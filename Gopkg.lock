@@ -21,10 +21,7 @@
 
 [[projects]]
   name = "github.com/naoina/toml"
-  packages = [
-    ".",
-    "ast"
-  ]
+  packages = [".","ast"]
   revision = "e6f5723bf2a66af014955e0888881314cf294129"
   version = "v0.1.1"
 
@@ -36,31 +33,14 @@
 
 [[projects]]
   name = "github.com/stretchr/testify"
-  packages = [
-    "assert",
-    "require",
-    "suite"
-  ]
+  packages = ["assert","require","suite"]
   revision = "f35b8ab0b5a2cef36673838d662e249dd9c94686"
   version = "v1.2.2"
 
 [[projects]]
   branch = "master"
   name = "github.com/syndtr/goleveldb"
-  packages = [
-    "leveldb",
-    "leveldb/cache",
-    "leveldb/comparer",
-    "leveldb/errors",
-    "leveldb/filter",
-    "leveldb/iterator",
-    "leveldb/journal",
-    "leveldb/memdb",
-    "leveldb/opt",
-    "leveldb/storage",
-    "leveldb/table",
-    "leveldb/util"
-  ]
+  packages = ["leveldb","leveldb/cache","leveldb/comparer","leveldb/errors","leveldb/filter","leveldb/iterator","leveldb/journal","leveldb/memdb","leveldb/opt","leveldb/storage","leveldb/table","leveldb/util"]
   revision = "c4c61651e9e37fa117f53c5a906d3b63090d8445"
 
 [solve-meta]
