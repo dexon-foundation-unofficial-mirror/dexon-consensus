@@ -1,0 +1,18 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/golang:1.10
+
+    working_directory: /go/src/github.com/dexon-foundation/dexon-consensus-core
+
+    environment:
+
+    steps:
+      - checkout
+      - run: bin/install_tools.sh
+      - run: dep ensure
+      - run: make lint
+      - run: make vet
+      - run: make test
+      - run: make

@@ -1,3 +1,5 @@
+[![CircleCI](https://circleci.com/gh/dexon-foundation/dexon-consensus-core.svg?style=svg)](https://circleci.com/gh/dexon-foundation/dexon-consensus-core)
+
 DEXON Consensus Core
 ====================
 
@@ -32,10 +34,10 @@ DEXON Consensus Core
    ```
    You should write these settings to your `.bashrc` file.
 
-### Run unit tests
+### Run Unit Tests
 
 ```
-make test
+make pre-submit
 ```
 
 ## Simulation
