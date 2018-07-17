@@ -1,4 +1,4 @@
-# Makefile for Cobinhood Backend
+# Makefile for DEXON consensus core
 
 DEXON_CONSENSUS_CORE=github.com/dexon-foundation/dexon-consensus-core
 

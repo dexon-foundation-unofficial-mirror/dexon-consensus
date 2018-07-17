@@ -27,13 +27,13 @@ import (
 var (
 	// ErrBlockExists is the error when block eixsts.
 	ErrBlockExists = errors.New("block exists")
-	// ErrBlockDoesNotExist is the error when block does not eixsts.
+	// ErrBlockDoesNotExist is the error when block does not eixst.
 	ErrBlockDoesNotExist = errors.New("block does not exist")
-	// ErrValidatorDoesNotExist is the error when validator does not eixsts.
+	// ErrValidatorDoesNotExist is the error when validator does not eixst.
 	ErrValidatorDoesNotExist = errors.New("validator does not exist")
 )
 
-// BlockDatabase is the interface for a BlockDatabse.
+// BlockDatabase is the interface for a BlockDatabase.
 type BlockDatabase interface {
 	Reader
 	Writer

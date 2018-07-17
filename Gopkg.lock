@@ -8,12 +8,6 @@
   version = "v1.1.0"
 
 [[projects]]
-  name = "github.com/getlantern/deepcopy"
-  packages = ["."]
-  revision = "b923171e8640f94369e21e324b1b0465cb82ec9f"
-  version = "v1"
-
-[[projects]]
   branch = "master"
   name = "github.com/golang/snappy"
   packages = ["."]
@@ -72,6 +66,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "15c32472a1fe08e302ec948065c4bd908fd8e81b4fda7cbb210f9431e63b3714"
+  inputs-digest = "fdad0896fd0b14f0f84c7b77ee9d6335968e200efa7d48562ed6e4a80b923d79"
   solver-name = "gps-cdcl"
   solver-version = 1

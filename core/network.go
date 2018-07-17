@@ -21,7 +21,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-// Endpoint is the interface for a client network endoint.
+// Endpoint is the interface for a client network endpoint.
 type Endpoint interface {
 	GetID() types.ValidatorID
 }

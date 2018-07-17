@@ -25,7 +25,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 )
 
-// State represent the block process state.
+// State represents the block process state.
 type State int
 
 // Block Status.

@@ -19,7 +19,7 @@ package core
 
 import "github.com/dexon-foundation/dexon-consensus-core/core/types"
 
-// BlockChain is the basic datastucture used for storing blocks in each
+// BlockChain is the basic datastructure used for storing blocks in each
 // validator.
 type BlockChain struct {
 	validatorID types.ValidatorID

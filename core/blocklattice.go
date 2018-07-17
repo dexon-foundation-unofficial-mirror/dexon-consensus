@@ -38,7 +38,7 @@ const (
 	infinity uint64 = math.MaxUint64
 )
 
-// BlockLattice represent the local view of a single validator.
+// BlockLattice represents the local view of a single validator.
 //
 // blockDB stores blocks that are final. blocks stores blocks that are in ToTo
 // State.
@@ -97,7 +97,7 @@ func (l *BlockLattice) AddValidator(
 	id types.ValidatorID, genesis *types.Block) {
 
 	l.validatorSet[id] = struct{}{}
-	l.fmax = len(l.validatorSet) / 3
+	l.fmax = (len(l.validatorSet) - 1) / 3
 	l.phi = 2*l.fmax + 1
 
 	genesis.State = types.BlockStatusFinal
