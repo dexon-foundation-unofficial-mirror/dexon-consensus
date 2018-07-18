@@ -45,9 +45,8 @@ type Block struct {
 	Timestamps map[ValidatorID]time.Time
 	Acks       map[common.Hash]struct{}
 
-	IndirectAcks map[common.Hash]struct{}
-	AckedBy      map[common.Hash]bool // bool: direct
-	State        State
+	Ackeds map[common.Hash]struct{}
+	State   State
 }
 
 func (b *Block) String() string {

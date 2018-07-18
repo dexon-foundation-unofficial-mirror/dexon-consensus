@@ -57,7 +57,7 @@ func (a *TestApp) ValidateBlock(b *types.Block) bool {
 }
 
 func (a *TestApp) Deliver(blocks []*types.Block, early bool) {
-	a.Outputs = blocks
+	a.Outputs = append(a.Outputs, blocks...)
 	a.Early = early
 }
 
@@ -201,7 +201,6 @@ func (s *BlockLatticeTest) SetupTest() {
 		Height:     3,
 		Acks: map[common.Hash]struct{}{
 			b12.Hash: struct{}{},
-			b22.Hash: struct{}{},
 			b32.Hash: struct{}{},
 		},
 	}
@@ -270,8 +269,7 @@ func (s *BlockLatticeTest) TestAckAndStateTransition() {
 	s.Require().Equal(0, len(lattice.stronglyAckedSet))
 	s.Require().Equal(0, len(lattice.pendingSet))
 
-	s.Require().Equal(0, len(b01.IndirectAcks))
-	s.Require().Equal(0, len(b01.AckedBy))
+	s.Require().Equal(0, len(b01.Ackeds))
 
 	// B12
 	lattice.ProcessBlock(b12)
@@ -288,12 +286,10 @@ func (s *BlockLatticeTest) TestAckAndStateTransition() {
 	lattice.ProcessBlock(b11)
 
 	// b01 is acked.
-	s.Require().Equal(1, len(b01.AckedBy))
-	s.Require().NotNil(b01.AckedBy[b11.Hash])
+	s.Require().Equal(1, len(b01.Ackeds))
+	s.Require().NotNil(b01.Ackeds[b11.Hash])
 	// b11 indirect acks.
-	s.Require().Equal(1, len(b11.IndirectAcks))
-	s.Require().Equal(0, len(b11.AckedBy))
-	s.Require().NotNil(b11.IndirectAcks[genesises[0].Hash])
+	s.Require().Equal(0, len(b11.Ackeds))
 
 	// Set status check.
 	s.Require().Equal(1, len(lattice.waitingSet))
@@ -311,11 +307,10 @@ func (s *BlockLatticeTest) TestAckAndStateTransition() {
 	s.Require().Equal(0, len(lattice.pendingSet))
 
 	// b01 is acked.
-	s.Require().Equal(2, len(b01.AckedBy))
-	s.Require().NotNil(b01.AckedBy[b21.Hash])
+	s.Require().Equal(2, len(b01.Ackeds))
+	s.Require().NotNil(b01.Ackeds[b21.Hash])
 	// b21 indirect acks.
-	s.Require().Equal(1, len(b21.IndirectAcks))
-	s.Require().Equal(0, len(b21.AckedBy))
+	s.Require().Equal(0, len(b21.Ackeds))
 
 	// B31
 	lattice.ProcessBlock(b31)
@@ -330,23 +325,23 @@ func (s *BlockLatticeTest) TestAckAndStateTransition() {
 	s.Require().Equal(types.BlockStatusToTo, b01.State)
 
 	// b01 is acked.
-	s.Require().Equal(3, len(b01.AckedBy))
-	s.Require().NotNil(b01.AckedBy[b31.Hash])
+	s.Require().Equal(4, len(b01.Ackeds))
+	s.Require().NotNil(b01.Ackeds[b31.Hash])
 
 	// b11 is acked.
-	s.Require().Equal(1, len(b11.AckedBy))
-	s.Require().NotNil(b11.AckedBy[b31.Hash])
+	s.Require().Equal(2, len(b11.Ackeds))
+	s.Require().NotNil(b11.Ackeds[b31.Hash])
+	s.Require().NotNil(b11.Ackeds[b12.Hash])
 
 	// b31 indirect acks.
-	s.Require().Equal(2, len(b31.IndirectAcks))
-	s.Require().Equal(1, len(b31.AckedBy))
-	s.Require().NotNil(b31.AckedBy[b12.Hash])
+	s.Require().Equal(1, len(b31.Ackeds))
+	s.Require().NotNil(b31.Ackeds[b12.Hash])
 
 	// b21 & b31 is acked by b12 (which is previously in waiting set).
-	s.Require().Equal(1, len(b21.AckedBy))
-	s.Require().NotNil(b21.AckedBy[b12.Hash])
-	s.Require().Equal(1, len(b31.AckedBy))
-	s.Require().NotNil(b31.AckedBy[b12.Hash])
+	s.Require().Equal(1, len(b21.Ackeds))
+	s.Require().NotNil(b21.Ackeds[b12.Hash])
+	s.Require().Equal(1, len(b31.Ackeds))
+	s.Require().NotNil(b31.Ackeds[b12.Hash])
 
 	// B02
 	lattice.ProcessBlock(b02)
@@ -355,19 +350,22 @@ func (s *BlockLatticeTest) TestAckAndStateTransition() {
 	s.Require().Equal(0, len(lattice.waitingSet))
 	s.Require().Equal(4, len(lattice.ackCandidateSet))
 	s.Require().Equal(0, len(lattice.stronglyAckedSet))
-	s.Require().Equal(1, len(lattice.pendingSet))
+	s.Require().Equal(2, len(lattice.pendingSet))
+
+	s.Require().NotNil(lattice.pendingSet[b01.Hash])
+	s.Require().NotNil(lattice.pendingSet[b11.Hash])
 
 	// b11 is acked.
-	s.Require().Equal(2, len(b11.AckedBy))
-	s.Require().NotNil(b11.AckedBy[b02.Hash])
+	s.Require().Equal(3, len(b11.Ackeds))
+	s.Require().NotNil(b11.Ackeds[b02.Hash])
 	// b21 is acked.
-	s.Require().Equal(2, len(b21.AckedBy))
-	s.Require().NotNil(b21.AckedBy[b02.Hash])
-	s.Require().NotNil(b21.AckedBy[b12.Hash])
+	s.Require().Equal(2, len(b21.Ackeds))
+	s.Require().NotNil(b21.Ackeds[b02.Hash])
+	s.Require().NotNil(b21.Ackeds[b12.Hash])
 	// b31 is acked.
-	s.Require().Equal(2, len(b31.AckedBy))
-	s.Require().NotNil(b31.AckedBy[b02.Hash])
-	s.Require().NotNil(b31.AckedBy[b12.Hash])
+	s.Require().Equal(2, len(b31.Ackeds))
+	s.Require().NotNil(b31.Ackeds[b02.Hash])
+	s.Require().NotNil(b31.Ackeds[b12.Hash])
 
 	// B32
 	lattice.ProcessBlock(b32)
@@ -376,17 +374,19 @@ func (s *BlockLatticeTest) TestAckAndStateTransition() {
 	s.Require().Equal(0, len(lattice.waitingSet))
 	s.Require().Equal(4, len(lattice.ackCandidateSet))
 	s.Require().Equal(0, len(lattice.stronglyAckedSet))
-	s.Require().Equal(2, len(lattice.pendingSet))
+	s.Require().Equal(4, len(lattice.pendingSet))
 
 	s.Require().NotNil(lattice.pendingSet[b01.Hash])
+	s.Require().NotNil(lattice.pendingSet[b11.Hash])
 	s.Require().NotNil(lattice.pendingSet[b21.Hash])
+	s.Require().NotNil(lattice.pendingSet[b31.Hash])
 
 	// b02 is acked.
-	s.Require().Equal(1, len(b02.AckedBy))
-	s.Require().NotNil(b02.AckedBy[b32.Hash])
+	s.Require().Equal(1, len(b02.Ackeds))
+	s.Require().NotNil(b02.Ackeds[b32.Hash])
 	// b12 is acked.
-	s.Require().Equal(1, len(b12.AckedBy))
-	s.Require().NotNil(b12.AckedBy[b32.Hash])
+	s.Require().Equal(1, len(b12.Ackeds))
+	s.Require().NotNil(b12.Ackeds[b32.Hash])
 
 	// B22
 	lattice.ProcessBlock(b22)
@@ -407,18 +407,14 @@ func (s *BlockLatticeTest) TestAckAndStateTransition() {
 	s.Require().Equal(types.BlockStatusToTo, b31.State)
 
 	// b02 is acked.
-	s.Require().Equal(2, len(b02.AckedBy))
-	s.Require().NotNil(b02.AckedBy[b22.Hash])
+	s.Require().Equal(2, len(b02.Ackeds))
+	s.Require().NotNil(b02.Ackeds[b22.Hash])
 	// b12 is acked.
-	s.Require().Equal(2, len(b12.AckedBy))
-	s.Require().NotNil(b12.AckedBy[b22.Hash])
+	s.Require().Equal(2, len(b12.Ackeds))
+	s.Require().NotNil(b12.Ackeds[b22.Hash])
 	// b31 is acked.
-	s.Require().Equal(3, len(b31.AckedBy))
-	s.Require().NotNil(b31.AckedBy[b22.Hash])
-
-	// b22 indirect acks.
-	s.Require().NotNil(b22.IndirectAcks[b11.Hash])
-	s.Require().NotNil(b22.IndirectAcks[b01.Hash])
+	s.Require().Equal(4, len(b31.Ackeds))
+	s.Require().NotNil(b31.Ackeds[b22.Hash])
 
 	// B13, B33, B03, B23
 	lattice.ProcessBlock(b13)
@@ -434,17 +430,15 @@ func (s *BlockLatticeTest) TesttotalOrdering() {
 	//   B01 -> B12 -> B11 -> B21 -> B31 -> B02 -> B32 -> B22 -> B13 -> B33
 	//       -> B03 -> B23
 
-	lattice.ProcessBlock(b01)
-	lattice.ProcessBlock(b12)
-	lattice.ProcessBlock(b11)
-	lattice.ProcessBlock(b21)
+	lattice.ProcessBlock(b01, true)
+	lattice.ProcessBlock(b12, true)
+	lattice.ProcessBlock(b11, true)
+	lattice.ProcessBlock(b21, true)
 
 	// B01 in pendingSet after b31 is recieved.
-	lattice.ProcessBlock(b31)
+	lattice.ProcessBlock(b31, true)
 	s.Require().NotNil(lattice.pendingSet[b01.Hash])
 
-	// Run total ordering for b01.
-	lattice.totalOrdering(b01)
 	s.Require().Equal(0, len(s.app.Outputs))
 	s.Require().Equal(1, len(lattice.candidateSet))
 	s.Require().Equal(1, len(lattice.pendingSet))
@@ -453,67 +447,89 @@ func (s *BlockLatticeTest) TesttotalOrdering() {
 	// ABS & AHV
 	s.Require().Equal(1, len(lattice.AHV[b01.Hash]))
 
-	lattice.ProcessBlock(b02)
-	lattice.ProcessBlock(b32)
+	lattice.ProcessBlock(b02, true)
+	lattice.ProcessBlock(b32, true)
 
 	// B21 in pendingSet after b32 is recieved.
-	s.Require().Equal(2, len(lattice.pendingSet))
-	s.Require().NotNil(lattice.pendingSet[b01.Hash])
+	s.Require().Equal(3, len(lattice.pendingSet))
+	s.Require().NotNil(lattice.pendingSet[b11.Hash])
 	s.Require().NotNil(lattice.pendingSet[b21.Hash])
+	s.Require().NotNil(lattice.pendingSet[b31.Hash])
 
-	// Run total ordering for b21.
-	lattice.totalOrdering(b21)
-	s.Require().Equal(2, len(lattice.pendingSet))
-	s.Require().Equal(0, len(s.app.Outputs))
-
-	// ABS & AHV
-	s.Require().Equal(uint64(1), lattice.ABS[b01.Hash][b21.ProposerID])
-	s.Require().Equal(uint64(1), lattice.AHV[b01.Hash][b21.ProposerID])
-
-	lattice.ProcessBlock(b22)
-	s.Require().Equal(4, len(lattice.pendingSet))
-
-	// Run total ordering for b31.
-	lattice.totalOrdering(b31)
+	s.Require().Equal(3, len(lattice.pendingSet))
 	s.Require().Equal(1, len(s.app.Outputs))
 	s.Require().Equal(b01.Hash, s.app.Outputs[0].Hash)
-	s.Require().Equal(false, s.app.Early)
+
+	// ABS & AHV
+	lattice.updateABSAHV()
+
+	s.Require().Equal(2, len(lattice.ABS[b11.Hash]))
+	s.Require().Equal(uint64(1), lattice.ABS[b11.Hash][validators[1]])
+	s.Require().Equal(uint64(1), lattice.ABS[b11.Hash][validators[3]])
+	s.Require().Equal(1, len(lattice.ABS[b21.Hash]))
+	s.Require().Equal(uint64(1), lattice.ABS[b21.Hash][validators[2]])
+
+	s.Require().Equal(uint64(1), lattice.AHV[b11.Hash][validators[1]])
+	s.Require().Equal(infinity, lattice.AHV[b11.Hash][validators[2]])
+	s.Require().Equal(uint64(1), lattice.AHV[b11.Hash][validators[3]])
+
+	s.Require().Equal(infinity, lattice.AHV[b21.Hash][validators[1]])
+	s.Require().Equal(uint64(1), lattice.AHV[b21.Hash][validators[2]])
+	s.Require().Equal(infinity, lattice.AHV[b21.Hash][validators[3]])
+
+	// B22
+	s.app.Clear()
+	lattice.ProcessBlock(b22, true)
+	s.Require().Equal(0, len(s.app.Outputs))
+	s.Require().Equal(3, len(lattice.pendingSet))
+	s.Require().Equal(2, len(lattice.candidateSet))
+
+	// ABS & AHV
 	lattice.updateABSAHV()
 	s.Require().Equal(3, len(lattice.abs()))
-	s.Require().Equal(2, len(lattice.candidateSet))
+
+	// B13
 	s.app.Clear()
-
-	lattice.totalOrdering(b22)
-	s.Require().Equal(0, len(s.app.Outputs))
-	s.Require().Equal(2, len(lattice.candidateSet))
-	s.Require().Equal(3, len(lattice.abs()))
-
 	lattice.ProcessBlock(b13, true)
 	s.Require().Equal(2, len(s.app.Outputs))
 	s.Require().Equal(b21.Hash, s.app.Outputs[0].Hash)
 	s.Require().Equal(b11.Hash, s.app.Outputs[1].Hash)
 	s.Require().Equal(false, s.app.Early)
-	s.app.Clear()
 
+	s.Require().Equal(1, len(lattice.candidateSet))
+	s.Require().NotNil(lattice.candidateSet[b31.Hash])
+
+	// ABS & AHV
+	lattice.updateABSAHV()
+	s.Require().Equal(3, len(lattice.abs()))
+
+	// B33
+	s.app.Clear()
 	lattice.ProcessBlock(b33, true)
 	s.Require().Equal(0, len(s.app.Outputs))
+	s.Require().Equal(1, len(lattice.candidateSet))
+	s.Require().Equal(3, len(lattice.pendingSet))
+	s.Require().NotNil(lattice.candidateSet[b31.Hash])
 
+	// ABS & AHV
+	lattice.updateABSAHV()
+	s.Require().Equal(3, len(lattice.abs()))
+
+	// B03
+	s.app.Clear()
 	lattice.ProcessBlock(b03, true)
+	s.Require().Equal(0, len(s.app.Outputs))
+
+	// B23
+	s.app.Clear()
+	lattice.ProcessBlock(b23, true)
 	s.Require().Equal(1, len(s.app.Outputs))
 	s.Require().Equal(b31.Hash, s.app.Outputs[0].Hash)
-	s.Require().Equal(false, s.app.Early)
-	s.app.Clear()
-
-	lattice.ProcessBlock(b23, true)
-	s.Require().Equal(2, len(s.app.Outputs))
-	s.Require().Equal(b02.Hash, s.app.Outputs[0].Hash)
-	s.Require().Equal(b12.Hash, s.app.Outputs[1].Hash)
 
 	s.Require().Equal(0, len(lattice.waitingSet))
 	s.Require().Equal(0, len(lattice.stronglyAckedSet))
-	s.Require().Equal(2, len(lattice.pendingSet))
-	lattice.updateABSAHV()
-	s.Require().Equal(2, len(lattice.abs()))
+	s.Require().Equal(4, len(lattice.pendingSet))
+	s.Require().Equal(2, len(lattice.candidateSet))
 }
 
 func TestBlockLattice(t *testing.T) {

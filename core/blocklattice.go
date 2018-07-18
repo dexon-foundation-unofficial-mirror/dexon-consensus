@@ -126,9 +126,8 @@ func (l *BlockLattice) getBlock(hash common.Hash) *types.Block {
 
 // processAcks updates the ack count of the blocks that is acked by *b*.
 func (l *BlockLattice) processAcks(b *types.Block) {
-	if b.IndirectAcks == nil {
-		b.IndirectAcks = make(map[common.Hash]struct{})
-	}
+	// Always acks it's own parent.
+	b.Acks[b.ParentHash] = struct{}{}
 
 	for ackBlockHash := range b.Acks {
 		ackedBlock, ok := l.blocks[ackBlockHash]
@@ -140,36 +139,24 @@ func (l *BlockLattice) processAcks(b *types.Block) {
 			panic(fmt.Sprintf("failed to get block: %v", ackBlockHash))
 		}
 
-		// Populate IndirectAcks.
-		for a := range ackedBlock.Acks {
-			if _, exists := b.Acks[a]; !exists {
-				b.IndirectAcks[a] = struct{}{}
-			}
+		// Populate Ackeds.
+		if ackedBlock.Ackeds == nil {
+			ackedBlock.Ackeds = make(map[common.Hash]struct{})
 		}
-		for a := range ackedBlock.IndirectAcks {
-			if _, exists := b.Acks[a]; !exists {
-				b.IndirectAcks[a] = struct{}{}
-			}
-		}
-
-		// Populate AckedBy.
-		if ackedBlock.AckedBy == nil {
-			ackedBlock.AckedBy = make(map[common.Hash]bool)
-		}
-		ackedBlock.AckedBy[b.Hash] = true
+		ackedBlock.Ackeds[b.Hash] = struct{}{}
 
 		bp := ackedBlock
 		for bp != nil && bp.State < types.BlockStatusAcked {
-			if bp.AckedBy == nil {
-				bp.AckedBy = make(map[common.Hash]bool)
+			if bp.Ackeds == nil {
+				bp.Ackeds = make(map[common.Hash]struct{})
 			}
-			if _, exists := bp.AckedBy[b.Hash]; !exists {
-				bp.AckedBy[b.Hash] = false
+			if _, exists := bp.Ackeds[b.Hash]; !exists {
+				bp.Ackeds[b.Hash] = struct{}{}
 			}
 
 			// Calculate acked by nodes.
 			ackedByNodes := make(map[types.ValidatorID]struct{})
-			for hash := range bp.AckedBy {
+			for hash := range bp.Ackeds {
 				bp := l.getBlock(hash)
 				ackedByNodes[bp.ProposerID] = struct{}{}
 			}
@@ -180,6 +167,18 @@ func (l *BlockLattice) processAcks(b *types.Block) {
 			}
 			bp = l.getBlock(bp.ParentHash)
 		}
+
+		var populateAckBy func(bx, target *types.Block)
+		populateAckBy = func(bx, target *types.Block) {
+			for ab := range bx.Acks {
+				abb := l.getBlock(ab)
+				if abb.State < types.BlockStatusFinal {
+					abb.Ackeds[target.Hash] = struct{}{}
+					populateAckBy(abb, target)
+				}
+			}
+		}
+		populateAckBy(ackedBlock, b)
 	}
 }
 
@@ -312,28 +311,9 @@ func (l *BlockLattice) ProposeBlock(b *types.Block) {
 	l.ackCandidateSet = make(map[types.ValidatorID]*types.Block)
 }
 
-// DetectNack implements the NACK detection.
-func (l *BlockLattice) DetectNack() {
+// detectNack implements the NACK detection.
+func (l *BlockLattice) detectNack() {
 
-}
-
-func (l *BlockLattice) setAHV(
-	block common.Hash, vID types.ValidatorID, v uint64) {
-
-	if l.AHV[block] == nil {
-		l.AHV[block] = make(map[types.ValidatorID]uint64)
-	}
-	l.AHV[block][vID] = v
-}
-
-func (l *BlockLattice) pushABS(block *types.Block, vID types.ValidatorID) {
-	if l.ABS[block.Hash] == nil {
-		l.ABS[block.Hash] = make(map[types.ValidatorID]uint64)
-	}
-	v, exists := l.ABS[block.Hash][vID]
-	if !exists || block.Height < v {
-		l.ABS[block.Hash][vID] = block.Height
-	}
 }
 
 func (l *BlockLattice) abs() map[types.ValidatorID]struct{} {
@@ -353,7 +333,7 @@ func (l *BlockLattice) calculateABSofBlock(b *types.Block) {
 	var calculateABSRecursive func(target *types.Block)
 
 	calculateABSRecursive = func(target *types.Block) {
-		for hash := range target.AckedBy {
+		for hash := range target.Ackeds {
 			ackedByBlock := l.getBlock(hash)
 			if ackedByBlock.State != types.BlockStatusToTo {
 				continue
@@ -419,40 +399,13 @@ func (l *BlockLattice) totalOrdering(b *types.Block) {
 		}
 	}
 
-	abs := l.abs()
 	if acksOnlyFinal {
 		l.candidateSet[b.Hash] = b
-		/*
-			for r := range abs {
-				l.setAHV(b.Hash, r, infinity)
-			}
-		*/
 	}
-
-	/*
-		q := b.ProposerID
-		if _, exists := abs[q]; !exists {
-			for _, bp := range l.candidateSet {
-				if bp.Hash.Equal(b.Hash) {
-					continue
-				}
-
-				_, directlyAckedBy := b.Acks[bp.Hash]
-				_, indirectlyAckedBy := b.IndirectAcks[bp.Hash]
-
-				if directlyAckedBy || indirectlyAckedBy {
-					l.setAHV(bp.Hash, q, b.Height)
-					l.pushABS(bp, q)
-				} else {
-					l.setAHV(bp.Hash, q, infinity)
-				}
-			}
-		}
-	*/
 
 	// Update ABS and AHV.
 	l.updateABSAHV()
-	abs = l.abs()
+	abs := l.abs()
 
 	// Calculate preceding set.
 	precedingSet := make(map[common.Hash]*types.Block)
@@ -584,7 +537,8 @@ func (l *BlockLattice) totalOrdering(b *types.Block) {
 		}
 		acksOnlyFinal := true
 		for ackedBlockHash := range block.Acks {
-			if !l.blockDB.Has(ackedBlockHash) {
+			bp := l.getBlock(ackedBlockHash)
+			if bp.State != types.BlockStatusFinal {
 				acksOnlyFinal = false
 				break
 			}

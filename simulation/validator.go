@@ -130,7 +130,7 @@ func (v *Validator) BlockProposer() {
 			ProposerID: v.ID,
 			ParentHash: v.current.Hash,
 			Hash:       common.NewRandomHash(),
-			Height:     0,
+			Height:     v.current.Height + 1.,
 			Acks:       map[common.Hash]struct{}{},
 		}
 		v.current = block
