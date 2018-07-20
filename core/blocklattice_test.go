@@ -35,17 +35,6 @@ var b01, b11, b21, b31,
 	b02, b12, b22, b32,
 	b03, b13, b23, b33 *types.Block
 
-// TestNetwork.
-type TestNetwork struct {
-}
-
-func (n *TestNetwork) Join(endpoint Endpoint) chan interface{} {
-	return nil
-}
-
-func (n *TestNetwork) BroadcastBlock(block *types.Block) {
-}
-
 // TestApp.
 type TestApp struct {
 	Outputs []*types.Block
@@ -78,13 +67,11 @@ func (s *BlockLatticeTest) SetupTest() {
 
 	s.app = &TestApp{}
 
-	lattice = NewBlockLattice(
-		blockdb.NewMemBackedBlockDB(),
-		&TestNetwork{},
-		s.app)
+	lattice = NewBlockLattice(blockdb.NewMemBackedBlockDB(), s.app)
 
 	for i := 0; i < 4; i++ {
-		validators = append(validators, types.ValidatorID(common.NewRandomHash()))
+		validators = append(validators,
+			types.ValidatorID{Hash: common.NewRandomHash()})
 		Debugf("V%d: %s\n", i, validators[i])
 	}
 	Debugf("\n")
@@ -116,6 +103,7 @@ func (s *BlockLatticeTest) SetupTest() {
 			genesises[3].Hash: struct{}{},
 		},
 	}
+
 	b11 = &types.Block{
 		ProposerID: validators[1],
 		ParentHash: genesises[1].Hash,

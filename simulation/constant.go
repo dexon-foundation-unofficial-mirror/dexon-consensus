@@ -15,21 +15,9 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package core
+package simulation
 
-import (
-	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+const (
+	peerPort      = 8080
+	msgBufferSize = 128
 )
-
-// Endpoint is the interface for a client network endpoint.
-type Endpoint interface {
-	GetID() types.ValidatorID
-}
-
-// Network is the interface for network related functions.
-type Network interface {
-	Start()
-	NumPeers() int
-	Join(endpoint Endpoint) chan interface{}
-	BroadcastBlock(block *types.Block)
-}

@@ -38,15 +38,15 @@ const (
 
 // Block represents a single event broadcasted on the network.
 type Block struct {
-	ProposerID ValidatorID
-	ParentHash common.Hash
-	Hash       common.Hash
-	Height     uint64
-	Timestamps map[ValidatorID]time.Time
-	Acks       map[common.Hash]struct{}
+	ProposerID ValidatorID               `json:"proposer_id"`
+	ParentHash common.Hash               `json:"parent_hash"`
+	Hash       common.Hash               `json:"hash"`
+	Height     uint64                    `json:"height"`
+	Timestamps map[ValidatorID]time.Time `json:"timestamps"`
+	Acks       map[common.Hash]struct{}  `json:"acks"`
 
-	Ackeds map[common.Hash]struct{}
-	State   State
+	Ackeds map[common.Hash]struct{} `json:"-"`
+	State  State                    `json:"-"`
 }
 
 func (b *Block) String() string {

@@ -18,7 +18,6 @@
 package common
 
 import (
-	"bytes"
 	"encoding/hex"
 )
 
@@ -36,5 +35,18 @@ func (h Hash) String() string {
 
 // Equal compares if two hashes are the same.
 func (h Hash) Equal(hp Hash) bool {
-	return bytes.Compare([]byte(h[:]), []byte(hp[:])) == 0
+	return h == hp
+}
+
+// MarshalText implements the encoding.TextMarhsaler interface.
+func (h Hash) MarshalText() ([]byte, error) {
+	result := make([]byte, hex.EncodedLen(HashLength))
+	hex.Encode(result, h[:])
+	return result, nil
+}
+
+// UnmarshalText implements the encoding.TextUnmarshaler interface.
+func (h *Hash) UnmarshalText(text []byte) error {
+	_, err := hex.Decode(h[:], text)
+	return err
 }

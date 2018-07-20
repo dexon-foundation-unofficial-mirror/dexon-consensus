@@ -44,7 +44,7 @@ const (
 // State.
 type BlockLattice struct {
 	owner        types.ValidatorID
-	validatorSet map[types.ValidatorID]struct{}
+	ValidatorSet map[types.ValidatorID]struct{}
 	blocks       map[common.Hash]*types.Block
 
 	fmax               int
@@ -52,7 +52,6 @@ type BlockLattice struct {
 	lastSeenTimestamps map[types.ValidatorID]time.Time
 
 	blockDB blockdb.BlockDatabase
-	network Network
 	app     Application
 	mutex   sync.Mutex
 
@@ -72,14 +71,12 @@ type BlockLattice struct {
 // NewBlockLattice returns a new empty BlockLattice instance.
 func NewBlockLattice(
 	db blockdb.BlockDatabase,
-	network Network,
 	app Application) *BlockLattice {
 	return &BlockLattice{
-		validatorSet:       make(map[types.ValidatorID]struct{}),
+		ValidatorSet:       make(map[types.ValidatorID]struct{}),
 		blocks:             make(map[common.Hash]*types.Block),
 		lastSeenTimestamps: make(map[types.ValidatorID]time.Time),
 		blockDB:            db,
-		network:            network,
 		app:                app,
 		waitingSet:         make(map[common.Hash]*types.Block),
 		stronglyAckedSet:   make(map[common.Hash]*types.Block),
@@ -96,8 +93,8 @@ func NewBlockLattice(
 func (l *BlockLattice) AddValidator(
 	id types.ValidatorID, genesis *types.Block) {
 
-	l.validatorSet[id] = struct{}{}
-	l.fmax = (len(l.validatorSet) - 1) / 3
+	l.ValidatorSet[id] = struct{}{}
+	l.fmax = (len(l.ValidatorSet) - 1) / 3
 	l.phi = 2*l.fmax + 1
 
 	genesis.State = types.BlockStatusFinal
@@ -106,7 +103,7 @@ func (l *BlockLattice) AddValidator(
 
 // SetOwner sets the blocklattice's owner, which is the localview of whom.
 func (l *BlockLattice) SetOwner(id types.ValidatorID) {
-	if _, exists := l.validatorSet[id]; !exists {
+	if _, exists := l.ValidatorSet[id]; !exists {
 		panic("SetOnwer: owner is not a valid validator")
 	}
 	l.owner = id
@@ -173,6 +170,9 @@ func (l *BlockLattice) processAcks(b *types.Block) {
 			for ab := range bx.Acks {
 				abb := l.getBlock(ab)
 				if abb.State < types.BlockStatusFinal {
+					if abb.Ackeds == nil {
+						abb.Ackeds = make(map[common.Hash]struct{})
+					}
 					abb.Ackeds[target.Hash] = struct{}{}
 					populateAckBy(abb, target)
 				}
@@ -186,7 +186,7 @@ func (l *BlockLattice) processAcks(b *types.Block) {
 func (l *BlockLattice) updateTimestamps(b *types.Block) {
 	q := b.ProposerID
 	l.lastSeenTimestamps[q] = b.Timestamps[q].Add(epsilon)
-	for vid := range l.validatorSet {
+	for vid := range l.ValidatorSet {
 		if b.Timestamps[vid].After(l.lastSeenTimestamps[vid]) {
 			l.lastSeenTimestamps[vid] = b.Timestamps[vid]
 		}
@@ -245,6 +245,12 @@ func (l *BlockLattice) ProcessBlock(b *types.Block, runTotal ...bool) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
+	if b.Hash == b.ParentHash {
+		if _, exists := l.ValidatorSet[b.ProposerID]; !exists {
+			l.AddValidator(b.ProposerID, b)
+		}
+	}
+
 	if l.getBlock(b.Hash) != nil {
 		return
 	}
@@ -288,8 +294,8 @@ IterateStronglyAckedSet:
 	}
 }
 
-// ProposeBlock implements the send part of DEXON reliable broadcast.
-func (l *BlockLattice) ProposeBlock(b *types.Block) {
+// PrepareBlock prepare a block for broadcast.
+func (l *BlockLattice) PrepareBlock(b *types.Block) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
@@ -306,8 +312,6 @@ func (l *BlockLattice) ProposeBlock(b *types.Block) {
 	}
 
 	//l.ProcessBlock(b)
-	l.network.BroadcastBlock(b)
-
 	l.ackCandidateSet = make(map[types.ValidatorID]*types.Block)
 }
 
@@ -358,7 +362,7 @@ func (l *BlockLattice) calculateAHVofBlock(
 	// Calculate ABS of a block.
 	l.AHV[b.Hash] = make(map[types.ValidatorID]uint64)
 
-	for v := range l.validatorSet {
+	for v := range l.ValidatorSet {
 		gv, gExists := globalMins[v]
 		lv, lExists := l.ABS[b.Hash][v]
 
@@ -432,7 +436,7 @@ func (l *BlockLattice) totalOrdering(b *types.Block) {
 			if lose >= l.phi {
 				winAll = false
 				break
-			} else if lose < l.phi-len(l.validatorSet)+len(abs) {
+			} else if lose < l.phi-len(l.ValidatorSet)+len(abs) {
 				// Do nothing.
 			} else {
 				winAll = false
@@ -477,7 +481,7 @@ func (l *BlockLattice) totalOrdering(b *types.Block) {
 	earlyDelivery := false
 
 	// Does not satisfy External stability a.
-	if len(abs) < len(l.validatorSet) {
+	if len(abs) < len(l.ValidatorSet) {
 		earlyDelivery = true
 
 		// External stability b.
@@ -498,7 +502,7 @@ func (l *BlockLattice) totalOrdering(b *types.Block) {
 			return
 		}
 		for precedingHash := range precedingSet {
-			if len(l.ABS[precedingHash]) < len(l.validatorSet)-l.phi {
+			if len(l.ABS[precedingHash]) < len(l.ValidatorSet)-l.phi {
 				extBSatisfied = false
 			}
 		}

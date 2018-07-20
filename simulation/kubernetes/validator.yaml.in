@@ -1,0 +1,38 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: dexcon-simulation
+  labels:
+    app: dexcon-simulation
+    type: cobinhood
+spec:
+  revisionHistoryLimit: 5
+  replicas: {{numValidators}}
+  template:
+    metadata:
+      name: dexcon-simulation
+      labels:
+        app: dexcon-simulation
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-nodepool: default-pool
+      volumes:
+        - name: ssl-certs
+          hostPath:
+            path: /etc/ssl/certs
+      containers:
+        - name: dexcon-simulation
+          image: asia.gcr.io/cobinhood/dexcon-simulation:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 200m
+              memory: 512Mi
+          env:
+            - name: ROLE
+              value: "validator"

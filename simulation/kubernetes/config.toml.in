@@ -1,0 +1,13 @@
+title = "DEXON Consensus Simulation Config"
+
+[validator]
+num = {{numValidators}}
+propose_interval_mean = 5e+02
+propose_interval_sigma = 3e+01
+
+[networking]
+type = "tcp"
+peer_server = "peer-server-svc.default.svc.cluster.local"
+mean = 1e+02
+sigma = 1e+01
+loss_rate_value = 0e+00

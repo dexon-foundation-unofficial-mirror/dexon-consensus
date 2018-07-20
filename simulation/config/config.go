@@ -23,6 +23,16 @@ import (
 	"github.com/naoina/toml"
 )
 
+// NetworkType is the simulation network type.
+type NetworkType string
+
+// NetworkType enums.
+const (
+	NetworkTypeFake     NetworkType = "fake"
+	NetworkTypeTCP      NetworkType = "tcp"
+	NetworkTypeTCPLocal NetworkType = "tcp-local"
+)
+
 // Validator config for the simulation.
 type Validator struct {
 	Num                  int
@@ -32,6 +42,9 @@ type Validator struct {
 
 // Networking config.
 type Networking struct {
+	Type       NetworkType
+	PeerServer string
+
 	Mean          float64
 	Sigma         float64
 	LossRateValue float64
@@ -55,13 +68,15 @@ func GenerateDefault(path string) error {
 	config := Config{
 		Title: "DEXON Consensus Simulation Config",
 		Validator: Validator{
-			Num:                  4,
+			Num:                  7,
 			ProposeIntervalMean:  500,
 			ProposeIntervalSigma: 30,
 		},
 		Networking: Networking{
+			Type:          NetworkTypeFake,
+			PeerServer:    "peer.server",
 			Mean:          100,
-			Sigma:         30,
+			Sigma:         10,
 			LossRateValue: 0,
 		},
 	}

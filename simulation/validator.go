@@ -52,19 +52,8 @@ func NewValidator(
 	config config.Validator,
 	network core.Network,
 	db *leveldb.DB) *Validator {
-
-	hash := common.NewRandomHash()
-	genesis := &types.Block{
-		ProposerID: id,
-		ParentHash: hash,
-		Hash:       hash,
-		Height:     0,
-		Acks:       map[common.Hash]struct{}{},
-	}
-
 	app := NewSimApp(id)
-	lattice := core.NewBlockLattice(blockdb.NewMemBackedBlockDB(), network, app)
-
+	lattice := core.NewBlockLattice(blockdb.NewMemBackedBlockDB(), app)
 	return &Validator{
 		ID:      id,
 		config:  config,
@@ -72,22 +61,12 @@ func NewValidator(
 		app:     app,
 		db:      db,
 		lattice: lattice,
-		genesis: genesis,
-		current: genesis,
 	}
 }
 
 // GetID returns the ID of validator.
 func (v *Validator) GetID() types.ValidatorID {
 	return v.ID
-}
-
-// Bootstrap bootstraps a validator.
-func (v *Validator) Bootstrap(vs []*Validator) {
-	for _, x := range vs {
-		v.lattice.AddValidator(x.ID, x.genesis)
-	}
-	v.lattice.SetOwner(v.ID)
 }
 
 // Run starts the validator.
@@ -118,6 +97,35 @@ func (v *Validator) MsgServer() {
 
 // BlockProposer propose blocks to be send to the DEXON network.
 func (v *Validator) BlockProposer() {
+	// Wait until all peer joined the network.
+	for v.network.NumPeers() != v.config.Num {
+		time.Sleep(time.Second)
+	}
+
+	if v.genesis == nil {
+		hash := common.NewRandomHash()
+		b := &types.Block{
+			ProposerID: v.ID,
+			ParentHash: hash,
+			Hash:       hash,
+			Height:     0,
+			Acks:       map[common.Hash]struct{}{},
+		}
+		v.genesis = b
+		v.current = b
+
+		v.lattice.AddValidator(v.ID, b)
+		v.lattice.SetOwner(v.ID)
+
+		v.lattice.PrepareBlock(b)
+		v.network.BroadcastBlock(b)
+	}
+
+	// Wait until all peer knows each other.
+	for len(v.lattice.ValidatorSet) != v.config.Num {
+		time.Sleep(time.Second)
+	}
+
 	model := &NormalNetwork{
 		Sigma: v.config.ProposeIntervalSigma,
 		Mean:  v.config.ProposeIntervalMean,
@@ -134,6 +142,7 @@ func (v *Validator) BlockProposer() {
 			Acks:       map[common.Hash]struct{}{},
 		}
 		v.current = block
-		v.lattice.ProposeBlock(block)
+		v.lattice.PrepareBlock(block)
+		v.network.BroadcastBlock(block)
 	}
 }

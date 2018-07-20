@@ -15,21 +15,19 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package core
+package main
 
 import (
-	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"flag"
+
+	"github.com/dexon-foundation/dexon-consensus-core/simulation"
 )
 
-// Endpoint is the interface for a client network endpoint.
-type Endpoint interface {
-	GetID() types.ValidatorID
-}
+var configFile = flag.String("config", "", "path to simulation config file")
 
-// Network is the interface for network related functions.
-type Network interface {
-	Start()
-	NumPeers() int
-	Join(endpoint Endpoint) chan interface{}
-	BroadcastBlock(block *types.Block)
+func main() {
+	flag.Parse()
+
+	server := simulation.NewPeerServer()
+	server.Run(*configFile)
 }

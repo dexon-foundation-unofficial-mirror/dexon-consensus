@@ -1,17 +1,56 @@
-# Makefile for DEXON consensus core
+# Makefile for DEXON Consensus Core
 
-DEXON_CONSENSUS_CORE=github.com/dexon-foundation/dexon-consensus-core
+GOPATH = $(CURDIR)/../../../../
+ifndef BINDIR
+BINDIR := $(CURDIR)/build
+else
+BINDIR := $(abspath $(BINDIR))
+endif
+PROJECT_ROOT=github.com/dexon-foundation/dexon-consensus-core
+BUILDER_REPO = cobinhooddev/ci-base-alpine
+
+ifeq ($(DOCKER),true)
+GO_LDFLAGS += -linkmode external -extldflags \"-static\"
+endif
+
+V ?= 0
+AT_LOCAL_GO    = $(AT_LOCAL_GO_$(V))
+AT_LOCAL_GO_0  = @echo "  HOST GO    "$1;
+AT_LOCAL_GO_1  =
+AT_DOCKER_GO   = $(AT_DOCKER_GO_$(V))
+AT_DOCKER_GO_0 = @echo "  DOCKER GO  "$1;
+AT_DOCKER_GO_1 =
+
+define BUILD_RULE
+$1: pre-build
+ifeq ($(DOCKER),true)
+	$(AT_DOCKER_GO)docker run --rm \
+		-v "$(GOPATH)":/go:z \
+		-v $(BINDIR):/artifacts:z \
+		-e "GOPATH=/go" \
+		-w /go/src/$(PROJECT_ROOT) \
+		$(BUILDER_REPO):latest sh -c "\
+			go build -o /artifacts/$1 $(PROJECT_ROOT)/cmd/$1"
+else
+	@mkdir -p $(BINDIR)
+	$(AT_LOCAL_GO)go install -ldflags '$(GO_LDFLAGS)' $(PROJECT_ROOT)/cmd/$1
+	@install -c $(GOPATH)/bin/$1 $(BINDIR)
+endif
+endef
+
+COMPONENTS = \
+	dexcon-simulation \
+	dexcon-simulation-peer-server
 
 .PHONY: clean default
 
 default: all
 
-all: dexcon-simulation
+all: $(COMPONENTS)
 
-pre-submit: lint
+$(foreach component, $(COMPONENTS), $(eval $(call BUILD_RULE,$(component))))
 
-dexcon-simulation:
-	go install $(DEXON_CONSENSUS_CORE)/cmd/dexcon-simulation
+pre-build:
 
 pre-submit: lint test vet
 

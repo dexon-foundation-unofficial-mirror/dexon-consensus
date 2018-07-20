@@ -21,37 +21,57 @@ import (
 	"fmt"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
 
 // Run starts the simulation.
 func Run(configPath string) {
-	config, err := config.Read(configPath)
+	cfg, err := config.Read(configPath)
 	if err != nil {
 		panic(err)
 	}
 
-	networkModel := &NormalNetwork{
-		Sigma:         config.Networking.Sigma,
-		Mean:          config.Networking.Mean,
-		LossRateValue: config.Networking.LossRateValue,
-	}
-	network := NewNetwork(networkModel)
+	networkType := cfg.Networking.Type
 
-	var vs []*Validator
-	for i := 0; i < config.Validator.Num; i++ {
-		id := types.ValidatorID(common.NewRandomHash())
-		vs = append(vs, NewValidator(id, config.Validator, network, nil))
-	}
+	if networkType == config.NetworkTypeFake ||
+		networkType == config.NetworkTypeTCPLocal {
 
-	for i := 0; i < config.Validator.Num; i++ {
-		vs[i].Bootstrap(vs)
-	}
+		var vs []*Validator
+		var network core.Network
 
-	for i := 0; i < config.Validator.Num; i++ {
-		fmt.Printf("Validator %d: %s\n", i, vs[i].ID)
-		go vs[i].Run()
+		if networkType == config.NetworkTypeFake {
+			networkModel := &NormalNetwork{
+				Sigma:         cfg.Networking.Sigma,
+				Mean:          cfg.Networking.Mean,
+				LossRateValue: cfg.Networking.LossRateValue,
+			}
+			network = NewFakeNetwork(networkModel)
+
+			for i := 0; i < cfg.Validator.Num; i++ {
+				id := types.ValidatorID{Hash: common.NewRandomHash()}
+				vs = append(vs, NewValidator(id, cfg.Validator, network, nil))
+			}
+		} else if networkType == config.NetworkTypeTCPLocal {
+			for i := 0; i < cfg.Validator.Num; i++ {
+				id := types.ValidatorID{Hash: common.NewRandomHash()}
+				network := NewTCPNetwork(true, cfg.Networking.PeerServer)
+				go network.Start()
+				vs = append(vs, NewValidator(id, cfg.Validator, network, nil))
+			}
+		}
+
+		for i := 0; i < cfg.Validator.Num; i++ {
+			fmt.Printf("Validator %d: %s\n", i, vs[i].ID)
+			go vs[i].Run()
+		}
+	} else if networkType == config.NetworkTypeTCP {
+		id := types.ValidatorID{Hash: common.NewRandomHash()}
+		network := NewTCPNetwork(false, cfg.Networking.PeerServer)
+		go network.Start()
+		v := NewValidator(id, cfg.Validator, network, nil)
+		go v.Run()
 	}
 
 	select {}
