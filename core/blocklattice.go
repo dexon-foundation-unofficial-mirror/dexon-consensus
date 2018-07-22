@@ -97,6 +97,7 @@ func (l *BlockLattice) AddValidator(
 	l.fmax = (len(l.ValidatorSet) - 1) / 3
 	l.phi = 2*l.fmax + 1
 
+	// TODO: We should not make genesis blocks 'final' directly.
 	genesis.State = types.BlockStatusFinal
 	l.blockDB.Put(*genesis)
 }

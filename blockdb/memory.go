@@ -22,7 +22,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-// MemBackendBlockDB is a memory bakcend BlockDB implementation.
+// MemBackendBlockDB is a memory backend BlockDB implementation.
 type MemBackendBlockDB struct {
 	blocksByHash      map[common.Hash]*types.Block
 	blocksByValidator map[types.ValidatorID]map[uint64]*types.Block
@@ -77,9 +77,4 @@ func (m *MemBackendBlockDB) Put(block types.Block) error {
 func (m *MemBackendBlockDB) Update(block types.Block) error {
 	m.blocksByHash[block.Hash] = &block
 	return nil
-}
-
-// Delete deletes a block in the database.
-func (m *MemBackendBlockDB) Delete(hash common.Hash) {
-	delete(m.blocksByHash, hash)
 }

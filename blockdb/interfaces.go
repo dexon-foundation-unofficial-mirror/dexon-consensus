@@ -37,7 +37,6 @@ var (
 type BlockDatabase interface {
 	Reader
 	Writer
-	Deleter
 }
 
 // Reader defines the interface for reading blocks into DB.
@@ -51,9 +50,4 @@ type Reader interface {
 type Writer interface {
 	Update(block types.Block) error
 	Put(block types.Block) error
-}
-
-// Deleter defines the interface for deleting blocks in the DB.
-type Deleter interface {
-	Delete(hash common.Hash)
 }
