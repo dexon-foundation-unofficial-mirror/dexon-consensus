@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"os"
+
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
@@ -36,12 +38,12 @@ func (s *LevelDBTestSuite) TestBasicUsage() {
 	dbName := fmt.Sprintf("test-db-%v.db", time.Now().UTC())
 	db, err := NewLevelDBBackendBlockDB(dbName)
 	s.Require().Nil(err)
-	defer func() {
+	defer func(dbName string) {
 		err = db.Close()
 		s.Nil(err)
-
-		// TODO(missionliao): remove test db.
-	}()
+		err = os.RemoveAll(dbName)
+		s.Nil(err)
+	}(dbName)
 
 	// Queried something from an empty database.
 	hash1 := common.NewRandomHash()
