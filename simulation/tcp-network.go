@@ -50,9 +50,13 @@ func NewTCPNetwork(local bool, peerServer string) *TCPNetwork {
 	if !local {
 		port = peerPort
 	}
+	pServer := peerServer
+	if local {
+		pServer = "localhost"
+	}
 	return &TCPNetwork{
 		local:       local,
-		peerServer:  peerServer,
+		peerServer:  pServer,
 		port:        port,
 		endpoints:   make(map[types.ValidatorID]string),
 		recieveChan: make(chan interface{}, msgBufferSize),

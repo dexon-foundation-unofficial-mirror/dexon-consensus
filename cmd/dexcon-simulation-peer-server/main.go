@@ -19,6 +19,8 @@ package main
 
 import (
 	"flag"
+	"log"
+	"os"
 
 	"github.com/dexon-foundation/dexon-consensus-core/simulation"
 )
@@ -27,6 +29,11 @@ var configFile = flag.String("config", "", "path to simulation config file")
 
 func main() {
 	flag.Parse()
+
+	if *configFile == "" {
+		log.Println("error: no config file specified")
+		os.Exit(1)
+	}
 
 	server := simulation.NewPeerServer()
 	server.Run(*configFile)

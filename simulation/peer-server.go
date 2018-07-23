@@ -68,7 +68,7 @@ func (p *PeerServer) Run(configPath string) {
 		defer p.peersMu.Unlock()
 
 		host, _, _ := net.SplitHostPort(r.RemoteAddr)
-		p.peers[id] = fmt.Sprintf("%s:%s", host, portString)
+		p.peers[id] = net.JoinHostPort(host, portString)
 		log.Printf("Peer %s joined from %s", id, p.peers[id])
 	}
 
