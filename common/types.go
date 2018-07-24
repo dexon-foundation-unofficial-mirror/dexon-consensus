@@ -18,6 +18,7 @@
 package common
 
 import (
+	"bytes"
 	"encoding/hex"
 )
 
@@ -50,3 +51,10 @@ func (h *Hash) UnmarshalText(text []byte) error {
 	_, err := hex.Decode(h[:], text)
 	return err
 }
+
+// Hashes is for sorting hashes.
+type Hashes []Hash
+
+func (hs Hashes) Len() int           { return len(hs) }
+func (hs Hashes) Less(i, j int) bool { return bytes.Compare(hs[i][:], hs[j][:]) < 0 }
+func (hs Hashes) Swap(i, j int)      { hs[i], hs[j] = hs[j], hs[i] }

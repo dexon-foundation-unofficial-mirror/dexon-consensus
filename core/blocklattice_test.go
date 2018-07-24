@@ -18,6 +18,7 @@
 package core
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -480,8 +481,11 @@ func (s *BlockLatticeTest) TesttotalOrdering() {
 	s.app.Clear()
 	lattice.ProcessBlock(b13, true)
 	s.Require().Equal(2, len(s.app.Outputs))
-	s.Require().Equal(b21.Hash, s.app.Outputs[0].Hash)
-	s.Require().Equal(b11.Hash, s.app.Outputs[1].Hash)
+	expected := common.Hashes{b21.Hash, b11.Hash}
+	sort.Sort(expected)
+	got := common.Hashes{s.app.Outputs[0].Hash, s.app.Outputs[1].Hash}
+	sort.Sort(got)
+	s.Require().Equal(expected, got)
 	s.Require().Equal(false, s.app.Early)
 
 	s.Require().Equal(1, len(lattice.candidateSet))
