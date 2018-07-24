@@ -1,4 +1,4 @@
-[![CircleCI](https://circleci.com/gh/dexon-foundation/dexon-consensus-core.svg?style=svg)](https://circleci.com/gh/dexon-foundation/dexon-consensus-core)
+[![CircleCI](https://circleci.com/gh/dexon-foundation/dexon-consensus-core.svg?style=svg&circle-token=faed911ec07618dfbd6868b09181aa2046b550d8)](https://circleci.com/gh/dexon-foundation/dexon-consensus-core)
 
 DEXON Consensus Core
 ====================
