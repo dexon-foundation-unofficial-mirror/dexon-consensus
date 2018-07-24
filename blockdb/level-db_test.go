@@ -87,6 +87,54 @@ func (s *LevelDBTestSuite) TestBasicUsage() {
 	s.Equal(now, queried.Timestamps[queried.ProposerID])
 }
 
+func (s *LevelDBTestSuite) TestSyncIndex() {
+	dbName := fmt.Sprintf("test-db-%v-si.db", time.Now().UTC())
+	db, err := NewLevelDBBackendBlockDB(dbName)
+	s.Require().Nil(err)
+	defer func(dbName string) {
+		err = db.Close()
+		s.Nil(err)
+		err = os.RemoveAll(dbName)
+		s.Nil(err)
+	}(dbName)
+
+	// Create some blocks.
+	blocks := [10]types.Block{}
+	for i := range blocks {
+		block := types.Block{
+			ProposerID: types.ValidatorID{Hash: common.NewRandomHash()},
+			Hash:       common.NewRandomHash(),
+			Height:     uint64(i),
+			State:      types.BlockStatusInit,
+		}
+		db.Put(block)
+		blocks[i] = block
+	}
+
+	// Save blocks to db.
+	err = db.Close()
+	s.Nil(err)
+
+	// Load back blocks(syncIndex is called).
+	db, err = NewLevelDBBackendBlockDB(dbName)
+	s.Require().Nil(err)
+
+	// Verify result.
+	for _, block := range blocks {
+		queried, err := db.Get(block.Hash)
+		s.Nil(err)
+		s.Equal(block.ProposerID, queried.ProposerID)
+		s.Equal(block.Height, queried.Height)
+	}
+
+	// Verify result using GetByValidatorAndHeight().
+	for _, block := range blocks {
+		queried, err := db.GetByValidatorAndHeight(block.ProposerID, block.Height)
+		s.Nil(err)
+		s.Equal(block.Hash, queried.Hash)
+	}
+}
+
 func TestLevelDB(t *testing.T) {
 	suite.Run(t, new(LevelDBTestSuite))
 }
