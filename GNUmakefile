@@ -52,7 +52,10 @@ $(foreach component, $(COMPONENTS), $(eval $(call BUILD_RULE,$(component))))
 
 pre-build:
 
-pre-submit: lint test vet
+pre-submit: check-format lint test vet
+
+format:
+	@go fmt `go list ./... | grep -v 'vendor'`
 
 lint:
 	@$(GOPATH)/bin/golint -set_exit_status `go list ./... | grep -v 'vendor'`
@@ -67,3 +70,10 @@ test:
 			exit 1; \
 		fi; \
 	done
+
+check-format:
+	@if gofmt -l `go list -f '{{.Dir}}' ./...` | grep -q go; then \
+		echo 'Error: source code not formatted'; \
+		exit 1; \
+	fi
+

@@ -11,6 +11,7 @@ jobs:
     steps:
       - checkout
       - run: bin/install_tools.sh
+      - run: make check-format
       - run: dep ensure
       - run: make lint
       - run: make vet
