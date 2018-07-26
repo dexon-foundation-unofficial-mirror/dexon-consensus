@@ -10,9 +10,23 @@ jobs:
 
     steps:
       - checkout
+      - restore_cache:
+          keys:
+            - v1-Gopkg.lock-{{ .Branch }}-{{ checksum "Gopkg.toml" }}
+      - restore_cache:
+          keys:
+            - v1-vendor-{{ .Branch }}-{{ checksum "Gopkg.lock" }}
       - run: bin/install_tools.sh
       - run: make check-format
       - run: dep ensure
+      - save_cache:
+          key: v1-Gopkg.lock-{{ .Branch }}-{{ checksum "Gopkg.toml" }}
+          paths:
+            - Gopkg.lock
+      - save_cache:
+          key: v1-vendor-{{ .Branch }}-{{ checksum "Gopkg.lock" }}
+          paths:
+            - vendor
       - run: make lint
       - run: make vet
       - run: make test
