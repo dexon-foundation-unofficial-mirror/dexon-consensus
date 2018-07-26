@@ -28,15 +28,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dexon-foundation/dexon-consensus-core/core"
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-// TCPNetwork implements the core.Network interface.
+// TCPNetwork implements the Network interface.
 type TCPNetwork struct {
 	local    bool
 	port     int
-	endpoint core.Endpoint
+	endpoint Endpoint
 
 	peerServer    string
 	endpointMutex sync.RWMutex
@@ -116,7 +116,7 @@ func (n *TCPNetwork) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Join allow a client to join the network. It reutnrs a interface{} channel for
 // the client to recieve information.
-func (n *TCPNetwork) Join(endpoint core.Endpoint) chan interface{} {
+func (n *TCPNetwork) Join(endpoint Endpoint) chan interface{} {
 	n.endpointMutex.Lock()
 	defer n.endpointMutex.Unlock()
 
@@ -234,4 +234,42 @@ func (n *TCPNetwork) BroadcastBlock(block *types.Block) {
 	for endpoint := range n.endpoints {
 		n.Send(endpoint, block.Clone())
 	}
+}
+
+// DeliverBlocks sends blocks to peerServer.
+func (n *TCPNetwork) DeliverBlocks(blocks common.Hashes, id int) {
+
+	message := BlockList{
+		ID:        id,
+		BlockHash: blocks,
+	}
+
+	messageJSON, err := json.Marshal(message)
+	if err != nil {
+		fmt.Printf("error: failed to marshal json: %v\n%+v\n", err, message)
+		return
+	}
+
+	msgURL := fmt.Sprintf("http://%s:%d/delivery", n.peerServer, peerPort)
+
+	go func() {
+		retries := 3
+		client := &http.Client{Timeout: 5 * time.Second}
+
+		for i := 0; i < retries; i++ {
+			req, err := http.NewRequest(
+				http.MethodPost, msgURL, strings.NewReader(string(messageJSON)))
+			if err != nil {
+				continue
+			}
+			req.Header.Add("ID", n.endpoint.GetID().String())
+
+			resp, err := client.Do(req)
+			if err == nil && resp.StatusCode == http.StatusOK {
+				runtime.Goexit()
+			}
+			time.Sleep(1 * time.Second)
+		}
+		fmt.Printf("failed to send message: %v\n", blocks)
+	}()
 }

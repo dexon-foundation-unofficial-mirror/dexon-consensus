@@ -20,6 +20,7 @@ package simulation
 import (
 	"fmt"
 
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -28,12 +29,16 @@ type SimApp struct {
 	ValidatorID types.ValidatorID
 	Outputs     []*types.Block
 	Early       bool
+	Network     PeerServerNetwork
+	DeliverID   int
 }
 
 // NewSimApp returns point to a new instance of SimApp.
-func NewSimApp(id types.ValidatorID) *SimApp {
+func NewSimApp(id types.ValidatorID, Network PeerServerNetwork) *SimApp {
 	return &SimApp{
 		ValidatorID: id,
+		Network:     Network,
+		DeliverID:   0,
 	}
 }
 
@@ -47,4 +52,10 @@ func (a *SimApp) Deliver(blocks []*types.Block, early bool) {
 	a.Outputs = blocks
 	a.Early = early
 	fmt.Println("OUTPUT", a.ValidatorID, a.Early, a.Outputs)
+	blockHash := common.Hashes{}
+	for _, block := range blocks {
+		blockHash = append(blockHash, block.Hash)
+	}
+	a.Network.DeliverBlocks(blockHash, a.DeliverID)
+	a.DeliverID++
 }

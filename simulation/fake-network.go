@@ -22,11 +22,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dexon-foundation/dexon-consensus-core/core"
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-// FakeNetwork implements the core.Network interface.
+// FakeNetwork implements the Network interface.
 type FakeNetwork struct {
 	model Model
 
@@ -55,7 +55,7 @@ func (n *FakeNetwork) NumPeers() int {
 
 // Join allow a client to join the network. It reutnrs a interface{} channel for
 // the client to recieve information.
-func (n *FakeNetwork) Join(endpoint core.Endpoint) chan interface{} {
+func (n *FakeNetwork) Join(endpoint Endpoint) chan interface{} {
 	n.endpointMutex.Lock()
 	defer n.endpointMutex.Unlock()
 
@@ -92,4 +92,10 @@ func (n *FakeNetwork) BroadcastBlock(block *types.Block) {
 	for endpoint := range n.endpoints {
 		n.Send(endpoint, block.Clone())
 	}
+}
+
+// DeliverBlocks sends blocks to peerServer.
+func (n *FakeNetwork) DeliverBlocks(blocks common.Hashes, id int) {
+	// TODO
+	return
 }

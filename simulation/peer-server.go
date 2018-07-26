@@ -20,6 +20,7 @@ package simulation
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -31,14 +32,17 @@ import (
 
 // PeerServer is the main object for maintaining peer list.
 type PeerServer struct {
-	peers   map[types.ValidatorID]string
-	peersMu sync.Mutex
+	peers            map[types.ValidatorID]string
+	peersMu          sync.Mutex
+	peerTotalOrder   PeerTotalOrder
+	peerTotalOrderMu sync.Mutex
 }
 
 // NewPeerServer returns a new peer server.
 func NewPeerServer() *PeerServer {
 	return &PeerServer{
-		peers: make(map[types.ValidatorID]string),
+		peers:          make(map[types.ValidatorID]string),
+		peerTotalOrder: make(PeerTotalOrder),
 	}
 }
 
@@ -69,6 +73,7 @@ func (p *PeerServer) Run(configPath string) {
 
 		host, _, _ := net.SplitHostPort(r.RemoteAddr)
 		p.peers[id] = net.JoinHostPort(host, portString)
+		p.peerTotalOrder[id] = NewTotalOrderResult()
 		log.Printf("Peer %s joined from %s", id, p.peers[id])
 	}
 
@@ -105,10 +110,50 @@ func (p *PeerServer) Run(configPath string) {
 		w.Write(jsonText)
 	}
 
+	deliveryHandler := func(w http.ResponseWriter, r *http.Request) {
+		idString := r.Header.Get("ID")
+
+		defer r.Body.Close()
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		m := BlockList{}
+		if err := json.Unmarshal(body, &m); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		id := types.ValidatorID{}
+		id.UnmarshalText([]byte(idString))
+
+		p.peerTotalOrderMu.Lock()
+		defer p.peerTotalOrderMu.Unlock()
+
+		readyForVerify := p.peerTotalOrder[id].PushBlocks(m)
+		if !readyForVerify {
+			return
+		}
+
+		// Verify the total order result.
+		go func(id types.ValidatorID) {
+			p.peerTotalOrderMu.Lock()
+			defer p.peerTotalOrderMu.Unlock()
+			var correct bool
+			p.peerTotalOrder, correct = VerifyTotalOrder(id, p.peerTotalOrder)
+			if !correct {
+				log.Printf("The result of Total Ordering Algorithm has error.\n")
+			}
+		}(id)
+	}
+
 	http.HandleFunc("/reset", resetHandler)
 	http.HandleFunc("/join", joinHandler)
 	http.HandleFunc("/peers", peersHandler)
 	http.HandleFunc("/info", infoHandler)
+	http.HandleFunc("/delivery", deliveryHandler)
 
 	addr := fmt.Sprintf("0.0.0.0:%d", peerPort)
 	log.Printf("Peer server started at %s", addr)

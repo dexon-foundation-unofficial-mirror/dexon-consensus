@@ -15,9 +15,10 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package core
+package simulation
 
 import (
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -28,8 +29,14 @@ type Endpoint interface {
 
 // Network is the interface for network related functions.
 type Network interface {
+	PeerServerNetwork
 	Start()
 	NumPeers() int
 	Join(endpoint Endpoint) chan interface{}
 	BroadcastBlock(block *types.Block)
+}
+
+// PeerServerNetwork is the interface for peerServer network related functions
+type PeerServerNetwork interface {
+	DeliverBlocks(blocks common.Hashes, id int)
 }

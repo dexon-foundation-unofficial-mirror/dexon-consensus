@@ -31,7 +31,7 @@ import (
 
 // Validator represents a validator in DexCon.
 type Validator struct {
-	network core.Network
+	network Network
 	app     *SimApp
 
 	config     config.Validator
@@ -50,9 +50,9 @@ type Validator struct {
 func NewValidator(
 	id types.ValidatorID,
 	config config.Validator,
-	network core.Network,
+	network Network,
 	db *leveldb.DB) *Validator {
-	app := NewSimApp(id)
+	app := NewSimApp(id, network)
 	lattice := core.NewBlockLattice(blockdb.NewMemBackedBlockDB(), app)
 	return &Validator{
 		ID:      id,

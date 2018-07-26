@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/core"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
@@ -39,7 +38,7 @@ func Run(configPath string) {
 		networkType == config.NetworkTypeTCPLocal {
 
 		var vs []*Validator
-		var network core.Network
+		var network Network
 
 		if networkType == config.NetworkTypeFake {
 			networkModel := &NormalNetwork{
