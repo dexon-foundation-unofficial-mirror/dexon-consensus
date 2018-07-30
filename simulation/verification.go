@@ -70,12 +70,12 @@ func (totalOrder *TotalOrderResult) PushBlocks(blocks BlockList) (ready bool) {
 // of each validators may not be the same, so only the common part is verified.
 func VerifyTotalOrder(id types.ValidatorID,
 	totalOrder PeerTotalOrder) (
-	unverifiedMap PeerTotalOrder, correct bool) {
+	unverifiedMap PeerTotalOrder, correct bool, length int) {
 
 	hasError := false
 
 	// Get the common length from all validators.
-	length := math.MaxInt32
+	length = math.MaxInt32
 	for _, peerTotalOrder := range totalOrder {
 		if len(peerTotalOrder.hashList) < length {
 			length = len(peerTotalOrder.hashList)
@@ -107,5 +107,5 @@ func VerifyTotalOrder(id types.ValidatorID,
 				totalOrder[vid].hashList[length:]
 		}
 	}
-	return totalOrder, !hasError
+	return totalOrder, !hasError, length
 }

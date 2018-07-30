@@ -18,6 +18,7 @@
 package config
 
 import (
+	"math"
 	"os"
 
 	"github.com/naoina/toml"
@@ -38,6 +39,7 @@ type Validator struct {
 	Num                  int
 	ProposeIntervalMean  float64
 	ProposeIntervalSigma float64
+	MaxBlock             uint64
 }
 
 // Networking config.
@@ -71,6 +73,7 @@ func GenerateDefault(path string) error {
 			Num:                  7,
 			ProposeIntervalMean:  500,
 			ProposeIntervalSigma: 30,
+			MaxBlock:             math.MaxUint64,
 		},
 		Networking: Networking{
 			Type:          NetworkTypeFake,

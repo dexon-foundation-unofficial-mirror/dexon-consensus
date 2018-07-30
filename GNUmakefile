@@ -77,3 +77,13 @@ check-format:
 		exit 1; \
 	fi
 
+.ONESHELL:
+test-sim: all
+	@rm -rf build/test-sim
+	@mkdir build/test-sim
+	@cp test_config/test.toml build/test-sim/
+	@cd build/test-sim ; ../dexcon-simulation-peer-server -config test.toml >& server.log &
+	@cd build/test-sim ; ../dexcon-simulation -config test.toml >& /dev/null
+	@if grep "error" build/test-sim/server.log -q -i; then \
+		exit 1; \
+	fi

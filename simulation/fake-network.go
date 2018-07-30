@@ -96,6 +96,18 @@ func (n *FakeNetwork) BroadcastBlock(block *types.Block) {
 
 // DeliverBlocks sends blocks to peerServer.
 func (n *FakeNetwork) DeliverBlocks(blocks common.Hashes, id int) {
-	// TODO
+	// TODO(jimmy-dexon): Implement this method.
 	return
+}
+
+// NotifyServer sends message to peerServer
+func (n *FakeNetwork) NotifyServer(msg Message) {
+	// TODO(jimmy-dexon): Implement this method.
+	return
+}
+
+// GetServerInfo retrieve the info message from peerServer.
+func (n *FakeNetwork) GetServerInfo() InfoMessage {
+	// TODO(jimmy-dexon): Implement this method.
+	return InfoMessage{}
 }

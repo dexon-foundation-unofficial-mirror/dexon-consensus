@@ -34,10 +34,11 @@ func Run(configPath string) {
 
 	networkType := cfg.Networking.Type
 
+	var vs []*Validator
+
 	if networkType == config.NetworkTypeFake ||
 		networkType == config.NetworkTypeTCPLocal {
 
-		var vs []*Validator
 		var network Network
 
 		if networkType == config.NetworkTypeFake {
@@ -71,7 +72,11 @@ func Run(configPath string) {
 		go network.Start()
 		v := NewValidator(id, cfg.Validator, network, nil)
 		go v.Run()
+		vs = append(vs, v)
 	}
 
-	select {}
+	for _, v := range vs {
+		v.Wait()
+		fmt.Printf("Validator %s is shutdown\n", v.GetID())
+	}
 }

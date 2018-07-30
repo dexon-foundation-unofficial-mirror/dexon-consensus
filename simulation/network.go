@@ -18,9 +18,36 @@
 package simulation
 
 import (
+	"encoding/json"
+
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
+
+type messageType string
+
+const (
+	shutdownAck messageType = "shutdownAck"
+)
+
+// Message is a struct for peer sending message to server.
+type Message struct {
+	Type    messageType     `json:"type"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+type infoStatus string
+
+const (
+	normal   infoStatus = "normal"
+	shutdown infoStatus = "shutdown"
+)
+
+// InfoMessage is a struct used by peerServer's /info.
+type InfoMessage struct {
+	Status infoStatus                   `json:"status"`
+	Peers  map[types.ValidatorID]string `json:"peers"`
+}
 
 // Endpoint is the interface for a client network endpoint.
 type Endpoint interface {
@@ -39,4 +66,6 @@ type Network interface {
 // PeerServerNetwork is the interface for peerServer network related functions
 type PeerServerNetwork interface {
 	DeliverBlocks(blocks common.Hashes, id int)
+	NotifyServer(msg Message)
+	GetServerInfo() InfoMessage
 }

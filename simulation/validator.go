@@ -37,6 +37,7 @@ type Validator struct {
 	config     config.Validator
 	db         *leveldb.DB
 	msgChannel chan interface{}
+	isFinished chan struct{}
 
 	ID              types.ValidatorID
 	lattice         *core.BlockLattice
@@ -55,12 +56,13 @@ func NewValidator(
 	app := NewSimApp(id, network)
 	lattice := core.NewBlockLattice(blockdb.NewMemBackedBlockDB(), app)
 	return &Validator{
-		ID:      id,
-		config:  config,
-		network: network,
-		app:     app,
-		db:      db,
-		lattice: lattice,
+		ID:         id,
+		config:     config,
+		network:    network,
+		app:        app,
+		db:         db,
+		lattice:    lattice,
+		isFinished: make(chan struct{}),
 	}
 }
 
@@ -73,11 +75,38 @@ func (v *Validator) GetID() types.ValidatorID {
 func (v *Validator) Run() {
 	v.msgChannel = v.network.Join(v)
 
+	isStopped := make(chan struct{})
+	isShutdown := make(chan struct{})
+
+	v.BroadcastGenesisBlock()
 	go v.MsgServer()
-	go v.BlockProposer()
+	go v.CheckServerInfo(isShutdown)
+	go v.BlockProposer(isStopped, isShutdown)
 
 	// Blocks forever.
-	select {}
+	<-isStopped
+	v.network.NotifyServer(Message{
+		Type: shutdownAck,
+	})
+	v.isFinished <- struct{}{}
+}
+
+// Wait for the validator to stop (if peerServer told it to).
+func (v *Validator) Wait() {
+	<-v.isFinished
+}
+
+// CheckServerInfo will check the info from the peerServer and update
+// validator's status if needed.
+func (v *Validator) CheckServerInfo(isShutdown chan struct{}) {
+	for {
+		infoMsg := v.network.GetServerInfo()
+		if infoMsg.Status == shutdown {
+			isShutdown <- struct{}{}
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }
 
 // MsgServer listen to the network channel for message and handle it.
@@ -95,8 +124,8 @@ func (v *Validator) MsgServer() {
 	}
 }
 
-// BlockProposer propose blocks to be send to the DEXON network.
-func (v *Validator) BlockProposer() {
+// BroadcastGenesisBlock broadcasts genesis block to all peers.
+func (v *Validator) BroadcastGenesisBlock() {
 	// Wait until all peer joined the network.
 	for v.network.NumPeers() != v.config.Num {
 		time.Sleep(time.Second)
@@ -120,7 +149,10 @@ func (v *Validator) BlockProposer() {
 		v.lattice.PrepareBlock(b)
 		v.network.BroadcastBlock(b)
 	}
+}
 
+// BlockProposer propose blocks to be send to the DEXON network.
+func (v *Validator) BlockProposer(isStopped, isShutdown chan struct{}) {
 	// Wait until all peer knows each other.
 	for len(v.lattice.ValidatorSet) != v.config.Num {
 		time.Sleep(time.Second)
@@ -130,7 +162,7 @@ func (v *Validator) BlockProposer() {
 		Sigma: v.config.ProposeIntervalSigma,
 		Mean:  v.config.ProposeIntervalMean,
 	}
-
+ProposingBlockLoop:
 	for {
 		time.Sleep(model.Delay())
 
@@ -144,5 +176,12 @@ func (v *Validator) BlockProposer() {
 		v.current = block
 		v.lattice.PrepareBlock(block)
 		v.network.BroadcastBlock(block)
+		select {
+		case <-isShutdown:
+			isStopped <- struct{}{}
+			break ProposingBlockLoop
+		default:
+			break
+		}
 	}
 }

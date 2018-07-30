@@ -52,7 +52,7 @@ func NewTCPNetwork(local bool, peerServer string) *TCPNetwork {
 	}
 	pServer := peerServer
 	if local {
-		pServer = "localhost"
+		pServer = "127.0.0.1"
 	}
 	return &TCPNetwork{
 		local:       local,
@@ -217,6 +217,7 @@ func (n *TCPNetwork) Send(destID types.ValidatorID, msg interface{}) {
 			if err != nil {
 				continue
 			}
+			req.Close = true
 			req.Header.Add("ID", n.endpoint.GetID().String())
 
 			resp, err := client.Do(req)
@@ -272,4 +273,64 @@ func (n *TCPNetwork) DeliverBlocks(blocks common.Hashes, id int) {
 		}
 		fmt.Printf("failed to send message: %v\n", blocks)
 	}()
+}
+
+// NotifyServer sends message to peerServer
+func (n *TCPNetwork) NotifyServer(msg Message) {
+	messageJSON, err := json.Marshal(msg)
+	if err != nil {
+		fmt.Printf("error: failed to marshal json: %v\n%+v\n", err, msg)
+		return
+	}
+
+	msgURL := fmt.Sprintf("http://%s:%d/message", n.peerServer, peerPort)
+
+	retries := 3
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	for i := 0; i < retries; i++ {
+		req, err := http.NewRequest(
+			http.MethodPost, msgURL, strings.NewReader(string(messageJSON)))
+		if err != nil {
+			continue
+		}
+		req.Header.Add("ID", n.endpoint.GetID().String())
+
+		resp, err := client.Do(req)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			return
+		}
+		time.Sleep(1 * time.Second)
+	}
+	fmt.Printf("failed to send message: %v\n", msg)
+
+	return
+}
+
+// GetServerInfo retrieve the info message from peerServer.
+func (n *TCPNetwork) GetServerInfo() InfoMessage {
+	msgURL := fmt.Sprintf("http://%s:%d/info", n.peerServer, peerPort)
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	req, err := http.NewRequest(
+		http.MethodGet, msgURL, nil)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Printf("error: %v\n", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("error: %v\n", err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	infoMsg := InfoMessage{}
+
+	if err := json.Unmarshal(body, &infoMsg); err != nil {
+		fmt.Printf("error: %v", err)
+	}
+	return infoMsg
 }
