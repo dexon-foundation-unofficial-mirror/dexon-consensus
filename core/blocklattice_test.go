@@ -244,7 +244,7 @@ func (s *BlockLatticeTest) SetupTest() {
 	Debugf("\n")
 }
 
-func (s *BlockLatticeTest) TestAckAndStateTransition() {
+func (s *BlockLatticeTest) TestAckAndStatusTransition() {
 	// Recieve Order:
 	//   B01 -> B12 -> B11 -> B21 -> B31 -> B02 -> B32 -> B22 -> B13 -> B33
 	//       -> B03 -> B23
@@ -311,7 +311,7 @@ func (s *BlockLatticeTest) TestAckAndStateTransition() {
 	s.Require().Equal(1, len(lattice.pendingSet))
 
 	s.Require().NotNil(lattice.pendingSet[b01.Hash])
-	s.Require().Equal(types.BlockStatusToTo, b01.State)
+	s.Require().Equal(types.BlockStatusOrdering, b01.Status)
 
 	// b01 is acked.
 	s.Require().Equal(4, len(b01.Ackeds))
@@ -390,10 +390,10 @@ func (s *BlockLatticeTest) TestAckAndStateTransition() {
 	s.Require().NotNil(lattice.pendingSet[b11.Hash])
 	s.Require().NotNil(lattice.pendingSet[b21.Hash])
 	s.Require().NotNil(lattice.pendingSet[b31.Hash])
-	s.Require().Equal(types.BlockStatusToTo, b01.State)
-	s.Require().Equal(types.BlockStatusToTo, b11.State)
-	s.Require().Equal(types.BlockStatusToTo, b21.State)
-	s.Require().Equal(types.BlockStatusToTo, b31.State)
+	s.Require().Equal(types.BlockStatusOrdering, b01.Status)
+	s.Require().Equal(types.BlockStatusOrdering, b11.Status)
+	s.Require().Equal(types.BlockStatusOrdering, b21.Status)
+	s.Require().Equal(types.BlockStatusOrdering, b31.Status)
 
 	// b02 is acked.
 	s.Require().Equal(2, len(b02.Ackeds))

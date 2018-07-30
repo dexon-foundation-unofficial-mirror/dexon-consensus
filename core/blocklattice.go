@@ -41,7 +41,7 @@ const (
 // BlockLattice represents the local view of a single validator.
 //
 // blockDB stores blocks that are final. blocks stores blocks that are in ToTo
-// State.
+// Status.
 type BlockLattice struct {
 	owner        types.ValidatorID
 	ValidatorSet map[types.ValidatorID]struct{}
@@ -98,7 +98,7 @@ func (l *BlockLattice) AddValidator(
 	l.phi = 2*l.fmax + 1
 
 	// TODO: We should not make genesis blocks 'final' directly.
-	genesis.State = types.BlockStatusFinal
+	genesis.Status = types.BlockStatusFinal
 	l.blockDB.Put(*genesis)
 }
 
@@ -144,7 +144,7 @@ func (l *BlockLattice) processAcks(b *types.Block) {
 		ackedBlock.Ackeds[b.Hash] = struct{}{}
 
 		bp := ackedBlock
-		for bp != nil && bp.State < types.BlockStatusAcked {
+		for bp != nil && bp.Status < types.BlockStatusAcked {
 			if bp.Ackeds == nil {
 				bp.Ackeds = make(map[common.Hash]struct{})
 			}
@@ -160,7 +160,7 @@ func (l *BlockLattice) processAcks(b *types.Block) {
 			}
 
 			if len(ackedByNodes) > 2*l.fmax {
-				bp.State = types.BlockStatusAcked
+				bp.Status = types.BlockStatusAcked
 				l.stronglyAckedSet[bp.Hash] = bp
 			}
 			bp = l.getBlock(bp.ParentHash)
@@ -170,7 +170,7 @@ func (l *BlockLattice) processAcks(b *types.Block) {
 		populateAckBy = func(bx, target *types.Block) {
 			for ab := range bx.Acks {
 				abb := l.getBlock(ab)
-				if abb.State < types.BlockStatusFinal {
+				if abb.Status < types.BlockStatusFinal {
 					if abb.Ackeds == nil {
 						abb.Ackeds = make(map[common.Hash]struct{})
 					}
@@ -220,7 +220,7 @@ func (l *BlockLattice) isValidAckCandidate(b *types.Block) bool {
 			if bx == nil {
 				return false
 			}
-			if bx.State == types.BlockStatusFinal {
+			if bx.Status == types.BlockStatusFinal {
 				return true
 			}
 		}
@@ -281,11 +281,11 @@ IterateStronglyAckedSet:
 	for bpHash, bp := range l.stronglyAckedSet {
 		for ackBlockHash := range bp.Acks {
 			bx := l.getBlock(ackBlockHash)
-			if bx == nil || bx.State < types.BlockStatusAcked {
+			if bx == nil || bx.Status < types.BlockStatusAcked {
 				break IterateStronglyAckedSet
 			}
 		}
-		bp.State = types.BlockStatusToTo
+		bp.Status = types.BlockStatusOrdering
 		l.pendingSet[bp.Hash] = bp
 		delete(l.stronglyAckedSet, bpHash)
 
@@ -340,7 +340,7 @@ func (l *BlockLattice) calculateABSofBlock(b *types.Block) {
 	calculateABSRecursive = func(target *types.Block) {
 		for hash := range target.Ackeds {
 			ackedByBlock := l.getBlock(hash)
-			if ackedByBlock.State != types.BlockStatusToTo {
+			if ackedByBlock.Status != types.BlockStatusOrdering {
 				continue
 			}
 			v, exists := l.ABS[b.Hash][ackedByBlock.ProposerID]
@@ -398,7 +398,7 @@ func (l *BlockLattice) totalOrdering(b *types.Block) {
 	acksOnlyFinal := true
 	for ackedBlockHash := range b.Acks {
 		bp := l.getBlock(ackedBlockHash)
-		if bp.State != types.BlockStatusFinal {
+		if bp.Status != types.BlockStatusFinal {
 			acksOnlyFinal = false
 			break
 		}
@@ -515,7 +515,7 @@ func (l *BlockLattice) totalOrdering(b *types.Block) {
 	var output []*types.Block
 	for hash, x := range precedingSet {
 		output = append(output, x)
-		x.State = types.BlockStatusFinal
+		x.Status = types.BlockStatusFinal
 
 		// Remove from pending set and candidate set.
 		delete(l.pendingSet, hash)
@@ -543,7 +543,7 @@ func (l *BlockLattice) totalOrdering(b *types.Block) {
 		acksOnlyFinal := true
 		for ackedBlockHash := range block.Acks {
 			bp := l.getBlock(ackedBlockHash)
-			if bp.State != types.BlockStatusFinal {
+			if bp.Status != types.BlockStatusFinal {
 				acksOnlyFinal = false
 				break
 			}

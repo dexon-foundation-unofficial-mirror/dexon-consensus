@@ -25,14 +25,14 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 )
 
-// State represents the block process state.
-type State int
+// Status represents the block process state.
+type Status int
 
 // Block Status.
 const (
-	BlockStatusInit State = iota
+	BlockStatusInit Status = iota
 	BlockStatusAcked
-	BlockStatusToTo
+	BlockStatusOrdering
 	BlockStatusFinal
 )
 
@@ -45,8 +45,9 @@ type Block struct {
 	Timestamps map[ValidatorID]time.Time `json:"timestamps"`
 	Acks       map[common.Hash]struct{}  `json:"acks"`
 
-	Ackeds map[common.Hash]struct{} `json:"-"`
-	State  State                    `json:"-"`
+	Ackeds          map[common.Hash]struct{} `json:"-"`
+	AckedValidators map[ValidatorID]struct{} `json:"-"`
+	Status          Status                   `json:"-"`
 }
 
 func (b *Block) String() string {
