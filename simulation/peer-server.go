@@ -217,6 +217,8 @@ func (p *PeerServer) Run(configPath string) {
 	go func() {
 		<-stopServer
 
+		LogStatus(p.peerTotalOrder)
+
 		log.Printf("Shutting down peerServer.\n")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

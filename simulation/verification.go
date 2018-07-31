@@ -21,10 +21,20 @@ import (
 	"container/heap"
 	"log"
 	"math"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
+
+type timeStamp struct {
+	time   time.Time
+	length int
+}
+
+type totalOrderStatus struct {
+	blockReceive []timeStamp
+}
 
 // TotalOrderResult is the object maintaining peer's result of
 // Total Ordering Algorithm.
@@ -32,6 +42,7 @@ type TotalOrderResult struct {
 	hashList         common.Hashes
 	curID            int
 	pendingBlockList PendingBlockList
+	status           totalOrderStatus
 }
 
 // PeerTotalOrder stores the TotalOrderResult of each validator.
@@ -47,6 +58,11 @@ func NewTotalOrderResult() *TotalOrderResult {
 // PushBlocks push a BlockList into the TotalOrderResult and return true if
 // there is new blocks ready for verifiy
 func (totalOrder *TotalOrderResult) PushBlocks(blocks BlockList) (ready bool) {
+	totalOrder.status.blockReceive = append(totalOrder.status.blockReceive,
+		timeStamp{
+			time:   time.Now(),
+			length: len(blocks.BlockHash),
+		})
 	if blocks.ID != totalOrder.curID {
 		heap.Push(&totalOrder.pendingBlockList, &blocks)
 		return false
@@ -63,6 +79,28 @@ func (totalOrder *TotalOrderResult) PushBlocks(blocks BlockList) (ready bool) {
 		blocks = *heap.Pop(&totalOrder.pendingBlockList).(*BlockList)
 	}
 	return true
+}
+
+// CalculateBlocksPerSecond calculates the result using status.blockReceive
+func (totalOrder *TotalOrderResult) CalculateBlocksPerSecond() float64 {
+	ts := totalOrder.status.blockReceive
+	if len(ts) < 2 {
+		return 0
+	}
+
+	diffTime := ts[len(ts)-1].time.Sub(ts[0].time).Seconds()
+	if diffTime == 0 {
+		return 0
+	}
+	totalBlocks := 0
+	for _, blocks := range ts {
+		// Blocks received at time zero are confirmed beforehand.
+		if blocks.time == ts[0].time {
+			continue
+		}
+		totalBlocks += blocks.length
+	}
+	return float64(totalBlocks) / diffTime
 }
 
 // VerifyTotalOrder verifies if the result of Total Ordering Algorithm
@@ -108,4 +146,11 @@ func VerifyTotalOrder(id types.ValidatorID,
 		}
 	}
 	return totalOrder, !hasError, length
+}
+
+// LogStatus prints all the status to log.
+func LogStatus(peerTotalOrder PeerTotalOrder) {
+	for vID, totalOrder := range peerTotalOrder {
+		log.Printf("[Validator %s] BPS: %.6f\n", vID, totalOrder.CalculateBlocksPerSecond())
+	}
 }
