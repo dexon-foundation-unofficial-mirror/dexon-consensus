@@ -51,14 +51,14 @@ func Run(configPath string) {
 
 			for i := 0; i < cfg.Validator.Num; i++ {
 				id := types.ValidatorID{Hash: common.NewRandomHash()}
-				vs = append(vs, NewValidator(id, cfg.Validator, network, nil))
+				vs = append(vs, NewValidator(id, cfg.Validator, network))
 			}
 		} else if networkType == config.NetworkTypeTCPLocal {
 			for i := 0; i < cfg.Validator.Num; i++ {
 				id := types.ValidatorID{Hash: common.NewRandomHash()}
 				network := NewTCPNetwork(true, cfg.Networking.PeerServer)
 				go network.Start()
-				vs = append(vs, NewValidator(id, cfg.Validator, network, nil))
+				vs = append(vs, NewValidator(id, cfg.Validator, network))
 			}
 		}
 
@@ -70,7 +70,7 @@ func Run(configPath string) {
 		id := types.ValidatorID{Hash: common.NewRandomHash()}
 		network := NewTCPNetwork(false, cfg.Networking.PeerServer)
 		go network.Start()
-		v := NewValidator(id, cfg.Validator, network, nil)
+		v := NewValidator(id, cfg.Validator, network)
 		go v.Run()
 		vs = append(vs, v)
 	}

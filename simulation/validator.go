@@ -20,8 +20,6 @@ package simulation
 import (
 	"time"
 
-	"github.com/syndtr/goleveldb/leveldb"
-
 	"github.com/dexon-foundation/dexon-consensus-core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core"
@@ -35,7 +33,6 @@ type Validator struct {
 	app     *SimApp
 
 	config     config.Validator
-	db         *leveldb.DB
 	msgChannel chan interface{}
 	isFinished chan struct{}
 
@@ -51,16 +48,18 @@ type Validator struct {
 func NewValidator(
 	id types.ValidatorID,
 	config config.Validator,
-	network Network,
-	db *leveldb.DB) *Validator {
+	network Network) *Validator {
 	app := NewSimApp(id, network)
-	lattice := core.NewBlockLattice(blockdb.NewMemBackedBlockDB(), app)
+	db, err := blockdb.NewMemBackedBlockDB()
+	if err != nil {
+		panic(err)
+	}
+	lattice := core.NewBlockLattice(db, app)
 	return &Validator{
 		ID:         id,
 		config:     config,
 		network:    network,
 		app:        app,
-		db:         db,
 		lattice:    lattice,
 		isFinished: make(chan struct{}),
 	}

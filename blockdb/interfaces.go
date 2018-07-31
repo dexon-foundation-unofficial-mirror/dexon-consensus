@@ -19,6 +19,7 @@ package blockdb
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -29,25 +30,41 @@ var (
 	ErrBlockExists = errors.New("block exists")
 	// ErrBlockDoesNotExist is the error when block does not eixst.
 	ErrBlockDoesNotExist = errors.New("block does not exist")
-	// ErrValidatorDoesNotExist is the error when validator does not eixst.
-	ErrValidatorDoesNotExist = errors.New("validator does not exist")
+	// ErrIterationFinished is the error to check if the iteration is finished.
+	ErrIterationFinished = errors.New("iteration finished")
+	// ErrEmptyPath is the error when the required path is empty.
+	ErrEmptyPath = fmt.Errorf("empty path")
+	// ErrClosed is the error when using DB after it's closed.
+	ErrClosed = fmt.Errorf("db closed")
+	// ErrNotImplemented is the error that some interface is not implemented.
+	ErrNotImplemented = fmt.Errorf("not implemented")
 )
 
 // BlockDatabase is the interface for a BlockDatabase.
 type BlockDatabase interface {
 	Reader
 	Writer
+
+	// Close allows database implementation able to
+	// release resource when finishing.
+	Close() error
 }
 
 // Reader defines the interface for reading blocks into DB.
 type Reader interface {
 	Has(hash common.Hash) bool
 	Get(hash common.Hash) (types.Block, error)
-	GetByValidatorAndHeight(vID types.ValidatorID, height uint64) (types.Block, error)
+	GetAll() (BlockIterator, error)
 }
 
 // Writer defines the interface for writing blocks into DB.
 type Writer interface {
 	Update(block types.Block) error
 	Put(block types.Block) error
+}
+
+// BlockIterator defines an iterator on blocks hold
+// in a DB.
+type BlockIterator interface {
+	Next() (types.Block, error)
 }

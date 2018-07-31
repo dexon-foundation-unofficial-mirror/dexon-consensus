@@ -68,7 +68,9 @@ func (s *BlockLatticeTest) SetupTest() {
 
 	s.app = &TestApp{}
 
-	lattice = NewBlockLattice(blockdb.NewMemBackedBlockDB(), s.app)
+	db, err := blockdb.NewMemBackedBlockDB()
+	s.Require().Nil(err)
+	lattice = NewBlockLattice(db, s.app)
 
 	for i := 0; i < 4; i++ {
 		validators = append(validators,

@@ -36,7 +36,7 @@ type LevelDBTestSuite struct {
 
 func (s *LevelDBTestSuite) TestBasicUsage() {
 	dbName := fmt.Sprintf("test-db-%v.db", time.Now().UTC())
-	db, err := NewLevelDBBackendBlockDB(dbName)
+	db, err := NewLevelDBBackedBlockDB(dbName)
 	s.Require().Nil(err)
 	defer func(dbName string) {
 		err = db.Close()
@@ -81,7 +81,7 @@ func (s *LevelDBTestSuite) TestBasicUsage() {
 	s.Nil(err)
 
 	// Try to get it back via ValidatorID and height.
-	queried, err = db.GetByValidatorAndHeight(block1.ProposerID, block1.Height)
+	queried, err = db.Get(block1.Hash)
 
 	s.Nil(err)
 	s.Equal(now, queried.Timestamps[queried.ProposerID])
@@ -89,7 +89,7 @@ func (s *LevelDBTestSuite) TestBasicUsage() {
 
 func (s *LevelDBTestSuite) TestSyncIndex() {
 	dbName := fmt.Sprintf("test-db-%v-si.db", time.Now().UTC())
-	db, err := NewLevelDBBackendBlockDB(dbName)
+	db, err := NewLevelDBBackedBlockDB(dbName)
 	s.Require().Nil(err)
 	defer func(dbName string) {
 		err = db.Close()
@@ -116,7 +116,7 @@ func (s *LevelDBTestSuite) TestSyncIndex() {
 	s.Nil(err)
 
 	// Load back blocks(syncIndex is called).
-	db, err = NewLevelDBBackendBlockDB(dbName)
+	db, err = NewLevelDBBackedBlockDB(dbName)
 	s.Require().Nil(err)
 
 	// Verify result.
@@ -125,13 +125,6 @@ func (s *LevelDBTestSuite) TestSyncIndex() {
 		s.Nil(err)
 		s.Equal(block.ProposerID, queried.ProposerID)
 		s.Equal(block.Height, queried.Height)
-	}
-
-	// Verify result using GetByValidatorAndHeight().
-	for _, block := range blocks {
-		queried, err := db.GetByValidatorAndHeight(block.ProposerID, block.Height)
-		s.Nil(err)
-		s.Equal(block.Hash, queried.Hash)
 	}
 }
 

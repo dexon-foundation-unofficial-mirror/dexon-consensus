@@ -19,7 +19,6 @@ package blockdb
 
 import (
 	"encoding/json"
-	"sync"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
@@ -28,36 +27,30 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-// LevelDBBackendBlockDB is a leveldb backend BlockDB implementation.
-type LevelDBBackendBlockDB struct {
-	db        *leveldb.DB
-	index     map[types.ValidatorID]map[uint64]common.Hash
-	indexLock sync.RWMutex
+// LevelDBBackedBlockDB is a leveldb backed BlockDB implementation.
+type LevelDBBackedBlockDB struct {
+	db *leveldb.DB
 }
 
-// NewLevelDBBackendBlockDB initialize a leveldb-backed block database.
-func NewLevelDBBackendBlockDB(
-	path string) (lvl *LevelDBBackendBlockDB, err error) {
+// NewLevelDBBackedBlockDB initialize a leveldb-backed block database.
+func NewLevelDBBackedBlockDB(
+	path string) (lvl *LevelDBBackedBlockDB, err error) {
 
 	db, err := leveldb.OpenFile(path, nil)
 	if err != nil {
 		return
 	}
-	lvl = &LevelDBBackendBlockDB{db: db}
-	err = lvl.syncIndex()
-	if err != nil {
-		return
-	}
+	lvl = &LevelDBBackedBlockDB{db: db}
 	return
 }
 
-// Close would release allocated resource.
-func (lvl *LevelDBBackendBlockDB) Close() error {
+// Close implement Closer interface, which would release allocated resource.
+func (lvl *LevelDBBackedBlockDB) Close() error {
 	return lvl.db.Close()
 }
 
 // Has implements the Reader.Has method.
-func (lvl *LevelDBBackendBlockDB) Has(hash common.Hash) bool {
+func (lvl *LevelDBBackedBlockDB) Has(hash common.Hash) bool {
 	exists, err := lvl.db.Has([]byte(hash[:]), nil)
 	if err != nil {
 		// TODO(missionliao): Modify the interface to return error.
@@ -67,7 +60,7 @@ func (lvl *LevelDBBackendBlockDB) Has(hash common.Hash) bool {
 }
 
 // Get implements the Reader.Get method.
-func (lvl *LevelDBBackendBlockDB) Get(
+func (lvl *LevelDBBackedBlockDB) Get(
 	hash common.Hash) (block types.Block, err error) {
 
 	queried, err := lvl.db.Get([]byte(hash[:]), nil)
@@ -84,44 +77,8 @@ func (lvl *LevelDBBackendBlockDB) Get(
 	return
 }
 
-// GetByValidatorAndHeight implements
-// the Reader.GetByValidatorAndHeight method.
-func (lvl *LevelDBBackendBlockDB) GetByValidatorAndHeight(
-	vID types.ValidatorID, height uint64) (block types.Block, err error) {
-
-	lvl.indexLock.RLock()
-	defer lvl.indexLock.RUnlock()
-
-	// Get block's hash from in-memory index.
-	vMap, exists := lvl.index[vID]
-	if !exists {
-		err = ErrBlockDoesNotExist
-		return
-	}
-	hash, exists := vMap[height]
-	if !exists {
-		err = ErrBlockDoesNotExist
-		return
-	}
-
-	// Get block from hash.
-	queried, err := lvl.db.Get([]byte(hash[:]), nil)
-	if err != nil {
-		if err == leveldb.ErrNotFound {
-			err = ErrBlockDoesNotExist
-		}
-		return
-	}
-
-	err = json.Unmarshal(queried, &block)
-	if err != nil {
-		return
-	}
-	return
-}
-
 // Update implements the Writer.Update method.
-func (lvl *LevelDBBackendBlockDB) Update(block types.Block) (err error) {
+func (lvl *LevelDBBackedBlockDB) Update(block types.Block) (err error) {
 	// NOTE: we didn't handle changes of block hash (and it
 	//       should not happen).
 	marshaled, err := json.Marshal(&block)
@@ -146,7 +103,7 @@ func (lvl *LevelDBBackendBlockDB) Update(block types.Block) (err error) {
 }
 
 // Put implements the Writer.Put method.
-func (lvl *LevelDBBackendBlockDB) Put(block types.Block) (err error) {
+func (lvl *LevelDBBackedBlockDB) Put(block types.Block) (err error) {
 	marshaled, err := json.Marshal(&block)
 	if err != nil {
 		return
@@ -167,47 +124,12 @@ func (lvl *LevelDBBackendBlockDB) Put(block types.Block) (err error) {
 	if err != nil {
 		return
 	}
-
-	// Build in-memory index.
-	lvl.addIndex(&block)
 	return
 }
 
-func (lvl *LevelDBBackendBlockDB) syncIndex() (err error) {
-	// Reset index.
-	lvl.index = make(map[types.ValidatorID]map[uint64]common.Hash)
-
-	// Construct index from DB.
-	iter := lvl.db.NewIterator(nil, nil)
-	defer func() {
-		iter.Release()
-		if err == nil {
-			// Only return iterator's error when no error
-			// is presented so far.
-			err = iter.Error()
-		}
-	}()
-
-	// Build index from blocks in DB, it may take time.
-	var block types.Block
-	for iter.Next() {
-		err = json.Unmarshal(iter.Value(), &block)
-		if err != nil {
-			return
-		}
-		lvl.addIndex(&block)
-	}
-	return
-}
-
-func (lvl *LevelDBBackendBlockDB) addIndex(block *types.Block) {
-	lvl.indexLock.Lock()
-	defer lvl.indexLock.Unlock()
-
-	heightMap, exists := lvl.index[block.ProposerID]
-	if !exists {
-		heightMap = make(map[uint64]common.Hash)
-		lvl.index[block.ProposerID] = heightMap
-	}
-	heightMap[block.Height] = block.Hash
+// GetAll implements Reader.GetAll method, which allows callers
+// to retrieve all blocks in DB.
+func (lvl *LevelDBBackedBlockDB) GetAll() (BlockIterator, error) {
+	// TODO (mission): Implement this part via goleveldb's iterator.
+	return nil, ErrNotImplemented
 }
