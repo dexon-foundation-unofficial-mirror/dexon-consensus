@@ -76,7 +76,7 @@ func (p *PeerServer) Run(configPath string) {
 
 		host, _, _ := net.SplitHostPort(r.RemoteAddr)
 		p.peers[id] = net.JoinHostPort(host, portString)
-		p.peerTotalOrder[id] = NewTotalOrderResult()
+		p.peerTotalOrder[id] = NewTotalOrderResult(id)
 		log.Printf("Peer %s joined from %s", id, p.peers[id])
 	}
 

@@ -20,7 +20,6 @@ package simulation
 import (
 	"encoding/json"
 
-	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -65,7 +64,7 @@ type Network interface {
 
 // PeerServerNetwork is the interface for peerServer network related functions
 type PeerServerNetwork interface {
-	DeliverBlocks(blocks common.Hashes, id int)
+	DeliverBlocks(blocks BlockList)
 	NotifyServer(msg Message)
 	GetServerInfo() InfoMessage
 }

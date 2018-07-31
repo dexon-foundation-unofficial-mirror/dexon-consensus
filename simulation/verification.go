@@ -33,12 +33,14 @@ type timeStamp struct {
 }
 
 type totalOrderStatus struct {
-	blockReceive []timeStamp
+	blockReceive   []timeStamp
+	confirmLatency []time.Duration
 }
 
 // TotalOrderResult is the object maintaining peer's result of
 // Total Ordering Algorithm.
 type TotalOrderResult struct {
+	validatorID      types.ValidatorID
 	hashList         common.Hashes
 	curID            int
 	pendingBlockList PendingBlockList
@@ -49,20 +51,28 @@ type TotalOrderResult struct {
 type PeerTotalOrder = map[types.ValidatorID]*TotalOrderResult
 
 // NewTotalOrderResult returns pointer to a a new TotalOrderResult instance.
-func NewTotalOrderResult() *TotalOrderResult {
-	totalOrder := &TotalOrderResult{}
+func NewTotalOrderResult(vID types.ValidatorID) *TotalOrderResult {
+	totalOrder := &TotalOrderResult{
+		validatorID: vID,
+	}
 	heap.Init(&totalOrder.pendingBlockList)
 	return totalOrder
 }
 
-// PushBlocks push a BlockList into the TotalOrderResult and return true if
-// there is new blocks ready for verifiy
-func (totalOrder *TotalOrderResult) PushBlocks(blocks BlockList) (ready bool) {
+func (totalOrder *TotalOrderResult) processStatus(blocks BlockList) {
 	totalOrder.status.blockReceive = append(totalOrder.status.blockReceive,
 		timeStamp{
 			time:   time.Now(),
 			length: len(blocks.BlockHash),
 		})
+	totalOrder.status.confirmLatency = append(totalOrder.status.confirmLatency,
+		blocks.ConfirmLatency...)
+}
+
+// PushBlocks push a BlockList into the TotalOrderResult and return true if
+// there is new blocks ready for verifiy
+func (totalOrder *TotalOrderResult) PushBlocks(blocks BlockList) (ready bool) {
+	totalOrder.processStatus(blocks)
 	if blocks.ID != totalOrder.curID {
 		heap.Push(&totalOrder.pendingBlockList, &blocks)
 		return false
@@ -101,6 +111,16 @@ func (totalOrder *TotalOrderResult) CalculateBlocksPerSecond() float64 {
 		totalBlocks += blocks.length
 	}
 	return float64(totalBlocks) / diffTime
+}
+
+// CalculateAverageConfirmLatency calculates the result using
+// status.confirmLatency
+func (totalOrder *TotalOrderResult) CalculateAverageConfirmLatency() float64 {
+	sum := 0.0
+	for _, latency := range totalOrder.status.confirmLatency {
+		sum += latency.Seconds()
+	}
+	return sum / float64(len(totalOrder.status.confirmLatency))
 }
 
 // VerifyTotalOrder verifies if the result of Total Ordering Algorithm
@@ -151,6 +171,9 @@ func VerifyTotalOrder(id types.ValidatorID,
 // LogStatus prints all the status to log.
 func LogStatus(peerTotalOrder PeerTotalOrder) {
 	for vID, totalOrder := range peerTotalOrder {
-		log.Printf("[Validator %s] BPS: %.6f\n", vID, totalOrder.CalculateBlocksPerSecond())
+		log.Printf("[Validator %s] BPS: %.6f\n",
+			vID, totalOrder.CalculateBlocksPerSecond())
+		log.Printf("[Validator %s] Confirm Latency: %.3fs\n",
+			vID, totalOrder.CalculateAverageConfirmLatency())
 	}
 }

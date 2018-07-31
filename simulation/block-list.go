@@ -18,18 +18,22 @@
 package simulation
 
 import (
+	"time"
+
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 )
 
 // BlockList is the list of blocks from the result of Total Ordering Algorithm.
 type BlockList struct {
-	ID        int           `json:"id"`
-	BlockHash common.Hashes `json:"blockhash"`
+	ID             int             `json:"id"`
+	BlockHash      common.Hashes   `json:"blockhash"`
+	ConfirmLatency []time.Duration `json:"confirmlatency"`
 	// The index is required by heap.Interface.
 	index int
 }
 
-// PendingBlockList is a PrioirtyQueue maintaining the BlockList received before the previous one (based on ID).
+// PendingBlockList is a PrioirtyQueue maintaining the BlockList received
+// before the previous one (based on ID).
 type PendingBlockList []*BlockList
 
 // Len, Less and Swap are implementing heap.Interface

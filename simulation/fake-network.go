@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -95,7 +94,7 @@ func (n *FakeNetwork) BroadcastBlock(block *types.Block) {
 }
 
 // DeliverBlocks sends blocks to peerServer.
-func (n *FakeNetwork) DeliverBlocks(blocks common.Hashes, id int) {
+func (n *FakeNetwork) DeliverBlocks(blocks BlockList) {
 	// TODO(jimmy-dexon): Implement this method.
 	return
 }

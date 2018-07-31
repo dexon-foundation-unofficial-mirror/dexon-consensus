@@ -28,7 +28,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -238,16 +237,10 @@ func (n *TCPNetwork) BroadcastBlock(block *types.Block) {
 }
 
 // DeliverBlocks sends blocks to peerServer.
-func (n *TCPNetwork) DeliverBlocks(blocks common.Hashes, id int) {
-
-	message := BlockList{
-		ID:        id,
-		BlockHash: blocks,
-	}
-
-	messageJSON, err := json.Marshal(message)
+func (n *TCPNetwork) DeliverBlocks(blocks BlockList) {
+	messageJSON, err := json.Marshal(blocks)
 	if err != nil {
-		fmt.Printf("error: failed to marshal json: %v\n%+v\n", err, message)
+		fmt.Printf("error: failed to marshal json: %v\n%+v\n", err, blocks)
 		return
 	}
 

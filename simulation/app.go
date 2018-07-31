@@ -19,6 +19,7 @@ package simulation
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -49,13 +50,27 @@ func (a *SimApp) ValidateBlock(b *types.Block) bool {
 
 // Deliver is called when blocks are delivered by the total ordering algorithm.
 func (a *SimApp) Deliver(blocks []*types.Block, early bool) {
+	now := time.Now()
 	a.Outputs = blocks
 	a.Early = early
 	fmt.Println("OUTPUT", a.ValidatorID, a.Early, a.Outputs)
+
 	blockHash := common.Hashes{}
+	confirmLatency := []time.Duration{}
+
 	for _, block := range blocks {
 		blockHash = append(blockHash, block.Hash)
+		if block.ProposerID == a.ValidatorID {
+			confirmLatency = append(confirmLatency,
+				now.Sub(block.Timestamps[a.ValidatorID]))
+		}
 	}
-	a.Network.DeliverBlocks(blockHash, a.DeliverID)
+
+	blockList := BlockList{
+		ID:             a.DeliverID,
+		BlockHash:      blockHash,
+		ConfirmLatency: confirmLatency,
+	}
+	a.Network.DeliverBlocks(blockList)
 	a.DeliverID++
 }
