@@ -87,3 +87,18 @@ func (b ByHash) Less(i int, j int) bool {
 func (b ByHash) Swap(i int, j int) {
 	b[i], b[j] = b[j], b[i]
 }
+
+// ByHeight is the helper type for sorting slice of blocks by height.
+type ByHeight []*Block
+
+func (b ByHeight) Len() int {
+	return len(b)
+}
+
+func (b ByHeight) Less(i int, j int) bool {
+	return b[i].Height < b[j].Height
+}
+
+func (b ByHeight) Swap(i int, j int) {
+	b[i], b[j] = b[j], b[i]
+}
