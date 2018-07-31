@@ -20,6 +20,7 @@ package core
 import (
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 
@@ -42,13 +43,12 @@ type TestApp struct {
 	Early   bool
 }
 
-func (a *TestApp) ValidateBlock(b *types.Block) bool {
-	return true
-}
-
-func (a *TestApp) Deliver(blocks []*types.Block, early bool) {
+func (a *TestApp) TotalOrderingDeliver(blocks []*types.Block, early bool) {
 	a.Outputs = append(a.Outputs, blocks...)
 	a.Early = early
+}
+
+func (a *TestApp) DeliverBlock(blockHashes common.Hash, timestamp time.Time) {
 }
 
 func (a *TestApp) Clear() {

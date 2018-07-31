@@ -532,7 +532,7 @@ func (l *BlockLattice) totalOrdering(b *types.Block) {
 	sort.Sort(types.ByHash(output))
 
 	if len(output) > 0 {
-		l.app.Deliver(output, earlyDelivery)
+		l.app.TotalOrderingDeliver(output, earlyDelivery)
 	}
 
 	// Rescan pending blocks to add into candidate set.

@@ -50,6 +50,12 @@ type Block struct {
 	Status          Status                   `json:"-"`
 }
 
+// BlockConverter interface define the interface for extracting block
+// information from an existing object.
+type BlockConverter interface {
+	Block() *Block
+}
+
 func (b *Block) String() string {
 	return fmt.Sprintf("Block(%v)", b.Hash.String()[:6])
 }

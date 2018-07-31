@@ -43,13 +43,9 @@ func NewSimApp(id types.ValidatorID, Network PeerServerNetwork) *SimApp {
 	}
 }
 
-// ValidateBlock validates a given block.
-func (a *SimApp) ValidateBlock(b *types.Block) bool {
-	return true
-}
-
-// Deliver is called when blocks are delivered by the total ordering algorithm.
-func (a *SimApp) Deliver(blocks []*types.Block, early bool) {
+// TotalOrderingDeliver is called when blocks are delivered by the total
+// ordering algorithm.
+func (a *SimApp) TotalOrderingDeliver(blocks []*types.Block, early bool) {
 	now := time.Now()
 	a.Outputs = blocks
 	a.Early = early
@@ -73,4 +69,8 @@ func (a *SimApp) Deliver(blocks []*types.Block, early bool) {
 	}
 	a.Network.DeliverBlocks(blockList)
 	a.DeliverID++
+}
+
+// DeliverBlock is called when a block in compaction chain is delivered.
+func (a *SimApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 }

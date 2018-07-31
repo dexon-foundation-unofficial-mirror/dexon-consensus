@@ -17,11 +17,20 @@
 
 package core
 
-import "github.com/dexon-foundation/dexon-consensus-core/core/types"
+import (
+	"time"
+
+	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+)
 
 // Application describes the application interface that interacts with DEXON
 // consensus core.
 type Application interface {
-	ValidateBlock(b *types.Block) bool
-	Deliver(blocks []*types.Block, early bool)
+	// TotalOrderingDeliver is called when the total ordering algorithm deliver
+	// a set of block.
+	TotalOrderingDeliver(blocks []*types.Block, early bool)
+
+	// DeliverBlock is called when a block is add to the compaction chain.
+	DeliverBlock(blockHash common.Hash, timestamp time.Time)
 }
