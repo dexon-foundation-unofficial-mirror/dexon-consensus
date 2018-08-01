@@ -18,7 +18,7 @@
 package core
 
 import (
-	"github.com/cobinhood/decimal"
+	"github.com/shopspring/decimal"
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
