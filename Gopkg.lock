@@ -2,6 +2,14 @@
 
 
 [[projects]]
+  branch = "master"
+  digest = "1:ae0b29e6e7c0856b94ca0060f6328b1bd714f07c7d51b5b0cbe55075f39da4ce"
+  name = "github.com/cobinhood/decimal"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "9ca7f51822d222ae4e246f070f9aad863599bd1a"
+
+[[projects]]
   digest = "1:a2c1d0e43bd3baaa071d1b9ed72c27d78169b2b269f71c105ac4ba34b1be4a39"
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
@@ -81,27 +89,11 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/davecgh/go-spew/spew",
-    "github.com/golang/snappy",
-    "github.com/naoina/go-stringutil",
+    "github.com/cobinhood/decimal",
     "github.com/naoina/toml",
-    "github.com/naoina/toml/ast",
-    "github.com/pmezard/go-difflib/difflib",
-    "github.com/stretchr/testify/assert",
-    "github.com/stretchr/testify/require",
     "github.com/stretchr/testify/suite",
     "github.com/syndtr/goleveldb/leveldb",
-    "github.com/syndtr/goleveldb/leveldb/cache",
-    "github.com/syndtr/goleveldb/leveldb/comparer",
-    "github.com/syndtr/goleveldb/leveldb/errors",
-    "github.com/syndtr/goleveldb/leveldb/filter",
-    "github.com/syndtr/goleveldb/leveldb/iterator",
-    "github.com/syndtr/goleveldb/leveldb/journal",
-    "github.com/syndtr/goleveldb/leveldb/memdb",
     "github.com/syndtr/goleveldb/leveldb/opt",
-    "github.com/syndtr/goleveldb/leveldb/storage",
-    "github.com/syndtr/goleveldb/leveldb/table",
-    "github.com/syndtr/goleveldb/leveldb/util",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

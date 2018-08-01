@@ -123,12 +123,6 @@ func (v *Validator) MsgServer() {
 	}
 }
 
-func (v *Validator) createBlockTimestamps() map[types.ValidatorID]time.Time {
-	timestamps := make(map[types.ValidatorID]time.Time)
-	timestamps[v.GetID()] = time.Now()
-	return timestamps
-}
-
 // BroadcastGenesisBlock broadcasts genesis block to all peers.
 func (v *Validator) BroadcastGenesisBlock() {
 	// Wait until all peer joined the network.
@@ -143,7 +137,6 @@ func (v *Validator) BroadcastGenesisBlock() {
 			ParentHash: hash,
 			Hash:       hash,
 			Height:     0,
-			Timestamps: v.createBlockTimestamps(),
 			Acks:       map[common.Hash]struct{}{},
 		}
 		v.genesis = b
@@ -177,7 +170,6 @@ ProposingBlockLoop:
 			ParentHash: v.current.Hash,
 			Hash:       common.NewRandomHash(),
 			Height:     v.current.Height + 1.,
-			Timestamps: v.createBlockTimestamps(),
 			Acks:       map[common.Hash]struct{}{},
 		}
 		v.current = block
