@@ -24,8 +24,8 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-// Acking is for acking module.
-type Acking struct {
+// acking is for acking module.
+type acking struct {
 	// lattice stores blocks by its validator ID and height.
 	lattice map[types.ValidatorID]*ackingValidatorStatus
 
@@ -61,16 +61,16 @@ type ackingValidatorStatus struct {
 
 // Errors for sanity check error.
 var (
-	ErrInvalidProposerID  = fmt.Errorf("invalid_proposer_id")
-	ErrForkBlock          = fmt.Errorf("fork_block")
-	ErrNotAckParent       = fmt.Errorf("not_ack_parent")
-	ErrDoubleAck          = fmt.Errorf("double_ack")
-	ErrInvalidBlockHeight = fmt.Errorf("invalid_block_height")
+	ErrInvalidProposerID  = fmt.Errorf("invalid proposer id")
+	ErrForkBlock          = fmt.Errorf("fork block")
+	ErrNotAckParent       = fmt.Errorf("not ack parent")
+	ErrDoubleAck          = fmt.Errorf("double ack")
+	ErrInvalidBlockHeight = fmt.Errorf("invalid block height")
 )
 
-// NewAcking creates a new Acking struct.
-func NewAcking() *Acking {
-	return &Acking{
+// newAcking creates a new acking struct.
+func newAcking() *acking {
+	return &acking{
 		lattice:        make(map[types.ValidatorID]*ackingValidatorStatus),
 		blocks:         make(map[common.Hash]*types.Block),
 		receivedBlocks: make(map[common.Hash]*types.Block),
@@ -78,7 +78,7 @@ func NewAcking() *Acking {
 	}
 }
 
-func (a *Acking) sanityCheck(b *types.Block) error {
+func (a *acking) sanityCheck(b *types.Block) error {
 	// Check if its proposer is in validator set.
 	if _, exist := a.lattice[b.ProposerID]; !exist {
 		return ErrInvalidProposerID
@@ -117,7 +117,7 @@ func (a *Acking) sanityCheck(b *types.Block) error {
 }
 
 // areAllAcksReceived checks if all ack blocks of a block are all in lattice.
-func (a *Acking) areAllAcksInLattice(b *types.Block) bool {
+func (a *acking) areAllAcksInLattice(b *types.Block) bool {
 	for h := range b.Acks {
 		bAck, exist := a.blocks[h]
 		if !exist {
@@ -125,7 +125,7 @@ func (a *Acking) areAllAcksInLattice(b *types.Block) bool {
 		}
 		if bAckInLattice, exist := a.lattice[bAck.ProposerID].blocks[bAck.Height]; !exist {
 			if bAckInLattice.Hash != bAck.Hash {
-				panic("areAllAcksInLattice: Acking.lattice has corrupted")
+				panic("areAllAcksInLattice: acking.lattice has corrupted")
 			}
 			return false
 		}
@@ -133,9 +133,9 @@ func (a *Acking) areAllAcksInLattice(b *types.Block) bool {
 	return true
 }
 
-// ProcessBlock processes block, it does sanity check, inserts block into
+// processBlock processes block, it does sanity check, inserts block into
 // lattice, handles strong acking and deletes blocks which will not be used.
-func (a *Acking) ProcessBlock(block *types.Block) {
+func (a *acking) processBlock(block *types.Block) {
 	// If a block does not pass sanity check, discard this block.
 	if err := a.sanityCheck(block); err != nil {
 		return
@@ -247,10 +247,10 @@ func (a *Acking) ProcessBlock(block *types.Block) {
 	}
 }
 
-// ExtractBlocks returns all blocks that can be inserted into total ordering's
+// extractBlocks returns all blocks that can be inserted into total ordering's
 // DAG. This function changes the status of blocks from types.BlockStatusAcked
-// to types.BlockStatusOrdering.
-func (a *Acking) ExtractBlocks() []*types.Block {
+// to blockStatusOrdering.
+func (a *acking) extractBlocks() []*types.Block {
 	ret := []*types.Block{}
 	for {
 		updated := false
@@ -289,8 +289,8 @@ func (a *Acking) ExtractBlocks() []*types.Block {
 	return ret
 }
 
-// AddValidator adds validator in the validator set.
-func (a *Acking) AddValidator(h types.ValidatorID) {
+// addValidator adds validator in the validator set.
+func (a *acking) addValidator(h types.ValidatorID) {
 	a.lattice[h] = &ackingValidatorStatus{
 		blocks:     make(map[uint64]*types.Block),
 		nextAck:    make(map[types.ValidatorID]uint64),
@@ -299,8 +299,8 @@ func (a *Acking) AddValidator(h types.ValidatorID) {
 	}
 }
 
-// DeleteValidator deletes validator in validator set.
-func (a *Acking) DeleteValidator(h types.ValidatorID) {
+// deleteValidator deletes validator in validator set.
+func (a *acking) deleteValidator(h types.ValidatorID) {
 	for h := range a.lattice {
 		delete(a.lattice[h].nextAck, h)
 	}

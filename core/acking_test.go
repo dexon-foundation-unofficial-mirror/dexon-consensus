@@ -48,14 +48,14 @@ func (s *AckingTest) SetupTest() {
 //  |  |     |
 //  0  0  0  0 (block height)
 //  0  1  2  3 (validator)
-func genTestCase1(s *AckingTest, a *Acking) []types.ValidatorID {
-	// Create new Acking instance with 4 validators
+func genTestCase1(s *AckingTest, a *acking) []types.ValidatorID {
+	// Create new acking instance with 4 validators
 	var b *types.Block
 	var h common.Hash
 	vids := []types.ValidatorID{}
 	for i := 0; i < 4; i++ {
 		vid := types.ValidatorID{Hash: common.NewRandomHash()}
-		a.AddValidator(vid)
+		a.addValidator(vid)
 		vids = append(vids, vid)
 	}
 	// Add genesis blocks.
@@ -68,7 +68,7 @@ func genTestCase1(s *AckingTest, a *Acking) []types.ValidatorID {
 			Height:     0,
 			Acks:       map[common.Hash]struct{}{},
 		}
-		a.ProcessBlock(b)
+		a.processBlock(b)
 	}
 
 	// Add block 0-1 which acks 0-0.
@@ -82,7 +82,7 @@ func genTestCase1(s *AckingTest, a *Acking) []types.ValidatorID {
 			h: struct{}{},
 		},
 	}
-	a.ProcessBlock(b)
+	a.processBlock(b)
 	s.NotNil(a.lattice[vids[0]].blocks[1])
 
 	// Add block 0-2 which acks 0-1 and 1-0.
@@ -97,7 +97,7 @@ func genTestCase1(s *AckingTest, a *Acking) []types.ValidatorID {
 			a.lattice[vids[1]].blocks[0].Hash: struct{}{},
 		},
 	}
-	a.ProcessBlock(b)
+	a.processBlock(b)
 	s.NotNil(a.lattice[vids[0]].blocks[2])
 
 	// Add block 0-3 which acks 0-2.
@@ -111,7 +111,7 @@ func genTestCase1(s *AckingTest, a *Acking) []types.ValidatorID {
 			h: struct{}{},
 		},
 	}
-	a.ProcessBlock(b)
+	a.processBlock(b)
 	s.NotNil(a.lattice[vids[0]].blocks[3])
 
 	// Add block 3-1 which acks 3-0.
@@ -125,14 +125,14 @@ func genTestCase1(s *AckingTest, a *Acking) []types.ValidatorID {
 			h: struct{}{},
 		},
 	}
-	a.ProcessBlock(b)
+	a.processBlock(b)
 	s.NotNil(a.lattice[vids[3]].blocks[0])
 
 	return vids
 }
 
 func (s *AckingTest) TestAddValidator() {
-	a := NewAcking()
+	a := newAcking()
 	s.Equal(len(a.lattice), 0)
 	genTestCase1(s, a)
 	s.Equal(len(a.lattice), 4)
@@ -143,7 +143,7 @@ func (s *AckingTest) TestSanityCheck() {
 	var h common.Hash
 	var vids []types.ValidatorID
 	var err error
-	a := NewAcking()
+	a := newAcking()
 	vids = genTestCase1(s, a)
 
 	// Non-genesis block with no ack, should get error.
@@ -245,7 +245,7 @@ func (s *AckingTest) TestSanityCheck() {
 func (s *AckingTest) TestAreAllAcksInLattice() {
 	var b *types.Block
 	var vids []types.ValidatorID
-	a := NewAcking()
+	a := newAcking()
 	vids = genTestCase1(s, a)
 
 	// Empty ack should get true, although won't pass sanity check.
@@ -275,7 +275,7 @@ func (s *AckingTest) TestAreAllAcksInLattice() {
 func (s *AckingTest) TestStrongAck() {
 	var b *types.Block
 	var vids []types.ValidatorID
-	a := NewAcking()
+	a := newAcking()
 	vids = genTestCase1(s, a)
 
 	// Check block 0-0 to 0-3 before adding 1-1 and 2-1.
@@ -295,7 +295,7 @@ func (s *AckingTest) TestStrongAck() {
 			a.lattice[vids[1]].blocks[0].Hash: struct{}{},
 		},
 	}
-	a.ProcessBlock(b)
+	a.processBlock(b)
 	s.NotNil(a.lattice[vids[1]].blocks[1])
 	for i := uint64(0); i < 4; i++ {
 		s.Equal(types.BlockStatusInit, a.lattice[vids[0]].blocks[i].Status)
@@ -313,7 +313,7 @@ func (s *AckingTest) TestStrongAck() {
 			a.lattice[vids[2]].blocks[0].Hash: struct{}{},
 		},
 	}
-	a.ProcessBlock(b)
+	a.processBlock(b)
 	s.Equal(types.BlockStatusAcked, a.lattice[vids[0]].blocks[0].Status)
 	s.Equal(types.BlockStatusAcked, a.lattice[vids[0]].blocks[1].Status)
 	s.Equal(types.BlockStatusAcked, a.lattice[vids[0]].blocks[2].Status)
@@ -322,7 +322,7 @@ func (s *AckingTest) TestStrongAck() {
 
 func (s *AckingTest) TestExtractBlocks() {
 	var b *types.Block
-	a := NewAcking()
+	a := newAcking()
 	vids := genTestCase1(s, a)
 
 	// Add block 1-1 which acks 1-0, 0-2, 3-0.
@@ -337,7 +337,7 @@ func (s *AckingTest) TestExtractBlocks() {
 			a.lattice[vids[3]].blocks[0].Hash: struct{}{},
 		},
 	}
-	a.ProcessBlock(b)
+	a.processBlock(b)
 
 	// Add block 2-1 which acks 0-2, 2-0, 3-0.
 	b = &types.Block{
@@ -351,7 +351,7 @@ func (s *AckingTest) TestExtractBlocks() {
 			a.lattice[vids[3]].blocks[0].Hash: struct{}{},
 		},
 	}
-	a.ProcessBlock(b)
+	a.processBlock(b)
 
 	hashs := []common.Hash{
 		a.lattice[vids[0]].blocks[0].Hash,
@@ -359,7 +359,7 @@ func (s *AckingTest) TestExtractBlocks() {
 		a.lattice[vids[3]].blocks[0].Hash,
 	}
 	hashExtracted := map[common.Hash]*types.Block{}
-	for _, b := range a.ExtractBlocks() {
+	for _, b := range a.extractBlocks() {
 		hashExtracted[b.Hash] = b
 		s.Equal(types.BlockStatusOrdering, b.Status)
 	}
@@ -370,7 +370,7 @@ func (s *AckingTest) TestExtractBlocks() {
 }
 
 func (s *AckingTest) TestRandomIntensiveAcking() {
-	a := NewAcking()
+	a := newAcking()
 	vids := []types.ValidatorID{}
 	heights := map[types.ValidatorID]uint64{}
 	extractedBlocks := []*types.Block{}
@@ -378,7 +378,7 @@ func (s *AckingTest) TestRandomIntensiveAcking() {
 	// Generate validators and genesis blocks.
 	for i := 0; i < 4; i++ {
 		vid := types.ValidatorID{Hash: common.NewRandomHash()}
-		a.AddValidator(vid)
+		a.addValidator(vid)
 		vids = append(vids, vid)
 		h := common.NewRandomHash()
 		b := &types.Block{
@@ -388,7 +388,7 @@ func (s *AckingTest) TestRandomIntensiveAcking() {
 			Height:     0,
 			ProposerID: vid,
 		}
-		a.ProcessBlock(b)
+		a.processBlock(b)
 		heights[vid] = 1
 	}
 
@@ -410,11 +410,11 @@ func (s *AckingTest) TestRandomIntensiveAcking() {
 			Height:     height,
 			Acks:       acks,
 		}
-		a.ProcessBlock(b)
-		extractedBlocks = append(extractedBlocks, a.ExtractBlocks()...)
+		a.processBlock(b)
+		extractedBlocks = append(extractedBlocks, a.extractBlocks()...)
 	}
 
-	extractedBlocks = append(extractedBlocks, a.ExtractBlocks()...)
+	extractedBlocks = append(extractedBlocks, a.extractBlocks()...)
 	// The len of array extractedBlocks should be about 5000.
 	s.True(len(extractedBlocks) > 4500)
 	// The len of a.blocks should be small if deleting mechanism works.
