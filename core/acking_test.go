@@ -19,11 +19,14 @@ package core
 
 import (
 	"math/rand"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/dexon-foundation/dexon-consensus-core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -419,6 +422,77 @@ func (s *AckingTest) TestRandomIntensiveAcking() {
 	s.True(len(extractedBlocks) > 4500)
 	// The len of a.blocks should be small if deleting mechanism works.
 	s.True(len(a.blocks) < 500)
+}
+
+func (s *AckingTest) TestRandomlyGeneratedBlocks() {
+	var (
+		validatorCount = 19
+		blockCount     = 50
+		repeat         = 20
+	)
+
+	// Prepare a randomly generated blocks.
+	db, err := blockdb.NewMemBackedBlockDB("test-acking-random.blockdb")
+	s.Require().Nil(err)
+	defer func() {
+		// If the test fails, keep the block database for troubleshooting.
+		if s.T().Failed() {
+			s.Nil(db.Close())
+		}
+	}()
+	gen := test.NewBlocksGenerator(nil)
+	s.Require().Nil(gen.Generate(validatorCount, blockCount, nil, db))
+	iter, err := db.GetAll()
+	s.Require().Nil(err)
+	// Setup a revealer that would reveal blocks randomly.
+	revealer, err := test.NewRandomRevealer(iter)
+	s.Require().Nil(err)
+
+	stronglyAckedHashesAsString := map[string]struct{}{}
+	for i := 0; i < repeat; i++ {
+		validators := map[types.ValidatorID]struct{}{}
+		acking := newAcking()
+		stronglyAckedHashes := common.Hashes{}
+		revealer.Reset()
+
+		for {
+			// Reveal next block.
+			b, err := revealer.Next()
+			if err != nil {
+				if err == blockdb.ErrIterationFinished {
+					err = nil
+					break
+				}
+			}
+			s.Require().Nil(err)
+
+			// It's a hack to add validator to Acking module.
+			if _, added := validators[b.ProposerID]; !added {
+				acking.addValidator(b.ProposerID)
+				validators[b.ProposerID] = struct{}{}
+			}
+			// Perform reliable broadcast process.
+			acking.processBlock(&b)
+			for _, b := range acking.extractBlocks() {
+				stronglyAckedHashes = append(stronglyAckedHashes, b.Hash)
+			}
+		}
+		// To make it easier to check, sort hashes of
+		// strongly acked blocks, and concatenate them into
+		// a string.
+		sort.Sort(stronglyAckedHashes)
+		asString := ""
+		for _, h := range stronglyAckedHashes {
+			asString += h.String() + ","
+		}
+		stronglyAckedHashesAsString[asString] = struct{}{}
+	}
+	// Make sure concatenated hashes of strongly acked blocks are identical.
+	s.Require().Len(stronglyAckedHashesAsString, 1)
+	for h := range stronglyAckedHashesAsString {
+		// Make sure at least some blocks are strongly acked.
+		s.True(len(h) > 0)
+	}
 }
 
 func TestAcking(t *testing.T) {

@@ -96,8 +96,8 @@ func (a *acking) sanityCheck(b *types.Block) error {
 		if _, exist := b.Acks[b.ParentHash]; !exist {
 			return ErrNotAckParent
 		}
-		bParent := a.blocks[b.ParentHash]
-		if bParent.Height != b.Height-1 {
+		bParent, exists := a.blocks[b.ParentHash]
+		if exists && bParent.Height != b.Height-1 {
 			return ErrInvalidBlockHeight
 		}
 	}
@@ -123,11 +123,12 @@ func (a *acking) areAllAcksInLattice(b *types.Block) bool {
 		if !exist {
 			return false
 		}
-		if bAckInLattice, exist := a.lattice[bAck.ProposerID].blocks[bAck.Height]; !exist {
-			if bAckInLattice.Hash != bAck.Hash {
-				panic("areAllAcksInLattice: acking.lattice has corrupted")
-			}
+		bAckInLattice, exist := a.lattice[bAck.ProposerID].blocks[bAck.Height]
+		if !exist {
 			return false
+		}
+		if bAckInLattice.Hash != bAck.Hash {
+			panic("areAllAcksInLattice: acking.lattice has corrupted")
 		}
 	}
 	return true

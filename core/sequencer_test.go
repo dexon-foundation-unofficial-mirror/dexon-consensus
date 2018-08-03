@@ -1,10 +1,30 @@
+// Copyright 2018 The dexon-consensus-core Authors
+// This file is part of the dexon-consensus-core library.
+//
+// The dexon-consensus-core library is free software: you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public License as
+// published by the Free Software Foundation, either version 3 of the License,
+// or (at your option) any later version.
+//
+// The dexon-consensus-core library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the dexon-consensus-core library. If not, see
+// <http://www.gnu.org/licenses/>.
+
 package core
 
 import (
 	"sort"
+	"strings"
 	"testing"
 
+	"github.com/dexon-foundation/dexon-consensus-core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -867,6 +887,108 @@ func (s *SequencerTestSuite) TestBasicCaseForK0() {
 	// Make sure b10, b30 are candidates for next round.
 	s.Contains(seq.candidateAckingStatusVectors, b10.Hash)
 	s.Contains(seq.candidateAckingStatusVectors, b30.Hash)
+}
+
+func (s *SequencerTestSuite) baseTestRandomlyGeneratedBlocks(
+	seqConstructor func() *sequencer,
+	revealer test.Revealer,
+	repeat int) {
+
+	// TODO (mission): make this part run concurrently.
+	revealingSequence := map[string]struct{}{}
+	orderingSequence := map[string]struct{}{}
+	for i := 0; i < repeat; i++ {
+		revealed := ""
+		ordered := ""
+		revealer.Reset()
+		seq := seqConstructor()
+		for {
+			// Reveal next block.
+			b, err := revealer.Next()
+			if err != nil {
+				if err == blockdb.ErrIterationFinished {
+					err = nil
+					break
+				}
+			}
+			s.Require().Nil(err)
+			revealed += b.Hash.String() + ","
+
+			// Perform total ordering.
+			hashes, _, err := seq.processBlock(&b)
+			s.Require().Nil(err)
+			for _, h := range hashes {
+				ordered += h.String() + ","
+			}
+		}
+		revealingSequence[revealed] = struct{}{}
+		orderingSequence[ordered] = struct{}{}
+	}
+
+	// Make sure we test at least two different
+	// revealing sequence.
+	s.True(len(revealingSequence) > 1)
+	// Make sure all ordering are equal or prefixed
+	// to another one.
+	for orderFrom := range orderingSequence {
+		for orderTo := range orderingSequence {
+			if orderFrom == orderTo {
+				continue
+			}
+			ok := strings.HasPrefix(orderFrom, orderTo) ||
+				strings.HasPrefix(orderTo, orderFrom)
+			s.True(ok)
+		}
+	}
+}
+
+func (s *SequencerTestSuite) TestRandomlyGeneratedBlocks() {
+	var (
+		validatorCount        = 19
+		blockCount            = 50
+		phi            uint64 = 10
+		repeat                = 10
+	)
+
+	// Prepare a randomly genearated blocks.
+	db, err := blockdb.NewMemBackedBlockDB("test-sequencer-random.blockdb")
+	s.Require().Nil(err)
+	defer func() {
+		// If the test fails, keep the block database for troubleshooting.
+		if s.T().Failed() {
+			s.Nil(db.Close())
+		}
+	}()
+
+	gen := test.NewBlocksGenerator(nil)
+	s.Require().Nil(gen.Generate(validatorCount, blockCount, nil, db))
+	iter, err := db.GetAll()
+	s.Require().Nil(err)
+	// Setup a revealer that would reveal blocks forming
+	// valid DAGs.
+	revealer, err := test.NewRandomDAGRevealer(iter)
+	s.Require().Nil(err)
+
+	// Test for K=0.
+	constructor := func() *sequencer {
+		return newSequencer(0, phi, uint64(validatorCount))
+	}
+	s.baseTestRandomlyGeneratedBlocks(constructor, revealer, repeat)
+	// Test for K=1,
+	constructor = func() *sequencer {
+		return newSequencer(1, phi, uint64(validatorCount))
+	}
+	s.baseTestRandomlyGeneratedBlocks(constructor, revealer, repeat)
+	// Test for K=2,
+	constructor = func() *sequencer {
+		return newSequencer(2, phi, uint64(validatorCount))
+	}
+	s.baseTestRandomlyGeneratedBlocks(constructor, revealer, repeat)
+	// Test for K=3,
+	constructor = func() *sequencer {
+		return newSequencer(2, phi, uint64(validatorCount))
+	}
+	s.baseTestRandomlyGeneratedBlocks(constructor, revealer, repeat)
 }
 
 func TestSequencer(t *testing.T) {
