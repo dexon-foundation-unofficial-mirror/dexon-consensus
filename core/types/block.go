@@ -2,16 +2,16 @@
 // This file is part of the dexon-consensus-core library.
 //
 // The dexon-consensus-core library is free software: you can redistribute it
-// and/or modify it under the terms of the GNU Lesser General Pubic License as
-// pubished by the Free Software Foundation, either version 3 of the License,
+// and/or modify it under the terms of the GNU Lesser General Public License as
+// published by the Free Software Foundation, either version 3 of the License,
 // or (at your option) any later version.
 //
 // The dexon-consensus-core library is distributed in the hope that it will be
 // useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser
-// General Pubic License for more details.
+// General Public License for more details.
 //
-// You should have received a copy of the GNU Lesser General Pubic License
+// You should have received a copy of the GNU Lesser General Public License
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
@@ -38,12 +38,14 @@ const (
 
 // Block represents a single event broadcasted on the network.
 type Block struct {
-	ProposerID ValidatorID               `json:"proposer_id"`
-	ParentHash common.Hash               `json:"parent_hash"`
-	Hash       common.Hash               `json:"hash"`
-	Height     uint64                    `json:"height"`
-	Timestamps map[ValidatorID]time.Time `json:"timestamps"`
-	Acks       map[common.Hash]struct{}  `json:"acks"`
+	ProposerID      ValidatorID               `json:"proposer_id"`
+	ParentHash      common.Hash               `json:"parent_hash"`
+	Hash            common.Hash               `json:"hash"`
+	Height          uint64                    `json:"height"`
+	Timestamps      map[ValidatorID]time.Time `json:"timestamps"`
+	Acks            map[common.Hash]struct{}  `json:"acks"`
+	ConsensusTime   time.Time                 `json:"consensus_time"`
+	ConsensusHeight uint64                    `json:"consensus_height"`
 
 	Ackeds          map[common.Hash]struct{} `json:"-"`
 	AckedValidators map[ValidatorID]struct{} `json:"-"`

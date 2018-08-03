@@ -20,6 +20,7 @@ package common
 import (
 	"bytes"
 	"encoding/hex"
+	"time"
 )
 
 const (
@@ -58,3 +59,10 @@ type Hashes []Hash
 func (hs Hashes) Len() int           { return len(hs) }
 func (hs Hashes) Less(i, j int) bool { return bytes.Compare(hs[i][:], hs[j][:]) < 0 }
 func (hs Hashes) Swap(i, j int)      { hs[i], hs[j] = hs[j], hs[i] }
+
+// ByTime implements sort.Interface for time.Time.
+type ByTime []time.Time
+
+func (t ByTime) Len() int           { return len(t) }
+func (t ByTime) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
+func (t ByTime) Less(i, j int) bool { return t[i].Before(t[j]) }
