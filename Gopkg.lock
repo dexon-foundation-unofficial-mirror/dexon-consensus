@@ -2,71 +2,56 @@
 
 
 [[projects]]
-  branch = "master"
-  digest = "1:ae0b29e6e7c0856b94ca0060f6328b1bd714f07c7d51b5b0cbe55075f39da4ce"
-  name = "github.com/cobinhood/decimal"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "9ca7f51822d222ae4e246f070f9aad863599bd1a"
-
-[[projects]]
-  digest = "1:a2c1d0e43bd3baaa071d1b9ed72c27d78169b2b269f71c105ac4ba34b1be4a39"
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
-  pruneopts = "UT"
   revision = "346938d642f2ec3594ed81d874461961cd0faa76"
   version = "v1.1.0"
 
 [[projects]]
   branch = "master"
-  digest = "1:4a0c6bb4805508a6287675fac876be2ac1182539ca8a32468d8128882e9d5009"
   name = "github.com/golang/snappy"
   packages = ["."]
-  pruneopts = "UT"
   revision = "2e65f85255dbc3072edf28d6b5b8efc472979f5a"
 
 [[projects]]
-  digest = "1:b56c589214f01a5601e0821387db484617392d0042f26234bf2da853a2f498a1"
   name = "github.com/naoina/go-stringutil"
   packages = ["."]
-  pruneopts = "UT"
   revision = "6b638e95a32d0c1131db0e7fe83775cbea4a0d0b"
   version = "v0.1.0"
 
 [[projects]]
-  digest = "1:ce268ac5ab983535f7372bf9d4f8e4807f51ea961f71510d73e433e164208e34"
   name = "github.com/naoina/toml"
   packages = [
     ".",
-    "ast",
+    "ast"
   ]
-  pruneopts = "UT"
   revision = "e6f5723bf2a66af014955e0888881314cf294129"
   version = "v0.1.1"
 
 [[projects]]
-  digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
   name = "github.com/pmezard/go-difflib"
   packages = ["difflib"]
-  pruneopts = "UT"
   revision = "792786c7400a136282c1664665ae0a8db921c6c2"
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:38aee443dc6b1610660b68fb6ff259315aa4219c4772da84a410029a06bc1f76"
+  name = "github.com/shopspring/decimal"
+  packages = ["."]
+  revision = "cd690d0c9e2447b1ef2a129a6b7b49077da89b8e"
+  version = "1.1.0"
+
+[[projects]]
   name = "github.com/stretchr/testify"
   packages = [
     "assert",
     "require",
-    "suite",
+    "suite"
   ]
-  pruneopts = "UT"
   revision = "f35b8ab0b5a2cef36673838d662e249dd9c94686"
   version = "v1.2.2"
 
 [[projects]]
   branch = "master"
-  digest = "1:922191411ad8f61bcd8018ac127589bb489712c1d1a0ab2497aca4b16de417d2"
   name = "github.com/syndtr/goleveldb"
   packages = [
     "leveldb",
@@ -80,20 +65,13 @@
     "leveldb/opt",
     "leveldb/storage",
     "leveldb/table",
-    "leveldb/util",
+    "leveldb/util"
   ]
-  pruneopts = "UT"
   revision = "c4c61651e9e37fa117f53c5a906d3b63090d8445"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  input-imports = [
-    "github.com/cobinhood/decimal",
-    "github.com/naoina/toml",
-    "github.com/stretchr/testify/suite",
-    "github.com/syndtr/goleveldb/leveldb",
-    "github.com/syndtr/goleveldb/leveldb/opt",
-  ]
+  inputs-digest = "c592a0430dcbe75d2a547d9bf41ee018e6284ec00e0750063fc9d95bbd5e52a1"
   solver-name = "gps-cdcl"
   solver-version = 1

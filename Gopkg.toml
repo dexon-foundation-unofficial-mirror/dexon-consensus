@@ -26,10 +26,6 @@
 
 
 [[constraint]]
-  name = "github.com/getlantern/deepcopy"
-  version = "1.0.0"
-
-[[constraint]]
   name = "github.com/naoina/toml"
   version = "0.1.1"
 
