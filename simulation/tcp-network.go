@@ -20,6 +20,7 @@ package simulation
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -38,6 +39,7 @@ type TCPNetwork struct {
 	local    bool
 	port     int
 	endpoint Endpoint
+	client   *http.Client
 
 	peerServer    string
 	endpointMutex sync.RWMutex
@@ -55,10 +57,20 @@ func NewTCPNetwork(local bool, peerServer string) *TCPNetwork {
 	if local {
 		pServer = "127.0.0.1"
 	}
+	// Force connection reuse.
+	tr := &http.Transport{
+		MaxIdleConnsPerHost: 1024,
+		TLSHandshakeTimeout: 0 * time.Second,
+	}
+	client := &http.Client{
+		Transport: tr,
+		Timeout:   5 * time.Second,
+	}
 	return &TCPNetwork{
 		local:       local,
 		peerServer:  pServer,
 		port:        port,
+		client:      client,
 		endpoints:   make(map[types.ValidatorID]string),
 		recieveChan: make(chan interface{}, msgBufferSize),
 	}
@@ -126,8 +138,6 @@ func (n *TCPNetwork) Join(endpoint Endpoint) chan interface{} {
 	joinURL := fmt.Sprintf("http://%s:%d/join", n.peerServer, peerPort)
 	peersURL := fmt.Sprintf("http://%s:%d/peers", n.peerServer, peerPort)
 
-	client := &http.Client{Timeout: 5 * time.Second}
-
 	// Join the peer list.
 	for {
 		time.Sleep(time.Second)
@@ -139,9 +149,10 @@ func (n *TCPNetwork) Join(endpoint Endpoint) chan interface{} {
 		req.Header.Add("ID", endpoint.GetID().String())
 		req.Header.Add("PORT", fmt.Sprintf("%d", n.port))
 
-		resp, err := client.Do(req)
+		resp, err := n.client.Do(req)
 		if err == nil {
 			defer resp.Body.Close()
+			io.Copy(ioutil.Discard, resp.Body)
 		}
 		if err == nil && resp.StatusCode == http.StatusOK {
 			break
@@ -159,7 +170,7 @@ func (n *TCPNetwork) Join(endpoint Endpoint) chan interface{} {
 			fmt.Println(err)
 			continue
 		}
-		resp, err := client.Do(req)
+		resp, err := n.client.Do(req)
 		if err != nil || resp.StatusCode != http.StatusOK {
 			continue
 		}
@@ -210,8 +221,6 @@ func (n *TCPNetwork) Send(destID types.ValidatorID, msg interface{}) {
 	msgURL := fmt.Sprintf("http://%s/msg", clientAddr)
 
 	go func() {
-		client := &http.Client{Timeout: 5 * time.Second}
-
 		for i := 0; i < retries; i++ {
 			req, err := http.NewRequest(
 				http.MethodPost, msgURL, strings.NewReader(string(messageJSON)))
@@ -221,9 +230,10 @@ func (n *TCPNetwork) Send(destID types.ValidatorID, msg interface{}) {
 			req.Close = true
 			req.Header.Add("ID", n.endpoint.GetID().String())
 
-			resp, err := client.Do(req)
+			resp, err := n.client.Do(req)
 			if err == nil {
 				defer resp.Body.Close()
+				io.Copy(ioutil.Discard, resp.Body)
 			}
 			if err == nil && resp.StatusCode == http.StatusOK {
 				runtime.Goexit()
@@ -254,8 +264,6 @@ func (n *TCPNetwork) DeliverBlocks(blocks BlockList) {
 	msgURL := fmt.Sprintf("http://%s:%d/delivery", n.peerServer, peerPort)
 
 	go func() {
-		client := &http.Client{Timeout: 5 * time.Second}
-
 		for i := 0; i < retries; i++ {
 			req, err := http.NewRequest(
 				http.MethodPost, msgURL, strings.NewReader(string(messageJSON)))
@@ -264,9 +272,10 @@ func (n *TCPNetwork) DeliverBlocks(blocks BlockList) {
 			}
 			req.Header.Add("ID", n.endpoint.GetID().String())
 
-			resp, err := client.Do(req)
+			resp, err := n.client.Do(req)
 			if err == nil {
 				defer resp.Body.Close()
+				io.Copy(ioutil.Discard, resp.Body)
 			}
 
 			if err == nil && resp.StatusCode == http.StatusOK {
@@ -288,8 +297,6 @@ func (n *TCPNetwork) NotifyServer(msg Message) {
 
 	msgURL := fmt.Sprintf("http://%s:%d/message", n.peerServer, peerPort)
 
-	client := &http.Client{Timeout: 5 * time.Second}
-
 	for i := 0; i < retries; i++ {
 		req, err := http.NewRequest(
 			http.MethodPost, msgURL, strings.NewReader(string(messageJSON)))
@@ -298,9 +305,10 @@ func (n *TCPNetwork) NotifyServer(msg Message) {
 		}
 		req.Header.Add("ID", n.endpoint.GetID().String())
 
-		resp, err := client.Do(req)
+		resp, err := n.client.Do(req)
 		if err == nil {
 			defer resp.Body.Close()
+			io.Copy(ioutil.Discard, resp.Body)
 		}
 		if err == nil && resp.StatusCode == http.StatusOK {
 			return
@@ -316,7 +324,6 @@ func (n *TCPNetwork) NotifyServer(msg Message) {
 func (n *TCPNetwork) GetServerInfo() InfoMessage {
 	infoMsg := InfoMessage{}
 	msgURL := fmt.Sprintf("http://%s:%d/info", n.peerServer, peerPort)
-	client := &http.Client{Timeout: 5 * time.Second}
 
 	req, err := http.NewRequest(
 		http.MethodGet, msgURL, nil)
@@ -324,7 +331,7 @@ func (n *TCPNetwork) GetServerInfo() InfoMessage {
 		fmt.Printf("error: %v\n", err)
 	}
 
-	resp, err := client.Do(req)
+	resp, err := n.client.Do(req)
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
 		return infoMsg
