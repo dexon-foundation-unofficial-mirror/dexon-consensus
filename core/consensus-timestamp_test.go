@@ -29,7 +29,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-type TimestampTest struct {
+type ConsensusTimestampTest struct {
 	suite.Suite
 }
 
@@ -84,26 +84,26 @@ func extractTimestamps(blocks []*types.Block) []time.Time {
 	return timestamps
 }
 
-func (s *TimestampTest) TestMainChainSelection() {
-	ts := NewTimestamp()
-	ts2 := NewTimestamp()
+func (s *ConsensusTimestampTest) TestMainChainSelection() {
+	ct := newConsensusTimestamp()
+	ct2 := newConsensusTimestamp()
 	blockNums := []int{50, 100, 30}
 	maxAcks := 5
 	for _, blockNum := range blockNums {
 		chain := generateBlocksWithAcks(blockNum, maxAcks)
-		mainChain, _ := ts.selectMainChain(chain)
+		mainChain, _ := ct.selectMainChain(chain)
 		// Verify the selected main chain.
 		for i := 1; i < len(mainChain); i++ {
 			_, exists := mainChain[i].Acks[mainChain[i-1].Hash]
 			s.True(exists)
 		}
 		// Verify if selectMainChain is stable.
-		mainChain2, _ := ts2.selectMainChain(chain)
+		mainChain2, _ := ct2.selectMainChain(chain)
 		s.Equal(mainChain, mainChain2)
 	}
 }
 
-func (s *TimestampTest) TestTimestampPartition() {
+func (s *ConsensusTimestampTest) TestTimestampPartition() {
 	blockNums := []int{50, 100, 30}
 	validatorNum := 19
 	sigma := 100 * time.Millisecond
@@ -111,26 +111,26 @@ func (s *TimestampTest) TestTimestampPartition() {
 	totalMainChain := make([]*types.Block, 1)
 	totalChain := make([]*types.Block, 0)
 	totalTimestamps := make([]time.Time, 0)
-	ts := NewTimestamp()
+	ct := newConsensusTimestamp()
 	var lastMainChainBlock *types.Block
 	for _, blockNum := range blockNums {
 		chain := generateBlocksWithAcks(blockNum, maxAcks)
 		fillBlocksTimestamps(chain, validatorNum, time.Second, sigma)
-		blocksWithTimestamps, mainChain, err := ts.ProcessBlocks(chain)
+		blocksWithTimestamps, mainChain, err := ct.processBlocks(chain)
 		s.Require().Nil(err)
 		timestamps := extractTimestamps(blocksWithTimestamps)
 		if lastMainChainBlock != nil {
 			s.Require().Equal(mainChain[0], lastMainChainBlock)
 		}
-		s.Require().Equal(mainChain[len(mainChain)-1], ts.lastMainChainBlock)
-		lastMainChainBlock = ts.lastMainChainBlock
+		s.Require().Equal(mainChain[len(mainChain)-1], ct.lastMainChainBlock)
+		lastMainChainBlock = ct.lastMainChainBlock
 		totalMainChain =
 			append(totalMainChain[:len(totalMainChain)-1], mainChain...)
 		totalChain = append(totalChain, chain...)
 		totalTimestamps = append(totalTimestamps, timestamps...)
 	}
-	ts2 := NewTimestamp()
-	blocksWithTimestamps2, mainChain2, err := ts2.ProcessBlocks(totalChain)
+	ct2 := newConsensusTimestamp()
+	blocksWithTimestamps2, mainChain2, err := ct2.processBlocks(totalChain)
 	s.Require().Nil(err)
 	timestamps2 := extractTimestamps(blocksWithTimestamps2)
 	s.Equal(totalMainChain, mainChain2)
@@ -144,35 +144,35 @@ func timeDiffWithinTolerance(t1, t2 time.Time, tolerance time.Duration) bool {
 	return t1.Add(tolerance).After(t2)
 }
 
-func (s *TimestampTest) TestTimestampIncrease() {
+func (s *ConsensusTimestampTest) TestTimestampIncrease() {
 	validatorNum := 19
 	sigma := 100 * time.Millisecond
-	ts := NewTimestamp()
+	ct := newConsensusTimestamp()
 	chain := generateBlocksWithAcks(1000, 5)
 	fillBlocksTimestamps(chain, validatorNum, time.Second, sigma)
-	blocksWithTimestamps, _, err := ts.ProcessBlocks(chain)
+	blocksWithTimestamps, _, err := ct.processBlocks(chain)
 	s.Require().Nil(err)
 	timestamps := extractTimestamps(blocksWithTimestamps)
 	for i := 1; i < len(timestamps); i++ {
 		s.True(timestamps[i].After(timestamps[i-1]))
 	}
-	// Test if the ProcessBlocks is stable.
-	ts2 := NewTimestamp()
-	blocksWithTimestamps2, _, err := ts2.ProcessBlocks(chain)
+	// Test if the processBlocks is stable.
+	ct2 := newConsensusTimestamp()
+	blocksWithTimestamps2, _, err := ct2.processBlocks(chain)
 	s.Require().Nil(err)
 	timestamps2 := extractTimestamps(blocksWithTimestamps2)
 	s.Equal(timestamps, timestamps2)
 }
 
-func (s *TimestampTest) TestByzantineBiasTime() {
+func (s *ConsensusTimestampTest) TestByzantineBiasTime() {
 	// Test that Byzantine node cannot bias the timestamps.
 	validatorNum := 19
 	sigma := 100 * time.Millisecond
 	tolerance := 4 * sigma
-	ts := NewTimestamp()
+	ct := newConsensusTimestamp()
 	chain := generateBlocksWithAcks(1000, 5)
 	fillBlocksTimestamps(chain, validatorNum, time.Second, sigma)
-	blocksWithTimestamps, _, err := ts.ProcessBlocks(chain)
+	blocksWithTimestamps, _, err := ct.processBlocks(chain)
 	s.Require().Nil(err)
 	timestamps := extractTimestamps(blocksWithTimestamps)
 	byzantine := validatorNum / 3
@@ -190,8 +190,8 @@ func (s *TimestampTest) TestByzantineBiasTime() {
 			block.Timestamps[vID] = time.Time{}
 		}
 	}
-	tsByzantine := NewTimestamp()
-	blocksWithTimestampsB, _, err := tsByzantine.ProcessBlocks(chain)
+	ctByzantine := newConsensusTimestamp()
+	blocksWithTimestampsB, _, err := ctByzantine.processBlocks(chain)
 	s.Require().Nil(err)
 	timestampsWithByzantine := extractTimestamps(blocksWithTimestampsB)
 	for idx, timestamp := range timestamps {
@@ -201,6 +201,6 @@ func (s *TimestampTest) TestByzantineBiasTime() {
 	}
 }
 
-func TestTimestamp(t *testing.T) {
-	suite.Run(t, new(TimestampTest))
+func TestConsensusTimestamp(t *testing.T) {
+	suite.Run(t, new(ConsensusTimestampTest))
 }

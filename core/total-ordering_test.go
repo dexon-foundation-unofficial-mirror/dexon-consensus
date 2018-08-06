@@ -29,11 +29,11 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type SequencerTestSuite struct {
+type TotalOrderingTestSuite struct {
 	suite.Suite
 }
 
-func (s *SequencerTestSuite) generateValidatorIDs(
+func (s *TotalOrderingTestSuite) generateValidatorIDs(
 	count int) []types.ValidatorID {
 
 	validatorIDs := []types.ValidatorID{}
@@ -45,7 +45,7 @@ func (s *SequencerTestSuite) generateValidatorIDs(
 	return validatorIDs
 }
 
-func (s *SequencerTestSuite) genRootBlock(
+func (s *TotalOrderingTestSuite) genRootBlock(
 	vID types.ValidatorID, acks map[common.Hash]struct{}) *types.Block {
 
 	hash := common.NewRandomHash()
@@ -58,21 +58,21 @@ func (s *SequencerTestSuite) genRootBlock(
 	}
 }
 
-func (s *SequencerTestSuite) checkNotDeliver(seq *sequencer, b *types.Block) {
-	hashes, eqrly, err := seq.processBlock(b)
+func (s *TotalOrderingTestSuite) checkNotDeliver(to *totalOrdering, b *types.Block) {
+	hashes, eqrly, err := to.processBlock(b)
 	s.Empty(hashes)
 	s.False(eqrly)
 	s.Nil(err)
 }
 
-func (s *SequencerTestSuite) checkNotInWorkingSet(
-	seq *sequencer, b *types.Block) {
+func (s *TotalOrderingTestSuite) checkNotInWorkingSet(
+	to *totalOrdering, b *types.Block) {
 
-	s.NotContains(seq.pendings, b.Hash)
-	s.NotContains(seq.acked, b.Hash)
+	s.NotContains(to.pendings, b.Hash)
+	s.NotContains(to.acked, b.Hash)
 }
 
-func (s *SequencerTestSuite) TestBlockRelation() {
+func (s *TotalOrderingTestSuite) TestBlockRelation() {
 	// This test case would verify if 'acking' and 'acked'
 	// accumulated correctly.
 	//
@@ -108,27 +108,27 @@ func (s *SequencerTestSuite) TestBlockRelation() {
 		},
 	}
 
-	seq := newSequencer(1, 3, 5)
-	s.checkNotDeliver(seq, blockA)
-	s.checkNotDeliver(seq, blockB)
-	s.checkNotDeliver(seq, blockC)
+	to := newTotalOrdering(1, 3, 5)
+	s.checkNotDeliver(to, blockA)
+	s.checkNotDeliver(to, blockB)
+	s.checkNotDeliver(to, blockC)
 
 	// Check 'acked'.
-	ackedA := seq.acked[blockA.Hash]
+	ackedA := to.acked[blockA.Hash]
 	s.Require().NotNil(ackedA)
 	s.Len(ackedA, 2)
 	s.Contains(ackedA, blockB.Hash)
 	s.Contains(ackedA, blockC.Hash)
 
-	ackedB := seq.acked[blockB.Hash]
+	ackedB := to.acked[blockB.Hash]
 	s.Require().NotNil(ackedB)
 	s.Len(ackedB, 1)
 	s.Contains(ackedB, blockC.Hash)
 
-	s.Nil(seq.acked[blockC.Hash])
+	s.Nil(to.acked[blockC.Hash])
 }
 
-func (s *SequencerTestSuite) TestCreateAckingHeightVectorFromHeightVector() {
+func (s *TotalOrderingTestSuite) TestCreateAckingHeightVectorFromHeightVector() {
 	validators := s.generateValidatorIDs(5)
 	global := ackingStatusVector{
 		validators[0]: &struct{ minHeight, count uint64 }{
@@ -172,7 +172,7 @@ func (s *SequencerTestSuite) TestCreateAckingHeightVectorFromHeightVector() {
 	s.Len(ahv, 0)
 }
 
-func (s *SequencerTestSuite) TestCreateAckingNodeSetFromHeightVector() {
+func (s *TotalOrderingTestSuite) TestCreateAckingNodeSetFromHeightVector() {
 	validators := s.generateValidatorIDs(5)
 	global := ackingStatusVector{
 		validators[0]: &struct{ minHeight, count uint64 }{
@@ -194,9 +194,9 @@ func (s *SequencerTestSuite) TestCreateAckingNodeSetFromHeightVector() {
 	s.Len(local.getAckingNodeSet(global, 3), 0)
 }
 
-func (s *SequencerTestSuite) TestGrade() {
+func (s *TotalOrderingTestSuite) TestGrade() {
 	validators := s.generateValidatorIDs(5)
-	seq := newSequencer(1, 3, 5) // K doesn't matter when calculating preceding.
+	to := newTotalOrdering(1, 3, 5) // K doesn't matter when calculating preceding.
 
 	ans := map[types.ValidatorID]struct{}{
 		validators[0]: struct{}{},
@@ -223,13 +223,13 @@ func (s *SequencerTestSuite) TestGrade() {
 		validators[2]: infinity,
 		validators[3]: infinity,
 	}
-	s.Equal(seq.grade(ahv2, ahv1, ans), 1)
-	s.Equal(seq.grade(ahv1, ahv2, ans), 0)
-	s.Equal(seq.grade(ahv2, ahv3, ans), -1)
-	s.Equal(seq.grade(ahv3, ahv2, ans), 0)
+	s.Equal(to.grade(ahv2, ahv1, ans), 1)
+	s.Equal(to.grade(ahv1, ahv2, ans), 0)
+	s.Equal(to.grade(ahv2, ahv3, ans), -1)
+	s.Equal(to.grade(ahv3, ahv2, ans), 0)
 }
 
-func (s *SequencerTestSuite) TestCycleDetection() {
+func (s *TotalOrderingTestSuite) TestCycleDetection() {
 	// Make sure we don't get hang by cycle from
 	// block's acks.
 	validators := s.generateValidatorIDs(5)
@@ -287,20 +287,20 @@ func (s *SequencerTestSuite) TestCycleDetection() {
 	}
 
 	// Make sure we won't hang when cycle exists.
-	seq := newSequencer(1, 3, 5)
-	s.checkNotDeliver(seq, b00)
-	s.checkNotDeliver(seq, b01)
-	s.checkNotDeliver(seq, b02)
+	to := newTotalOrdering(1, 3, 5)
+	s.checkNotDeliver(to, b00)
+	s.checkNotDeliver(to, b01)
+	s.checkNotDeliver(to, b02)
 
 	// Should not hang in this line.
-	s.checkNotDeliver(seq, b03)
+	s.checkNotDeliver(to, b03)
 	// Should not hang in this line
-	s.checkNotDeliver(seq, b10)
+	s.checkNotDeliver(to, b10)
 }
 
-func (s *SequencerTestSuite) TestNotValidDAGDetection() {
+func (s *TotalOrderingTestSuite) TestNotValidDAGDetection() {
 	validators := s.generateValidatorIDs(4)
-	seq := newSequencer(1, 3, 5)
+	to := newTotalOrdering(1, 3, 5)
 
 	hash := common.NewRandomHash()
 	b00 := &types.Block{
@@ -316,14 +316,14 @@ func (s *SequencerTestSuite) TestNotValidDAGDetection() {
 		Hash:       common.NewRandomHash(),
 	}
 
-	// When submit to block with lower height to sequencer,
+	// When submit to block with lower height to totalOrdering,
 	// caller should receive an error.
-	s.checkNotDeliver(seq, b01)
-	_, _, err := seq.processBlock(b00)
+	s.checkNotDeliver(to, b01)
+	_, _, err := to.processBlock(b00)
 	s.Equal(err, ErrNotValidDAG)
 }
 
-func (s *SequencerTestSuite) TestEarlyDeliver() {
+func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 	// The test scenario:
 	//
 	//  o o o o o
@@ -334,7 +334,7 @@ func (s *SequencerTestSuite) TestEarlyDeliver() {
 	//     A    B
 	//  Even when B is not received, A should
 	//  be able to be delivered.
-	seq := newSequencer(2, 3, 5)
+	to := newTotalOrdering(2, 3, 5)
 	validators := s.generateValidatorIDs(5)
 
 	genNextBlock := func(b *types.Block) *types.Block {
@@ -373,29 +373,29 @@ func (s *SequencerTestSuite) TestEarlyDeliver() {
 
 	// It's a valid block sequence to deliver
 	// to total ordering algorithm: DAG.
-	s.checkNotDeliver(seq, b00)
-	s.checkNotDeliver(seq, b01)
-	s.checkNotDeliver(seq, b02)
+	s.checkNotDeliver(to, b00)
+	s.checkNotDeliver(to, b01)
+	s.checkNotDeliver(to, b02)
 
-	vec := seq.candidateAckingStatusVectors[b00.Hash]
+	vec := to.candidateAckingStatusVectors[b00.Hash]
 	s.Require().NotNil(vec)
 	s.Len(vec, 1)
 	s.Equal(vec[validators[0]].minHeight, b00.Height)
 	s.Equal(vec[validators[0]].count, uint64(3))
 
-	s.checkNotDeliver(seq, b10)
-	s.checkNotDeliver(seq, b11)
-	s.checkNotDeliver(seq, b12)
-	s.checkNotDeliver(seq, b20)
-	s.checkNotDeliver(seq, b21)
-	s.checkNotDeliver(seq, b22)
-	s.checkNotDeliver(seq, b30)
-	s.checkNotDeliver(seq, b31)
+	s.checkNotDeliver(to, b10)
+	s.checkNotDeliver(to, b11)
+	s.checkNotDeliver(to, b12)
+	s.checkNotDeliver(to, b20)
+	s.checkNotDeliver(to, b21)
+	s.checkNotDeliver(to, b22)
+	s.checkNotDeliver(to, b30)
+	s.checkNotDeliver(to, b31)
 
 	// Check the internal state before delivering.
-	s.Len(seq.candidateAckingStatusVectors, 1) // b00 is the only candidate.
+	s.Len(to.candidateAckingStatusVectors, 1) // b00 is the only candidate.
 
-	vec = seq.candidateAckingStatusVectors[b00.Hash]
+	vec = to.candidateAckingStatusVectors[b00.Hash]
 	s.Require().NotNil(vec)
 	s.Len(vec, 4)
 	s.Equal(vec[validators[0]].minHeight, b00.Height)
@@ -407,50 +407,50 @@ func (s *SequencerTestSuite) TestEarlyDeliver() {
 	s.Equal(vec[validators[3]].minHeight, b30.Height)
 	s.Equal(vec[validators[3]].count, uint64(2))
 
-	hashes, early, err := seq.processBlock(b32)
+	hashes, early, err := to.processBlock(b32)
 	s.Require().Len(hashes, 1)
 	s.True(early)
 	s.Nil(err)
 	s.Equal(hashes[0], b00.Hash)
 
 	// Check the internal state after delivered.
-	s.Len(seq.candidateAckingStatusVectors, 4) // b01, b10, b20, b30 are candidates.
+	s.Len(to.candidateAckingStatusVectors, 4) // b01, b10, b20, b30 are candidates.
 
 	// Check b01.
-	vec = seq.candidateAckingStatusVectors[b01.Hash]
+	vec = to.candidateAckingStatusVectors[b01.Hash]
 	s.Require().NotNil(vec)
 	s.Len(vec, 1)
 	s.Equal(vec[validators[0]].minHeight, b01.Height)
 	s.Equal(vec[validators[0]].count, uint64(2))
 
 	// Check b10.
-	vec = seq.candidateAckingStatusVectors[b10.Hash]
+	vec = to.candidateAckingStatusVectors[b10.Hash]
 	s.Require().NotNil(vec)
 	s.Len(vec, 1)
 	s.Equal(vec[validators[1]].minHeight, b10.Height)
 	s.Equal(vec[validators[1]].count, uint64(3))
 
 	// Check b20.
-	vec = seq.candidateAckingStatusVectors[b20.Hash]
+	vec = to.candidateAckingStatusVectors[b20.Hash]
 	s.Require().NotNil(vec)
 	s.Len(vec, 1)
 	s.Equal(vec[validators[2]].minHeight, b20.Height)
 	s.Equal(vec[validators[2]].count, uint64(3))
 
 	// Check b30.
-	vec = seq.candidateAckingStatusVectors[b30.Hash]
+	vec = to.candidateAckingStatusVectors[b30.Hash]
 	s.Require().NotNil(vec)
 	s.Len(vec, 1)
 	s.Equal(vec[validators[3]].minHeight, b30.Height)
 	s.Equal(vec[validators[3]].count, uint64(3))
 
 	// Make sure b00 doesn't exist in current working set:
-	s.checkNotInWorkingSet(seq, b00)
+	s.checkNotInWorkingSet(to, b00)
 }
 
-func (s *SequencerTestSuite) TestBasicCaseForK2() {
+func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	// It's a handcrafted test case.
-	seq := newSequencer(2, 3, 5)
+	to := newTotalOrdering(2, 3, 5)
 	validators := s.generateValidatorIDs(5)
 
 	b00 := s.genRootBlock(validators[0], map[common.Hash]struct{}{})
@@ -596,20 +596,20 @@ func (s *SequencerTestSuite) TestBasicCaseForK2() {
 		},
 	}
 
-	s.checkNotDeliver(seq, b00)
-	s.checkNotDeliver(seq, b10)
-	s.checkNotDeliver(seq, b11)
-	s.checkNotDeliver(seq, b01)
-	s.checkNotDeliver(seq, b20)
-	s.checkNotDeliver(seq, b30)
-	s.checkNotDeliver(seq, b21)
-	s.checkNotDeliver(seq, b31)
-	s.checkNotDeliver(seq, b32)
-	s.checkNotDeliver(seq, b22)
-	s.checkNotDeliver(seq, b12)
+	s.checkNotDeliver(to, b00)
+	s.checkNotDeliver(to, b10)
+	s.checkNotDeliver(to, b11)
+	s.checkNotDeliver(to, b01)
+	s.checkNotDeliver(to, b20)
+	s.checkNotDeliver(to, b30)
+	s.checkNotDeliver(to, b21)
+	s.checkNotDeliver(to, b31)
+	s.checkNotDeliver(to, b32)
+	s.checkNotDeliver(to, b22)
+	s.checkNotDeliver(to, b12)
 
 	// Make sure 'acked' for current precedings is correct.
-	acked := seq.acked[b00.Hash]
+	acked := to.acked[b00.Hash]
 	s.Require().NotNil(acked)
 	s.Len(acked, 7)
 	s.Contains(acked, b01.Hash)
@@ -620,7 +620,7 @@ func (s *SequencerTestSuite) TestBasicCaseForK2() {
 	s.Contains(acked, b31.Hash)
 	s.Contains(acked, b32.Hash)
 
-	acked = seq.acked[b10.Hash]
+	acked = to.acked[b10.Hash]
 	s.Require().NotNil(acked)
 	s.Len(acked, 9)
 	s.Contains(acked, b01.Hash)
@@ -634,10 +634,10 @@ func (s *SequencerTestSuite) TestBasicCaseForK2() {
 	s.Contains(acked, b32.Hash)
 
 	// Make sure there are 2 candidates.
-	s.Require().Len(seq.candidateAckingStatusVectors, 2)
+	s.Require().Len(to.candidateAckingStatusVectors, 2)
 
 	// Check b00's height vector.
-	vec := seq.candidateAckingStatusVectors[b00.Hash]
+	vec := to.candidateAckingStatusVectors[b00.Hash]
 	s.Require().NotNil(vec)
 	s.NotContains(vec, validators[4])
 	s.Equal(vec[validators[0]].minHeight, b00.Height)
@@ -650,7 +650,7 @@ func (s *SequencerTestSuite) TestBasicCaseForK2() {
 	s.Equal(vec[validators[3]].count, uint64(2))
 
 	// Check b10's height vector.
-	vec = seq.candidateAckingStatusVectors[b10.Hash]
+	vec = to.candidateAckingStatusVectors[b10.Hash]
 	s.Require().NotNil(vec)
 	s.NotContains(vec, validators[4])
 	s.Equal(vec[validators[0]].minHeight, b01.Height)
@@ -663,7 +663,7 @@ func (s *SequencerTestSuite) TestBasicCaseForK2() {
 	s.Equal(vec[validators[3]].count, uint64(3))
 
 	// Check the first deliver.
-	hashes, early, err := seq.processBlock(b02)
+	hashes, early, err := to.processBlock(b02)
 	s.True(early)
 	s.Nil(err)
 	expected := common.Hashes{b00.Hash, b10.Hash}
@@ -671,14 +671,14 @@ func (s *SequencerTestSuite) TestBasicCaseForK2() {
 	s.Equal(hashes, expected)
 
 	// Make sure b00, b10 are removed from current working set.
-	s.checkNotInWorkingSet(seq, b00)
-	s.checkNotInWorkingSet(seq, b10)
+	s.checkNotInWorkingSet(to, b00)
+	s.checkNotInWorkingSet(to, b10)
 
 	// Check if candidates of next round are picked correctly.
-	s.Len(seq.candidateAckingStatusVectors, 2)
+	s.Len(to.candidateAckingStatusVectors, 2)
 
 	// Check b01's height vector.
-	vec = seq.candidateAckingStatusVectors[b11.Hash]
+	vec = to.candidateAckingStatusVectors[b11.Hash]
 	s.Require().NotNil(vec)
 	s.NotContains(vec, validators[4])
 	s.Equal(vec[validators[0]].minHeight, b01.Height)
@@ -691,7 +691,7 @@ func (s *SequencerTestSuite) TestBasicCaseForK2() {
 	s.Equal(vec[validators[3]].count, uint64(2))
 
 	// Check b20's height vector.
-	vec = seq.candidateAckingStatusVectors[b20.Hash]
+	vec = to.candidateAckingStatusVectors[b20.Hash]
 	s.Require().NotNil(vec)
 	s.NotContains(vec, validators[4])
 	s.Equal(vec[validators[0]].minHeight, b02.Height)
@@ -703,10 +703,10 @@ func (s *SequencerTestSuite) TestBasicCaseForK2() {
 	s.Equal(vec[validators[3]].minHeight, b30.Height)
 	s.Equal(vec[validators[3]].count, uint64(3))
 
-	s.checkNotDeliver(seq, b13)
+	s.checkNotDeliver(to, b13)
 
 	// Check the second deliver.
-	hashes, early, err = seq.processBlock(b03)
+	hashes, early, err = to.processBlock(b03)
 	s.True(early)
 	s.Nil(err)
 	expected = common.Hashes{b11.Hash, b20.Hash}
@@ -714,18 +714,18 @@ func (s *SequencerTestSuite) TestBasicCaseForK2() {
 	s.Equal(hashes, expected)
 
 	// Make sure b11, b20 are removed from current working set.
-	s.checkNotInWorkingSet(seq, b11)
-	s.checkNotInWorkingSet(seq, b20)
+	s.checkNotInWorkingSet(to, b11)
+	s.checkNotInWorkingSet(to, b20)
 
 	// Add b40, b41, b42 to pending set.
-	s.checkNotDeliver(seq, b40)
-	s.checkNotDeliver(seq, b41)
-	s.checkNotDeliver(seq, b42)
-	s.checkNotDeliver(seq, b14)
+	s.checkNotDeliver(to, b40)
+	s.checkNotDeliver(to, b41)
+	s.checkNotDeliver(to, b42)
+	s.checkNotDeliver(to, b14)
 
 	// Make sure b01, b30, b40 are candidate in next round.
-	s.Len(seq.candidateAckingStatusVectors, 3)
-	vec = seq.candidateAckingStatusVectors[b01.Hash]
+	s.Len(to.candidateAckingStatusVectors, 3)
+	vec = to.candidateAckingStatusVectors[b01.Hash]
 	s.Require().NotNil(vec)
 	s.NotContains(vec, validators[4])
 	s.Equal(vec[validators[0]].minHeight, b01.Height)
@@ -737,7 +737,7 @@ func (s *SequencerTestSuite) TestBasicCaseForK2() {
 	s.Equal(vec[validators[3]].minHeight, b31.Height)
 	s.Equal(vec[validators[3]].count, uint64(2))
 
-	vec = seq.candidateAckingStatusVectors[b30.Hash]
+	vec = to.candidateAckingStatusVectors[b30.Hash]
 	s.Require().NotNil(vec)
 	s.NotContains(vec, validators[4])
 	s.Equal(vec[validators[0]].minHeight, b03.Height)
@@ -749,7 +749,7 @@ func (s *SequencerTestSuite) TestBasicCaseForK2() {
 	s.Equal(vec[validators[3]].minHeight, b30.Height)
 	s.Equal(vec[validators[3]].count, uint64(3))
 
-	vec = seq.candidateAckingStatusVectors[b40.Hash]
+	vec = to.candidateAckingStatusVectors[b40.Hash]
 	s.Require().NotNil(vec)
 	s.NotContains(vec, validators[0])
 	s.NotContains(vec, validators[1])
@@ -760,7 +760,7 @@ func (s *SequencerTestSuite) TestBasicCaseForK2() {
 
 	// Make 'Acking Node Set' contains blocks from all validators,
 	// this should trigger not-early deliver.
-	hashes, early, err = seq.processBlock(b23)
+	hashes, early, err = to.processBlock(b23)
 	s.False(early)
 	s.Nil(err)
 	expected = common.Hashes{b01.Hash, b30.Hash}
@@ -768,15 +768,15 @@ func (s *SequencerTestSuite) TestBasicCaseForK2() {
 	s.Equal(expected, hashes)
 
 	// Make sure b01, b30 not in working set
-	s.checkNotInWorkingSet(seq, b01)
-	s.checkNotInWorkingSet(seq, b30)
+	s.checkNotInWorkingSet(to, b01)
+	s.checkNotInWorkingSet(to, b30)
 
 	// Make sure b21, b40 are candidates of next round.
-	s.Contains(seq.candidateAckingStatusVectors, b21.Hash)
-	s.Contains(seq.candidateAckingStatusVectors, b40.Hash)
+	s.Contains(to.candidateAckingStatusVectors, b21.Hash)
+	s.Contains(to.candidateAckingStatusVectors, b40.Hash)
 }
 
-func (s *SequencerTestSuite) TestBasicCaseForK0() {
+func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 	// This is a relatively simple test for K=0.
 	//
 	//  0   1   2    3    4
@@ -787,7 +787,7 @@ func (s *SequencerTestSuite) TestBasicCaseForK0() {
 	//  | \ | \ |    |
 	//  v   v   v    v
 	//  o   o   o <- o        Height: 0
-	seq := newSequencer(0, 3, 5)
+	to := newTotalOrdering(0, 3, 5)
 	validators := s.generateValidatorIDs(5)
 
 	b00 := s.genRootBlock(validators[0], map[common.Hash]struct{}{})
@@ -839,23 +839,23 @@ func (s *SequencerTestSuite) TestBasicCaseForK0() {
 		b31.Hash: struct{}{},
 	})
 
-	s.checkNotDeliver(seq, b00)
-	s.checkNotDeliver(seq, b10)
-	s.checkNotDeliver(seq, b20)
-	s.checkNotDeliver(seq, b30)
-	s.checkNotDeliver(seq, b01)
-	s.checkNotDeliver(seq, b11)
-	s.checkNotDeliver(seq, b21)
-	s.checkNotDeliver(seq, b31)
+	s.checkNotDeliver(to, b00)
+	s.checkNotDeliver(to, b10)
+	s.checkNotDeliver(to, b20)
+	s.checkNotDeliver(to, b30)
+	s.checkNotDeliver(to, b01)
+	s.checkNotDeliver(to, b11)
+	s.checkNotDeliver(to, b21)
+	s.checkNotDeliver(to, b31)
 
 	// Check status before delivering.
-	vec := seq.candidateAckingStatusVectors[b00.Hash]
+	vec := to.candidateAckingStatusVectors[b00.Hash]
 	s.Require().NotNil(vec)
 	s.Len(vec, 1)
 	s.Equal(vec[validators[0]].minHeight, b00.Height)
 	s.Equal(vec[validators[0]].count, uint64(2))
 
-	vec = seq.candidateAckingStatusVectors[b10.Hash]
+	vec = to.candidateAckingStatusVectors[b10.Hash]
 	s.Require().NotNil(vec)
 	s.Len(vec, 2)
 	s.Equal(vec[validators[0]].minHeight, b01.Height)
@@ -863,7 +863,7 @@ func (s *SequencerTestSuite) TestBasicCaseForK0() {
 	s.Equal(vec[validators[1]].minHeight, b10.Height)
 	s.Equal(vec[validators[1]].count, uint64(2))
 
-	vec = seq.candidateAckingStatusVectors[b20.Hash]
+	vec = to.candidateAckingStatusVectors[b20.Hash]
 	s.Require().NotNil(vec)
 	s.Len(vec, 3)
 	s.Equal(vec[validators[1]].minHeight, b11.Height)
@@ -874,7 +874,7 @@ func (s *SequencerTestSuite) TestBasicCaseForK0() {
 	s.Equal(vec[validators[3]].count, uint64(2))
 
 	// This new block should trigger non-early deliver.
-	hashes, early, err := seq.processBlock(b40)
+	hashes, early, err := to.processBlock(b40)
 	s.False(early)
 	s.Nil(err)
 	expected := common.Hashes{b20.Hash}
@@ -882,15 +882,15 @@ func (s *SequencerTestSuite) TestBasicCaseForK0() {
 	s.Equal(expected, hashes)
 
 	// Make sure b20 is no long existing in working set.
-	s.checkNotInWorkingSet(seq, b20)
+	s.checkNotInWorkingSet(to, b20)
 
 	// Make sure b10, b30 are candidates for next round.
-	s.Contains(seq.candidateAckingStatusVectors, b10.Hash)
-	s.Contains(seq.candidateAckingStatusVectors, b30.Hash)
+	s.Contains(to.candidateAckingStatusVectors, b10.Hash)
+	s.Contains(to.candidateAckingStatusVectors, b30.Hash)
 }
 
-func (s *SequencerTestSuite) baseTestRandomlyGeneratedBlocks(
-	seqConstructor func() *sequencer,
+func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
+	totalOrderingConstructor func() *totalOrdering,
 	revealer test.Revealer,
 	repeat int) {
 
@@ -901,7 +901,7 @@ func (s *SequencerTestSuite) baseTestRandomlyGeneratedBlocks(
 		revealed := ""
 		ordered := ""
 		revealer.Reset()
-		seq := seqConstructor()
+		to := totalOrderingConstructor()
 		for {
 			// Reveal next block.
 			b, err := revealer.Next()
@@ -915,7 +915,7 @@ func (s *SequencerTestSuite) baseTestRandomlyGeneratedBlocks(
 			revealed += b.Hash.String() + ","
 
 			// Perform total ordering.
-			hashes, _, err := seq.processBlock(&b)
+			hashes, _, err := to.processBlock(&b)
 			s.Require().Nil(err)
 			for _, h := range hashes {
 				ordered += h.String() + ","
@@ -942,7 +942,7 @@ func (s *SequencerTestSuite) baseTestRandomlyGeneratedBlocks(
 	}
 }
 
-func (s *SequencerTestSuite) TestRandomlyGeneratedBlocks() {
+func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 	var (
 		validatorCount        = 19
 		blockCount            = 50
@@ -951,7 +951,7 @@ func (s *SequencerTestSuite) TestRandomlyGeneratedBlocks() {
 	)
 
 	// Prepare a randomly genearated blocks.
-	db, err := blockdb.NewMemBackedBlockDB("test-sequencer-random.blockdb")
+	db, err := blockdb.NewMemBackedBlockDB("test-total-ordering-random.blockdb")
 	s.Require().Nil(err)
 	defer func() {
 		// If the test fails, keep the block database for troubleshooting.
@@ -970,27 +970,27 @@ func (s *SequencerTestSuite) TestRandomlyGeneratedBlocks() {
 	s.Require().Nil(err)
 
 	// Test for K=0.
-	constructor := func() *sequencer {
-		return newSequencer(0, phi, uint64(validatorCount))
+	constructor := func() *totalOrdering {
+		return newTotalOrdering(0, phi, uint64(validatorCount))
 	}
 	s.baseTestRandomlyGeneratedBlocks(constructor, revealer, repeat)
 	// Test for K=1,
-	constructor = func() *sequencer {
-		return newSequencer(1, phi, uint64(validatorCount))
+	constructor = func() *totalOrdering {
+		return newTotalOrdering(1, phi, uint64(validatorCount))
 	}
 	s.baseTestRandomlyGeneratedBlocks(constructor, revealer, repeat)
 	// Test for K=2,
-	constructor = func() *sequencer {
-		return newSequencer(2, phi, uint64(validatorCount))
+	constructor = func() *totalOrdering {
+		return newTotalOrdering(2, phi, uint64(validatorCount))
 	}
 	s.baseTestRandomlyGeneratedBlocks(constructor, revealer, repeat)
 	// Test for K=3,
-	constructor = func() *sequencer {
-		return newSequencer(2, phi, uint64(validatorCount))
+	constructor = func() *totalOrdering {
+		return newTotalOrdering(2, phi, uint64(validatorCount))
 	}
 	s.baseTestRandomlyGeneratedBlocks(constructor, revealer, repeat)
 }
 
-func TestSequencer(t *testing.T) {
-	suite.Run(t, new(SequencerTestSuite))
+func TestTotalOrdering(t *testing.T) {
+	suite.Run(t, new(TotalOrderingTestSuite))
 }

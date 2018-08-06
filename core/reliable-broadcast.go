@@ -24,8 +24,8 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-// acking is for acking module.
-type acking struct {
+// reliableBroadcast is a module for reliable broadcast.
+type reliableBroadcast struct {
 	// lattice stores blocks by its validator ID and height.
 	lattice map[types.ValidatorID]*ackingValidatorStatus
 
@@ -48,7 +48,7 @@ type ackingValidatorStatus struct {
 
 	// nextAck stores the height of next height that should be acked, i.e. last
 	// acked height + 1. Initialized to 0, when genesis blocks are still not
-	// being acked. For example, a.lattice[vid1].NextAck[vid2] - 1 is the last
+	// being acked. For example, rb.lattice[vid1].NextAck[vid2] - 1 is the last
 	// acked height by vid1 acking vid2.
 	nextAck map[types.ValidatorID]uint64
 
@@ -68,9 +68,9 @@ var (
 	ErrInvalidBlockHeight = fmt.Errorf("invalid block height")
 )
 
-// newAcking creates a new acking struct.
-func newAcking() *acking {
-	return &acking{
+// newReliableBroadcast creates a new reliableBroadcast struct.
+func newReliableBroadcast() *reliableBroadcast {
+	return &reliableBroadcast{
 		lattice:        make(map[types.ValidatorID]*ackingValidatorStatus),
 		blocks:         make(map[common.Hash]*types.Block),
 		receivedBlocks: make(map[common.Hash]*types.Block),
@@ -78,14 +78,14 @@ func newAcking() *acking {
 	}
 }
 
-func (a *acking) sanityCheck(b *types.Block) error {
+func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 	// Check if its proposer is in validator set.
-	if _, exist := a.lattice[b.ProposerID]; !exist {
+	if _, exist := rb.lattice[b.ProposerID]; !exist {
 		return ErrInvalidProposerID
 	}
 
 	// Check if it forks.
-	if bInLattice, exist := a.lattice[b.ProposerID].blocks[b.Height]; exist {
+	if bInLattice, exist := rb.lattice[b.ProposerID].blocks[b.Height]; exist {
 		if b.Hash != bInLattice.Hash {
 			return ErrForkBlock
 		}
@@ -96,7 +96,7 @@ func (a *acking) sanityCheck(b *types.Block) error {
 		if _, exist := b.Acks[b.ParentHash]; !exist {
 			return ErrNotAckParent
 		}
-		bParent, exists := a.blocks[b.ParentHash]
+		bParent, exists := rb.blocks[b.ParentHash]
 		if exists && bParent.Height != b.Height-1 {
 			return ErrInvalidBlockHeight
 		}
@@ -104,8 +104,8 @@ func (a *acking) sanityCheck(b *types.Block) error {
 
 	// Check if it acks older blocks.
 	for hash := range b.Acks {
-		if bAck, exist := a.blocks[hash]; exist {
-			if bAck.Height < a.lattice[b.ProposerID].nextAck[bAck.ProposerID] {
+		if bAck, exist := rb.blocks[hash]; exist {
+			if bAck.Height < rb.lattice[b.ProposerID].nextAck[bAck.ProposerID] {
 				return ErrDoubleAck
 			}
 		}
@@ -117,18 +117,18 @@ func (a *acking) sanityCheck(b *types.Block) error {
 }
 
 // areAllAcksReceived checks if all ack blocks of a block are all in lattice.
-func (a *acking) areAllAcksInLattice(b *types.Block) bool {
+func (rb *reliableBroadcast) areAllAcksInLattice(b *types.Block) bool {
 	for h := range b.Acks {
-		bAck, exist := a.blocks[h]
+		bAck, exist := rb.blocks[h]
 		if !exist {
 			return false
 		}
-		bAckInLattice, exist := a.lattice[bAck.ProposerID].blocks[bAck.Height]
+		bAckInLattice, exist := rb.lattice[bAck.ProposerID].blocks[bAck.Height]
 		if !exist {
 			return false
 		}
 		if bAckInLattice.Hash != bAck.Hash {
-			panic("areAllAcksInLattice: acking.lattice has corrupted")
+			panic("areAllAcksInLattice: reliableBroadcast.lattice has corrupted")
 		}
 	}
 	return true
@@ -136,14 +136,14 @@ func (a *acking) areAllAcksInLattice(b *types.Block) bool {
 
 // processBlock processes block, it does sanity check, inserts block into
 // lattice, handles strong acking and deletes blocks which will not be used.
-func (a *acking) processBlock(block *types.Block) {
+func (rb *reliableBroadcast) processBlock(block *types.Block) {
 	// If a block does not pass sanity check, discard this block.
-	if err := a.sanityCheck(block); err != nil {
+	if err := rb.sanityCheck(block); err != nil {
 		return
 	}
-	a.blocks[block.Hash] = block
+	rb.blocks[block.Hash] = block
 	block.AckedValidators = make(map[types.ValidatorID]struct{})
-	a.receivedBlocks[block.Hash] = block
+	rb.receivedBlocks[block.Hash] = block
 
 	// Check blocks in receivedBlocks if its acks are all in lattice. If a block's
 	// acking blocks are all in lattice, execute sanity check and add the block
@@ -151,8 +151,8 @@ func (a *acking) processBlock(block *types.Block) {
 	blocksToAcked := map[common.Hash]*types.Block{}
 	for {
 		blocksToLattice := map[common.Hash]*types.Block{}
-		for _, b := range a.receivedBlocks {
-			if a.areAllAcksInLattice(b) {
+		for _, b := range rb.receivedBlocks {
+			if rb.areAllAcksInLattice(b) {
 				blocksToLattice[b.Hash] = b
 			}
 		}
@@ -166,19 +166,19 @@ func (a *acking) processBlock(block *types.Block) {
 			// B   C  Block B and C both ack A and are valid. B, C received first
 			//  \ /   (added in receivedBlocks), and A comes, if sanity check is
 			//   A    not being executed here, B and C will both be added in lattice
-			if err := a.sanityCheck(b); err != nil {
-				delete(a.blocks, b.Hash)
-				delete(a.receivedBlocks, b.Hash)
+			if err := rb.sanityCheck(b); err != nil {
+				delete(rb.blocks, b.Hash)
+				delete(rb.receivedBlocks, b.Hash)
 				continue
 			}
-			a.lattice[b.ProposerID].blocks[b.Height] = b
-			delete(a.receivedBlocks, b.Hash)
+			rb.lattice[b.ProposerID].blocks[b.Height] = b
+			delete(rb.receivedBlocks, b.Hash)
 			for h := range b.Acks {
-				bAck := a.blocks[h]
+				bAck := rb.blocks[h]
 				// Update nextAck only when bAck.Height + 1 is greater. A block might
 				// ack blocks proposed by same validator with different height.
-				if a.lattice[b.ProposerID].nextAck[bAck.ProposerID] < bAck.Height+1 {
-					a.lattice[b.ProposerID].nextAck[bAck.ProposerID] = bAck.Height + 1
+				if rb.lattice[b.ProposerID].nextAck[bAck.ProposerID] < bAck.Height+1 {
+					rb.lattice[b.ProposerID].nextAck[bAck.ProposerID] = bAck.Height + 1
 				}
 				// Update AckedValidators for each ack blocks and its parents.
 				for {
@@ -191,20 +191,20 @@ func (a *acking) processBlock(block *types.Block) {
 					bAck.AckedValidators[b.ProposerID] = struct{}{}
 					// A block is strongly acked if it is acked by more than
 					// 2 * (maximum number of byzatine validators) unique validators.
-					if len(bAck.AckedValidators) > 2*((len(a.lattice)-1)/3) {
+					if len(bAck.AckedValidators) > 2*((len(rb.lattice)-1)/3) {
 						blocksToAcked[bAck.Hash] = bAck
 					}
 					if bAck.Height == 0 {
 						break
 					}
-					bAck = a.blocks[bAck.ParentHash]
+					bAck = rb.blocks[bAck.ParentHash]
 				}
 			}
 		}
 	}
 
 	for _, b := range blocksToAcked {
-		a.ackedBlocks[b.Hash] = b
+		rb.ackedBlocks[b.Hash] = b
 		b.Status = types.BlockStatusAcked
 	}
 
@@ -214,15 +214,15 @@ func (a *acking) processBlock(block *types.Block) {
 	// Delete old blocks in "lattice" and "blocks" for release memory space.
 	// First, find the height that blocks below it can be deleted. This height
 	// is defined by finding minimum of validator's nextOutput and last acking
-	// heights from other validators, i.e. a.lattice[v_other].nextAck[this_vid].
+	// heights from other validators, i.e. rb.lattice[v_other].nextAck[this_vid].
 	// This works because blocks of height below this minimum are not going to be
 	// acked anymore, the ackings of these blocks are illegal.
-	for vid := range a.lattice {
+	for vid := range rb.lattice {
 		// Find the minimum height that heights lesser can be deleted.
-		min := a.lattice[vid].nextOutput
-		for vid2 := range a.lattice {
-			if a.lattice[vid2].nextAck[vid] < min {
-				min = a.lattice[vid2].nextAck[vid]
+		min := rb.lattice[vid].nextOutput
+		for vid2 := range rb.lattice {
+			if rb.lattice[vid2].nextAck[vid] < min {
+				min = rb.lattice[vid2].nextAck[vid]
 			}
 		}
 		// "min" is the height of "next" last acked, min - 1 is the last height.
@@ -232,13 +232,13 @@ func (a *acking) processBlock(block *types.Block) {
 		}
 		min -= 2
 		for {
-			b, exist := a.lattice[vid].blocks[min]
+			b, exist := rb.lattice[vid].blocks[min]
 			if !exist {
 				break
 			}
 			if b.Status >= types.BlockStatusOrdering {
-				delete(a.lattice[vid].blocks, b.Height)
-				delete(a.blocks, b.Hash)
+				delete(rb.lattice[vid].blocks, b.Height)
+				delete(rb.blocks, b.Hash)
 			}
 			if min == 0 {
 				break
@@ -251,12 +251,12 @@ func (a *acking) processBlock(block *types.Block) {
 // extractBlocks returns all blocks that can be inserted into total ordering's
 // DAG. This function changes the status of blocks from types.BlockStatusAcked
 // to blockStatusOrdering.
-func (a *acking) extractBlocks() []*types.Block {
+func (rb *reliableBroadcast) extractBlocks() []*types.Block {
 	ret := []*types.Block{}
 	for {
 		updated := false
-		for vid := range a.lattice {
-			b, exist := a.lattice[vid].blocks[a.lattice[vid].nextOutput]
+		for vid := range rb.lattice {
+			b, exist := rb.lattice[vid].blocks[rb.lattice[vid].nextOutput]
 			if !exist || b.Status < types.BlockStatusAcked {
 				continue
 			}
@@ -265,7 +265,7 @@ func (a *acking) extractBlocks() []*types.Block {
 			// does not exist means that it deleted but its status is definitely Acked
 			// or ordering.
 			for ackHash := range b.Acks {
-				bAck, exist := a.blocks[ackHash]
+				bAck, exist := rb.blocks[ackHash]
 				if !exist {
 					continue
 				}
@@ -279,9 +279,9 @@ func (a *acking) extractBlocks() []*types.Block {
 			}
 			updated = true
 			b.Status = types.BlockStatusOrdering
-			delete(a.ackedBlocks, b.Hash)
+			delete(rb.ackedBlocks, b.Hash)
 			ret = append(ret, b)
-			a.lattice[vid].nextOutput++
+			rb.lattice[vid].nextOutput++
 		}
 		if !updated {
 			break
@@ -291,8 +291,8 @@ func (a *acking) extractBlocks() []*types.Block {
 }
 
 // addValidator adds validator in the validator set.
-func (a *acking) addValidator(h types.ValidatorID) {
-	a.lattice[h] = &ackingValidatorStatus{
+func (rb *reliableBroadcast) addValidator(h types.ValidatorID) {
+	rb.lattice[h] = &ackingValidatorStatus{
 		blocks:     make(map[uint64]*types.Block),
 		nextAck:    make(map[types.ValidatorID]uint64),
 		nextOutput: 0,
@@ -301,9 +301,9 @@ func (a *acking) addValidator(h types.ValidatorID) {
 }
 
 // deleteValidator deletes validator in validator set.
-func (a *acking) deleteValidator(h types.ValidatorID) {
-	for h := range a.lattice {
-		delete(a.lattice[h].nextAck, h)
+func (rb *reliableBroadcast) deleteValidator(h types.ValidatorID) {
+	for h := range rb.lattice {
+		delete(rb.lattice[h].nextAck, h)
 	}
-	delete(a.lattice, h)
+	delete(rb.lattice, h)
 }

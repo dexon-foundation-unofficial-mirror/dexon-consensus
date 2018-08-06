@@ -27,7 +27,7 @@ import (
 )
 
 // Timestamp is for Concensus Timestamp Algorithm.
-type Timestamp struct {
+type consensusTimestamp struct {
 	lastMainChainBlock   *types.Block
 	blocksNotInMainChain []*types.Block
 }
@@ -41,27 +41,27 @@ var (
 )
 
 // NewTimestamp create Timestamp object.
-func NewTimestamp() *Timestamp {
-	return &Timestamp{}
+func newConsensusTimestamp() *consensusTimestamp {
+	return &consensusTimestamp{}
 }
 
 // ProcessBlocks is the entry function.
-func (ts *Timestamp) ProcessBlocks(blocks []*types.Block) (
+func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (
 	blocksWithTimestamp []*types.Block, mainChain []*types.Block, err error) {
 	if len(blocks) == 0 {
 		// TODO (jimmy-dexon): Remove this panic before release.
 		panic("Unexpected empty block list.")
 	}
 	outputFirstBlock := true
-	blocks = append(ts.blocksNotInMainChain, blocks...)
-	if ts.lastMainChainBlock != nil {
+	blocks = append(ct.blocksNotInMainChain, blocks...)
+	if ct.lastMainChainBlock != nil {
 		// TODO (jimmy-dexon): The performance here can be optimized.
-		blocks = append([]*types.Block{ts.lastMainChainBlock}, blocks...)
+		blocks = append([]*types.Block{ct.lastMainChainBlock}, blocks...)
 		outputFirstBlock = false
 	}
-	mainChain, nonMainChain := ts.selectMainChain(blocks)
-	ts.blocksNotInMainChain = nonMainChain
-	ts.lastMainChainBlock = mainChain[len(mainChain)-1]
+	mainChain, nonMainChain := ct.selectMainChain(blocks)
+	ct.blocksNotInMainChain = nonMainChain
+	ct.lastMainChainBlock = mainChain[len(mainChain)-1]
 	blocksWithTimestamp = blocks[:len(blocks)-len(nonMainChain)]
 	leftMainChainIdx := 0
 	rightMainChainIdx := 0
@@ -72,7 +72,7 @@ func (ts *Timestamp) ProcessBlocks(blocks []*types.Block) (
 			return
 		} else if block.Hash == mainChain[idxMainChain].Hash {
 			rightMainChainIdx = idx
-			blocksWithTimestamp[idx].ConsensusTime, err = ts.getMedianTime(block)
+			blocksWithTimestamp[idx].ConsensusTime, err = ct.getMedianTime(block)
 			if err != nil {
 				return
 			}
@@ -95,7 +95,7 @@ func (ts *Timestamp) ProcessBlocks(blocks []*types.Block) (
 	return
 }
 
-func (ts *Timestamp) selectMainChain(blocks []*types.Block) (
+func (ct *consensusTimestamp) selectMainChain(blocks []*types.Block) (
 	mainChain []*types.Block, nonMainChain []*types.Block) {
 	for _, block := range blocks {
 		if len(mainChain) != 0 {
@@ -110,7 +110,7 @@ func (ts *Timestamp) selectMainChain(blocks []*types.Block) (
 	return
 }
 
-func (ts *Timestamp) getMedianTime(block *types.Block) (
+func (ct *consensusTimestamp) getMedianTime(block *types.Block) (
 	timestamp time.Time, err error) {
 	timestamps := []time.Time{}
 	for _, timestamp := range block.Timestamps {

@@ -25,7 +25,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-// ErrNotValidDAG would be reported when block subbmitted to sequencer
+// ErrNotValidDAG would be reported when block subbmitted to totalOrdering
 // didn't form a DAG.
 var ErrNotValidDAG = fmt.Errorf("not a valid dag")
 
@@ -157,9 +157,9 @@ func (v blockVector) getHeightVector() ackingStatusVector {
 	return ret
 }
 
-// Sequencer represent a process unit to handle total ordering
+// totalOrdering represent a process unit to handle total ordering
 // for blocks.
-type sequencer struct {
+type totalOrdering struct {
 	// pendings stores blocks awaiting to be ordered.
 	pendings map[common.Hash]*types.Block
 
@@ -190,8 +190,8 @@ type sequencer struct {
 	acked map[common.Hash]map[common.Hash]struct{}
 }
 
-func newSequencer(k, phi, validatorCount uint64) *sequencer {
-	return &sequencer{
+func newTotalOrdering(k, phi, validatorCount uint64) *totalOrdering {
+	return &totalOrdering{
 		candidateAckingStatusVectors: make(map[common.Hash]ackingStatusVector),
 		pendings:                     make(map[common.Hash]*types.Block),
 		k:                            k,
@@ -203,16 +203,16 @@ func newSequencer(k, phi, validatorCount uint64) *sequencer {
 }
 
 // buildBlockRelation populates the acked according their acking relationships.
-func (s *sequencer) buildBlockRelation(b *types.Block) {
+func (to *totalOrdering) buildBlockRelation(b *types.Block) {
 	// populateAcked would update all blocks implcitly acked
 	// by input block recursively.
 	var populateAcked func(bx, target *types.Block)
 	populateAcked = func(bx, target *types.Block) {
 		for ack := range bx.Acks {
-			acked, exists := s.acked[ack]
+			acked, exists := to.acked[ack]
 			if !exists {
 				acked = make(map[common.Hash]struct{})
-				s.acked[ack] = acked
+				to.acked[ack] = acked
 			}
 
 			// This means we've walked this block already.
@@ -222,7 +222,7 @@ func (s *sequencer) buildBlockRelation(b *types.Block) {
 			acked[target.Hash] = struct{}{}
 
 			// See if we need to go forward.
-			if nextBlock, exists := s.pendings[ack]; !exists {
+			if nextBlock, exists := to.pendings[ack]; !exists {
 				continue
 			} else {
 				populateAcked(nextBlock, target)
@@ -234,23 +234,23 @@ func (s *sequencer) buildBlockRelation(b *types.Block) {
 
 // clean would remove a block from working set. This behaviour
 // would prevent our memory usage growing infinity.
-func (s *sequencer) clean(h common.Hash) {
-	delete(s.acked, h)
-	delete(s.pendings, h)
-	delete(s.candidateAckingStatusVectors, h)
+func (to *totalOrdering) clean(h common.Hash) {
+	delete(to.acked, h)
+	delete(to.pendings, h)
+	delete(to.candidateAckingStatusVectors, h)
 }
 
 // updateVectors is a helper function to update all cached vectors.
-func (s *sequencer) updateVectors(b *types.Block) (err error) {
+func (to *totalOrdering) updateVectors(b *types.Block) (err error) {
 	// Update global height vector
-	err = s.globalVector.addBlock(b)
+	err = to.globalVector.addBlock(b)
 	if err != nil {
 		return
 	}
 
 	// Update acking status of candidates.
-	for candidate, vector := range s.candidateAckingStatusVectors {
-		if _, acked := s.acked[candidate][b.Hash]; !acked {
+	for candidate, vector := range to.candidateAckingStatusVectors {
+		if _, acked := to.acked[candidate][b.Hash]; !acked {
 			continue
 		}
 		if err = vector.addBlock(b); err != nil {
@@ -261,7 +261,7 @@ func (s *sequencer) updateVectors(b *types.Block) (err error) {
 }
 
 // grade implements the 'grade' potential function described in white paper.
-func (s *sequencer) grade(
+func (to *totalOrdering) grade(
 	hvFrom, hvTo map[types.ValidatorID]uint64,
 	globalAns map[types.ValidatorID]struct{}) int {
 
@@ -277,9 +277,9 @@ func (s *sequencer) grade(
 		}
 	}
 
-	if count >= s.phi {
+	if count >= to.phi {
 		return 1
-	} else if count < s.phi-s.validatorCount+uint64(len(globalAns)) {
+	} else if count < to.phi-to.validatorCount+uint64(len(globalAns)) {
 		return 0
 	} else {
 		return -1
@@ -288,10 +288,10 @@ func (s *sequencer) grade(
 
 // buildAckingStatusVectorForNewCandidate is a helper function to
 // build ackingStatusVector for new candidate.
-func (s *sequencer) buildAckingStatusVectorForNewCandidate(
+func (to *totalOrdering) buildAckingStatusVectorForNewCandidate(
 	candidate *types.Block) (hVec ackingStatusVector) {
 
-	blocks := s.globalVector[candidate.ProposerID]
+	blocks := to.globalVector[candidate.ProposerID]
 	hVec = ackingStatusVector{
 		candidate.ProposerID: &struct {
 			minHeight, count uint64
@@ -301,13 +301,13 @@ func (s *sequencer) buildAckingStatusVectorForNewCandidate(
 		},
 	}
 
-	ackedsForCandidate, exists := s.acked[candidate.Hash]
+	ackedsForCandidate, exists := to.acked[candidate.Hash]
 	if !exists {
 		// This candidate is acked by nobody.
 		return
 	}
 
-	for vID, blocks := range s.globalVector {
+	for vID, blocks := range to.globalVector {
 		if vID == candidate.ProposerID {
 			continue
 		}
@@ -333,9 +333,9 @@ func (s *sequencer) buildAckingStatusVectorForNewCandidate(
 
 // isAckOnlyPrecedings is a helper function to check if a block
 // only contain acks to delivered blocks.
-func (s *sequencer) isAckOnlyPrecedings(b *types.Block) bool {
+func (to *totalOrdering) isAckOnlyPrecedings(b *types.Block) bool {
 	for ack := range b.Acks {
-		if _, pending := s.pendings[ack]; pending {
+		if _, pending := to.pendings[ack]; pending {
 			return false
 		}
 	}
@@ -344,40 +344,40 @@ func (s *sequencer) isAckOnlyPrecedings(b *types.Block) bool {
 
 // output is a helper function to finish the delivery of
 // deliverable preceding set.
-func (s *sequencer) output(precedings map[common.Hash]struct{}) common.Hashes {
+func (to *totalOrdering) output(precedings map[common.Hash]struct{}) common.Hashes {
 	ret := common.Hashes{}
 	for p := range precedings {
 		ret = append(ret, p)
 
 		// Remove the first element from corresponding blockVector.
-		b := s.pendings[p]
-		s.globalVector[b.ProposerID] = s.globalVector[b.ProposerID][1:]
+		b := to.pendings[p]
+		to.globalVector[b.ProposerID] = to.globalVector[b.ProposerID][1:]
 
 		// Remove block relations.
-		s.clean(p)
+		to.clean(p)
 	}
 	sort.Sort(ret)
 
 	// Find new candidates from tip of globalVector of each validator.
 	// The complexity here is O(N^2logN).
-	for _, blocks := range s.globalVector {
+	for _, blocks := range to.globalVector {
 		if len(blocks) == 0 {
 			continue
 		}
 
 		tip := blocks[0]
 		if _, alreadyCandidate :=
-			s.candidateAckingStatusVectors[tip.Hash]; alreadyCandidate {
+			to.candidateAckingStatusVectors[tip.Hash]; alreadyCandidate {
 			continue
 		}
 
-		if !s.isAckOnlyPrecedings(tip) {
+		if !to.isAckOnlyPrecedings(tip) {
 			continue
 		}
 
 		// Build ackingStatusVector for new candidate.
-		s.candidateAckingStatusVectors[tip.Hash] =
-			s.buildAckingStatusVectorForNewCandidate(tip)
+		to.candidateAckingStatusVectors[tip.Hash] =
+			to.buildAckingStatusVectorForNewCandidate(tip)
 	}
 	return ret
 }
@@ -385,25 +385,25 @@ func (s *sequencer) output(precedings map[common.Hash]struct{}) common.Hashes {
 // generateDeliverSet would:
 //  - generate preceding set
 //  - check if the preceding set deliverable by checking potential function
-func (s *sequencer) generateDeliverSet() (
+func (to *totalOrdering) generateDeliverSet() (
 	delivered map[common.Hash]struct{}, early bool) {
 
-	globalHeightVector := s.globalVector.getHeightVector()
+	globalHeightVector := to.globalVector.getHeightVector()
 	ahvs := map[common.Hash]map[types.ValidatorID]uint64{}
-	for candidate, v := range s.candidateAckingStatusVectors {
-		ahvs[candidate] = v.getAckingHeightVector(globalHeightVector, s.k)
+	for candidate, v := range to.candidateAckingStatusVectors {
+		ahvs[candidate] = v.getAckingHeightVector(globalHeightVector, to.k)
 	}
 
-	globalAns := globalHeightVector.getAckingNodeSet(globalHeightVector, s.k)
+	globalAns := globalHeightVector.getAckingNodeSet(globalHeightVector, to.k)
 	precedings := make(map[common.Hash]struct{})
 
 CheckNextCandidateLoop:
-	for candidate := range s.candidateAckingStatusVectors {
-		for otherCandidate := range s.candidateAckingStatusVectors {
+	for candidate := range to.candidateAckingStatusVectors {
+		for otherCandidate := range to.candidateAckingStatusVectors {
 			if candidate == otherCandidate {
 				continue
 			}
-			if s.grade(ahvs[otherCandidate], ahvs[candidate], globalAns) != 0 {
+			if to.grade(ahvs[otherCandidate], ahvs[candidate], globalAns) != 0 {
 				continue CheckNextCandidateLoop
 			}
 		}
@@ -416,7 +416,7 @@ CheckNextCandidateLoop:
 
 	// internal is a helper function to verify internal stability.
 	internal := func() bool {
-		for candidate := range s.candidateAckingStatusVectors {
+		for candidate := range to.candidateAckingStatusVectors {
 			if _, isPreceding := precedings[candidate]; isPreceding {
 				continue
 			}
@@ -424,7 +424,7 @@ CheckNextCandidateLoop:
 			beaten := false
 			for p := range precedings {
 				if beaten =
-					s.grade(ahvs[p], ahvs[candidate], globalAns) == 1; beaten {
+					to.grade(ahvs[p], ahvs[candidate], globalAns) == 1; beaten {
 					break
 				}
 			}
@@ -447,7 +447,7 @@ CheckNextCandidateLoop:
 				}
 			}
 
-			if count > s.phi {
+			if count > to.phi {
 				return true
 			}
 		}
@@ -459,9 +459,9 @@ CheckNextCandidateLoop:
 	// to be delivered.
 	checkANS := func() bool {
 		for p := range precedings {
-			validatorAns := s.candidateAckingStatusVectors[p].getAckingNodeSet(
-				globalHeightVector, s.k)
-			if uint64(len(validatorAns)) < s.validatorCount-s.phi {
+			validatorAns := to.candidateAckingStatusVectors[p].getAckingNodeSet(
+				globalHeightVector, to.k)
+			if uint64(len(validatorAns)) < to.validatorCount-to.phi {
 				return false
 			}
 		}
@@ -476,7 +476,7 @@ CheckNextCandidateLoop:
 
 	// If all validators propose enough blocks, we should force
 	// to deliver since the whole picture of the DAG is revealed.
-	if uint64(len(globalAns)) != s.validatorCount {
+	if uint64(len(globalAns)) != to.validatorCount {
 		// The whole picture is not ready, we need to check if
 		// exteranl stability is met, and we can deliver earlier.
 		if checkAHV() && checkANS() {
@@ -490,8 +490,8 @@ CheckNextCandidateLoop:
 	return
 }
 
-// processBlock is the entry point of sequencer.
-func (s *sequencer) processBlock(b *types.Block) (
+// processBlock is the entry point of totalOrdering.
+func (to *totalOrdering) processBlock(b *types.Block) (
 	delivered common.Hashes, early bool, err error) {
 
 	// NOTE: I assume the block 'b' is already safe for total ordering.
@@ -499,14 +499,14 @@ func (s *sequencer) processBlock(b *types.Block) (
 	//       total ordering stage.
 
 	// Incremental part.
-	s.pendings[b.Hash] = b
-	s.buildBlockRelation(b)
-	if err = s.updateVectors(b); err != nil {
+	to.pendings[b.Hash] = b
+	to.buildBlockRelation(b)
+	if err = to.updateVectors(b); err != nil {
 		return
 	}
-	if s.isAckOnlyPrecedings(b) {
-		s.candidateAckingStatusVectors[b.Hash] =
-			s.buildAckingStatusVectorForNewCandidate(b)
+	if to.isAckOnlyPrecedings(b) {
+		to.candidateAckingStatusVectors[b.Hash] =
+			to.buildAckingStatusVectorForNewCandidate(b)
 	}
 
 	// Not-Incremental part (yet).
@@ -514,9 +514,9 @@ func (s *sequencer) processBlock(b *types.Block) (
 	//  - generate ans for each candidate
 	//  - generate global ans
 	//  - find preceding set
-	hashes, early := s.generateDeliverSet()
+	hashes, early := to.generateDeliverSet()
 
 	// output precedings
-	delivered = s.output(hashes)
+	delivered = to.output(hashes)
 	return
 }
