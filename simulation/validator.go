@@ -100,7 +100,7 @@ func (v *Validator) Wait() {
 func (v *Validator) CheckServerInfo(isShutdown chan struct{}) {
 	for {
 		infoMsg := v.network.GetServerInfo()
-		if infoMsg.Status == shutdown {
+		if infoMsg.Status == statusShutdown {
 			isShutdown <- struct{}{}
 			break
 		}

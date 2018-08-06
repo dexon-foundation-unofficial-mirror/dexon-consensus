@@ -19,5 +19,5 @@ package simulation
 
 const (
 	peerPort      = 8080
-	msgBufferSize = 128
+	msgBufferSize = 256
 )

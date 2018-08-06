@@ -79,4 +79,10 @@ func Run(configPath string) {
 		v.Wait()
 		fmt.Printf("Validator %s is shutdown\n", v.GetID())
 	}
+
+	// Do not exit when we are in TCP node, since k8s will restart the pod and
+	// cause confusions.
+	if networkType == config.NetworkTypeTCP {
+		select {}
+	}
 }

@@ -1,10 +1,10 @@
 title = "DEXON Consensus Simulation Config"
 
 [validator]
-num =7 
+num = 21
 propose_interval_mean = 5e+02
-propose_interval_sigma = 3e+01
-max_block = 10
+propose_interval_sigma = 5e+0
+max_block = 20
 
 [networking]
 type = "tcp-local"

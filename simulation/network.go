@@ -38,8 +38,9 @@ type Message struct {
 type infoStatus string
 
 const (
-	normal   infoStatus = "normal"
-	shutdown infoStatus = "shutdown"
+	statusInit     infoStatus = "init"
+	statusNormal   infoStatus = "normal"
+	statusShutdown infoStatus = "shutdown"
 )
 
 // InfoMessage is a struct used by peerServer's /info.

@@ -14,11 +14,20 @@ build_docker_image() {
 }
 
 start_simulation() {
-  kubectl delete deployment --all --force --grace-period=0
+  kubectl delete deployment dexcon-simulation --force --grace-period=0
+  kubectl delete deployment dexcon-simulation-peer-server --force --grace-period=0
   sleep 10
 
   kubectl apply -f peer-server.yaml
-  sleep 10
+
+  while true; do
+    if kubectl get pods -l app=dexcon-simulation-peer-server | grep Running;
+    then
+      break
+    fi
+    sleep 1
+  done
+
   kubectl apply -f validator.yaml
 }
 

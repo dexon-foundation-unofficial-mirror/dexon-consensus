@@ -31,6 +31,8 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
+const retries = 5
+
 // TCPNetwork implements the Network interface.
 type TCPNetwork struct {
 	local    bool
@@ -138,6 +140,9 @@ func (n *TCPNetwork) Join(endpoint Endpoint) chan interface{} {
 		req.Header.Add("PORT", fmt.Sprintf("%d", n.port))
 
 		resp, err := client.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+		}
 		if err == nil && resp.StatusCode == http.StatusOK {
 			break
 		}
@@ -154,8 +159,6 @@ func (n *TCPNetwork) Join(endpoint Endpoint) chan interface{} {
 			fmt.Println(err)
 			continue
 		}
-		req.Header.Add("ID", endpoint.GetID().String())
-
 		resp, err := client.Do(req)
 		if err != nil || resp.StatusCode != http.StatusOK {
 			continue
@@ -207,7 +210,6 @@ func (n *TCPNetwork) Send(destID types.ValidatorID, msg interface{}) {
 	msgURL := fmt.Sprintf("http://%s/msg", clientAddr)
 
 	go func() {
-		retries := 3
 		client := &http.Client{Timeout: 5 * time.Second}
 
 		for i := 0; i < retries; i++ {
@@ -220,9 +222,14 @@ func (n *TCPNetwork) Send(destID types.ValidatorID, msg interface{}) {
 			req.Header.Add("ID", n.endpoint.GetID().String())
 
 			resp, err := client.Do(req)
+			if err == nil {
+				defer resp.Body.Close()
+			}
 			if err == nil && resp.StatusCode == http.StatusOK {
 				runtime.Goexit()
 			}
+
+			fmt.Printf("failed to submit message: %s\n", err)
 			time.Sleep(1 * time.Second)
 		}
 		fmt.Printf("failed to send message: %v\n", msg)
@@ -247,7 +254,6 @@ func (n *TCPNetwork) DeliverBlocks(blocks BlockList) {
 	msgURL := fmt.Sprintf("http://%s:%d/delivery", n.peerServer, peerPort)
 
 	go func() {
-		retries := 3
 		client := &http.Client{Timeout: 5 * time.Second}
 
 		for i := 0; i < retries; i++ {
@@ -259,6 +265,10 @@ func (n *TCPNetwork) DeliverBlocks(blocks BlockList) {
 			req.Header.Add("ID", n.endpoint.GetID().String())
 
 			resp, err := client.Do(req)
+			if err == nil {
+				defer resp.Body.Close()
+			}
+
 			if err == nil && resp.StatusCode == http.StatusOK {
 				runtime.Goexit()
 			}
@@ -278,7 +288,6 @@ func (n *TCPNetwork) NotifyServer(msg Message) {
 
 	msgURL := fmt.Sprintf("http://%s:%d/message", n.peerServer, peerPort)
 
-	retries := 3
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	for i := 0; i < retries; i++ {
@@ -290,6 +299,9 @@ func (n *TCPNetwork) NotifyServer(msg Message) {
 		req.Header.Add("ID", n.endpoint.GetID().String())
 
 		resp, err := client.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+		}
 		if err == nil && resp.StatusCode == http.StatusOK {
 			return
 		}
@@ -302,6 +314,7 @@ func (n *TCPNetwork) NotifyServer(msg Message) {
 
 // GetServerInfo retrieve the info message from peerServer.
 func (n *TCPNetwork) GetServerInfo() InfoMessage {
+	infoMsg := InfoMessage{}
 	msgURL := fmt.Sprintf("http://%s:%d/info", n.peerServer, peerPort)
 	client := &http.Client{Timeout: 5 * time.Second}
 
@@ -314,13 +327,13 @@ func (n *TCPNetwork) GetServerInfo() InfoMessage {
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Printf("error: %v\n", err)
+		return infoMsg
 	}
 	if resp.StatusCode != http.StatusOK {
 		fmt.Printf("error: %v\n", err)
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-	infoMsg := InfoMessage{}
 
 	if err := json.Unmarshal(body, &infoMsg); err != nil {
 		fmt.Printf("error: %v", err)

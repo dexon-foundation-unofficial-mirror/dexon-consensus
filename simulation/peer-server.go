@@ -65,6 +65,8 @@ func (p *PeerServer) Run(configPath string) {
 	}
 
 	joinHandler := func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
 		idString := r.Header.Get("ID")
 		portString := r.Header.Get("PORT")
 
@@ -78,11 +80,16 @@ func (p *PeerServer) Run(configPath string) {
 		p.peers[id] = net.JoinHostPort(host, portString)
 		p.peerTotalOrder[id] = NewTotalOrderResult(id)
 		log.Printf("Peer %s joined from %s", id, p.peers[id])
+
+		if len(p.peers) == cfg.Validator.Num {
+			log.Println("All peers connected.")
+		}
 	}
 
 	peersHandler := func(w http.ResponseWriter, r *http.Request) {
 		p.peersMu.Lock()
 		defer p.peersMu.Unlock()
+		defer r.Body.Close()
 
 		if len(p.peers) != cfg.Validator.Num {
 			w.WriteHeader(http.StatusNotFound)
@@ -102,15 +109,20 @@ func (p *PeerServer) Run(configPath string) {
 	infoHandler := func(w http.ResponseWriter, r *http.Request) {
 		p.peersMu.Lock()
 		defer p.peersMu.Unlock()
+		defer r.Body.Close()
 
 		msg := InfoMessage{
-			Status: normal,
+			Status: statusNormal,
 			Peers:  p.peers,
+		}
+
+		if len(p.peers) < cfg.Validator.Num {
+			msg.Status = statusInit
 		}
 
 		// Determine msg.status.
 		if p.verifiedLen >= cfg.Validator.MaxBlock {
-			msg.Status = shutdown
+			msg.Status = statusShutdown
 		}
 
 		jsonText, err := json.Marshal(msg)
@@ -124,6 +136,8 @@ func (p *PeerServer) Run(configPath string) {
 	}
 
 	deliveryHandler := func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+
 		idString := r.Header.Get("ID")
 
 		defer r.Body.Close()
@@ -159,6 +173,7 @@ func (p *PeerServer) Run(configPath string) {
 		go func(id types.ValidatorID) {
 			p.peerTotalOrderMu.Lock()
 			defer p.peerTotalOrderMu.Unlock()
+
 			var correct bool
 			var length int
 			p.peerTotalOrder, correct, length = VerifyTotalOrder(id, p.peerTotalOrder)
@@ -172,6 +187,10 @@ func (p *PeerServer) Run(configPath string) {
 	stopServer := make(chan struct{})
 
 	messageHandler := func(w http.ResponseWriter, r *http.Request) {
+		p.peersMu.Lock()
+		defer p.peersMu.Unlock()
+		defer r.Body.Close()
+
 		idString := r.Header.Get("ID")
 		id := types.ValidatorID{}
 		id.UnmarshalText([]byte(idString))
