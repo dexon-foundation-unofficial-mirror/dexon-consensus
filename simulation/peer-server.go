@@ -208,17 +208,32 @@ func (p *PeerServer) Run(configPath string) {
 			return
 		}
 
-		if m.Type != shutdownAck {
+		switch m.Type {
+		case shutdownAck:
+			delete(p.peers, id)
+			log.Printf("%v shutdown, %d remains.\n", id, len(p.peers))
+			if len(p.peers) == 0 {
+				stopServer <- struct{}{}
+			}
+			break
+		case blockTimestamp:
+			msgs := []TimestampMessage{}
+			if err := json.Unmarshal(m.Payload, &msgs); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			for _, msg := range msgs {
+				if ok := p.peerTotalOrder[id].PushTimestamp(msg); !ok {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+			}
+			break
+		default:
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-
 		w.WriteHeader(http.StatusOK)
-		delete(p.peers, id)
-		log.Printf("%v shutdown, %d remains.\n", id, len(p.peers))
-		if len(p.peers) == 0 {
-			stopServer <- struct{}{}
-		}
 	}
 
 	http.HandleFunc("/reset", resetHandler)

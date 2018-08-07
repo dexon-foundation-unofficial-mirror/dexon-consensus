@@ -66,6 +66,9 @@ type BlockLattice struct {
 	candidateSet map[common.Hash]*types.Block
 	ABS          map[common.Hash]map[types.ValidatorID]uint64
 	AHV          map[common.Hash]map[types.ValidatorID]uint64
+
+	// Timestamp.
+	timestampEngine consensusTimestamp
 }
 
 // NewBlockLattice returns a new empty BlockLattice instance.
@@ -86,6 +89,7 @@ func NewBlockLattice(
 		candidateSet:       make(map[common.Hash]*types.Block),
 		ABS:                make(map[common.Hash]map[types.ValidatorID]uint64),
 		AHV:                make(map[common.Hash]map[types.ValidatorID]uint64),
+		timestampEngine:    *newConsensusTimestamp(),
 	}
 }
 
@@ -533,6 +537,13 @@ func (l *BlockLattice) totalOrdering(b *types.Block) {
 
 	if len(output) > 0 {
 		l.app.TotalOrderingDeliver(output, earlyDelivery)
+		blocksReady, _, err := l.timestampEngine.processBlocks(output)
+		if err != nil && err != ErrEmptyTimestamps {
+			panic(err)
+		}
+		for _, block := range blocksReady {
+			l.app.DeliverBlock(block.Hash, block.ConsensusTime)
+		}
 	}
 
 	// Rescan pending blocks to add into candidate set.

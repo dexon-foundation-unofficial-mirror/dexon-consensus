@@ -19,20 +19,39 @@ package simulation
 
 import (
 	"encoding/json"
+	"time"
 
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
 type messageType string
 
 const (
-	shutdownAck messageType = "shutdownAck"
+	shutdownAck    messageType = "shutdownAck"
+	blockTimestamp messageType = "blockTimestamps"
 )
 
 // Message is a struct for peer sending message to server.
 type Message struct {
 	Type    messageType     `json:"type"`
 	Payload json.RawMessage `json:"payload"`
+}
+
+type timestampEvent string
+
+const (
+	blockSeen        timestampEvent = "blockSeen"
+	timestampConfirm timestampEvent = "timestampConfirm"
+	timestampAck     timestampEvent = "timestampAck"
+)
+
+// TimestampMessage is a struct for peer sending consensus timestamp information
+// to server.
+type TimestampMessage struct {
+	BlockHash common.Hash    `json:"hash"`
+	Event     timestampEvent `json:"event"`
+	Timestamp time.Time      `json:"timestamp"`
 }
 
 type infoStatus string

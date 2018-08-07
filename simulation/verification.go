@@ -33,8 +33,11 @@ type timeStamp struct {
 }
 
 type totalOrderStatus struct {
-	blockReceive   []timeStamp
-	confirmLatency []time.Duration
+	blockReceive             []timeStamp
+	confirmLatency           []time.Duration
+	blockSeen                map[common.Hash]time.Time
+	internalTimestampLatency []time.Duration
+	externalTimestampLatency []time.Duration
 }
 
 // TotalOrderResult is the object maintaining peer's result of
@@ -54,6 +57,9 @@ type PeerTotalOrder = map[types.ValidatorID]*TotalOrderResult
 func NewTotalOrderResult(vID types.ValidatorID) *TotalOrderResult {
 	totalOrder := &TotalOrderResult{
 		validatorID: vID,
+		status: totalOrderStatus{
+			blockSeen: make(map[common.Hash]time.Time),
+		},
 	}
 	heap.Init(&totalOrder.pendingBlockList)
 	return totalOrder
@@ -91,6 +97,28 @@ func (totalOrder *TotalOrderResult) PushBlocks(blocks BlockList) (ready bool) {
 	return true
 }
 
+// PushTimestamp log the information in the msg.
+func (totalOrder *TotalOrderResult) PushTimestamp(msg TimestampMessage) bool {
+	pushLatency := func(latency *[]time.Duration, t1, t2 time.Time) {
+		*latency = append(*latency, t2.Sub(t1))
+	}
+	switch msg.Event {
+	case blockSeen:
+		totalOrder.status.blockSeen[msg.BlockHash] = msg.Timestamp
+	case timestampConfirm:
+		pushLatency(&totalOrder.status.internalTimestampLatency,
+			totalOrder.status.blockSeen[msg.BlockHash], msg.Timestamp)
+	case timestampAck:
+		if seenTime, exist := totalOrder.status.blockSeen[msg.BlockHash]; exist {
+			pushLatency(&totalOrder.status.externalTimestampLatency,
+				seenTime, msg.Timestamp)
+		}
+	default:
+		return false
+	}
+	return true
+}
+
 // CalculateBlocksPerSecond calculates the result using status.blockReceive
 func (totalOrder *TotalOrderResult) CalculateBlocksPerSecond() float64 {
 	ts := totalOrder.status.blockReceive
@@ -121,6 +149,25 @@ func (totalOrder *TotalOrderResult) CalculateAverageConfirmLatency() float64 {
 		sum += latency.Seconds()
 	}
 	return sum / float64(len(totalOrder.status.confirmLatency))
+}
+
+// CalculateAverageTimestampLatency calculates the result using
+// status.timestampLatency
+func (totalOrder *TotalOrderResult) CalculateAverageTimestampLatency() (
+	internal float64, external float64) {
+	for _, latency := range totalOrder.status.internalTimestampLatency {
+		internal += latency.Seconds()
+	}
+	if internal > 0 {
+		internal /= float64(len(totalOrder.status.internalTimestampLatency))
+	}
+	for _, latency := range totalOrder.status.externalTimestampLatency {
+		external += latency.Seconds()
+	}
+	if external > 0 {
+		external /= float64(len(totalOrder.status.externalTimestampLatency))
+	}
+	return
 }
 
 // VerifyTotalOrder verifies if the result of Total Ordering Algorithm
@@ -171,9 +218,13 @@ func VerifyTotalOrder(id types.ValidatorID,
 // LogStatus prints all the status to log.
 func LogStatus(peerTotalOrder PeerTotalOrder) {
 	for vID, totalOrder := range peerTotalOrder {
-		log.Printf("[Validator %s] BPS: %.6f\n",
-			vID, totalOrder.CalculateBlocksPerSecond())
-		log.Printf("[Validator %s] Confirm Latency: %.3fs\n",
-			vID, totalOrder.CalculateAverageConfirmLatency())
+		log.Printf("[Validator %s]\n", vID)
+		log.Printf("    BPS: %.6f\n",
+			totalOrder.CalculateBlocksPerSecond())
+		log.Printf("    Confirm Latency: %.2fms\n",
+			totalOrder.CalculateAverageConfirmLatency()*1000)
+		intLatency, extLatency := totalOrder.CalculateAverageTimestampLatency()
+		log.Printf("    Internal Timestamp Latency: %.2fms\n", intLatency*1000)
+		log.Printf("    External Timestamp Latency: %.2fms\n", extLatency*1000)
 	}
 }
