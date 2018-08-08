@@ -91,7 +91,17 @@ func (b *Block) Clone() *Block {
 		Height:     b.Height,
 		Timestamps: make(map[ValidatorID]time.Time),
 		Acks:       make(map[common.Hash]struct{}),
+		CompactionChainAck: CompactionChainAck{
+			AckingBlockHash: b.CompactionChainAck.AckingBlockHash,
+		},
+		ConsensusInfo: ConsensusInfo{
+			Timestamp: b.ConsensusInfo.Timestamp,
+			Height:    b.ConsensusInfo.Height,
+		},
+		ConsensusInfoParentHash: b.ConsensusInfoParentHash,
 	}
+	bcopy.CompactionChainAck.ConsensusSignature = append(
+		crypto.Signature(nil), b.CompactionChainAck.ConsensusSignature...)
 	for k, v := range b.Timestamps {
 		bcopy.Timestamps[k] = v
 	}

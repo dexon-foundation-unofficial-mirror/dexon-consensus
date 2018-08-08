@@ -15,12 +15,15 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
+// TODO(mission): we should check the return value from processBlock.
+
 package core
 
 import (
 	"math/rand"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 
@@ -40,6 +43,26 @@ func (s *ReliableBroadcastTest) SetupSuite() {
 
 func (s *ReliableBroadcastTest) SetupTest() {
 
+}
+
+func (s *ReliableBroadcastTest) prepareGenesisBlock(
+	proposerID types.ValidatorID,
+	validatorIDs []types.ValidatorID) (b *types.Block) {
+
+	hash := common.NewRandomHash()
+	b = &types.Block{
+		ProposerID: proposerID,
+		ParentHash: hash,
+		Hash:       hash,
+		Height:     0,
+		Acks:       make(map[common.Hash]struct{}),
+		Timestamps: make(map[types.ValidatorID]time.Time),
+	}
+	for _, vID := range validatorIDs {
+		b.Timestamps[vID] = time.Time{}
+	}
+	b.Timestamps[proposerID] = time.Now().UTC()
+	return
 }
 
 // genTestCase1 generates test case 1,
@@ -493,6 +516,81 @@ func (s *ReliableBroadcastTest) TestRandomlyGeneratedBlocks() {
 		// Make sure at least some blocks are strongly acked.
 		s.True(len(h) > 0)
 	}
+}
+
+func (s *ReliableBroadcastTest) TestPrepareBlock() {
+	var (
+		req         = s.Require()
+		rb          = newReliableBroadcast()
+		minInterval = 50 * time.Millisecond
+		validators  []types.ValidatorID
+	)
+	// Prepare validator IDs.
+	for i := 0; i < 4; i++ {
+		vID := types.ValidatorID{Hash: common.NewRandomHash()}
+		validators = append(validators, vID)
+		rb.addValidator(vID)
+	}
+	// Setup genesis blocks.
+	b00 := s.prepareGenesisBlock(validators[0], validators)
+	time.Sleep(minInterval)
+	b10 := s.prepareGenesisBlock(validators[1], validators)
+	time.Sleep(minInterval)
+	b20 := s.prepareGenesisBlock(validators[2], validators)
+	time.Sleep(minInterval)
+	b30 := s.prepareGenesisBlock(validators[3], validators)
+	// Submit these blocks to reliableBroadcast instance.
+	rb.processBlock(b00)
+	rb.processBlock(b10)
+	rb.processBlock(b20)
+	rb.processBlock(b30)
+	// We should be able to collect all 4 genesis blocks by calling
+	// prepareBlock.
+	b11 := &types.Block{
+		ProposerID: validators[1],
+		Hash:       common.NewRandomHash(),
+	}
+	rb.prepareBlock(b11)
+	req.Contains(b11.Acks, b00.Hash)
+	req.Contains(b11.Acks, b10.Hash)
+	req.Contains(b11.Acks, b20.Hash)
+	req.Contains(b11.Acks, b30.Hash)
+	req.Equal(b11.Timestamps[validators[0]],
+		b00.Timestamps[b00.ProposerID].Add(time.Millisecond))
+	req.Equal(b11.Timestamps[validators[1]],
+		b10.Timestamps[b10.ProposerID].Add(time.Millisecond))
+	req.Equal(b11.Timestamps[validators[2]],
+		b20.Timestamps[b20.ProposerID].Add(time.Millisecond))
+	req.Equal(b11.Timestamps[validators[3]],
+		b30.Timestamps[b30.ProposerID].Add(time.Millisecond))
+	req.Equal(b11.ParentHash, b10.Hash)
+	req.Equal(b11.Height, uint64(1))
+	rb.processBlock(b11)
+	// Propose/Process a block based on collected info.
+	b12 := &types.Block{
+		ProposerID: validators[1],
+		Hash:       common.NewRandomHash(),
+	}
+	rb.prepareBlock(b12)
+	// This time we only need to ack b11.
+	req.Len(b12.Acks, 1)
+	req.Contains(b12.Acks, b11.Hash)
+	req.Equal(b12.ParentHash, b11.Hash)
+	req.Equal(b12.Height, uint64(2))
+	// When calling with other validator ID, we should be able to
+	// get 4 blocks to ack.
+	b01 := &types.Block{
+		ProposerID: validators[0],
+		Hash:       common.NewRandomHash(),
+	}
+	rb.prepareBlock(b01)
+	req.Len(b01.Acks, 4)
+	req.Contains(b01.Acks, b00.Hash)
+	req.Contains(b01.Acks, b11.Hash)
+	req.Contains(b01.Acks, b20.Hash)
+	req.Contains(b01.Acks, b30.Hash)
+	req.Equal(b01.ParentHash, b00.Hash)
+	req.Equal(b01.Height, uint64(1))
 }
 
 func TestReliableBroadcast(t *testing.T) {

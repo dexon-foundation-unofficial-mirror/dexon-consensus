@@ -27,8 +27,10 @@ import (
 // Application describes the application interface that interacts with DEXON
 // consensus core.
 type Application interface {
-	// TotalOrderingDeliver is called when the total ordering algorithm deliver
-	// a set of block.
+	// StronglyAcked is called when a block is strongly acked.
+	StronglyAcked(blockHash common.Hash)
+
+	// TotalOrderingDeliver is called when the total ordering algorithm deliver // a set of block.
 	TotalOrderingDeliver(blocks []*types.Block, early bool)
 
 	// DeliverBlock is called when a block is add to the compaction chain.

@@ -19,10 +19,15 @@ package core
 
 import (
 	"fmt"
+	"math"
 	"sort"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+)
+
+const (
+	infinity uint64 = math.MaxUint64
 )
 
 // ErrNotValidDAG would be reported when block subbmitted to totalOrdering
@@ -139,9 +144,9 @@ func (v blockVector) addBlock(b *types.Block) (err error) {
 	return
 }
 
-// getHeightVector would convert a blockVector to
+// getAckingStatusVector would convert a blockVector to
 // ackingStatusVectorAckingStatus.
-func (v blockVector) getHeightVector() ackingStatusVector {
+func (v blockVector) getAckingStatusVector() ackingStatusVector {
 	ret := ackingStatusVector{}
 	for vID, vec := range v {
 		if len(vec) == 0 {
@@ -344,19 +349,17 @@ func (to *totalOrdering) isAckOnlyPrecedings(b *types.Block) bool {
 
 // output is a helper function to finish the delivery of
 // deliverable preceding set.
-func (to *totalOrdering) output(precedings map[common.Hash]struct{}) common.Hashes {
-	ret := common.Hashes{}
+func (to *totalOrdering) output(precedings map[common.Hash]struct{}) (ret []*types.Block) {
 	for p := range precedings {
-		ret = append(ret, p)
-
 		// Remove the first element from corresponding blockVector.
 		b := to.pendings[p]
 		to.globalVector[b.ProposerID] = to.globalVector[b.ProposerID][1:]
+		ret = append(ret, b)
 
 		// Remove block relations.
 		to.clean(p)
 	}
-	sort.Sort(ret)
+	sort.Sort(types.ByHash(ret))
 
 	// Find new candidates from tip of globalVector of each validator.
 	// The complexity here is O(N^2logN).
@@ -388,13 +391,14 @@ func (to *totalOrdering) output(precedings map[common.Hash]struct{}) common.Hash
 func (to *totalOrdering) generateDeliverSet() (
 	delivered map[common.Hash]struct{}, early bool) {
 
-	globalHeightVector := to.globalVector.getHeightVector()
+	globalAckingStatusVector := to.globalVector.getAckingStatusVector()
 	ahvs := map[common.Hash]map[types.ValidatorID]uint64{}
 	for candidate, v := range to.candidateAckingStatusVectors {
-		ahvs[candidate] = v.getAckingHeightVector(globalHeightVector, to.k)
+		ahvs[candidate] = v.getAckingHeightVector(globalAckingStatusVector, to.k)
 	}
 
-	globalAns := globalHeightVector.getAckingNodeSet(globalHeightVector, to.k)
+	globalAns := globalAckingStatusVector.getAckingNodeSet(
+		globalAckingStatusVector, to.k)
 	precedings := make(map[common.Hash]struct{})
 
 CheckNextCandidateLoop:
@@ -460,7 +464,7 @@ CheckNextCandidateLoop:
 	checkANS := func() bool {
 		for p := range precedings {
 			validatorAns := to.candidateAckingStatusVectors[p].getAckingNodeSet(
-				globalHeightVector, to.k)
+				globalAckingStatusVector, to.k)
 			if uint64(len(validatorAns)) < to.validatorCount-to.phi {
 				return false
 			}
@@ -492,8 +496,7 @@ CheckNextCandidateLoop:
 
 // processBlock is the entry point of totalOrdering.
 func (to *totalOrdering) processBlock(b *types.Block) (
-	delivered common.Hashes, early bool, err error) {
-
+	delivered []*types.Block, early bool, err error) {
 	// NOTE: I assume the block 'b' is already safe for total ordering.
 	//       That means, all its acking blocks are during/after
 	//       total ordering stage.

@@ -19,14 +19,11 @@ package core
 
 import (
 	"errors"
-	"sort"
-	"time"
 
-	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-// Timestamp is for Concensus Timestamp Algorithm.
+// consensusTimestamp is for Concensus Timestamp Algorithm.
 type consensusTimestamp struct {
 	lastMainChainBlock   *types.Block
 	blocksNotInMainChain []*types.Block
@@ -36,11 +33,9 @@ var (
 	// ErrInvalidMainChain would be reported if the invalid result from
 	// main chain selection algorithm is detected.
 	ErrInvalidMainChain = errors.New("invalid main chain")
-	// ErrEmptyTimestamps would be reported if Block.timestamps is empty.
-	ErrEmptyTimestamps = errors.New("timestamp vector should not be empty")
 )
 
-// NewTimestamp create Timestamp object.
+// newConsensusTimestamp create timestamper object.
 func newConsensusTimestamp() *consensusTimestamp {
 	return &consensusTimestamp{}
 }
@@ -73,7 +68,7 @@ func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (
 		} else if block.Hash == mainChain[idxMainChain].Hash {
 			rightMainChainIdx = idx
 			blocksWithTimestamp[idx].ConsensusInfo.Timestamp, err =
-				ct.getMedianTime(block)
+				getMedianTime(block)
 			if err != nil {
 				return
 			}
@@ -110,44 +105,4 @@ func (ct *consensusTimestamp) selectMainChain(blocks []*types.Block) (
 		mainChain = append(mainChain, block)
 	}
 	return
-}
-
-func (ct *consensusTimestamp) getMedianTime(block *types.Block) (
-	timestamp time.Time, err error) {
-	timestamps := []time.Time{}
-	for _, timestamp := range block.Timestamps {
-		timestamps = append(timestamps, timestamp)
-	}
-	if len(timestamps) == 0 {
-		err = ErrEmptyTimestamps
-		return
-	}
-	sort.Sort(common.ByTime(timestamps))
-	if len(timestamps)%2 == 0 {
-		t1 := timestamps[len(timestamps)/2-1]
-		t2 := timestamps[len(timestamps)/2]
-		timestamp = interpoTime(t1, t2, 1)[0]
-	} else {
-		timestamp = timestamps[len(timestamps)/2]
-	}
-	return
-}
-
-func interpoTime(t1 time.Time, t2 time.Time, sep int) []time.Time {
-	if sep == 0 {
-		return []time.Time{}
-	}
-	if t1.After(t2) {
-		return interpoTime(t2, t1, sep)
-	}
-	timestamps := make([]time.Time, sep)
-	duration := t2.Sub(t1)
-	period := time.Duration(
-		(duration.Nanoseconds() / int64(sep+1))) * time.Nanosecond
-	prevTime := t1
-	for idx := range timestamps {
-		prevTime = prevTime.Add(period)
-		timestamps[idx] = prevTime
-	}
-	return timestamps
 }

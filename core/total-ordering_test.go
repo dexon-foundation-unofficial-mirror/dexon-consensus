@@ -59,10 +59,17 @@ func (s *TotalOrderingTestSuite) genRootBlock(
 }
 
 func (s *TotalOrderingTestSuite) checkNotDeliver(to *totalOrdering, b *types.Block) {
-	hashes, eqrly, err := to.processBlock(b)
-	s.Empty(hashes)
+	blocks, eqrly, err := to.processBlock(b)
+	s.Empty(blocks)
 	s.False(eqrly)
 	s.Nil(err)
+}
+
+func (s *TotalOrderingTestSuite) checkHashSequence(blocks []*types.Block, hashes common.Hashes) {
+	sort.Sort(hashes)
+	for i, h := range hashes {
+		s.Equal(blocks[i].Hash, h)
+	}
 }
 
 func (s *TotalOrderingTestSuite) checkNotInWorkingSet(
@@ -407,11 +414,11 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 	s.Equal(vec[validators[3]].minHeight, b30.Height)
 	s.Equal(vec[validators[3]].count, uint64(2))
 
-	hashes, early, err := to.processBlock(b32)
-	s.Require().Len(hashes, 1)
+	blocks, early, err := to.processBlock(b32)
+	s.Require().Len(blocks, 1)
 	s.True(early)
 	s.Nil(err)
-	s.Equal(hashes[0], b00.Hash)
+	s.checkHashSequence(blocks, common.Hashes{b00.Hash})
 
 	// Check the internal state after delivered.
 	s.Len(to.candidateAckingStatusVectors, 4) // b01, b10, b20, b30 are candidates.
@@ -663,12 +670,10 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	s.Equal(vec[validators[3]].count, uint64(3))
 
 	// Check the first deliver.
-	hashes, early, err := to.processBlock(b02)
+	blocks, early, err := to.processBlock(b02)
 	s.True(early)
 	s.Nil(err)
-	expected := common.Hashes{b00.Hash, b10.Hash}
-	sort.Sort(expected)
-	s.Equal(hashes, expected)
+	s.checkHashSequence(blocks, common.Hashes{b00.Hash, b10.Hash})
 
 	// Make sure b00, b10 are removed from current working set.
 	s.checkNotInWorkingSet(to, b00)
@@ -706,12 +711,10 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	s.checkNotDeliver(to, b13)
 
 	// Check the second deliver.
-	hashes, early, err = to.processBlock(b03)
+	blocks, early, err = to.processBlock(b03)
 	s.True(early)
 	s.Nil(err)
-	expected = common.Hashes{b11.Hash, b20.Hash}
-	sort.Sort(expected)
-	s.Equal(hashes, expected)
+	s.checkHashSequence(blocks, common.Hashes{b11.Hash, b20.Hash})
 
 	// Make sure b11, b20 are removed from current working set.
 	s.checkNotInWorkingSet(to, b11)
@@ -760,12 +763,10 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 
 	// Make 'Acking Node Set' contains blocks from all validators,
 	// this should trigger not-early deliver.
-	hashes, early, err = to.processBlock(b23)
+	blocks, early, err = to.processBlock(b23)
 	s.False(early)
 	s.Nil(err)
-	expected = common.Hashes{b01.Hash, b30.Hash}
-	sort.Sort(expected)
-	s.Equal(expected, hashes)
+	s.checkHashSequence(blocks, common.Hashes{b01.Hash, b30.Hash})
 
 	// Make sure b01, b30 not in working set
 	s.checkNotInWorkingSet(to, b01)
@@ -874,12 +875,10 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 	s.Equal(vec[validators[3]].count, uint64(2))
 
 	// This new block should trigger non-early deliver.
-	hashes, early, err := to.processBlock(b40)
+	blocks, early, err := to.processBlock(b40)
 	s.False(early)
 	s.Nil(err)
-	expected := common.Hashes{b20.Hash}
-	sort.Sort(expected)
-	s.Equal(expected, hashes)
+	s.checkHashSequence(blocks, common.Hashes{b20.Hash})
 
 	// Make sure b20 is no long existing in working set.
 	s.checkNotInWorkingSet(to, b20)

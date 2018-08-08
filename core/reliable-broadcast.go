@@ -19,6 +19,7 @@ package core
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -66,6 +67,7 @@ var (
 	ErrNotAckParent       = fmt.Errorf("not ack parent")
 	ErrDoubleAck          = fmt.Errorf("double ack")
 	ErrInvalidBlockHeight = fmt.Errorf("invalid block height")
+	ErrAlreadyInLattice   = fmt.Errorf("block already in lattice")
 )
 
 // newReliableBroadcast creates a new reliableBroadcast struct.
@@ -89,6 +91,7 @@ func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 		if b.Hash != bInLattice.Hash {
 			return ErrForkBlock
 		}
+		return ErrAlreadyInLattice
 	}
 
 	// Check non-genesis blocks if it acks its parent.
@@ -136,9 +139,9 @@ func (rb *reliableBroadcast) areAllAcksInLattice(b *types.Block) bool {
 
 // processBlock processes block, it does sanity check, inserts block into
 // lattice, handles strong acking and deletes blocks which will not be used.
-func (rb *reliableBroadcast) processBlock(block *types.Block) {
+func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 	// If a block does not pass sanity check, discard this block.
-	if err := rb.sanityCheck(block); err != nil {
+	if err = rb.sanityCheck(block); err != nil {
 		return
 	}
 	rb.blocks[block.Hash] = block
@@ -166,10 +169,11 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) {
 			// B   C  Block B and C both ack A and are valid. B, C received first
 			//  \ /   (added in receivedBlocks), and A comes, if sanity check is
 			//   A    not being executed here, B and C will both be added in lattice
-			if err := rb.sanityCheck(b); err != nil {
+			if err = rb.sanityCheck(b); err != nil {
 				delete(rb.blocks, b.Hash)
 				delete(rb.receivedBlocks, b.Hash)
 				continue
+				// TODO(mission): how to return for multiple errors?
 			}
 			rb.lattice[b.ProposerID].blocks[b.Height] = b
 			delete(rb.receivedBlocks, b.Hash)
@@ -246,6 +250,7 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) {
 			min--
 		}
 	}
+	return
 }
 
 // extractBlocks returns all blocks that can be inserted into total ordering's
@@ -288,6 +293,78 @@ func (rb *reliableBroadcast) extractBlocks() []*types.Block {
 		}
 	}
 	return ret
+}
+
+// prepareBlock helps to setup fields of block based on its ProposerID,
+// including:
+//  - Set 'Acks' and 'Timestamps' for the highest block of each validator not
+//    acked by this proposer before.
+//  - Set 'ParentHash' and 'Height' from parent block, if we can't find a
+//    parent, these fields would be setup like a genesis block.
+func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
+	// Reset fields to make sure we got these information from parent block.
+	block.Height = 0
+	// TODO(mission): make all genesis block would contain zero ParentHash.
+	block.ParentHash = common.Hash{}
+	// The helper function to accumulate timestamps.
+	accumulateTimestamps := func(
+		times map[types.ValidatorID]time.Time, b *types.Block) {
+
+		// Update timestamps with the block's proposer time.
+		// TODO (mission): make epslon configurable.
+		times[b.ProposerID] = b.Timestamps[b.ProposerID].Add(
+			1 * time.Millisecond)
+
+		// Update timestamps from the block if it's later than
+		// current cached ones.
+		for vID, t := range b.Timestamps {
+			cachedTime, exists := times[vID]
+			if !exists {
+				// This means the block contains timestamps from
+				// removed validators.
+				continue
+			}
+			if cachedTime.After(t) {
+				continue
+			}
+			times[vID] = t
+		}
+		return
+	}
+	// Initial timestamps with current validator set.
+	times := make(map[types.ValidatorID]time.Time)
+	for vID := range rb.lattice {
+		times[vID] = time.Time{}
+	}
+	acks := make(map[common.Hash]struct{})
+	for vID := range rb.lattice {
+		// find height of the latest block for that validator.
+		var (
+			curBlock   *types.Block
+			nextHeight = rb.lattice[block.ProposerID].nextAck[vID]
+		)
+
+		for {
+			tmpBlock, exists := rb.lattice[vID].blocks[nextHeight]
+			if !exists {
+				break
+			}
+			curBlock = tmpBlock
+			nextHeight++
+		}
+		if curBlock == nil {
+			continue
+		}
+		acks[curBlock.Hash] = struct{}{}
+		accumulateTimestamps(times, curBlock)
+		if vID == block.ProposerID {
+			block.ParentHash = curBlock.Hash
+			block.Height = curBlock.Height + 1
+		}
+	}
+	block.Timestamps = times
+	block.Acks = acks
+	return
 }
 
 // addValidator adds validator in the validator set.

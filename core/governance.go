@@ -23,21 +23,6 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-// MembershipActionType specifies the action of a membership event.
-type MembershipActionType int
-
-// Event enums.
-const (
-	MembershipActionAdd    MembershipActionType = 0
-	MembershipActionDelete MembershipActionType = 1
-)
-
-// MembershipEvent specifies the event of membership changes.
-type MembershipEvent struct {
-	Epoch  int
-	Action MembershipActionType
-}
-
 // Governance interface specifies interface to control the governance contract.
 // Note that there are a lot more methods in the governance contract, that this
 // interface only define those that are required to run the consensus algorithm.
@@ -49,5 +34,5 @@ type Governance interface {
 	GetBlockProposingInterval() int
 
 	// Get membership events after a certain epoch.
-	GetMembershipEvents(epoch int) []MembershipEvent
+	GetMembershipEvents(epoch int) []types.MembershipEvent
 }

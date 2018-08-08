@@ -18,11 +18,21 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"sort"
+	"time"
+
+	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-var debug = false
+var (
+	debug = false
+	// ErrEmptyTimestamps would be reported if Block.timestamps is empty.
+	ErrEmptyTimestamps = errors.New("timestamp vector should not be empty")
+)
 
 func init() {
 	if os.Getenv("DEBUG") != "" {
@@ -42,4 +52,43 @@ func Debugln(args ...interface{}) {
 	if debug {
 		fmt.Println(args)
 	}
+}
+
+func interpoTime(t1 time.Time, t2 time.Time, sep int) []time.Time {
+	if sep == 0 {
+		return []time.Time{}
+	}
+	if t1.After(t2) {
+		return interpoTime(t2, t1, sep)
+	}
+	timestamps := make([]time.Time, sep)
+	duration := t2.Sub(t1)
+	period := time.Duration(
+		(duration.Nanoseconds() / int64(sep+1))) * time.Nanosecond
+	prevTime := t1
+	for idx := range timestamps {
+		prevTime = prevTime.Add(period)
+		timestamps[idx] = prevTime
+	}
+	return timestamps
+}
+func getMedianTime(block *types.Block) (t time.Time, err error) {
+	timestamps := []time.Time{}
+	for _, timestamp := range block.Timestamps {
+		timestamps = append(timestamps, timestamp)
+	}
+	if len(timestamps) == 0 {
+		err = ErrEmptyTimestamps
+		return
+	}
+	sort.Sort(common.ByTime(timestamps))
+	if len(timestamps)%2 == 0 {
+		t1 := timestamps[len(timestamps)/2-1]
+		t2 := timestamps[len(timestamps)/2]
+		t = interpoTime(t1, t2, 1)[0]
+	} else {
+		t = timestamps[len(timestamps)/2]
+	}
+	return
+
 }

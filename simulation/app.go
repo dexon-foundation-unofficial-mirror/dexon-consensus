@@ -77,6 +77,11 @@ func (a *SimApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
 	return
 }
 
+// StronglyAcked is called when a block is strongly acked by DEXON
+// Reliabe Broadcast algorithm.
+func (a *SimApp) StronglyAcked(blockHash common.Hash) {
+}
+
 // TotalOrderingDeliver is called when blocks are delivered by the total
 // ordering algorithm.
 func (a *SimApp) TotalOrderingDeliver(blocks []*types.Block, early bool) {

@@ -18,6 +18,7 @@
 package simulation
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/blockdb"
@@ -31,13 +32,15 @@ import (
 type Validator struct {
 	network Network
 	app     *SimApp
+	gov     *simGov
+	db      blockdb.BlockDatabase
 
 	config     config.Validator
 	msgChannel chan interface{}
 	isFinished chan struct{}
 
 	ID              types.ValidatorID
-	lattice         *core.BlockLattice
+	consensus       *core.Consensus
 	compactionChain *core.BlockChain
 
 	genesis *types.Block
@@ -49,18 +52,19 @@ func NewValidator(
 	id types.ValidatorID,
 	config config.Validator,
 	network Network) *Validator {
-	app := NewSimApp(id, network)
-	db, err := blockdb.NewMemBackedBlockDB()
+
+	db, err := blockdb.NewMemBackedBlockDB(
+		id.String() + ".blockdb")
 	if err != nil {
 		panic(err)
 	}
-	lattice := core.NewBlockLattice(db, app)
 	return &Validator{
 		ID:         id,
 		config:     config,
 		network:    network,
-		app:        app,
-		lattice:    lattice,
+		app:        NewSimApp(id, network),
+		gov:        newSimGov(config.Num),
+		db:         db,
 		isFinished: make(chan struct{}),
 	}
 }
@@ -84,6 +88,9 @@ func (v *Validator) Run() {
 
 	// Blocks forever.
 	<-isStopped
+	if err := v.db.Close(); err != nil {
+		fmt.Println(err)
+	}
 	v.network.NotifyServer(Message{
 		Type: shutdownAck,
 	})
@@ -110,15 +117,36 @@ func (v *Validator) CheckServerInfo(isShutdown chan struct{}) {
 
 // MsgServer listen to the network channel for message and handle it.
 func (v *Validator) MsgServer() {
+	var pendingBlocks []*types.Block
 	for {
 		msg := <-v.msgChannel
 
 		switch val := msg.(type) {
 		case *types.Block:
-			//if val.ProposerID.Equal(v.ID) {
-			//	continue
-			//}
-			v.lattice.ProcessBlock(val, true)
+			if v.consensus != nil {
+				if err := v.consensus.ProcessBlock(val); err != nil {
+					fmt.Println(err)
+					//panic(err)
+				}
+			} else {
+				pendingBlocks = append(pendingBlocks, val)
+				if val.ParentHash == val.Hash {
+					v.gov.addValidator(val.ProposerID)
+				}
+				validatorSet := v.gov.GetValidatorSet()
+				if len(validatorSet) != v.config.Num {
+					// We don't collect all validators yet.
+					break
+				}
+				v.consensus = core.NewConsensus(v.app, v.gov, v.db)
+				for _, b := range pendingBlocks {
+					if err := v.consensus.ProcessBlock(b); err != nil {
+						fmt.Println(err)
+						//panic(err)
+					}
+				}
+				pendingBlocks = pendingBlocks[:0]
+			}
 		}
 	}
 }
@@ -129,34 +157,26 @@ func (v *Validator) BroadcastGenesisBlock() {
 	for v.network.NumPeers() != v.config.Num {
 		time.Sleep(time.Second)
 	}
-
-	if v.genesis == nil {
-		hash := common.NewRandomHash()
-		b := &types.Block{
-			ProposerID: v.ID,
-			ParentHash: hash,
-			Hash:       hash,
-			Height:     0,
-			Acks:       map[common.Hash]struct{}{},
-		}
-		v.genesis = b
-		v.current = b
-
-		v.lattice.AddValidator(v.ID, b)
-		v.lattice.SetOwner(v.ID)
-
-		v.lattice.PrepareBlock(b)
-		v.network.BroadcastBlock(b)
+	hash := common.NewRandomHash()
+	b := &types.Block{
+		ProposerID: v.ID,
+		ParentHash: hash,
+		Hash:       hash,
+		Height:     0,
+		Acks:       map[common.Hash]struct{}{},
+		Timestamps: map[types.ValidatorID]time.Time{
+			v.ID: time.Now().UTC(),
+		},
 	}
+	v.network.BroadcastBlock(b)
 }
 
 // BlockProposer propose blocks to be send to the DEXON network.
 func (v *Validator) BlockProposer(isStopped, isShutdown chan struct{}) {
-	// Wait until all peer knows each other.
-	for len(v.lattice.ValidatorSet) != v.config.Num {
+	// Wait until all genesis blocks are received.
+	for v.consensus == nil {
 		time.Sleep(time.Second)
 	}
-
 	model := &NormalNetwork{
 		Sigma: v.config.ProposeIntervalSigma,
 		Mean:  v.config.ProposeIntervalMean,
@@ -167,13 +187,15 @@ ProposingBlockLoop:
 
 		block := &types.Block{
 			ProposerID: v.ID,
-			ParentHash: v.current.Hash,
 			Hash:       common.NewRandomHash(),
-			Height:     v.current.Height + 1.,
-			Acks:       map[common.Hash]struct{}{},
 		}
-		v.current = block
-		v.lattice.PrepareBlock(block)
+		if err := v.consensus.PrepareBlock(block); err != nil {
+			panic(err)
+		}
+		if err := v.consensus.ProcessBlock(block); err != nil {
+			fmt.Println(err)
+			//panic(err)
+		}
 		v.network.BroadcastBlock(block)
 		select {
 		case <-isShutdown:
