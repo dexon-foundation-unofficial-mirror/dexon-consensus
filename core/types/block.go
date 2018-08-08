@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
 // Status represents the block process state.
@@ -36,16 +37,35 @@ const (
 	BlockStatusFinal
 )
 
+// CompactionChainAck represents the acking to the compaction chain.
+type CompactionChainAck struct {
+	AckingBlockHash common.Hash `json:"acking_block_hash"`
+	// Signature is the signature of the hash value of
+	// Block.ConsensusInfoParentHash and Block.ConsensusInfo.
+	ConsensusSignature crypto.Signature `json:"consensus_signature"`
+}
+
+// ConsensusInfo represents the consensus information on the compaction chain.
+type ConsensusInfo struct {
+	Timestamp time.Time `json:"timestamp"`
+	Height    uint64    `json:"height"`
+}
+
 // Block represents a single event broadcasted on the network.
 type Block struct {
-	ProposerID      ValidatorID               `json:"proposer_id"`
-	ParentHash      common.Hash               `json:"parent_hash"`
-	Hash            common.Hash               `json:"hash"`
-	Height          uint64                    `json:"height"`
-	Timestamps      map[ValidatorID]time.Time `json:"timestamps"`
-	Acks            map[common.Hash]struct{}  `json:"acks"`
-	ConsensusTime   time.Time                 `json:"consensus_time"`
-	ConsensusHeight uint64                    `json:"consensus_height"`
+	ProposerID         ValidatorID               `json:"proposer_id"`
+	ParentHash         common.Hash               `json:"parent_hash"`
+	Hash               common.Hash               `json:"hash"`
+	Height             uint64                    `json:"height"`
+	Timestamps         map[ValidatorID]time.Time `json:"timestamps"`
+	Acks               map[common.Hash]struct{}  `json:"acks"`
+	CompactionChainAck CompactionChainAck        `json:"compaction_chain_ack"`
+
+	ConsensusInfo ConsensusInfo `json:"consensus_info"`
+	// ConsensusInfoParentHash is the hash value of Block.ConsensusInfoParentHash
+	// and Block.ConsensusInfo, where Block is the previous block on
+	// the compaction chain.
+	ConsensusInfoParentHash common.Hash `json:"consensus_info_parent_hash"`
 
 	Ackeds          map[common.Hash]struct{} `json:"-"`
 	AckedValidators map[ValidatorID]struct{} `json:"-"`

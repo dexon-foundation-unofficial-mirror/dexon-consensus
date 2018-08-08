@@ -542,7 +542,7 @@ func (l *BlockLattice) totalOrdering(b *types.Block) {
 			panic(err)
 		}
 		for _, block := range blocksReady {
-			l.app.DeliverBlock(block.Hash, block.ConsensusTime)
+			l.app.DeliverBlock(block.Hash, block.ConsensusInfo.Timestamp)
 		}
 	}
 

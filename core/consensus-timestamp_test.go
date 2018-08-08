@@ -79,7 +79,7 @@ func fillBlocksTimestamps(blocks []*types.Block, validatorNum int,
 func extractTimestamps(blocks []*types.Block) []time.Time {
 	timestamps := make([]time.Time, len(blocks))
 	for idx, block := range blocks {
-		timestamps[idx] = block.ConsensusTime
+		timestamps[idx] = block.ConsensusInfo.Timestamp
 	}
 	return timestamps
 }

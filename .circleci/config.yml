@@ -27,6 +27,7 @@ jobs:
           key: v1-vendor-{{ .Branch }}-{{ checksum "Gopkg.lock" }}
           paths:
             - vendor
+      - run: make eth-dep
       - run: make lint
       - run: make vet
       - run: make test

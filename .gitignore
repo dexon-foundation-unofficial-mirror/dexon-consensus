@@ -20,4 +20,5 @@
 vendor
 build
 simulation/kubernetes/build
+.dep
 
