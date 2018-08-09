@@ -78,11 +78,11 @@ func (v *Validator) GetID() types.ValidatorID {
 func (v *Validator) Run() {
 	v.msgChannel = v.network.Join(v)
 
-	isStopped := make(chan struct{})
+	isStopped := make(chan struct{}, 2)
 	isShutdown := make(chan struct{})
 
 	v.BroadcastGenesisBlock()
-	go v.MsgServer()
+	go v.MsgServer(isStopped)
 	go v.CheckServerInfo(isShutdown)
 	go v.BlockProposer(isStopped, isShutdown)
 
@@ -116,10 +116,15 @@ func (v *Validator) CheckServerInfo(isShutdown chan struct{}) {
 }
 
 // MsgServer listen to the network channel for message and handle it.
-func (v *Validator) MsgServer() {
+func (v *Validator) MsgServer(isStopped chan struct{}) {
 	var pendingBlocks []*types.Block
 	for {
-		msg := <-v.msgChannel
+		var msg interface{}
+		select {
+		case msg = <-v.msgChannel:
+		case <-isStopped:
+			return
+		}
 
 		switch val := msg.(type) {
 		case *types.Block:
@@ -199,6 +204,7 @@ ProposingBlockLoop:
 		v.network.BroadcastBlock(block)
 		select {
 		case <-isShutdown:
+			isStopped <- struct{}{}
 			isStopped <- struct{}{}
 			break ProposingBlockLoop
 		default:

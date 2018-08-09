@@ -49,6 +49,15 @@ func NewPeerServer() *PeerServer {
 	}
 }
 
+// isValidator checks if vID is in p.peers. If peer server restarts but
+// validators are not, it will cause panic if validators send message.
+func (p *PeerServer) isValidator(vID types.ValidatorID) bool {
+	p.peersMu.Lock()
+	defer p.peersMu.Unlock()
+	_, exist := p.peers[vID]
+	return exist
+}
+
 // Run starts the peer server.
 func (p *PeerServer) Run(configPath string) {
 	cfg, err := config.Read(configPath)
@@ -84,6 +93,7 @@ func (p *PeerServer) Run(configPath string) {
 		if len(p.peers) == cfg.Validator.Num {
 			log.Println("All peers connected.")
 		}
+		w.WriteHeader(http.StatusOK)
 	}
 
 	peersHandler := func(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +112,7 @@ func (p *PeerServer) Run(configPath string) {
 			return
 		}
 
+		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(jsonText)
 	}
@@ -131,6 +142,7 @@ func (p *PeerServer) Run(configPath string) {
 			return
 		}
 
+		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(jsonText)
 	}
@@ -139,8 +151,6 @@ func (p *PeerServer) Run(configPath string) {
 		defer r.Body.Close()
 
 		idString := r.Header.Get("ID")
-
-		defer r.Body.Close()
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -156,6 +166,11 @@ func (p *PeerServer) Run(configPath string) {
 		id := types.ValidatorID{}
 		if err := id.UnmarshalText([]byte(idString)); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if !p.isValidator(id) {
+			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
@@ -187,15 +202,17 @@ func (p *PeerServer) Run(configPath string) {
 	stopServer := make(chan struct{})
 
 	messageHandler := func(w http.ResponseWriter, r *http.Request) {
-		p.peersMu.Lock()
-		defer p.peersMu.Unlock()
 		defer r.Body.Close()
 
 		idString := r.Header.Get("ID")
 		id := types.ValidatorID{}
 		id.UnmarshalText([]byte(idString))
 
-		defer r.Body.Close()
+		if !p.isValidator(id) {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -263,5 +280,11 @@ func (p *PeerServer) Run(configPath string) {
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Error starting server %v\n", err)
+	}
+
+	// Do not exit when we are in TCP node, since k8s will restart the pod and
+	// cause confusions.
+	if cfg.Networking.Type == config.NetworkTypeTCP {
+		select {}
 	}
 }
