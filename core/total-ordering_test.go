@@ -1,15 +1,15 @@
 // Copyright 2018 The dexon-consensus-core Authors
 // This file is part of the dexon-consensus-core library.
 //
-// The dexon-consensus-core library is free software: you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public License as
+// The dexon-consensus-core library is free software: you can redistribute it
+// and/or modify it under the terms of the GNU Lesser General Public License as
 // published by the Free Software Foundation, either version 3 of the License,
 // or (at your option) any later version.
 //
-// The dexon-consensus-core library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
+// The dexon-consensus-core library is distributed in the hope that it will be
+// useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser
+// General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
 // along with the dexon-consensus-core library. If not, see
@@ -45,14 +45,13 @@ func (s *TotalOrderingTestSuite) generateValidatorIDs(
 	return validatorIDs
 }
 
-func (s *TotalOrderingTestSuite) genRootBlock(
+func (s *TotalOrderingTestSuite) genGenesisBlock(
 	vID types.ValidatorID, acks map[common.Hash]struct{}) *types.Block {
 
-	hash := common.NewRandomHash()
 	return &types.Block{
 		ProposerID: vID,
-		ParentHash: hash,
-		Hash:       hash,
+		ParentHash: common.Hash{},
+		Hash:       common.NewRandomHash(),
 		Height:     0,
 		Acks:       acks,
 	}
@@ -88,14 +87,7 @@ func (s *TotalOrderingTestSuite) TestBlockRelation() {
 
 	vID := types.ValidatorID{Hash: common.NewRandomHash()}
 
-	hash := common.NewRandomHash()
-	blockA := &types.Block{
-		ProposerID: vID,
-		ParentHash: hash,
-		Hash:       hash,
-		Height:     0,
-		Acks:       map[common.Hash]struct{}{},
-	}
+	blockA := s.genGenesisBlock(vID, map[common.Hash]struct{}{})
 	blockB := &types.Block{
 		ProposerID: vID,
 		ParentHash: blockA.Hash,
@@ -243,16 +235,9 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 
 	// create blocks with cycles in acking relation.
 	cycledHash := common.NewRandomHash()
-	hash := common.NewRandomHash()
-	b00 := &types.Block{
-		ProposerID: validators[0],
-		ParentHash: hash,
-		Hash:       hash,
-		Height:     0,
-		Acks: map[common.Hash]struct{}{
-			cycledHash: struct{}{},
-		},
-	}
+	b00 := s.genGenesisBlock(validators[0], map[common.Hash]struct{}{
+		cycledHash: struct{}{},
+	})
 	b01 := &types.Block{
 		ProposerID: validators[0],
 		ParentHash: b00.Hash,
@@ -282,16 +267,8 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 	}
 
 	// Create a block acks self.
-	hash = common.NewRandomHash()
-	b10 := &types.Block{
-		ProposerID: validators[1],
-		ParentHash: hash,
-		Hash:       hash,
-		Height:     0,
-		Acks: map[common.Hash]struct{}{
-			hash: struct{}{},
-		},
-	}
+	b10 := s.genGenesisBlock(validators[1], map[common.Hash]struct{}{})
+	b10.Acks[b10.Hash] = struct{}{}
 
 	// Make sure we won't hang when cycle exists.
 	to := newTotalOrdering(1, 3, 5)
@@ -309,14 +286,7 @@ func (s *TotalOrderingTestSuite) TestNotValidDAGDetection() {
 	validators := s.generateValidatorIDs(4)
 	to := newTotalOrdering(1, 3, 5)
 
-	hash := common.NewRandomHash()
-	b00 := &types.Block{
-		ProposerID: validators[0],
-		ParentHash: hash,
-		Hash:       hash,
-		Height:     0,
-		Acks:       map[common.Hash]struct{}{},
-	}
+	b00 := s.genGenesisBlock(validators[0], map[common.Hash]struct{}{})
 	b01 := &types.Block{
 		ProposerID: validators[0],
 		ParentHash: b00.Hash,
@@ -356,23 +326,23 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 		}
 	}
 
-	b00 := s.genRootBlock(validators[0], map[common.Hash]struct{}{})
+	b00 := s.genGenesisBlock(validators[0], map[common.Hash]struct{}{})
 	b01 := genNextBlock(b00)
 	b02 := genNextBlock(b01)
 
-	b10 := s.genRootBlock(validators[1], map[common.Hash]struct{}{
+	b10 := s.genGenesisBlock(validators[1], map[common.Hash]struct{}{
 		b00.Hash: struct{}{},
 	})
 	b11 := genNextBlock(b10)
 	b12 := genNextBlock(b11)
 
-	b20 := s.genRootBlock(validators[2], map[common.Hash]struct{}{
+	b20 := s.genGenesisBlock(validators[2], map[common.Hash]struct{}{
 		b00.Hash: struct{}{},
 	})
 	b21 := genNextBlock(b20)
 	b22 := genNextBlock(b21)
 
-	b30 := s.genRootBlock(validators[3], map[common.Hash]struct{}{
+	b30 := s.genGenesisBlock(validators[3], map[common.Hash]struct{}{
 		b00.Hash: struct{}{},
 	})
 	b31 := genNextBlock(b30)
@@ -460,13 +430,13 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	to := newTotalOrdering(2, 3, 5)
 	validators := s.generateValidatorIDs(5)
 
-	b00 := s.genRootBlock(validators[0], map[common.Hash]struct{}{})
-	b10 := s.genRootBlock(validators[1], map[common.Hash]struct{}{})
-	b20 := s.genRootBlock(
+	b00 := s.genGenesisBlock(validators[0], map[common.Hash]struct{}{})
+	b10 := s.genGenesisBlock(validators[1], map[common.Hash]struct{}{})
+	b20 := s.genGenesisBlock(
 		validators[2], map[common.Hash]struct{}{b10.Hash: struct{}{}})
-	b30 := s.genRootBlock(
+	b30 := s.genGenesisBlock(
 		validators[3], map[common.Hash]struct{}{b20.Hash: struct{}{}})
-	b40 := s.genRootBlock(validators[4], map[common.Hash]struct{}{})
+	b40 := s.genGenesisBlock(validators[4], map[common.Hash]struct{}{})
 	b11 := &types.Block{
 		ProposerID: validators[1],
 		ParentHash: b10.Hash,
@@ -791,10 +761,10 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 	to := newTotalOrdering(0, 3, 5)
 	validators := s.generateValidatorIDs(5)
 
-	b00 := s.genRootBlock(validators[0], map[common.Hash]struct{}{})
-	b10 := s.genRootBlock(validators[1], map[common.Hash]struct{}{})
-	b20 := s.genRootBlock(validators[2], map[common.Hash]struct{}{})
-	b30 := s.genRootBlock(validators[3], map[common.Hash]struct{}{
+	b00 := s.genGenesisBlock(validators[0], map[common.Hash]struct{}{})
+	b10 := s.genGenesisBlock(validators[1], map[common.Hash]struct{}{})
+	b20 := s.genGenesisBlock(validators[2], map[common.Hash]struct{}{})
+	b30 := s.genGenesisBlock(validators[3], map[common.Hash]struct{}{
 		b20.Hash: struct{}{},
 	})
 	b01 := &types.Block{
@@ -836,7 +806,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 			b30.Hash: struct{}{},
 		},
 	}
-	b40 := s.genRootBlock(validators[4], map[common.Hash]struct{}{
+	b40 := s.genGenesisBlock(validators[4], map[common.Hash]struct{}{
 		b31.Hash: struct{}{},
 	})
 

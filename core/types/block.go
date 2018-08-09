@@ -111,6 +111,11 @@ func (b *Block) Clone() *Block {
 	return bcopy
 }
 
+// IsGenesis checks if the block is a genesisBlock
+func (b *Block) IsGenesis() bool {
+	return b.Height == 0 && b.ParentHash == common.Hash{}
+}
+
 // ByHash is the helper type for sorting slice of blocks by hash.
 type ByHash []*Block
 

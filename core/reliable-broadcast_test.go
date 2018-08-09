@@ -1,15 +1,15 @@
 // Copyright 2018 The dexon-consensus-core Authors
 // This file is part of the dexon-consensus-core library.
 //
-// The dexon-consensus-core library is free software: you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public License as
+// The dexon-consensus-core library is free software: you can redistribute it
+// and/or modify it under the terms of the GNU Lesser General Public License as
 // published by the Free Software Foundation, either version 3 of the License,
 // or (at your option) any later version.
 //
-// The dexon-consensus-core library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
+// The dexon-consensus-core library is distributed in the hope that it will be
+// useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser
+// General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
 // along with the dexon-consensus-core library. If not, see
@@ -49,11 +49,10 @@ func (s *ReliableBroadcastTest) prepareGenesisBlock(
 	proposerID types.ValidatorID,
 	validatorIDs []types.ValidatorID) (b *types.Block) {
 
-	hash := common.NewRandomHash()
 	b = &types.Block{
 		ProposerID: proposerID,
-		ParentHash: hash,
-		Hash:       hash,
+		ParentHash: common.Hash{},
+		Hash:       common.NewRandomHash(),
 		Height:     0,
 		Acks:       make(map[common.Hash]struct{}),
 		Timestamps: make(map[types.ValidatorID]time.Time),
@@ -85,15 +84,8 @@ func genTestCase1(s *ReliableBroadcastTest, r *reliableBroadcast) []types.Valida
 		vids = append(vids, vid)
 	}
 	// Add genesis blocks.
-	for i := 0; i < 4; i++ {
-		h = common.NewRandomHash()
-		b = &types.Block{
-			ProposerID: vids[i],
-			ParentHash: h,
-			Hash:       h,
-			Height:     0,
-			Acks:       map[common.Hash]struct{}{},
-		}
+	for _, vid := range vids {
+		b = s.prepareGenesisBlock(vid, vids)
 		r.processBlock(b)
 	}
 
@@ -401,19 +393,15 @@ func (s *ReliableBroadcastTest) TestRandomIntensiveAcking() {
 	heights := map[types.ValidatorID]uint64{}
 	extractedBlocks := []*types.Block{}
 
-	// Generate validators and genesis blocks.
+	// Generate validators.
 	for i := 0; i < 4; i++ {
 		vid := types.ValidatorID{Hash: common.NewRandomHash()}
 		r.addValidator(vid)
 		vids = append(vids, vid)
-		h := common.NewRandomHash()
-		b := &types.Block{
-			Hash:       h,
-			ParentHash: h,
-			Acks:       map[common.Hash]struct{}{},
-			Height:     0,
-			ProposerID: vid,
-		}
+	}
+	// Generate genesis blocks.
+	for _, vid := range vids {
+		b := s.prepareGenesisBlock(vid, vids)
 		r.processBlock(b)
 		heights[vid] = 1
 	}

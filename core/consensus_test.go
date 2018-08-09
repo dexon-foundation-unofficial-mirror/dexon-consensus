@@ -40,7 +40,7 @@ func (s *ConsensusTestSuite) prepareGenesisBlock(
 	hash := common.NewRandomHash()
 	block := &types.Block{
 		ProposerID: proposerID,
-		ParentHash: hash,
+		ParentHash: common.Hash{},
 		Hash:       hash,
 		Height:     0,
 		Acks:       make(map[common.Hash]struct{}),

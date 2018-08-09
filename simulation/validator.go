@@ -135,7 +135,7 @@ func (v *Validator) MsgServer(isStopped chan struct{}) {
 				}
 			} else {
 				pendingBlocks = append(pendingBlocks, val)
-				if val.ParentHash == val.Hash {
+				if val.IsGenesis() {
 					v.gov.addValidator(val.ProposerID)
 				}
 				validatorSet := v.gov.GetValidatorSet()
@@ -162,11 +162,10 @@ func (v *Validator) BroadcastGenesisBlock() {
 	for v.network.NumPeers() != v.config.Num {
 		time.Sleep(time.Second)
 	}
-	hash := common.NewRandomHash()
 	b := &types.Block{
 		ProposerID: v.ID,
-		ParentHash: hash,
-		Hash:       hash,
+		ParentHash: common.Hash{},
+		Hash:       common.NewRandomHash(),
 		Height:     0,
 		Acks:       map[common.Hash]struct{}{},
 		Timestamps: map[types.ValidatorID]time.Time{
