@@ -78,7 +78,7 @@ vet:
 
 test:
 	@for pkg in `go list ./... | grep -v 'vendor'`; do \
-		if ! go test $$pkg; then \
+		if ! go test -race $$pkg; then \
 			echo 'Some test failed, abort'; \
 			exit 1; \
 		fi; \
