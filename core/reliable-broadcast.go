@@ -36,10 +36,6 @@ type reliableBroadcast struct {
 	// receivedBlocks stores blocks which is received but its acks are not all
 	// in lattice.
 	receivedBlocks map[common.Hash]*types.Block
-
-	// ackedBlocks stores blocks in status types.BlockStatusAcked, which are
-	// strongly acked but not yet being output to total ordering module.
-	ackedBlocks map[common.Hash]*types.Block
 }
 
 type ackingValidatorStatus struct {
@@ -76,7 +72,6 @@ func newReliableBroadcast() *reliableBroadcast {
 		lattice:        make(map[types.ValidatorID]*ackingValidatorStatus),
 		blocks:         make(map[common.Hash]*types.Block),
 		receivedBlocks: make(map[common.Hash]*types.Block),
-		ackedBlocks:    make(map[common.Hash]*types.Block),
 	}
 }
 
@@ -208,7 +203,6 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 	}
 
 	for _, b := range blocksToAcked {
-		rb.ackedBlocks[b.Hash] = b
 		b.Status = types.BlockStatusAcked
 	}
 
@@ -284,7 +278,6 @@ func (rb *reliableBroadcast) extractBlocks() []*types.Block {
 			}
 			updated = true
 			b.Status = types.BlockStatusOrdering
-			delete(rb.ackedBlocks, b.Hash)
 			ret = append(ret, b)
 			rb.lattice[vid].nextOutput++
 		}

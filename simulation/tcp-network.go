@@ -227,7 +227,6 @@ func (n *TCPNetwork) Send(destID types.ValidatorID, msg interface{}) {
 			if err != nil {
 				continue
 			}
-			req.Close = true
 			req.Header.Add("ID", n.endpoint.GetID().String())
 
 			resp, err := n.client.Do(req)
@@ -249,6 +248,9 @@ func (n *TCPNetwork) Send(destID types.ValidatorID, msg interface{}) {
 // BroadcastBlock broadcast blocks into the network.
 func (n *TCPNetwork) BroadcastBlock(block *types.Block) {
 	for endpoint := range n.endpoints {
+		if endpoint == block.ProposerID {
+			continue
+		}
 		n.Send(endpoint, block.Clone())
 	}
 }

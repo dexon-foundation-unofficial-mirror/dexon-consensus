@@ -955,7 +955,7 @@ func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 	s.baseTestRandomlyGeneratedBlocks(constructor, revealer, repeat)
 	// Test for K=3,
 	constructor = func() *totalOrdering {
-		return newTotalOrdering(2, phi, uint64(validatorCount))
+		return newTotalOrdering(3, phi, uint64(validatorCount))
 	}
 	s.baseTestRandomlyGeneratedBlocks(constructor, revealer, repeat)
 }

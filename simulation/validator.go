@@ -42,9 +42,6 @@ type Validator struct {
 	ID              types.ValidatorID
 	consensus       *core.Consensus
 	compactionChain *core.BlockChain
-
-	genesis *types.Block
-	current *types.Block
 }
 
 // NewValidator returns a new empty validator.
@@ -58,12 +55,14 @@ func NewValidator(
 	if err != nil {
 		panic(err)
 	}
+	gov := newSimGov(config.Num)
+	gov.addValidator(id)
 	return &Validator{
 		ID:         id,
 		config:     config,
 		network:    network,
 		app:        NewSimApp(id, network),
-		gov:        newSimGov(config.Num),
+		gov:        gov,
 		db:         db,
 		isFinished: make(chan struct{}),
 	}
@@ -78,11 +77,21 @@ func (v *Validator) GetID() types.ValidatorID {
 func (v *Validator) Run() {
 	v.msgChannel = v.network.Join(v)
 
+	genesisBlock := &types.Block{
+		ProposerID: v.ID,
+		ParentHash: common.Hash{},
+		Hash:       common.NewRandomHash(),
+		Height:     0,
+		Acks:       map[common.Hash]struct{}{},
+		Timestamps: map[types.ValidatorID]time.Time{
+			v.ID: time.Now().UTC(),
+		},
+	}
 	isStopped := make(chan struct{}, 2)
 	isShutdown := make(chan struct{})
 
-	v.BroadcastGenesisBlock()
-	go v.MsgServer(isStopped)
+	v.BroadcastGenesisBlock(genesisBlock)
+	go v.MsgServer(isStopped, genesisBlock)
 	go v.CheckServerInfo(isShutdown)
 	go v.BlockProposer(isStopped, isShutdown)
 
@@ -116,8 +125,10 @@ func (v *Validator) CheckServerInfo(isShutdown chan struct{}) {
 }
 
 // MsgServer listen to the network channel for message and handle it.
-func (v *Validator) MsgServer(isStopped chan struct{}) {
-	var pendingBlocks []*types.Block
+func (v *Validator) MsgServer(
+	isStopped chan struct{}, genesisBlock *types.Block) {
+
+	pendingBlocks := []*types.Block{genesisBlock}
 	for {
 		var msg interface{}
 		select {
@@ -158,22 +169,12 @@ func (v *Validator) MsgServer(isStopped chan struct{}) {
 }
 
 // BroadcastGenesisBlock broadcasts genesis block to all peers.
-func (v *Validator) BroadcastGenesisBlock() {
+func (v *Validator) BroadcastGenesisBlock(genesisBlock *types.Block) {
 	// Wait until all peer joined the network.
 	for v.network.NumPeers() != v.config.Num {
 		time.Sleep(time.Second)
 	}
-	b := &types.Block{
-		ProposerID: v.ID,
-		ParentHash: common.Hash{},
-		Hash:       common.NewRandomHash(),
-		Height:     0,
-		Acks:       map[common.Hash]struct{}{},
-		Timestamps: map[types.ValidatorID]time.Time{
-			v.ID: time.Now().UTC(),
-		},
-	}
-	v.network.BroadcastBlock(b)
+	v.network.BroadcastBlock(genesisBlock)
 }
 
 // BlockProposer propose blocks to be send to the DEXON network.
