@@ -90,6 +90,7 @@ func (v *Validator) Run() {
 	isStopped := make(chan struct{}, 2)
 	isShutdown := make(chan struct{})
 
+	v.app.addBlock(genesisBlock)
 	v.BroadcastGenesisBlock(genesisBlock)
 	go v.MsgServer(isStopped, genesisBlock)
 	go v.CheckServerInfo(isShutdown)
