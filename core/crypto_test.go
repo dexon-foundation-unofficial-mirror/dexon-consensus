@@ -32,10 +32,28 @@ type CryptoTestSuite struct {
 	suite.Suite
 }
 
-func (s *CryptoTestSuite) newBlock(prevBlock *types.Block) *types.Block {
+var myVID = types.ValidatorID{Hash: common.NewRandomHash()}
+
+type simpleBlock struct {
+	block *types.Block
+}
+
+func (sb *simpleBlock) Block() *types.Block {
+	return sb.block
+}
+
+func (sb *simpleBlock) GetPayloads() [][]byte {
+	return [][]byte{}
+}
+
+func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
+	acks := make(map[common.Hash]struct{})
+	timestamps := make(map[types.ValidatorID]time.Time)
+	timestamps[myVID] = time.Now().UTC()
 	if prevBlock == nil {
 		return &types.Block{
-			Hash: common.NewRandomHash(),
+			Acks:       acks,
+			Timestamps: timestamps,
 			ConsensusInfo: types.ConsensusInfo{
 				Timestamp: time.Now(),
 				Height:    0,
@@ -44,9 +62,14 @@ func (s *CryptoTestSuite) newBlock(prevBlock *types.Block) *types.Block {
 	}
 	parentHash, err := hashCompactionChainAck(prevBlock)
 	s.Require().Nil(err)
+	s.Require().NotEqual(prevBlock.Hash, common.Hash{})
+	acks[parentHash] = struct{}{}
 	return &types.Block{
-		Hash: common.NewRandomHash(),
+		ParentHash:              prevBlock.Hash,
+		Acks:                    acks,
+		Timestamps:              timestamps,
 		ConsensusInfoParentHash: parentHash,
+		Height:                  prevBlock.Height + 1,
 		CompactionChainAck: types.CompactionChainAck{
 			AckingBlockHash: prevBlock.Hash,
 		},
@@ -55,6 +78,14 @@ func (s *CryptoTestSuite) newBlock(prevBlock *types.Block) *types.Block {
 			Height:    prevBlock.ConsensusInfo.Height + 1,
 		},
 	}
+}
+
+func (s *CryptoTestSuite) newBlock(prevBlock *types.Block) *types.Block {
+	block := s.prepareBlock(prevBlock)
+	var err error
+	block.Hash, err = hashBlock(&simpleBlock{block: block})
+	s.Require().Nil(err)
+	return block
 }
 
 func (s *CryptoTestSuite) generateCompactionChain(
@@ -76,7 +107,7 @@ func (s *CryptoTestSuite) generateCompactionChain(
 	return blocks
 }
 
-func (s *CryptoTestSuite) TestSignature() {
+func (s *CryptoTestSuite) TestCompactionChainAckSignature() {
 	prv, err := eth.NewPrivateKey()
 	pub := prv.PublicKey()
 	s.Require().Nil(err)
@@ -108,6 +139,48 @@ func (s *CryptoTestSuite) TestSignature() {
 		s.Require().True(exist)
 		s.False(verifyCompactionChainAckSignature(
 			pub, ackingBlock, block.CompactionChainAck.ConsensusSignature))
+	}
+}
+
+func (s *CryptoTestSuite) generateBlockChain(
+	length int, prv crypto.PrivateKey) []*types.Block {
+	blocks := make([]*types.Block, length)
+	var prevBlock *types.Block
+	for idx := range blocks {
+		block := s.newBlock(prevBlock)
+		blocks[idx] = block
+		var err error
+		block.Signature, err = signBlock(&simpleBlock{block: block}, prv)
+		s.Require().Nil(err)
+	}
+	return blocks
+}
+
+func (s *CryptoTestSuite) TestBlockSignature() {
+	prv, err := eth.NewPrivateKey()
+	pub := prv.PublicKey()
+	s.Require().Nil(err)
+	blocks := s.generateBlockChain(10, prv)
+	blockMap := make(map[common.Hash]*types.Block)
+	for _, block := range blocks {
+		blockMap[block.Hash] = block
+	}
+	for _, block := range blocks {
+		if !block.IsGenesis() {
+			parentBlock, exist := blockMap[block.ParentHash]
+			s.Require().True(exist)
+			s.True(parentBlock.Height == block.Height-1)
+			hash, err := hashBlock(&simpleBlock{block: parentBlock})
+			s.Require().Nil(err)
+			s.Equal(hash, block.ParentHash)
+		}
+		s.True(verifyBlockSignature(pub, &simpleBlock{block: block}, block.Signature))
+	}
+	// Modify Block.Acks and verify signature again.
+	for _, block := range blocks {
+		block.Acks[common.NewRandomHash()] = struct{}{}
+		s.False(verifyBlockSignature(
+			pub, &simpleBlock{block: block}, block.Signature))
 	}
 }
 

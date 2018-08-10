@@ -19,6 +19,7 @@ package core
 
 import (
 	"encoding/binary"
+	"sort"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -51,6 +52,67 @@ func signCompactionChainAck(block *types.Block,
 func verifyCompactionChainAckSignature(pubkey crypto.PublicKey,
 	ackingBlock *types.Block, sig crypto.Signature) (bool, error) {
 	hash, err := hashCompactionChainAck(ackingBlock)
+	if err != nil {
+		return false, err
+	}
+	return pubkey.VerifySignature(hash, sig), nil
+}
+
+func hashBlock(blockConv types.BlockConverter) (common.Hash, error) {
+	block := blockConv.Block()
+	binaryHeight := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryHeight, block.Height)
+	// Handling Block.Acks.
+	acks := make(common.Hashes, 0, len(block.Acks))
+	for ack := range block.Acks {
+		acks = append(acks, ack)
+	}
+	sort.Sort(acks)
+	binaryAcks := make([][]byte, len(block.Acks))
+	for idx := range acks {
+		binaryAcks[idx] = acks[idx][:]
+	}
+	hashAcks := crypto.Keccak256Hash(binaryAcks...)
+	// Handle Block.Timestamps.
+	// TODO(jimmy-dexon): Store and get the sorted validatorIDs.
+	validators := make(types.ValidatorIDs, 0, len(block.Timestamps))
+	for vID := range block.Timestamps {
+		validators = append(validators, vID)
+	}
+	sort.Sort(validators)
+	binaryTimestamps := make([][]byte, len(block.Timestamps))
+	for idx, vID := range validators {
+		var err error
+		binaryTimestamps[idx], err = block.Timestamps[vID].MarshalBinary()
+		if err != nil {
+			return common.Hash{}, err
+		}
+	}
+	hashTimestamps := crypto.Keccak256Hash(binaryTimestamps...)
+	payloadHash := crypto.Keccak256Hash(blockConv.GetPayloads()...)
+
+	hash := crypto.Keccak256Hash(
+		block.ProposerID.Hash[:],
+		block.ParentHash[:],
+		binaryHeight,
+		hashAcks[:],
+		hashTimestamps[:],
+		payloadHash[:])
+	return hash, nil
+}
+
+func signBlock(blockConv types.BlockConverter,
+	prv crypto.PrivateKey) (crypto.Signature, error) {
+	hash, err := hashBlock(blockConv)
+	if err != nil {
+		return crypto.Signature{}, err
+	}
+	return prv.Sign(hash)
+}
+
+func verifyBlockSignature(pubkey crypto.PublicKey,
+	blockConv types.BlockConverter, sig crypto.Signature) (bool, error) {
+	hash, err := hashBlock(blockConv)
 	if err != nil {
 		return false, err
 	}

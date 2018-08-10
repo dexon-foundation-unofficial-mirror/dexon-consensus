@@ -60,6 +60,7 @@ type Block struct {
 	Timestamps         map[ValidatorID]time.Time `json:"timestamps"`
 	Acks               map[common.Hash]struct{}  `json:"acks"`
 	CompactionChainAck CompactionChainAck        `json:"compaction_chain_ack"`
+	Signature          crypto.Signature          `json:"signature"`
 
 	ConsensusInfo ConsensusInfo `json:"consensus_info"`
 	// ConsensusInfoParentHash is the hash value of Block.ConsensusInfoParentHash
@@ -72,10 +73,21 @@ type Block struct {
 	Status          Status                   `json:"-"`
 }
 
+// Block implements BlockConverter interface.
+func (b *Block) Block() *Block {
+	return b
+}
+
+// GetPayloads impelmemnts BlockConverter interface.
+func (b *Block) GetPayloads() [][]byte {
+	return [][]byte{}
+}
+
 // BlockConverter interface define the interface for extracting block
 // information from an existing object.
 type BlockConverter interface {
 	Block() *Block
+	GetPayloads() [][]byte
 }
 
 func (b *Block) String() string {
