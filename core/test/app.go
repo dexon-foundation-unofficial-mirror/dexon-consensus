@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
 // App implements Application interface for testing purpose.
@@ -52,16 +51,12 @@ func (app *App) StronglyAcked(blockHash common.Hash) {
 }
 
 // TotalOrderingDeliver implements Application interface.
-func (app *App) TotalOrderingDeliver(blocks []*types.Block, early bool) {
-	var hashes common.Hashes
-	for _, b := range blocks {
-		hashes = append(hashes, b.Hash)
-	}
+func (app *App) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 	app.TotalOrdered = append(app.TotalOrdered, &struct {
 		BlockHashes common.Hashes
 		Early       bool
 	}{
-		BlockHashes: hashes,
+		BlockHashes: blockHashes,
 		Early:       early,
 	})
 }

@@ -37,7 +37,7 @@ type SimApp struct {
 	blockSeen map[common.Hash]time.Time
 	// uncofirmBlocks stores the blocks whose timestamps are not ready.
 	unconfirmedBlocks map[types.ValidatorID]common.Hashes
-	blockHash         map[common.Hash]*types.Block
+	blockByHash       map[common.Hash]*types.Block
 }
 
 // NewSimApp returns point to a new instance of SimApp.
@@ -48,15 +48,19 @@ func NewSimApp(id types.ValidatorID, Network PeerServerNetwork) *SimApp {
 		DeliverID:         0,
 		blockSeen:         make(map[common.Hash]time.Time),
 		unconfirmedBlocks: make(map[types.ValidatorID]common.Hashes),
-		blockHash:         make(map[common.Hash]*types.Block),
+		blockByHash:       make(map[common.Hash]*types.Block),
 	}
+}
+
+func (a *SimApp) addBlock(block *types.Block) {
+	a.blockByHash[block.Hash] = block
 }
 
 // getAckedBlocks will return all unconfirmed blocks' hash with lower Height
 // than the block with ackHash.
 func (a *SimApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
 	// TODO(jimmy-dexon): Why there are some acks never seen?
-	ackBlock, exist := a.blockHash[ackHash]
+	ackBlock, exist := a.blockByHash[ackHash]
 	if !exist {
 		return
 	}
@@ -65,7 +69,7 @@ func (a *SimApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
 		return
 	}
 	for i, blockHash := range hashes {
-		if a.blockHash[blockHash].Height > ackBlock.Height {
+		if a.blockByHash[blockHash].Height > ackBlock.Height {
 			output, a.unconfirmedBlocks[ackBlock.ProposerID] = hashes[:i], hashes[i:]
 			break
 		}
@@ -84,24 +88,26 @@ func (a *SimApp) StronglyAcked(blockHash common.Hash) {
 
 // TotalOrderingDeliver is called when blocks are delivered by the total
 // ordering algorithm.
-func (a *SimApp) TotalOrderingDeliver(blocks []*types.Block, early bool) {
+func (a *SimApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 	now := time.Now()
+	blocks := make([]*types.Block, len(blockHashes))
+	for idx := range blockHashes {
+		blocks[idx] = a.blockByHash[blockHashes[idx]]
+	}
 	a.Outputs = blocks
 	a.Early = early
 	fmt.Println("OUTPUT", a.ValidatorID, a.Early, a.Outputs)
 
-	blockHash := common.Hashes{}
 	confirmLatency := []time.Duration{}
 
 	payload := []TimestampMessage{}
 	for _, block := range blocks {
-		blockHash = append(blockHash, block.Hash)
 		if block.ProposerID == a.ValidatorID {
 			confirmLatency = append(confirmLatency,
 				now.Sub(block.Timestamps[a.ValidatorID]))
 		}
 		// TODO(jimmy-dexon) : Remove block in this hash if it's no longer needed.
-		a.blockHash[block.Hash] = block
+		a.blockByHash[block.Hash] = block
 		for hash := range block.Acks {
 			for _, blockHash := range a.getAckedBlocks(hash) {
 				payload = append(payload, TimestampMessage{
@@ -128,7 +134,7 @@ func (a *SimApp) TotalOrderingDeliver(blocks []*types.Block, early bool) {
 
 	blockList := BlockList{
 		ID:             a.DeliverID,
-		BlockHash:      blockHash,
+		BlockHash:      blockHashes,
 		ConfirmLatency: confirmLatency,
 	}
 	a.Network.DeliverBlocks(blockList)

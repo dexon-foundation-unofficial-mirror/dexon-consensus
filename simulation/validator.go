@@ -128,6 +128,7 @@ func (v *Validator) MsgServer(isStopped chan struct{}) {
 
 		switch val := msg.(type) {
 		case *types.Block:
+			v.app.addBlock(val)
 			if v.consensus != nil {
 				if err := v.consensus.ProcessBlock(val); err != nil {
 					fmt.Println(err)
@@ -196,6 +197,7 @@ ProposingBlockLoop:
 		if err := v.consensus.PrepareBlock(block); err != nil {
 			panic(err)
 		}
+		v.app.addBlock(block)
 		if err := v.consensus.ProcessBlock(block); err != nil {
 			fmt.Println(err)
 			//panic(err)

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -101,8 +102,11 @@ func (con *Consensus) ProcessBlock(b *types.Block) (err error) {
 			}
 		}
 		// TODO(mission): handle membership events here.
-		// TODO(mission): return block hash instead of whole block here.
-		con.app.TotalOrderingDeliver(deliveredBlocks, earlyDelivered)
+		hashes := make(common.Hashes, len(deliveredBlocks))
+		for idx := range deliveredBlocks {
+			hashes[idx] = deliveredBlocks[idx].Hash
+		}
+		con.app.TotalOrderingDeliver(hashes, earlyDelivered)
 		// Perform timestamp generation.
 		deliveredBlocks, _, err = con.ctModule.processBlocks(
 			deliveredBlocks)
