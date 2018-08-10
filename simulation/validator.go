@@ -31,8 +31,8 @@ import (
 // Validator represents a validator in DexCon.
 type Validator struct {
 	network Network
-	app     *SimApp
-	gov     *simGov
+	app     *simApp
+	gov     *simGovernance
 	db      blockdb.BlockDatabase
 
 	config     config.Validator
@@ -55,13 +55,13 @@ func NewValidator(
 	if err != nil {
 		panic(err)
 	}
-	gov := newSimGov(config.Num)
+	gov := newSimGovernance(config.Num, config.Consensus)
 	gov.addValidator(id)
 	return &Validator{
 		ID:         id,
 		config:     config,
 		network:    network,
-		app:        NewSimApp(id, network),
+		app:        newSimApp(id, network),
 		gov:        gov,
 		db:         db,
 		isFinished: make(chan struct{}),

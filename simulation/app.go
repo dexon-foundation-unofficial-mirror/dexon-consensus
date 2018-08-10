@@ -26,8 +26,8 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-// SimApp is an DEXON app for simulation.
-type SimApp struct {
+// simApp is an DEXON app for simulation.
+type simApp struct {
 	ValidatorID types.ValidatorID
 	Outputs     []*types.Block
 	Early       bool
@@ -40,9 +40,9 @@ type SimApp struct {
 	blockByHash       map[common.Hash]*types.Block
 }
 
-// NewSimApp returns point to a new instance of SimApp.
-func NewSimApp(id types.ValidatorID, Network PeerServerNetwork) *SimApp {
-	return &SimApp{
+// newSimApp returns point to a new instance of simApp.
+func newSimApp(id types.ValidatorID, Network PeerServerNetwork) *simApp {
+	return &simApp{
 		ValidatorID:       id,
 		Network:           Network,
 		DeliverID:         0,
@@ -52,13 +52,13 @@ func NewSimApp(id types.ValidatorID, Network PeerServerNetwork) *SimApp {
 	}
 }
 
-func (a *SimApp) addBlock(block *types.Block) {
+func (a *simApp) addBlock(block *types.Block) {
 	a.blockByHash[block.Hash] = block
 }
 
 // getAckedBlocks will return all unconfirmed blocks' hash with lower Height
 // than the block with ackHash.
-func (a *SimApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
+func (a *simApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
 	// TODO(jimmy-dexon): Why there are some acks never seen?
 	ackBlock, exist := a.blockByHash[ackHash]
 	if !exist {
@@ -83,12 +83,12 @@ func (a *SimApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
 
 // StronglyAcked is called when a block is strongly acked by DEXON
 // Reliabe Broadcast algorithm.
-func (a *SimApp) StronglyAcked(blockHash common.Hash) {
+func (a *simApp) StronglyAcked(blockHash common.Hash) {
 }
 
 // TotalOrderingDeliver is called when blocks are delivered by the total
 // ordering algorithm.
-func (a *SimApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
+func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 	now := time.Now()
 	blocks := make([]*types.Block, len(blockHashes))
 	for idx := range blockHashes {
@@ -147,7 +147,7 @@ func (a *SimApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 }
 
 // DeliverBlock is called when a block in compaction chain is delivered.
-func (a *SimApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
+func (a *simApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 	seenTime, exist := a.blockSeen[blockHash]
 	if !exist {
 		return

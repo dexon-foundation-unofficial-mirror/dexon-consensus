@@ -15,30 +15,32 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package core
+package types
 
-import (
-	"github.com/shopspring/decimal"
+// ConfigurationChangeEventType specifies the action of a membership event.
+type ConfigurationChangeEventType int
 
-	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+// Event enums.
+const (
+	KChanged ConfigurationChangeEventType = iota
+	MembershipAdd
+	MembershipRemove
 )
 
-// Governance interface specifies interface to control the governance contract.
-// Note that there are a lot more methods in the governance contract, that this
-// interface only define those that are required to run the consensus algorithm.
-type Governance interface {
-	// Get the current validator set and it's corresponding stake.
-	GetValidatorSet() map[types.ValidatorID]decimal.Decimal
+// IntegerEventPayload is a general payload for integer type value.
+type IntegerEventPayload struct {
+	Value int64
+}
 
-	// Get K
-	GetTotalOrderingK() int
+// MembershipEventPayload is the payload type for membership event.
+type MembershipEventPayload struct {
+	ID       ValidatorID
+	Evidence []byte
+}
 
-	// Get PhiRatio
-	GetPhiRatio() float32
-
-	// Get block proposing interval (in milliseconds).
-	GetBlockProposingInterval() int
-
-	// Get configuration change events after a certain epoch.
-	GetConfigurationChangeEvent(epoch int) []types.ConfigurationChangeEvent
+// ConfigurationChangeEvent specifies the event of membership changes.
+type ConfigurationChangeEvent struct {
+	Epoch   int
+	Event   ConfigurationChangeEventType
+	Payload interface{}
 }

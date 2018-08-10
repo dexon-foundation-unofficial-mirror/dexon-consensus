@@ -34,8 +34,15 @@ const (
 	NetworkTypeTCPLocal NetworkType = "tcp-local"
 )
 
+// Consensus settings.
+type Consensus struct {
+	PhiRatio float32
+	K        int
+}
+
 // Validator config for the simulation.
 type Validator struct {
+	Consensus            Consensus
 	Num                  int
 	ProposeIntervalMean  float64
 	ProposeIntervalSigma float64
@@ -70,6 +77,10 @@ func GenerateDefault(path string) error {
 	config := Config{
 		Title: "DEXON Consensus Simulation Config",
 		Validator: Validator{
+			Consensus: Consensus{
+				PhiRatio: 0.66667,
+				K:        2,
+			},
 			Num:                  7,
 			ProposeIntervalMean:  500,
 			ProposeIntervalSigma: 30,
@@ -100,7 +111,7 @@ func Read(path string) (*Config, error) {
 
 	var config Config
 
-	if toml.NewDecoder(f).Decode(&config); err != nil {
+	if err := toml.NewDecoder(f).Decode(&config); err != nil {
 		return nil, err
 	}
 	return &config, nil

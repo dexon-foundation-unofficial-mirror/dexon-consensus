@@ -23,22 +23,21 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// Gov is an implementation of Goverance for testing purpose.
-type Gov struct {
+// Governance is an implementation of Goverance for testing purpose.
+type Governance struct {
 	BlockProposingInterval int
 	Validators             map[types.ValidatorID]decimal.Decimal
 }
 
-// NewGov constructs a Gov instance.
-func NewGov(
-	validatorCount, proposingInterval int) (gov *Gov) {
+// NewGovernance constructs a Governance instance.
+func NewGovernance(validatorCount, proposingInterval int) (g *Governance) {
 
-	gov = &Gov{
+	g = &Governance{
 		BlockProposingInterval: proposingInterval,
 		Validators:             make(map[types.ValidatorID]decimal.Decimal),
 	}
 	for i := 0; i < validatorCount; i++ {
-		gov.Validators[types.ValidatorID{Hash: common.NewRandomHash()}] =
+		g.Validators[types.ValidatorID{Hash: common.NewRandomHash()}] =
 			decimal.NewFromFloat(0)
 	}
 	return
@@ -46,18 +45,29 @@ func NewGov(
 
 // GetValidatorSet implements Governance interface to return current
 // validator set.
-func (gov *Gov) GetValidatorSet() map[types.ValidatorID]decimal.Decimal {
-	return gov.Validators
+func (g *Governance) GetValidatorSet() map[types.ValidatorID]decimal.Decimal {
+	return g.Validators
 }
 
 // GetBlockProposingInterval implements Governance interface to return maximum
 // allowed block proposing interval in millisecond.
-func (gov *Gov) GetBlockProposingInterval() int {
-	return gov.BlockProposingInterval
+func (g *Governance) GetBlockProposingInterval() int {
+	return g.BlockProposingInterval
 }
 
-// GetMembershipEvents implements Governance interface to return membership
-// changed events.
-func (gov *Gov) GetMembershipEvents(epoch int) []types.MembershipEvent {
+// GetTotalOrderingK returns K.
+func (g *Governance) GetTotalOrderingK() int {
+	return 0
+}
+
+// GetPhiRatio returns phi ratio.
+func (g *Governance) GetPhiRatio() float32 {
+	return 0.667
+}
+
+// GetConfigurationChangeEvent Get configuration change events after a certain
+// epoch.
+func (g *Governance) GetConfigurationChangeEvent(
+	epoch int) []types.ConfigurationChangeEvent {
 	return nil
 }

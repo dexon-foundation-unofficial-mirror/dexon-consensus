@@ -53,7 +53,7 @@ func (s *ConsensusTestSuite) prepareGenesisBlock(
 	return block
 }
 
-func (s *ConsensusTestSuite) prepareConsensus(gov *test.Gov) (
+func (s *ConsensusTestSuite) prepareConsensus(gov *test.Governance) (
 	*test.App, *Consensus) {
 
 	app := test.NewApp()
@@ -77,7 +77,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	// This test case only works for Total Ordering with K=0.
 	var (
 		minInterval = 50 * time.Millisecond
-		gov         = test.NewGov(4, 1000)
+		gov         = test.NewGovernance(4, 1000)
 		req         = s.Require()
 		validators  []types.ValidatorID
 	)
@@ -262,7 +262,7 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 	//  - Make sure Consensus.PrepareBlock would only attempt to
 	//    ack the prepared block.
 	var (
-		gov        = test.NewGov(4, 1000)
+		gov        = test.NewGovernance(4, 1000)
 		req        = s.Require()
 		validators []types.ValidatorID
 	)

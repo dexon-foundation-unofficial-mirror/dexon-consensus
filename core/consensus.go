@@ -42,7 +42,6 @@ func NewConsensus(
 	app Application,
 	gov Governance,
 	db blockdb.BlockDatabase) *Consensus {
-
 	validatorSet := gov.GetValidatorSet()
 
 	// Setup acking by information returned from Governace.
@@ -52,11 +51,9 @@ func NewConsensus(
 	}
 
 	// Setup sequencer by information returned from Governace.
-	// TODO(mission): the value of 'K' should be in governace.
-	// TODO(mission): the ratio of 'phi' should be in governance.
 	to := newTotalOrdering(
-		0,
-		uint64(2*(len(validatorSet)-1)/3+1),
+		uint64(gov.GetTotalOrderingK()),
+		uint64(float32(len(validatorSet)-1)*gov.GetPhiRatio()+1),
 		uint64(len(validatorSet)))
 
 	return &Consensus{
