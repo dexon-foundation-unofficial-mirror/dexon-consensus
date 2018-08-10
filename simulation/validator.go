@@ -196,7 +196,7 @@ ProposingBlockLoop:
 			ProposerID: v.ID,
 			Hash:       common.NewRandomHash(),
 		}
-		if err := v.consensus.PrepareBlock(block); err != nil {
+		if err := v.consensus.PrepareBlock(block, time.Now().UTC()); err != nil {
 			panic(err)
 		}
 		v.app.addBlock(block)

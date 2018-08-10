@@ -123,7 +123,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		ProposerID: validators[1],
 		Hash:       common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[1]].con.PrepareBlock(b11))
+	req.Nil(objs[validators[1]].con.PrepareBlock(b11, time.Now().UTC()))
 	req.Len(b11.Acks, 4)
 	req.Contains(b11.Acks, b00.Hash)
 	req.Contains(b11.Acks, b10.Hash)
@@ -136,7 +136,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		ProposerID: validators[0],
 		Hash:       common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[0]].con.PrepareBlock(b01))
+	req.Nil(objs[validators[0]].con.PrepareBlock(b01, time.Now().UTC()))
 	req.Len(b01.Acks, 4)
 	req.Contains(b01.Acks, b11.Hash)
 	// Setup b21.
@@ -145,7 +145,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		ProposerID: validators[2],
 		Hash:       common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[2]].con.PrepareBlock(b21))
+	req.Nil(objs[validators[2]].con.PrepareBlock(b21, time.Now().UTC()))
 	req.Len(b21.Acks, 4)
 	req.Contains(b21.Acks, b11.Hash)
 	// Setup b31.
@@ -154,7 +154,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		ProposerID: validators[3],
 		Hash:       common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[3]].con.PrepareBlock(b31))
+	req.Nil(objs[validators[3]].con.PrepareBlock(b31, time.Now().UTC()))
 	req.Len(b31.Acks, 4)
 	req.Contains(b31.Acks, b11.Hash)
 	// Broadcast other height=1 blocks.
@@ -168,7 +168,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		ProposerID: validators[0],
 		Hash:       common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[0]].con.PrepareBlock(b02))
+	req.Nil(objs[validators[0]].con.PrepareBlock(b02, time.Now().UTC()))
 	req.Len(b02.Acks, 3)
 	req.Contains(b02.Acks, b01.Hash)
 	req.Contains(b02.Acks, b21.Hash)
@@ -179,7 +179,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		ProposerID: validators[1],
 		Hash:       common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[1]].con.PrepareBlock(b12))
+	req.Nil(objs[validators[1]].con.PrepareBlock(b12, time.Now().UTC()))
 	req.Len(b12.Acks, 4)
 	req.Contains(b12.Acks, b01.Hash)
 	req.Contains(b12.Acks, b11.Hash)
@@ -191,7 +191,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		ProposerID: validators[2],
 		Hash:       common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[2]].con.PrepareBlock(b22))
+	req.Nil(objs[validators[2]].con.PrepareBlock(b22, time.Now().UTC()))
 	req.Len(b22.Acks, 3)
 	req.Contains(b22.Acks, b01.Hash)
 	req.Contains(b22.Acks, b21.Hash)
@@ -202,7 +202,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		ProposerID: validators[3],
 		Hash:       common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[3]].con.PrepareBlock(b32))
+	req.Nil(objs[validators[3]].con.PrepareBlock(b32, time.Now().UTC()))
 	req.Len(b32.Acks, 3)
 	req.Contains(b32.Acks, b01.Hash)
 	req.Contains(b32.Acks, b21.Hash)
@@ -284,7 +284,7 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 	}
 	// Sleep to make sure 'now' is slower than b10's timestamp.
 	time.Sleep(100 * time.Millisecond)
-	req.Nil(con.PrepareBlock(b11))
+	req.Nil(con.PrepareBlock(b11, time.Now().UTC()))
 	// Make sure we would assign 'now' to the timestamp belongs to
 	// the proposer.
 	req.True(
@@ -295,7 +295,7 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 		ProposerID: validators[1],
 		Hash:       common.NewRandomHash(),
 	}
-	req.Nil(con.PrepareBlock(b12))
+	req.Nil(con.PrepareBlock(b12, time.Now().UTC()))
 	req.Len(b12.Acks, 1)
 	req.Contains(b12.Acks, b11.Hash)
 }

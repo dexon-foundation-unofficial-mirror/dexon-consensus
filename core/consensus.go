@@ -26,6 +26,16 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
+// ErrMissingBlockInfo would be reported if some information is missing when
+// calling PrepareBlock. It implements error interface.
+type ErrMissingBlockInfo struct {
+	MissingField string
+}
+
+func (e *ErrMissingBlockInfo) Error() string {
+	return "missing " + e.MissingField + " in block"
+}
+
 // Consensus implements DEXON Consensus algorithm.
 type Consensus struct {
 	app      Application
@@ -67,7 +77,8 @@ func NewConsensus(
 }
 
 // ProcessBlock is the entry point to submit one block to a Consensus instance.
-func (con *Consensus) ProcessBlock(b *types.Block) (err error) {
+func (con *Consensus) ProcessBlock(blockConv types.BlockConverter) (err error) {
+	b := blockConv.Block()
 	var (
 		deliveredBlocks []*types.Block
 		earlyDelivered  bool
@@ -121,11 +132,18 @@ func (con *Consensus) ProcessBlock(b *types.Block) (err error) {
 }
 
 // PrepareBlock would setup header fields of block based on its ProposerID.
-func (con *Consensus) PrepareBlock(b *types.Block) (err error) {
+func (con *Consensus) PrepareBlock(blockConv types.BlockConverter,
+	proposeTime time.Time) (err error) {
+	b := blockConv.Block()
+	if (b.ProposerID == types.ValidatorID{}) {
+		err = &ErrMissingBlockInfo{MissingField: "ProposerID"}
+		return
+	}
 	con.lock.RLock()
 	defer con.lock.RUnlock()
 
 	con.rbModule.prepareBlock(b)
-	b.Timestamps[b.ProposerID] = time.Now().UTC()
+	b.Timestamps[b.ProposerID] = proposeTime
+	blockConv.SetBlock(b)
 	return
 }

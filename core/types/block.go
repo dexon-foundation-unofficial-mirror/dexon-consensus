@@ -78,16 +78,22 @@ func (b *Block) Block() *Block {
 	return b
 }
 
-// GetPayloads impelmemnts BlockConverter interface.
-func (b *Block) GetPayloads() [][]byte {
+// Payloads impelmemnts BlockConverter interface.
+func (b *Block) Payloads() [][]byte {
 	return [][]byte{}
+}
+
+// SetBlock implments BlockConverter interface.
+func (b *Block) SetBlock(block *Block) {
+	*b = *block
 }
 
 // BlockConverter interface define the interface for extracting block
 // information from an existing object.
 type BlockConverter interface {
 	Block() *Block
-	GetPayloads() [][]byte
+	Payloads() [][]byte
+	SetBlock(block *Block)
 }
 
 func (b *Block) String() string {

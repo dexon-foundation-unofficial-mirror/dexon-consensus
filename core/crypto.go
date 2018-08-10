@@ -89,7 +89,7 @@ func hashBlock(blockConv types.BlockConverter) (common.Hash, error) {
 		}
 	}
 	hashTimestamps := crypto.Keccak256Hash(binaryTimestamps...)
-	payloadHash := crypto.Keccak256Hash(blockConv.GetPayloads()...)
+	payloadHash := crypto.Keccak256Hash(blockConv.Payloads()...)
 
 	hash := crypto.Keccak256Hash(
 		block.ProposerID.Hash[:],

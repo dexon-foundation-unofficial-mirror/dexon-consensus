@@ -42,8 +42,12 @@ func (sb *simpleBlock) Block() *types.Block {
 	return sb.block
 }
 
-func (sb *simpleBlock) GetPayloads() [][]byte {
+func (sb *simpleBlock) Payloads() [][]byte {
 	return [][]byte{}
+}
+
+func (sb *simpleBlock) SetBlock(block *types.Block) {
+	*sb.block = *block
 }
 
 func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
