@@ -71,6 +71,7 @@ type Block struct {
 	Ackeds          map[common.Hash]struct{} `json:"-"`
 	AckedValidators map[ValidatorID]struct{} `json:"-"`
 	Status          Status                   `json:"-"`
+	ReceivedTime    time.Time                `json:"-"`
 }
 
 // Block implements BlockConverter interface.

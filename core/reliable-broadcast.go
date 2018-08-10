@@ -140,8 +140,9 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 		return
 	}
 	rb.blocks[block.Hash] = block
-	block.AckedValidators = make(map[types.ValidatorID]struct{})
 	rb.receivedBlocks[block.Hash] = block
+	block.AckedValidators = make(map[types.ValidatorID]struct{})
+	block.ReceivedTime = time.Now()
 
 	// Check blocks in receivedBlocks if its acks are all in lattice. If a block's
 	// acking blocks are all in lattice, execute sanity check and add the block
@@ -206,8 +207,16 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 		b.Status = types.BlockStatusAcked
 	}
 
-	// TODO(haoping): delete blocks in received array when it is received a long
-	// time ago
+	// Delete blocks in received array when it is received a long time ago.
+	oldBlocks := []common.Hash{}
+	for h, b := range rb.receivedBlocks {
+		if time.Now().Sub(b.ReceivedTime) >= 30*time.Second {
+			oldBlocks = append(oldBlocks, h)
+		}
+	}
+	for _, h := range oldBlocks {
+		delete(rb.receivedBlocks, h)
+	}
 
 	// Delete old blocks in "lattice" and "blocks" for release memory space.
 	// First, find the height that blocks below it can be deleted. This height
