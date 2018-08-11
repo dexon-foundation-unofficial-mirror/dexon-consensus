@@ -18,6 +18,7 @@
 package core
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -35,6 +36,11 @@ type ErrMissingBlockInfo struct {
 func (e *ErrMissingBlockInfo) Error() string {
 	return "missing " + e.MissingField + " in block"
 }
+
+// Errors for sanity check error.
+var (
+	ErrIncorrectHash = fmt.Errorf("hash of block is incorrect")
+)
 
 // Consensus implements DEXON Consensus algorithm.
 type Consensus struct {
@@ -76,8 +82,23 @@ func NewConsensus(
 	}
 }
 
+// sanityCheck checks if the block is a valid block
+func (con *Consensus) sanityCheck(blockConv types.BlockConverter) (err error) {
+	b := blockConv.Block()
+	// Check the hash of block.
+	hash, err := hashBlock(blockConv)
+	if err != nil || hash != b.Hash {
+		return ErrIncorrectHash
+	}
+
+	return nil
+}
+
 // ProcessBlock is the entry point to submit one block to a Consensus instance.
 func (con *Consensus) ProcessBlock(blockConv types.BlockConverter) (err error) {
+	if err := con.sanityCheck(blockConv); err != nil {
+		return err
+	}
 	b := blockConv.Block()
 	var (
 		deliveredBlocks []*types.Block
@@ -144,6 +165,7 @@ func (con *Consensus) PrepareBlock(blockConv types.BlockConverter,
 
 	con.rbModule.prepareBlock(b)
 	b.Timestamps[b.ProposerID] = proposeTime
+	b.Hash, err = hashBlock(b)
 	blockConv.SetBlock(b)
 	return
 }

@@ -37,11 +37,9 @@ func (s *ConsensusTestSuite) prepareGenesisBlock(
 	proposerID types.ValidatorID,
 	gov Governance) *types.Block {
 
-	hash := common.NewRandomHash()
 	block := &types.Block{
 		ProposerID: proposerID,
 		ParentHash: common.Hash{},
-		Hash:       hash,
 		Height:     0,
 		Acks:       make(map[common.Hash]struct{}),
 		Timestamps: make(map[types.ValidatorID]time.Time),
@@ -50,6 +48,9 @@ func (s *ConsensusTestSuite) prepareGenesisBlock(
 		block.Timestamps[vID] = time.Time{}
 	}
 	block.Timestamps[proposerID] = time.Now().UTC()
+	var err error
+	block.Hash, err = hashBlock(block)
+	s.Require().Nil(err)
 	return block
 }
 
@@ -121,8 +122,10 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b11 := &types.Block{
 		ProposerID: validators[1],
-		Hash:       common.NewRandomHash(),
 	}
+	var err error
+	b11.Hash, err = hashBlock(b11)
+	s.Require().Nil(err)
 	req.Nil(objs[validators[1]].con.PrepareBlock(b11, time.Now().UTC()))
 	req.Len(b11.Acks, 4)
 	req.Contains(b11.Acks, b00.Hash)
@@ -280,8 +283,10 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 	req.Nil(con.ProcessBlock(b30))
 	b11 := &types.Block{
 		ProposerID: validators[1],
-		Hash:       common.NewRandomHash(),
 	}
+	var err error
+	b11.Hash, err = hashBlock(b11)
+	s.Require().Nil(err)
 	// Sleep to make sure 'now' is slower than b10's timestamp.
 	time.Sleep(100 * time.Millisecond)
 	req.Nil(con.PrepareBlock(b11, time.Now().UTC()))
@@ -293,8 +298,9 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 	req.Nil(con.ProcessBlock(b11))
 	b12 := &types.Block{
 		ProposerID: validators[1],
-		Hash:       common.NewRandomHash(),
 	}
+	b12.Hash, err = hashBlock(b12)
+	s.Require().Nil(err)
 	req.Nil(con.PrepareBlock(b12, time.Now().UTC()))
 	req.Len(b12.Acks, 1)
 	req.Contains(b12.Acks, b11.Hash)

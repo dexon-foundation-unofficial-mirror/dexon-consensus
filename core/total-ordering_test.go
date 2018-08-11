@@ -929,7 +929,7 @@ func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 		}
 	}()
 
-	gen := test.NewBlocksGenerator(nil)
+	gen := test.NewBlocksGenerator(nil, hashBlock)
 	s.Require().Nil(gen.Generate(validatorCount, blockCount, nil, db))
 	iter, err := db.GetAll()
 	s.Require().Nil(err)

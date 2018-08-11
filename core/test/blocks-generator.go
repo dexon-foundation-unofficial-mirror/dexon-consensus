@@ -39,6 +39,8 @@ type validatorStatus struct {
 	lastAckingHeight map[types.ValidatorID]uint64
 }
 
+type hashBlockFn func(types.BlockConverter) (common.Hash, error)
+
 // getAckedBlockHash would randomly pick one block between
 // last acked one to current head.
 func (vs *validatorStatus) getAckedBlockHash(
@@ -71,9 +73,10 @@ type validatorSetStatus struct {
 	status       map[types.ValidatorID]*validatorStatus
 	validatorIDs []types.ValidatorID
 	randGen      *rand.Rand
+	hashBlock    hashBlockFn
 }
 
-func newValidatorSetStatus(vIDs []types.ValidatorID) *validatorSetStatus {
+func newValidatorSetStatus(vIDs []types.ValidatorID, hashBlock hashBlockFn) *validatorSetStatus {
 	status := make(map[types.ValidatorID]*validatorStatus)
 	for _, vID := range vIDs {
 		status[vID] = &validatorStatus{
@@ -85,6 +88,7 @@ func newValidatorSetStatus(vIDs []types.ValidatorID) *validatorSetStatus {
 		status:       status,
 		validatorIDs: vIDs,
 		randGen:      rand.New(rand.NewSource(time.Now().UnixNano())),
+		hashBlock:    hashBlock,
 	}
 }
 
@@ -139,10 +143,9 @@ func (vs *validatorSetStatus) prepareAcksForNewBlock(
 // proposeBlock propose new block and update validator status.
 func (vs *validatorSetStatus) proposeBlock(
 	proposerID types.ValidatorID,
-	acks map[common.Hash]struct{}) *types.Block {
+	acks map[common.Hash]struct{}) (*types.Block, error) {
 
 	status := vs.status[proposerID]
-	hash := common.NewRandomHash()
 	parentHash := common.Hash{}
 	if len(status.blocks) > 0 {
 		parentHash = status.blocks[len(status.blocks)-1].Hash
@@ -151,13 +154,17 @@ func (vs *validatorSetStatus) proposeBlock(
 	newBlock := &types.Block{
 		ProposerID: proposerID,
 		ParentHash: parentHash,
-		Hash:       hash,
 		Height:     uint64(len(status.blocks)),
 		Acks:       acks,
 		// TODO(mission.liao): Generate timestamp randomly.
 	}
+	var err error
+	newBlock.Hash, err = vs.hashBlock(newBlock)
+	if err != nil {
+		return nil, err
+	}
 	status.blocks = append(status.blocks, newBlock)
-	return newBlock
+	return newBlock, nil
 }
 
 // normalAckingCountGenerator would randomly pick acking count
@@ -189,17 +196,20 @@ func generateValidatorPicker() func([]types.ValidatorID) types.ValidatorID {
 // BlocksGenerator could generate blocks forming valid DAGs.
 type BlocksGenerator struct {
 	validatorPicker func([]types.ValidatorID) types.ValidatorID
+	hashBlock       hashBlockFn
 }
 
 // NewBlocksGenerator constructs BlockGenerator.
 func NewBlocksGenerator(validatorPicker func(
-	[]types.ValidatorID) types.ValidatorID) *BlocksGenerator {
+	[]types.ValidatorID) types.ValidatorID,
+	hashBlock hashBlockFn) *BlocksGenerator {
 
 	if validatorPicker == nil {
 		validatorPicker = generateValidatorPicker()
 	}
 	return &BlocksGenerator{
 		validatorPicker: validatorPicker,
+		hashBlock:       hashBlock,
 	}
 }
 
@@ -228,7 +238,7 @@ func (gen *BlocksGenerator) Generate(
 		validators = append(
 			validators, types.ValidatorID{Hash: common.NewRandomHash()})
 	}
-	status := newValidatorSetStatus(validators)
+	status := newValidatorSetStatus(validators, gen.hashBlock)
 
 	// We would record the smallest height of block that could be acked
 	// from each validator's point-of-view.
@@ -255,7 +265,11 @@ func (gen *BlocksGenerator) Generate(
 		if err != nil {
 			return
 		}
-		newBlock := status.proposeBlock(proposerID, acks)
+		var newBlock *types.Block
+		newBlock, err = status.proposeBlock(proposerID, acks)
+		if err != nil {
+			return
+		}
 
 		// Persist block to db.
 		err = writer.Put(*newBlock)
