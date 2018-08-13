@@ -58,6 +58,7 @@ func (a *simApp) addBlock(block *types.Block) {
 	a.blockByHashMutex.Lock()
 	defer a.blockByHashMutex.Unlock()
 
+	// TODO(jimmy-dexon) : Remove block in this hash if it's no longer needed.
 	a.blockByHash[block.Hash] = block
 }
 
@@ -95,11 +96,11 @@ func (a *simApp) StronglyAcked(blockHash common.Hash) {
 // TotalOrderingDeliver is called when blocks are delivered by the total
 // ordering algorithm.
 func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
-	a.blockByHashMutex.Lock()
-	defer a.blockByHashMutex.Unlock()
 
 	now := time.Now()
 	blocks := make([]*types.Block, len(blockHashes))
+	a.blockByHashMutex.RLock()
+	defer a.blockByHashMutex.RUnlock()
 	for idx := range blockHashes {
 		blocks[idx] = a.blockByHash[blockHashes[idx]]
 	}
@@ -115,8 +116,6 @@ func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 			confirmLatency = append(confirmLatency,
 				now.Sub(block.Timestamps[a.ValidatorID]))
 		}
-		// TODO(jimmy-dexon) : Remove block in this hash if it's no longer needed.
-		a.blockByHash[block.Hash] = block
 		for hash := range block.Acks {
 			for _, blockHash := range a.getAckedBlocks(hash) {
 				payload = append(payload, TimestampMessage{
