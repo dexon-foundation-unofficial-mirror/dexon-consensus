@@ -101,15 +101,6 @@ func hashBlock(blockConv types.BlockConverter) (common.Hash, error) {
 	return hash, nil
 }
 
-func signBlock(blockConv types.BlockConverter,
-	prv crypto.PrivateKey) (crypto.Signature, error) {
-	hash, err := hashBlock(blockConv)
-	if err != nil {
-		return crypto.Signature{}, err
-	}
-	return prv.Sign(hash)
-}
-
 func verifyBlockSignature(pubkey crypto.PublicKey,
 	blockConv types.BlockConverter, sig crypto.Signature) (bool, error) {
 	hash, err := hashBlock(blockConv)

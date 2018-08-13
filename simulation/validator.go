@@ -41,7 +41,8 @@ type Validator struct {
 	isFinished chan struct{}
 
 	ID              types.ValidatorID
-	privateKey      crypto.PrivateKey
+	prvKey          crypto.PrivateKey
+	sigToPub        core.SigToPubFn
 	consensus       *core.Consensus
 	compactionChain *core.BlockChain
 }
@@ -49,6 +50,7 @@ type Validator struct {
 // NewValidator returns a new empty validator.
 func NewValidator(
 	prvKey crypto.PrivateKey,
+	sigToPub core.SigToPubFn,
 	config config.Validator,
 	network Network) *Validator {
 
@@ -63,6 +65,8 @@ func NewValidator(
 	gov.addValidator(id)
 	return &Validator{
 		ID:         id,
+		prvKey:     prvKey,
+		sigToPub:   sigToPub,
 		config:     config,
 		network:    network,
 		app:        newSimApp(id, network),
@@ -160,7 +164,8 @@ func (v *Validator) MsgServer(
 					// We don't collect all validators yet.
 					break
 				}
-				v.consensus = core.NewConsensus(v.app, v.gov, v.db)
+				v.consensus = core.NewConsensus(
+					v.app, v.gov, v.db, v.prvKey, v.sigToPub)
 				for _, b := range pendingBlocks {
 					if err := v.consensus.ProcessBlock(b); err != nil {
 						fmt.Println(err)

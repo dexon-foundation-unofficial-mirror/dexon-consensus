@@ -26,6 +26,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -60,7 +61,9 @@ func (s *ConsensusTestSuite) prepareConsensus(gov *test.Governance) (
 	app := test.NewApp()
 	db, err := blockdb.NewMemBackedBlockDB()
 	s.Require().Nil(err)
-	con := NewConsensus(app, gov, db)
+	prv, err := eth.NewPrivateKey()
+	s.Require().Nil(err)
+	con := NewConsensus(app, gov, db, prv, eth.SigToPub)
 	return app, con
 }
 

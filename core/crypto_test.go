@@ -154,7 +154,7 @@ func (s *CryptoTestSuite) generateBlockChain(
 		block := s.newBlock(prevBlock)
 		blocks[idx] = block
 		var err error
-		block.Signature, err = signBlock(&simpleBlock{block: block}, prv)
+		block.Signature, err = prv.Sign(block.Hash)
 		s.Require().Nil(err)
 	}
 	return blocks

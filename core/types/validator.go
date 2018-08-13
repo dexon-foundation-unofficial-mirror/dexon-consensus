@@ -35,6 +35,11 @@ func NewValidatorID(pubKey crypto.PublicKey) ValidatorID {
 	return ValidatorID{Hash: crypto.Keccak256Hash(pubKey.Bytes())}
 }
 
+// Equal checks if the hash representation is the same ValidatorID.
+func (v ValidatorID) Equal(hash common.Hash) bool {
+	return v.Hash == hash
+}
+
 // ValidatorIDs implements sort.Interface for ValidatorID.
 type ValidatorIDs []ValidatorID
 

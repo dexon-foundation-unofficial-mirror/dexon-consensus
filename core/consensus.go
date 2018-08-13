@@ -25,7 +25,12 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
+
+// SigToPubFn is a function to recover public key from signature.
+type SigToPubFn func(hash common.Hash, signature crypto.Signature) (
+	crypto.PublicKey, error)
 
 // ErrMissingBlockInfo would be reported if some information is missing when
 // calling PrepareBlock. It implements error interface.
@@ -39,7 +44,8 @@ func (e *ErrMissingBlockInfo) Error() string {
 
 // Errors for sanity check error.
 var (
-	ErrIncorrectHash = fmt.Errorf("hash of block is incorrect")
+	ErrIncorrectHash      = fmt.Errorf("hash of block is incorrect")
+	ErrIncorrectSignature = fmt.Errorf("signature of block is incorrect")
 )
 
 // Consensus implements DEXON Consensus algorithm.
@@ -50,6 +56,8 @@ type Consensus struct {
 	toModule *totalOrdering
 	ctModule *consensusTimestamp
 	db       blockdb.BlockDatabase
+	prvKey   crypto.PrivateKey
+	sigToPub SigToPubFn
 	lock     sync.RWMutex
 }
 
@@ -57,7 +65,9 @@ type Consensus struct {
 func NewConsensus(
 	app Application,
 	gov Governance,
-	db blockdb.BlockDatabase) *Consensus {
+	db blockdb.BlockDatabase,
+	prv crypto.PrivateKey,
+	sigToPub SigToPubFn) *Consensus {
 	validatorSet := gov.GetValidatorSet()
 
 	// Setup acking by information returned from Governace.
@@ -79,6 +89,8 @@ func NewConsensus(
 		app:      app,
 		gov:      gov,
 		db:       db,
+		prvKey:   prv,
+		sigToPub: sigToPub,
 	}
 }
 
@@ -90,6 +102,18 @@ func (con *Consensus) sanityCheck(blockConv types.BlockConverter) (err error) {
 	if err != nil || hash != b.Hash {
 		return ErrIncorrectHash
 	}
+
+	/* Disable these check before the implmentation of the signature for
+	 * genesis block is finished.
+	// Check the signer.
+	pubKey, err := con.sigToPub(b.Hash, b.Signature)
+	if err != nil {
+		return err
+	}
+	if !b.ProposerID.Equal(crypto.Keccak256Hash(pubKey.Bytes())) {
+		return ErrIncorrectSignature
+	}
+	*/
 
 	return nil
 }
@@ -166,6 +190,13 @@ func (con *Consensus) PrepareBlock(blockConv types.BlockConverter,
 	con.rbModule.prepareBlock(b)
 	b.Timestamps[b.ProposerID] = proposeTime
 	b.Hash, err = hashBlock(b)
+	if err != nil {
+		return
+	}
+	b.Signature, err = con.prvKey.Sign(b.Hash)
+	if err != nil {
+		return
+	}
 	blockConv.SetBlock(b)
 	return
 }

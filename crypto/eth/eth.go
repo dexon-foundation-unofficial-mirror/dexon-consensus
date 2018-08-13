@@ -111,7 +111,7 @@ func (pub PublicKey) Bytes() []byte {
 
 // SigToPub returns the PublicKey that created the given signature.
 func SigToPub(
-	hash common.Hash, signature crypto.Signature) (PublicKey, error) {
+	hash common.Hash, signature crypto.Signature) (crypto.PublicKey, error) {
 	key, err := ethcrypto.SigToPub(hash[:], signature[:])
 	if err != nil {
 		return PublicKey{}, err
