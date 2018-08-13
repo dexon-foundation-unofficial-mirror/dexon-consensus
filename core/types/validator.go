@@ -21,11 +21,18 @@ import (
 	"bytes"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
 // ValidatorID is the ID type for validators.
 type ValidatorID struct {
 	common.Hash
+}
+
+// NewValidatorID returns a ValidatorID with Hash set to the hash value of
+// public key.
+func NewValidatorID(pubKey crypto.PublicKey) ValidatorID {
+	return ValidatorID{Hash: crypto.Keccak256Hash(pubKey.Bytes())}
 }
 
 // ValidatorIDs implements sort.Interface for ValidatorID.

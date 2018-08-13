@@ -39,4 +39,7 @@ type PrivateKey interface {
 type PublicKey interface {
 	// VerifySignature checks that the given public key created signature over hash.
 	VerifySignature(hash common.Hash, signature Signature) bool
+
+	// Bytes returns the []byte representation of public key.
+	Bytes() []byte
 }

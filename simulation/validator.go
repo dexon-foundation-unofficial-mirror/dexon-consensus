@@ -25,6 +25,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
 
@@ -40,15 +41,18 @@ type Validator struct {
 	isFinished chan struct{}
 
 	ID              types.ValidatorID
+	privateKey      crypto.PrivateKey
 	consensus       *core.Consensus
 	compactionChain *core.BlockChain
 }
 
 // NewValidator returns a new empty validator.
 func NewValidator(
-	id types.ValidatorID,
+	prvKey crypto.PrivateKey,
 	config config.Validator,
 	network Network) *Validator {
+
+	id := types.NewValidatorID(prvKey.PublicKey())
 
 	db, err := blockdb.NewMemBackedBlockDB(
 		id.String() + ".blockdb")

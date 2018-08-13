@@ -104,6 +104,11 @@ func (pub PublicKey) Compress() []byte {
 	return pub.publicKey
 }
 
+// Bytes returns the []byte representation of public key.
+func (pub PublicKey) Bytes() []byte {
+	return pub.Compress()
+}
+
 // SigToPub returns the PublicKey that created the given signature.
 func SigToPub(
 	hash common.Hash, signature crypto.Signature) (PublicKey, error) {

@@ -20,8 +20,7 @@ package simulation
 import (
 	"fmt"
 
-	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
 
@@ -50,15 +49,21 @@ func Run(configPath string) {
 			network = NewFakeNetwork(networkModel)
 
 			for i := 0; i < cfg.Validator.Num; i++ {
-				id := types.ValidatorID{Hash: common.NewRandomHash()}
-				vs = append(vs, NewValidator(id, cfg.Validator, network))
+				prv, err := eth.NewPrivateKey()
+				if err != nil {
+					panic(err)
+				}
+				vs = append(vs, NewValidator(prv, cfg.Validator, network))
 			}
 		} else if networkType == config.NetworkTypeTCPLocal {
 			for i := 0; i < cfg.Validator.Num; i++ {
-				id := types.ValidatorID{Hash: common.NewRandomHash()}
+				prv, err := eth.NewPrivateKey()
+				if err != nil {
+					panic(err)
+				}
 				network := NewTCPNetwork(true, cfg.Networking.PeerServer)
 				go network.Start()
-				vs = append(vs, NewValidator(id, cfg.Validator, network))
+				vs = append(vs, NewValidator(prv, cfg.Validator, network))
 			}
 		}
 
@@ -67,10 +72,13 @@ func Run(configPath string) {
 			go vs[i].Run()
 		}
 	} else if networkType == config.NetworkTypeTCP {
-		id := types.ValidatorID{Hash: common.NewRandomHash()}
+		prv, err := eth.NewPrivateKey()
+		if err != nil {
+			panic(err)
+		}
 		network := NewTCPNetwork(false, cfg.Networking.PeerServer)
 		go network.Start()
-		v := NewValidator(id, cfg.Validator, network)
+		v := NewValidator(prv, cfg.Validator, network)
 		go v.Run()
 		vs = append(vs, v)
 	}
