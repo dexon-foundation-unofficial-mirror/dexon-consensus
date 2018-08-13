@@ -28,7 +28,7 @@ import (
 // reliableBroadcast is a module for reliable broadcast.
 type reliableBroadcast struct {
 	// lattice stores blocks by its validator ID and height.
-	lattice map[types.ValidatorID]*ackingValidatorStatus
+	lattice map[types.ValidatorID]*reliableBroadcastValidatorStatus
 
 	// blocks stores the hash to block map.
 	blocks map[common.Hash]*types.Block
@@ -38,7 +38,7 @@ type reliableBroadcast struct {
 	receivedBlocks map[common.Hash]*types.Block
 }
 
-type ackingValidatorStatus struct {
+type reliableBroadcastValidatorStatus struct {
 	// blocks stores blocks proposed by specified validator in map which key is
 	// the height of the block.
 	blocks map[uint64]*types.Block
@@ -51,14 +51,12 @@ type ackingValidatorStatus struct {
 
 	// nextOutput is the next output height of block, default to 0.
 	nextOutput uint64
-
-	// restricted is the flag of a validator is in restricted mode or not.
-	restricted bool
 }
 
 // Errors for sanity check error.
 var (
 	ErrInvalidProposerID  = fmt.Errorf("invalid proposer id")
+	ErrInvalidTimestamp   = fmt.Errorf("invalid timestamp")
 	ErrForkBlock          = fmt.Errorf("fork block")
 	ErrNotAckParent       = fmt.Errorf("not ack parent")
 	ErrDoubleAck          = fmt.Errorf("double ack")
@@ -69,7 +67,7 @@ var (
 // newReliableBroadcast creates a new reliableBroadcast struct.
 func newReliableBroadcast() *reliableBroadcast {
 	return &reliableBroadcast{
-		lattice:        make(map[types.ValidatorID]*ackingValidatorStatus),
+		lattice:        make(map[types.ValidatorID]*reliableBroadcastValidatorStatus),
 		blocks:         make(map[common.Hash]*types.Block),
 		receivedBlocks: make(map[common.Hash]*types.Block),
 	}
@@ -109,6 +107,20 @@ func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 		}
 	}
 
+	// Check if its timestamp is valid.
+	for h := range rb.lattice {
+		if _, exist := b.Timestamps[h]; !exist {
+			return ErrInvalidTimestamp
+		}
+	}
+	if bParent, exist := rb.lattice[b.ProposerID].blocks[b.Height-1]; exist {
+		for hash := range rb.lattice {
+			if b.Timestamps[hash].Before(bParent.Timestamps[hash]) {
+				return ErrInvalidTimestamp
+			}
+		}
+	}
+
 	// TODO(haoping): application layer check of block's content
 
 	return nil
@@ -121,6 +133,7 @@ func (rb *reliableBroadcast) areAllAcksInLattice(b *types.Block) bool {
 		if !exist {
 			return false
 		}
+
 		bAckInLattice, exist := rb.lattice[bAck.ProposerID].blocks[bAck.Height]
 		if !exist {
 			return false
@@ -140,6 +153,8 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 		return
 	}
 	rb.blocks[block.Hash] = block
+	block.AckedValidators = make(map[types.ValidatorID]struct{})
+	block.ReceivedTime = time.Now().UTC()
 	rb.receivedBlocks[block.Hash] = block
 	block.AckedValidators = make(map[types.ValidatorID]struct{})
 	block.ReceivedTime = time.Now()
@@ -370,11 +385,10 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 
 // addValidator adds validator in the validator set.
 func (rb *reliableBroadcast) addValidator(h types.ValidatorID) {
-	rb.lattice[h] = &ackingValidatorStatus{
+	rb.lattice[h] = &reliableBroadcastValidatorStatus{
 		blocks:     make(map[uint64]*types.Block),
 		nextAck:    make(map[types.ValidatorID]uint64),
 		nextOutput: 0,
-		restricted: false,
 	}
 }
 

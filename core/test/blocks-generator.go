@@ -151,12 +151,17 @@ func (vs *validatorSetStatus) proposeBlock(
 		parentHash = status.blocks[len(status.blocks)-1].Hash
 	}
 
+	ts := map[types.ValidatorID]time.Time{}
+	for vid := range vs.status {
+		ts[vid] = time.Time{}
+	}
 	newBlock := &types.Block{
 		ProposerID: proposerID,
 		ParentHash: parentHash,
 		Height:     uint64(len(status.blocks)),
 		Acks:       acks,
-		// TODO(mission.liao): Generate timestamp randomly.
+		Timestamps: ts,
+		// TODO(mission.liao): Generate timestamp.
 	}
 	var err error
 	newBlock.Hash, err = vs.hashBlock(newBlock)
