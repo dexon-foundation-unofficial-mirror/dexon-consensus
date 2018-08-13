@@ -80,6 +80,7 @@ type Network interface {
 	NumPeers() int
 	Join(endpoint Endpoint) chan interface{}
 	BroadcastBlock(block *types.Block)
+	Endpoints() types.ValidatorIDs
 }
 
 // PeerServerNetwork is the interface for peerServer network related functions

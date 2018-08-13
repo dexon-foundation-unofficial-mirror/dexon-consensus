@@ -110,3 +110,12 @@ func (n *FakeNetwork) GetServerInfo() InfoMessage {
 	// TODO(jimmy-dexon): Implement this method.
 	return InfoMessage{}
 }
+
+// Endpoints returns all validatorIDs.
+func (n *FakeNetwork) Endpoints() types.ValidatorIDs {
+	vIDs := make(types.ValidatorIDs, len(n.endpoints))
+	for vID := range n.endpoints {
+		vIDs = append(vIDs, vID)
+	}
+	return vIDs
+}

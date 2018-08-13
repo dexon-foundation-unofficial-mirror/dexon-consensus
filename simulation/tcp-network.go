@@ -349,3 +349,12 @@ func (n *TCPNetwork) GetServerInfo() InfoMessage {
 	}
 	return infoMsg
 }
+
+// Endpoints returns all validatorIDs.
+func (n *TCPNetwork) Endpoints() types.ValidatorIDs {
+	vIDs := make(types.ValidatorIDs, 0, len(n.endpoints))
+	for vID := range n.endpoints {
+		vIDs = append(vIDs, vID)
+	}
+	return vIDs
+}

@@ -62,7 +62,6 @@ func NewValidator(
 		panic(err)
 	}
 	gov := newSimGovernance(config.Num, config.Consensus)
-	gov.addValidator(id)
 	return &Validator{
 		ID:         id,
 		prvKey:     prvKey,
@@ -85,6 +84,12 @@ func (v *Validator) GetID() types.ValidatorID {
 func (v *Validator) Run() {
 	v.msgChannel = v.network.Join(v)
 
+	for _, vID := range v.network.Endpoints() {
+		v.gov.addValidator(vID)
+	}
+	v.consensus = core.NewConsensus(
+		v.app, v.gov, v.db, v.prvKey, v.sigToPub)
+
 	genesisBlock := &types.Block{
 		ProposerID: v.ID,
 		ParentHash: common.Hash{},
@@ -99,8 +104,9 @@ func (v *Validator) Run() {
 	isShutdown := make(chan struct{})
 
 	v.app.addBlock(genesisBlock)
+	v.consensus.ProcessBlock(genesisBlock)
 	v.BroadcastGenesisBlock(genesisBlock)
-	go v.MsgServer(isStopped, genesisBlock)
+	go v.MsgServer(isStopped)
 	go v.CheckServerInfo(isShutdown)
 	go v.BlockProposer(isStopped, isShutdown)
 
@@ -135,9 +141,8 @@ func (v *Validator) CheckServerInfo(isShutdown chan struct{}) {
 
 // MsgServer listen to the network channel for message and handle it.
 func (v *Validator) MsgServer(
-	isStopped chan struct{}, genesisBlock *types.Block) {
+	isStopped chan struct{}) {
 
-	pendingBlocks := []*types.Block{genesisBlock}
 	for {
 		var msg interface{}
 		select {
@@ -149,30 +154,9 @@ func (v *Validator) MsgServer(
 		switch val := msg.(type) {
 		case *types.Block:
 			v.app.addBlock(val)
-			if v.consensus != nil {
-				if err := v.consensus.ProcessBlock(val); err != nil {
-					fmt.Println(err)
-					//panic(err)
-				}
-			} else {
-				pendingBlocks = append(pendingBlocks, val)
-				if val.IsGenesis() {
-					v.gov.addValidator(val.ProposerID)
-				}
-				validatorSet := v.gov.GetValidatorSet()
-				if len(validatorSet) != v.config.Num {
-					// We don't collect all validators yet.
-					break
-				}
-				v.consensus = core.NewConsensus(
-					v.app, v.gov, v.db, v.prvKey, v.sigToPub)
-				for _, b := range pendingBlocks {
-					if err := v.consensus.ProcessBlock(b); err != nil {
-						fmt.Println(err)
-						//panic(err)
-					}
-				}
-				pendingBlocks = pendingBlocks[:0]
+			if err := v.consensus.ProcessBlock(val); err != nil {
+				fmt.Println(err)
+				//panic(err)
 			}
 		}
 	}
@@ -189,10 +173,6 @@ func (v *Validator) BroadcastGenesisBlock(genesisBlock *types.Block) {
 
 // BlockProposer propose blocks to be send to the DEXON network.
 func (v *Validator) BlockProposer(isStopped, isShutdown chan struct{}) {
-	// Wait until all genesis blocks are received.
-	for v.consensus == nil {
-		time.Sleep(time.Second)
-	}
 	model := &NormalNetwork{
 		Sigma: v.config.ProposeIntervalSigma,
 		Mean:  v.config.ProposeIntervalMean,
