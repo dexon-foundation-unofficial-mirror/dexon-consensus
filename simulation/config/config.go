@@ -78,8 +78,8 @@ func GenerateDefault(path string) error {
 		Title: "DEXON Consensus Simulation Config",
 		Validator: Validator{
 			Consensus: Consensus{
-				PhiRatio: 0.66667,
-				K:        2,
+				PhiRatio: float32(2) / 3,
+				K:        1,
 			},
 			Num:                  7,
 			ProposeIntervalMean:  500,
