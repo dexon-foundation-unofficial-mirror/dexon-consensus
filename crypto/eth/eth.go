@@ -79,21 +79,37 @@ func (prv *PrivateKey) PublicKey() crypto.PublicKey {
 // solution is to hash any input before calculating the signature.
 //
 // The produced signature is in the [R || S || V] format where V is 0 or 1.
-func (prv *PrivateKey) Sign(hash common.Hash) (sig crypto.Signature, err error) {
+func (prv *PrivateKey) Sign(hash common.Hash) (
+	sig crypto.Signature, err error) {
 	s, err := ethcrypto.Sign(hash[:], &prv.privateKey)
-	// Magic!
-	sig = crypto.Signature(s[:64])
+	sig = crypto.Signature(s)
 	return
 }
 
 // VerifySignature checks that the given public key created signature over hash.
-// The public key should be in compressed (33 bytes) or uncompressed (65 bytes) format.
+// The public key should be in compressed (33 bytes) or uncompressed (65 bytes)
+// format.
 // The signature should have the 64 byte [R || S] format.
-func (pub PublicKey) VerifySignature(hash common.Hash, signature crypto.Signature) bool {
+func (pub PublicKey) VerifySignature(
+	hash common.Hash, signature crypto.Signature) bool {
+	if len(signature) == 65 {
+		// The last byte is for ecrecover.
+		signature = signature[:64]
+	}
 	return ethcrypto.VerifySignature(pub.publicKey, hash[:], signature)
 }
 
 // Compress encodes a public key to the 33-byte compressed format.
 func (pub PublicKey) Compress() []byte {
 	return pub.publicKey
+}
+
+// SigToPub returns the PublicKey that created the given signature.
+func SigToPub(
+	hash common.Hash, signature crypto.Signature) (PublicKey, error) {
+	key, err := ethcrypto.SigToPub(hash[:], signature[:])
+	if err != nil {
+		return PublicKey{}, err
+	}
+	return PublicKey{publicKey: ethcrypto.CompressPubkey(key)}, nil
 }

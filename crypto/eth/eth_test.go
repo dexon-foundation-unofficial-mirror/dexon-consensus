@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -72,6 +73,19 @@ func (s *ETHCryptoTestSuite) TestSignature() {
 	s.Require().Nil(err)
 	s.Equal(pub1, decompressPub1)
 	s.True(decompressPub1.VerifySignature(hash1, sig11))
+}
+
+func (s *ETHCryptoTestSuite) TestSigToPub() {
+	prv, err := NewPrivateKey()
+	s.Require().Nil(err)
+	data := "DEXON is infinitely scalable and low-latency."
+	hash := crypto.Keccak256Hash([]byte(data))
+	sigmsg, err := prv.Sign(hash)
+	s.Require().Nil(err)
+
+	pubkey, err := SigToPub(hash, sigmsg)
+	s.Require().Nil(err)
+	s.Equal(pubkey, prv.PublicKey())
 }
 
 func TestCrypto(t *testing.T) {
