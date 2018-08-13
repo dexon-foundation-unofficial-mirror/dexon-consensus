@@ -20,6 +20,7 @@ package simulation
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
@@ -38,6 +39,7 @@ type simApp struct {
 	// uncofirmBlocks stores the blocks whose timestamps are not ready.
 	unconfirmedBlocks map[types.ValidatorID]common.Hashes
 	blockByHash       map[common.Hash]*types.Block
+	blockByHashMutex  sync.RWMutex
 }
 
 // newSimApp returns point to a new instance of simApp.
@@ -53,6 +55,9 @@ func newSimApp(id types.ValidatorID, Network PeerServerNetwork) *simApp {
 }
 
 func (a *simApp) addBlock(block *types.Block) {
+	a.blockByHashMutex.Lock()
+	defer a.blockByHashMutex.Unlock()
+
 	a.blockByHash[block.Hash] = block
 }
 
@@ -74,6 +79,7 @@ func (a *simApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
 			break
 		}
 	}
+
 	// All of the Height of unconfirmed blocks are lower than the acked block.
 	if len(output) == 0 {
 		output, a.unconfirmedBlocks[ackBlock.ProposerID] = hashes, common.Hashes{}
@@ -89,6 +95,9 @@ func (a *simApp) StronglyAcked(blockHash common.Hash) {
 // TotalOrderingDeliver is called when blocks are delivered by the total
 // ordering algorithm.
 func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
+	a.blockByHashMutex.Lock()
+	defer a.blockByHashMutex.Unlock()
+
 	now := time.Now()
 	blocks := make([]*types.Block, len(blockHashes))
 	for idx := range blockHashes {

@@ -4,7 +4,7 @@ title = "DEXON Consensus Simulation Config"
 num = {{numValidators}}
 propose_interval_mean = 5e+02
 propose_interval_sigma = 3e+01
-max_block = 100
+max_block = 1000
 
 [validator.consensus]
 phi_ratio = 6.66670024394989e-01
