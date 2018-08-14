@@ -92,13 +92,10 @@ func (v *Validator) Run() {
 
 	genesisBlock := &types.Block{
 		ProposerID: v.ID,
-		ParentHash: common.Hash{},
-		Hash:       common.NewRandomHash(),
-		Height:     0,
-		Acks:       map[common.Hash]struct{}{},
-		Timestamps: map[types.ValidatorID]time.Time{
-			v.ID: time.Now().UTC(),
-		},
+	}
+	err := v.consensus.PrepareGenesisBlock(genesisBlock, time.Now().UTC())
+	if err != nil {
+		panic(err)
 	}
 	isStopped := make(chan struct{}, 2)
 	isShutdown := make(chan struct{})

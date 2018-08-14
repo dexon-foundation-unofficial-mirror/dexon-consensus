@@ -18,8 +18,9 @@
 package test
 
 import (
-	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
 	"github.com/shopspring/decimal"
 )
 
@@ -27,18 +28,25 @@ import (
 type Governance struct {
 	BlockProposingInterval int
 	Validators             map[types.ValidatorID]decimal.Decimal
+	PrivateKeys            map[types.ValidatorID]crypto.PrivateKey
 }
 
 // NewGovernance constructs a Governance instance.
-func NewGovernance(validatorCount, proposingInterval int) (g *Governance) {
-
+func NewGovernance(validatorCount, proposingInterval int) (
+	g *Governance, err error) {
 	g = &Governance{
 		BlockProposingInterval: proposingInterval,
 		Validators:             make(map[types.ValidatorID]decimal.Decimal),
+		PrivateKeys:            make(map[types.ValidatorID]crypto.PrivateKey),
 	}
 	for i := 0; i < validatorCount; i++ {
-		g.Validators[types.ValidatorID{Hash: common.NewRandomHash()}] =
-			decimal.NewFromFloat(0)
+		prv, err := eth.NewPrivateKey()
+		if err != nil {
+			return nil, err
+		}
+		vID := types.NewValidatorID(prv.PublicKey())
+		g.Validators[vID] = decimal.NewFromFloat(0)
+		g.PrivateKeys[vID] = prv
 	}
 	return
 }

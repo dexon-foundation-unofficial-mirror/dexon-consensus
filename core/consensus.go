@@ -42,10 +42,11 @@ func (e *ErrMissingBlockInfo) Error() string {
 	return "missing " + e.MissingField + " in block"
 }
 
-// Errors for sanity check error.
+// Errors for consensus core.
 var (
-	ErrIncorrectHash      = fmt.Errorf("hash of block is incorrect")
-	ErrIncorrectSignature = fmt.Errorf("signature of block is incorrect")
+	ErrIncorrectHash        = fmt.Errorf("hash of block is incorrect")
+	ErrIncorrectSignature   = fmt.Errorf("signature of block is incorrect")
+	ErrGenesisBlockNotEmpty = fmt.Errorf("genesis block should be empty")
 )
 
 // Consensus implements DEXON Consensus algorithm.
@@ -103,8 +104,6 @@ func (con *Consensus) sanityCheck(blockConv types.BlockConverter) (err error) {
 		return ErrIncorrectHash
 	}
 
-	/* Disable these check before the implmentation of the signature for
-	 * genesis block is finished.
 	// Check the signer.
 	pubKey, err := con.sigToPub(b.Hash, b.Signature)
 	if err != nil {
@@ -113,7 +112,6 @@ func (con *Consensus) sanityCheck(blockConv types.BlockConverter) (err error) {
 	if !b.ProposerID.Equal(crypto.Keccak256Hash(pubKey.Bytes())) {
 		return ErrIncorrectSignature
 	}
-	*/
 
 	return nil
 }
@@ -176,18 +174,57 @@ func (con *Consensus) ProcessBlock(blockConv types.BlockConverter) (err error) {
 	return
 }
 
+func (con *Consensus) checkPrepareBlock(
+	b *types.Block, proposeTime time.Time) (err error) {
+	if (b.ProposerID == types.ValidatorID{}) {
+		err = &ErrMissingBlockInfo{MissingField: "ProposerID"}
+		return
+	}
+	return
+}
+
 // PrepareBlock would setup header fields of block based on its ProposerID.
 func (con *Consensus) PrepareBlock(blockConv types.BlockConverter,
 	proposeTime time.Time) (err error) {
 	b := blockConv.Block()
-	if (b.ProposerID == types.ValidatorID{}) {
-		err = &ErrMissingBlockInfo{MissingField: "ProposerID"}
+	if err = con.checkPrepareBlock(b, proposeTime); err != nil {
 		return
 	}
 	con.lock.RLock()
 	defer con.lock.RUnlock()
 
 	con.rbModule.prepareBlock(b)
+	b.Timestamps[b.ProposerID] = proposeTime
+	b.Hash, err = hashBlock(b)
+	if err != nil {
+		return
+	}
+	b.Signature, err = con.prvKey.Sign(b.Hash)
+	if err != nil {
+		return
+	}
+	blockConv.SetBlock(b)
+	return
+}
+
+// PrepareGenesisBlock would setup header fields for genesis block.
+func (con *Consensus) PrepareGenesisBlock(blockConv types.BlockConverter,
+	proposeTime time.Time) (err error) {
+	b := blockConv.Block()
+	if err = con.checkPrepareBlock(b, proposeTime); err != nil {
+		return
+	}
+	if len(b.Payloads()) != 0 {
+		err = ErrGenesisBlockNotEmpty
+		return
+	}
+	b.Height = 0
+	b.ParentHash = common.Hash{}
+	b.Acks = make(map[common.Hash]struct{})
+	b.Timestamps = make(map[types.ValidatorID]time.Time)
+	for vID := range con.gov.GetValidatorSet() {
+		b.Timestamps[vID] = time.Time{}
+	}
 	b.Timestamps[b.ProposerID] = proposeTime
 	b.Hash, err = hashBlock(b)
 	if err != nil {

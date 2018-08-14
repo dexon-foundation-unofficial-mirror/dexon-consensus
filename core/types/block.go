@@ -113,6 +113,7 @@ func (b *Block) Clone() *Block {
 		CompactionChainAck: CompactionChainAck{
 			AckingBlockHash: b.CompactionChainAck.AckingBlockHash,
 		},
+		Signature: b.Signature,
 		ConsensusInfo: ConsensusInfo{
 			Timestamp: b.ConsensusInfo.Timestamp,
 			Height:    b.ConsensusInfo.Height,
