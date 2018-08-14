@@ -98,6 +98,7 @@ func (s *CryptoTestSuite) generateCompactionChain(
 	var prevBlock *types.Block
 	for idx := range blocks {
 		block := s.newBlock(prevBlock)
+		prevBlock = block
 		blocks[idx] = block
 		var err error
 		if idx > 0 {
