@@ -47,7 +47,7 @@ func (s *ConsensusTestSuite) prepareGenesisBlock(
 }
 
 func (s *ConsensusTestSuite) prepareConsensus(
-	gov *test.Governance, vID types.ValidatorID) (*test.App, *Consensus) {
+	gov *test.Governance, vID types.ValidatorID) (*Application, *Consensus) {
 
 	app := test.NewApp()
 	db, err := blockdb.NewMemBackedBlockDB()
@@ -55,7 +55,7 @@ func (s *ConsensusTestSuite) prepareConsensus(
 	prv, exist := gov.PrivateKeys[vID]
 	s.Require().True(exist)
 	con := NewConsensus(app, gov, db, prv, eth.SigToPub)
-	return app, con
+	return &con.app, con
 }
 
 func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
@@ -84,13 +84,13 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 
 	// Setup core.Consensus and test.App.
 	objs := map[types.ValidatorID]*struct {
-		app *test.App
+		app *Application
 		con *Consensus
 	}{}
 	for _, vID := range validators {
 		app, con := s.prepareConsensus(gov, vID)
 		objs[vID] = &struct {
-			app *test.App
+			app *Application
 			con *Consensus
 		}{app, con}
 	}
@@ -246,7 +246,14 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		req.Equal(t, app.Delivered[b11.Hash])
 	}
 	for _, obj := range objs {
-		verify(obj.app)
+		app := *obj.app
+		if nbapp, ok := app.(*nonBlockingApplication); ok {
+			nbapp.wait()
+			app = nbapp.app
+		}
+		testApp, ok := app.(*test.App)
+		s.Require().True(ok)
+		verify(testApp)
 	}
 }
 
@@ -269,13 +276,13 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 	}
 	// Setup core.Consensus and test.App.
 	objs := map[types.ValidatorID]*struct {
-		app *test.App
+		app *Application
 		con *Consensus
 	}{}
 	for _, vID := range validators {
 		app, con := s.prepareConsensus(gov, vID)
 		objs[vID] = &struct {
-			app *test.App
+			app *Application
 			con *Consensus
 		}{app, con}
 	}

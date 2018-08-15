@@ -87,7 +87,7 @@ func NewConsensus(
 		rbModule: rb,
 		toModule: to,
 		ctModule: newConsensusTimestamp(),
-		app:      app,
+		app:      newNonBlockingApplication(app),
 		gov:      gov,
 		db:       db,
 		prvKey:   prv,
