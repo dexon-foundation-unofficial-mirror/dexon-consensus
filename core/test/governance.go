@@ -18,10 +18,18 @@
 package test
 
 import (
+	"fmt"
+
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
 	"github.com/shopspring/decimal"
+)
+
+var (
+	// ErrPrivateKeyNotExists means caller request private key for an
+	// unknown validator ID.
+	ErrPrivateKeyNotExists = fmt.Errorf("private key not exists")
 )
 
 // Governance is an implementation of Goverance for testing purpose.
@@ -78,4 +86,17 @@ func (g *Governance) GetPhiRatio() float32 {
 func (g *Governance) GetConfigurationChangeEvent(
 	epoch int) []types.ConfigurationChangeEvent {
 	return nil
+}
+
+// GetPrivateKey return the private key for that validator, this function
+// is a test utility and not a general core.Governance interface.
+func (g *Governance) GetPrivateKey(
+	vID types.ValidatorID) (key crypto.PrivateKey, err error) {
+
+	key, exists := g.PrivateKeys[vID]
+	if !exists {
+		err = ErrPrivateKeyNotExists
+		return
+	}
+	return
 }

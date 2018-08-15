@@ -191,3 +191,15 @@ Loop:
 	}
 	return nil
 }
+
+// Check provides a backdoor to check status of App with reader lock.
+func (app *App) Check(checker func(*App)) {
+	app.ackedLock.RLock()
+	defer app.ackedLock.RUnlock()
+	app.totalOrderedLock.RLock()
+	defer app.totalOrderedLock.RUnlock()
+	app.deliveredLock.RLock()
+	defer app.deliveredLock.RUnlock()
+
+	checker(app)
+}
