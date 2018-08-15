@@ -449,15 +449,13 @@ func (s *ReliableBroadcastTest) TestExtractBlocks() {
 
 func (s *ReliableBroadcastTest) TestRandomIntensiveAcking() {
 	rb := newReliableBroadcast()
-	vids := []types.ValidatorID{}
+	vids := test.GenerateRandomValidatorIDs(4)
 	heights := map[types.ValidatorID]uint64{}
 	extractedBlocks := []*types.Block{}
 
 	// Generate validators.
-	for i := 0; i < 4; i++ {
-		vid := types.ValidatorID{Hash: common.NewRandomHash()}
+	for _, vid := range vids {
 		rb.addValidator(vid)
-		vids = append(vids, vid)
 	}
 	// Generate genesis blocks.
 	for _, vid := range vids {
@@ -574,12 +572,10 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 		req         = s.Require()
 		rb          = newReliableBroadcast()
 		minInterval = 50 * time.Millisecond
-		validators  []types.ValidatorID
+		validators  = test.GenerateRandomValidatorIDs(4)
 	)
 	// Prepare validator IDs.
-	for i := 0; i < 4; i++ {
-		vID := types.ValidatorID{Hash: common.NewRandomHash()}
-		validators = append(validators, vID)
+	for _, vID := range validators {
 		rb.addValidator(vID)
 	}
 	// Setup genesis blocks.

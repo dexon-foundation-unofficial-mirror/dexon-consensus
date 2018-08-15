@@ -29,3 +29,12 @@ func stableRandomHash(blockConv types.BlockConverter) (common.Hash, error) {
 	}
 	return common.NewRandomHash(), nil
 }
+
+// GenerateRandomValidatorIDs generates randomly a slices of types.ValidatorID.
+func GenerateRandomValidatorIDs(validatorCount int) (vIDs types.ValidatorIDs) {
+	vIDs = types.ValidatorIDs{}
+	for i := 0; i < validatorCount; i++ {
+		vIDs = append(vIDs, types.ValidatorID{Hash: common.NewRandomHash()})
+	}
+	return
+}

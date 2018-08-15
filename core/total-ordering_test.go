@@ -33,18 +33,6 @@ type TotalOrderingTestSuite struct {
 	suite.Suite
 }
 
-func (s *TotalOrderingTestSuite) generateValidatorIDs(
-	count int) []types.ValidatorID {
-
-	validatorIDs := []types.ValidatorID{}
-	for i := 0; i < count; i++ {
-		validatorIDs = append(validatorIDs,
-			types.ValidatorID{Hash: common.NewRandomHash()})
-	}
-
-	return validatorIDs
-}
-
 func (s *TotalOrderingTestSuite) genGenesisBlock(
 	vID types.ValidatorID, acks map[common.Hash]struct{}) *types.Block {
 
@@ -128,7 +116,7 @@ func (s *TotalOrderingTestSuite) TestBlockRelation() {
 }
 
 func (s *TotalOrderingTestSuite) TestCreateAckingHeightVectorFromHeightVector() {
-	validators := s.generateValidatorIDs(5)
+	validators := test.GenerateRandomValidatorIDs(5)
 	global := ackingStatusVector{
 		validators[0]: &struct{ minHeight, count uint64 }{
 			minHeight: 0, count: 5},
@@ -172,7 +160,7 @@ func (s *TotalOrderingTestSuite) TestCreateAckingHeightVectorFromHeightVector() 
 }
 
 func (s *TotalOrderingTestSuite) TestCreateAckingNodeSetFromHeightVector() {
-	validators := s.generateValidatorIDs(5)
+	validators := test.GenerateRandomValidatorIDs(5)
 	global := ackingStatusVector{
 		validators[0]: &struct{ minHeight, count uint64 }{
 			minHeight: 0, count: 5},
@@ -194,7 +182,7 @@ func (s *TotalOrderingTestSuite) TestCreateAckingNodeSetFromHeightVector() {
 }
 
 func (s *TotalOrderingTestSuite) TestGrade() {
-	validators := s.generateValidatorIDs(5)
+	validators := test.GenerateRandomValidatorIDs(5)
 	to := newTotalOrdering(1, 3, 5) // K doesn't matter when calculating preceding.
 
 	ans := map[types.ValidatorID]struct{}{
@@ -231,7 +219,7 @@ func (s *TotalOrderingTestSuite) TestGrade() {
 func (s *TotalOrderingTestSuite) TestCycleDetection() {
 	// Make sure we don't get hang by cycle from
 	// block's acks.
-	validators := s.generateValidatorIDs(5)
+	validators := test.GenerateRandomValidatorIDs(5)
 
 	// create blocks with cycles in acking relation.
 	cycledHash := common.NewRandomHash()
@@ -283,7 +271,7 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 }
 
 func (s *TotalOrderingTestSuite) TestNotValidDAGDetection() {
-	validators := s.generateValidatorIDs(4)
+	validators := test.GenerateRandomValidatorIDs(4)
 	to := newTotalOrdering(1, 3, 5)
 
 	b00 := s.genGenesisBlock(validators[0], map[common.Hash]struct{}{})
@@ -312,7 +300,7 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 	//  Even when B is not received, A should
 	//  be able to be delivered.
 	to := newTotalOrdering(2, 3, 5)
-	validators := s.generateValidatorIDs(5)
+	validators := test.GenerateRandomValidatorIDs(5)
 
 	genNextBlock := func(b *types.Block) *types.Block {
 		return &types.Block{
@@ -428,7 +416,7 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	// It's a handcrafted test case.
 	to := newTotalOrdering(2, 3, 5)
-	validators := s.generateValidatorIDs(5)
+	validators := test.GenerateRandomValidatorIDs(5)
 
 	b00 := s.genGenesisBlock(validators[0], map[common.Hash]struct{}{})
 	b10 := s.genGenesisBlock(validators[1], map[common.Hash]struct{}{})
@@ -759,7 +747,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 	//  v   v   v    v
 	//  o   o   o <- o        Height: 0
 	to := newTotalOrdering(0, 3, 5)
-	validators := s.generateValidatorIDs(5)
+	validators := test.GenerateRandomValidatorIDs(5)
 
 	b00 := s.genGenesisBlock(validators[0], map[common.Hash]struct{}{})
 	b10 := s.genGenesisBlock(validators[1], map[common.Hash]struct{}{})

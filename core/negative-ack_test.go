@@ -23,7 +23,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -84,10 +84,7 @@ func genTimestamp(vids []types.ValidatorID, a []int) map[types.ValidatorID]time.
 }
 
 func genTestNegativeAck(num int) (*negativeAck, []types.ValidatorID) {
-	vids := []types.ValidatorID{}
-	for i := 0; i < num; i++ {
-		vids = append(vids, types.ValidatorID{Hash: common.NewRandomHash()})
-	}
+	vids := test.GenerateRandomValidatorIDs(num)
 	n := newNegativeAck(vids[0])
 	for i := 1; i < num; i++ {
 		n.addValidator(vids[i])
