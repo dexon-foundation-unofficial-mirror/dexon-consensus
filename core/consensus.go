@@ -56,6 +56,7 @@ type Consensus struct {
 	rbModule *reliableBroadcast
 	toModule *totalOrdering
 	ctModule *consensusTimestamp
+	ccModule *compactionChain
 	db       blockdb.BlockDatabase
 	prvKey   crypto.PrivateKey
 	sigToPub SigToPubFn
@@ -87,6 +88,7 @@ func NewConsensus(
 		rbModule: rb,
 		toModule: to,
 		ctModule: newConsensusTimestamp(),
+		ccModule: newCompactionChain(),
 		app:      newNonBlockingApplication(app),
 		gov:      gov,
 		db:       db,
@@ -165,6 +167,9 @@ func (con *Consensus) ProcessBlock(blockConv types.BlockConverter) (err error) {
 			return
 		}
 		for _, b := range deliveredBlocks {
+			if err = con.ccModule.processBlock(b); err != nil {
+				return
+			}
 			if err = con.db.Update(*b); err != nil {
 				return
 			}
@@ -200,6 +205,10 @@ func (con *Consensus) PrepareBlock(blockConv types.BlockConverter,
 		return
 	}
 	b.Signature, err = con.prvKey.Sign(b.Hash)
+	if err != nil {
+		return
+	}
+	err = con.ccModule.prepareBlock(b, con.prvKey)
 	if err != nil {
 		return
 	}

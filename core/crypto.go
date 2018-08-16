@@ -26,7 +26,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
-func hashCompactionChainAck(block *types.Block) (common.Hash, error) {
+func hashConsensusInfo(block *types.Block) (common.Hash, error) {
 	binaryTime, err := block.ConsensusInfo.Timestamp.MarshalBinary()
 	if err != nil {
 		return common.Hash{}, err
@@ -40,18 +40,18 @@ func hashCompactionChainAck(block *types.Block) (common.Hash, error) {
 	return hash, nil
 }
 
-func signCompactionChainAck(block *types.Block,
+func signConsensusInfo(block *types.Block,
 	prv crypto.PrivateKey) (crypto.Signature, error) {
-	hash, err := hashCompactionChainAck(block)
+	hash, err := hashConsensusInfo(block)
 	if err != nil {
 		return crypto.Signature{}, err
 	}
 	return prv.Sign(hash)
 }
 
-func verifyCompactionChainAckSignature(pubkey crypto.PublicKey,
+func verifyConsensusInfoSignature(pubkey crypto.PublicKey,
 	ackingBlock *types.Block, sig crypto.Signature) (bool, error) {
-	hash, err := hashCompactionChainAck(ackingBlock)
+	hash, err := hashConsensusInfo(ackingBlock)
 	if err != nil {
 		return false, err
 	}

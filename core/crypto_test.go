@@ -64,7 +64,7 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 			},
 		}
 	}
-	parentHash, err := hashCompactionChainAck(prevBlock)
+	parentHash, err := hashConsensusInfo(prevBlock)
 	s.Require().Nil(err)
 	s.Require().NotEqual(prevBlock.Hash, common.Hash{})
 	acks[parentHash] = struct{}{}
@@ -102,10 +102,10 @@ func (s *CryptoTestSuite) generateCompactionChain(
 		blocks[idx] = block
 		var err error
 		if idx > 0 {
-			block.ConsensusInfoParentHash, err = hashCompactionChainAck(blocks[idx-1])
+			block.ConsensusInfoParentHash, err = hashConsensusInfo(blocks[idx-1])
 			s.Require().Nil(err)
-			block.CompactionChainAck.ConsensusSignature, err =
-				signCompactionChainAck(blocks[idx-1], prv)
+			block.CompactionChainAck.ConsensusInfoSignature, err =
+				signConsensusInfo(blocks[idx-1], prv)
 			s.Require().Nil(err)
 		}
 	}
@@ -128,11 +128,11 @@ func (s *CryptoTestSuite) TestCompactionChainAckSignature() {
 		ackingBlock, exist := blockMap[block.CompactionChainAck.AckingBlockHash]
 		s.Require().True(exist)
 		s.True(ackingBlock.ConsensusInfo.Height == block.ConsensusInfo.Height-1)
-		hash, err := hashCompactionChainAck(ackingBlock)
+		hash, err := hashConsensusInfo(ackingBlock)
 		s.Require().Nil(err)
 		s.Equal(hash, block.ConsensusInfoParentHash)
-		s.True(verifyCompactionChainAckSignature(
-			pub, ackingBlock, block.CompactionChainAck.ConsensusSignature))
+		s.True(verifyConsensusInfoSignature(
+			pub, ackingBlock, block.CompactionChainAck.ConsensusInfoSignature))
 	}
 	// Modify Block.ConsensusTime and verify signature again.
 	for _, block := range blocks {
@@ -142,8 +142,8 @@ func (s *CryptoTestSuite) TestCompactionChainAckSignature() {
 		}
 		ackingBlock, exist := blockMap[block.CompactionChainAck.AckingBlockHash]
 		s.Require().True(exist)
-		s.False(verifyCompactionChainAckSignature(
-			pub, ackingBlock, block.CompactionChainAck.ConsensusSignature))
+		s.False(verifyConsensusInfoSignature(
+			pub, ackingBlock, block.CompactionChainAck.ConsensusInfoSignature))
 	}
 }
 

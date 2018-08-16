@@ -40,9 +40,9 @@ const (
 // CompactionChainAck represents the acking to the compaction chain.
 type CompactionChainAck struct {
 	AckingBlockHash common.Hash `json:"acking_block_hash"`
-	// Signature is the signature of the hash value of
+	// ConsensusInfoSignature is the signature of the hash value of
 	// Block.ConsensusInfoParentHash and Block.ConsensusInfo.
-	ConsensusSignature crypto.Signature `json:"consensus_signature"`
+	ConsensusInfoSignature crypto.Signature `json:"consensus_info_signature"`
 }
 
 // ConsensusInfo represents the consensus information on the compaction chain.
@@ -120,8 +120,8 @@ func (b *Block) Clone() *Block {
 		},
 		ConsensusInfoParentHash: b.ConsensusInfoParentHash,
 	}
-	bcopy.CompactionChainAck.ConsensusSignature = append(
-		crypto.Signature(nil), b.CompactionChainAck.ConsensusSignature...)
+	bcopy.CompactionChainAck.ConsensusInfoSignature = append(
+		crypto.Signature(nil), b.CompactionChainAck.ConsensusInfoSignature...)
 	for k, v := range b.Timestamps {
 		bcopy.Timestamps[k] = v
 	}
