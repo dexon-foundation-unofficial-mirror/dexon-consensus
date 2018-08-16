@@ -15,12 +15,14 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
+// TODO(jimmy-dexon): remove those comments before open source.
+
 package core
 
 import (
 	"sync"
 
-	"github.com/dexon-foundation/dexon-consensus-core/common"
+	//"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
@@ -36,33 +38,37 @@ func newCompactionChain() *compactionChain {
 
 func (cc *compactionChain) prepareBlock(
 	block *types.Block, prvKey crypto.PrivateKey) (err error) {
-	prevBlock := cc.lastBlock()
-	if prevBlock != nil {
-		block.CompactionChainAck.ConsensusInfoSignature, err =
-			signConsensusInfo(prevBlock, prvKey)
-		if err != nil {
-			return
+	/*
+		prevBlock := cc.lastBlock()
+		if prevBlock != nil {
+			block.NotaryAck.NotarySignature, err =
+				signNotary(prevBlock, prvKey)
+			if err != nil {
+				return
+			}
+			block.NotaryAck.NotaryBlockHash = prevBlock.Hash
 		}
-		block.CompactionChainAck.AckingBlockHash = prevBlock.Hash
-	}
+	*/
 	return
 }
 
 func (cc *compactionChain) processBlock(block *types.Block) (err error) {
-	prevBlock := cc.lastBlock()
-	if prevBlock == nil {
-		block.ConsensusInfo.Height = 0
-		block.ConsensusInfoParentHash = common.Hash{}
-	} else {
-		block.ConsensusInfo.Height = prevBlock.ConsensusInfo.Height + 1
-		block.ConsensusInfoParentHash, err = hashConsensusInfo(prevBlock)
-		if err != nil {
-			return
+	/*
+		prevBlock := cc.lastBlock()
+		if prevBlock == nil {
+			block.Notary.Height = 0
+			block.NotaryParentHash = common.Hash{}
+		} else {
+			block.Notary.Height = prevBlock.Notary.Height + 1
+			block.NotaryParentHash, err = hashNotary(prevBlock)
+			if err != nil {
+				return
+			}
 		}
-	}
-	cc.lock.Lock()
-	defer cc.lock.Unlock()
-	cc.prevBlock = block
+		cc.lock.Lock()
+		defer cc.lock.Unlock()
+		cc.prevBlock = block
+	*/
 	return
 }
 

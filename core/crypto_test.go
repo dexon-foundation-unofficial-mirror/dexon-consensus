@@ -58,28 +58,30 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 		return &types.Block{
 			Acks:       acks,
 			Timestamps: timestamps,
-			ConsensusInfo: types.ConsensusInfo{
+			Notary: types.Notary{
 				Timestamp: time.Now(),
 				Height:    0,
 			},
 		}
 	}
-	parentHash, err := hashConsensusInfo(prevBlock)
+	parentHash, err := hashNotary(prevBlock)
 	s.Require().Nil(err)
 	s.Require().NotEqual(prevBlock.Hash, common.Hash{})
 	acks[parentHash] = struct{}{}
 	return &types.Block{
-		ParentHash:              prevBlock.Hash,
-		Acks:                    acks,
-		Timestamps:              timestamps,
-		ConsensusInfoParentHash: parentHash,
-		Height:                  prevBlock.Height + 1,
-		CompactionChainAck: types.CompactionChainAck{
-			AckingBlockHash: prevBlock.Hash,
-		},
-		ConsensusInfo: types.ConsensusInfo{
+		ParentHash:       prevBlock.Hash,
+		Acks:             acks,
+		Timestamps:       timestamps,
+		NotaryParentHash: parentHash,
+		Height:           prevBlock.Height + 1,
+		/*
+			NotaryAck: types.NotaryAck{
+				NotaryBlockHash: prevBlock.Hash,
+			},
+		*/
+		Notary: types.Notary{
 			Timestamp: time.Now(),
-			Height:    prevBlock.ConsensusInfo.Height + 1,
+			Height:    prevBlock.Notary.Height + 1,
 		},
 	}
 }
@@ -102,19 +104,21 @@ func (s *CryptoTestSuite) generateCompactionChain(
 		blocks[idx] = block
 		var err error
 		if idx > 0 {
-			block.ConsensusInfoParentHash, err = hashConsensusInfo(blocks[idx-1])
+			block.NotaryParentHash, err = hashNotary(blocks[idx-1])
 			s.Require().Nil(err)
-			block.CompactionChainAck.ConsensusInfoSignature, err =
-				signConsensusInfo(blocks[idx-1], prv)
-			s.Require().Nil(err)
+			/*
+				block.NotaryAck.NotarySignature, err =
+					signNotary(blocks[idx-1], prv)
+				s.Require().Nil(err)
+			*/
 		}
 	}
 	return blocks
 }
 
-func (s *CryptoTestSuite) TestCompactionChainAckSignature() {
+func (s *CryptoTestSuite) TestNotaryAckSignature() {
 	prv, err := eth.NewPrivateKey()
-	pub := prv.PublicKey()
+	//pub := prv.PublicKey()
 	s.Require().Nil(err)
 	blocks := s.generateCompactionChain(10, prv)
 	blockMap := make(map[common.Hash]*types.Block)
@@ -122,28 +126,32 @@ func (s *CryptoTestSuite) TestCompactionChainAckSignature() {
 		blockMap[block.Hash] = block
 	}
 	for _, block := range blocks {
-		if block.ConsensusInfo.Height == 0 {
+		if block.Notary.Height == 0 {
 			continue
 		}
-		ackingBlock, exist := blockMap[block.CompactionChainAck.AckingBlockHash]
-		s.Require().True(exist)
-		s.True(ackingBlock.ConsensusInfo.Height == block.ConsensusInfo.Height-1)
-		hash, err := hashConsensusInfo(ackingBlock)
-		s.Require().Nil(err)
-		s.Equal(hash, block.ConsensusInfoParentHash)
-		s.True(verifyConsensusInfoSignature(
-			pub, ackingBlock, block.CompactionChainAck.ConsensusInfoSignature))
+		/*
+			ackingBlock, exist := blockMap[block.NotaryAck.NotaryBlockHash]
+			s.Require().True(exist)
+			s.True(ackingBlock.Notary.Height == block.Notary.Height-1)
+			hash, err := hashNotary(ackingBlock)
+			s.Require().Nil(err)
+			s.Equal(hash, block.NotaryParentHash)
+			s.True(verifyNotarySignature(
+				pub, ackingBlock, block.NotaryAck.NotarySignature))
+		*/
 	}
 	// Modify Block.ConsensusTime and verify signature again.
 	for _, block := range blocks {
-		block.ConsensusInfo.Timestamp = time.Time{}
-		if block.ConsensusInfo.Height == 0 {
+		block.Notary.Timestamp = time.Time{}
+		if block.Notary.Height == 0 {
 			continue
 		}
-		ackingBlock, exist := blockMap[block.CompactionChainAck.AckingBlockHash]
-		s.Require().True(exist)
-		s.False(verifyConsensusInfoSignature(
-			pub, ackingBlock, block.CompactionChainAck.ConsensusInfoSignature))
+		/*
+			ackingBlock, exist := blockMap[block.NotaryAck.NotaryBlockHash]
+			s.Require().True(exist)
+			s.False(verifyNotarySignature(
+				pub, ackingBlock, block.NotaryAck.NotarySignature))
+		*/
 	}
 }
 

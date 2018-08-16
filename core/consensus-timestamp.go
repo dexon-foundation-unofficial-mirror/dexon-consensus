@@ -67,7 +67,7 @@ func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (
 			return
 		} else if block.Hash == mainChain[idxMainChain].Hash {
 			rightMainChainIdx = idx
-			blocksWithTimestamp[idx].ConsensusInfo.Timestamp, err =
+			blocksWithTimestamp[idx].Notary.Timestamp, err =
 				getMedianTime(block)
 			if err != nil {
 				return
@@ -75,10 +75,10 @@ func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (
 			// Process Non-MainChain blocks.
 			if rightMainChainIdx > leftMainChainIdx {
 				for idx, timestamp := range interpoTime(
-					blocksWithTimestamp[leftMainChainIdx].ConsensusInfo.Timestamp,
-					blocksWithTimestamp[rightMainChainIdx].ConsensusInfo.Timestamp,
+					blocksWithTimestamp[leftMainChainIdx].Notary.Timestamp,
+					blocksWithTimestamp[rightMainChainIdx].Notary.Timestamp,
 					rightMainChainIdx-leftMainChainIdx-1) {
-					blocksWithTimestamp[leftMainChainIdx+idx+1].ConsensusInfo.Timestamp =
+					blocksWithTimestamp[leftMainChainIdx+idx+1].Notary.Timestamp =
 						timestamp
 				}
 			}

@@ -15,6 +15,8 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
+// TODO(jimmy-dexon): remove comments of NotaryAck before open source.
+
 package types
 
 import (
@@ -37,36 +39,36 @@ const (
 	BlockStatusFinal
 )
 
-// CompactionChainAck represents the acking to the compaction chain.
-type CompactionChainAck struct {
-	AckingBlockHash common.Hash `json:"acking_block_hash"`
-	// ConsensusInfoSignature is the signature of the hash value of
-	// Block.ConsensusInfoParentHash and Block.ConsensusInfo.
-	ConsensusInfoSignature crypto.Signature `json:"consensus_info_signature"`
+// NotaryAck represents the acking to the compaction chain.
+type NotaryAck struct {
+	NotaryBlockHash common.Hash `json:"notary_block_hash"`
+	// NotarySignature is the signature of the hash value of
+	// Block.NotaryParentHash and Block.Notary.
+	NotarySignature crypto.Signature `json:"notary_signature"`
 }
 
-// ConsensusInfo represents the consensus information on the compaction chain.
-type ConsensusInfo struct {
+// Notary represents the consensus information on the compaction chain.
+type Notary struct {
 	Timestamp time.Time `json:"timestamp"`
 	Height    uint64    `json:"height"`
 }
 
 // Block represents a single event broadcasted on the network.
 type Block struct {
-	ProposerID         ValidatorID               `json:"proposer_id"`
-	ParentHash         common.Hash               `json:"parent_hash"`
-	Hash               common.Hash               `json:"hash"`
-	Height             uint64                    `json:"height"`
-	Timestamps         map[ValidatorID]time.Time `json:"timestamps"`
-	Acks               map[common.Hash]struct{}  `json:"acks"`
-	CompactionChainAck CompactionChainAck        `json:"compaction_chain_ack"`
-	Signature          crypto.Signature          `json:"signature"`
+	ProposerID ValidatorID               `json:"proposer_id"`
+	ParentHash common.Hash               `json:"parent_hash"`
+	Hash       common.Hash               `json:"hash"`
+	Height     uint64                    `json:"height"`
+	Timestamps map[ValidatorID]time.Time `json:"timestamps"`
+	Acks       map[common.Hash]struct{}  `json:"acks"`
+	//NotaryAck  NotaryAck                 `json:"notary_ack"`
+	Signature crypto.Signature `json:"signature"`
 
-	ConsensusInfo ConsensusInfo `json:"consensus_info"`
-	// ConsensusInfoParentHash is the hash value of Block.ConsensusInfoParentHash
-	// and Block.ConsensusInfo, where Block is the previous block on
+	Notary Notary `json:"notary"`
+	// NotaryParentHash is the hash value of Block.NotaryParentHash
+	// and Block.Notary, where Block is the previous block on
 	// the compaction chain.
-	ConsensusInfoParentHash common.Hash `json:"consensus_info_parent_hash"`
+	NotaryParentHash common.Hash `json:"notary_parent_hash"`
 
 	Ackeds          map[common.Hash]struct{} `json:"-"`
 	AckedValidators map[ValidatorID]struct{} `json:"-"`
@@ -110,18 +112,22 @@ func (b *Block) Clone() *Block {
 		Height:     b.Height,
 		Timestamps: make(map[ValidatorID]time.Time),
 		Acks:       make(map[common.Hash]struct{}),
-		CompactionChainAck: CompactionChainAck{
-			AckingBlockHash: b.CompactionChainAck.AckingBlockHash,
-		},
+		/*
+			NotaryAck: NotaryAck{
+				NotaryBlockHash: b.NotaryAck.NotaryBlockHash,
+			},
+		*/
 		Signature: b.Signature,
-		ConsensusInfo: ConsensusInfo{
-			Timestamp: b.ConsensusInfo.Timestamp,
-			Height:    b.ConsensusInfo.Height,
+		Notary: Notary{
+			Timestamp: b.Notary.Timestamp,
+			Height:    b.Notary.Height,
 		},
-		ConsensusInfoParentHash: b.ConsensusInfoParentHash,
+		NotaryParentHash: b.NotaryParentHash,
 	}
-	bcopy.CompactionChainAck.ConsensusInfoSignature = append(
-		crypto.Signature(nil), b.CompactionChainAck.ConsensusInfoSignature...)
+	/*
+		bcopy.NotaryAck.NotarySignature = append(
+			crypto.Signature(nil), b.NotaryAck.NotarySignature...)
+	*/
 	for k, v := range b.Timestamps {
 		bcopy.Timestamps[k] = v
 	}

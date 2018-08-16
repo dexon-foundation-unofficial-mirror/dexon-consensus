@@ -48,8 +48,8 @@ var (
 		"hash of block is incorrect")
 	ErrIncorrectSignature = fmt.Errorf(
 		"signature of block is incorrect")
-	ErrIncorrectCompactionChainAck = fmt.Errorf(
-		"compaction chain ack of block is incorrect")
+	ErrIncorrectNotaryAck = fmt.Errorf(
+		"compaction chain notary of block is incorrect")
 	ErrGenesisBlockNotEmpty = fmt.Errorf(
 		"genesis block should be empty")
 )
@@ -120,26 +120,29 @@ func (con *Consensus) sanityCheck(blockConv types.BlockConverter) (err error) {
 		return ErrIncorrectSignature
 	}
 
-	// Check the compaction chain info.
-	if ackingBlockHash :=
-		b.CompactionChainAck.AckingBlockHash; (ackingBlockHash != common.Hash{}) {
-		ackingBlock, err := con.db.Get(ackingBlockHash)
-		if err != nil {
-			return err
+	// TODO(jimmy-dexon): remove these comments before open source.
+	/*
+		// Check the notary ack.
+		if notaryBlockHash :=
+			b.NotaryAck.NotaryBlockHash; (notaryBlockHash != common.Hash{}) {
+			notaryBlock, err := con.db.Get(notaryBlockHash)
+			if err != nil {
+				return err
+			}
+			hash, err := hashNotary(&notaryBlock)
+			if err != nil {
+				return err
+			}
+			pubKey, err := con.sigToPub(hash,
+				b.NotaryAck.NotarySignature)
+			if err != nil {
+				return err
+			}
+			if !b.ProposerID.Equal(crypto.Keccak256Hash(pubKey.Bytes())) {
+				return ErrIncorrectNotaryAck
+			}
 		}
-		hash, err := hashConsensusInfo(&ackingBlock)
-		if err != nil {
-			return err
-		}
-		pubKey, err := con.sigToPub(hash,
-			b.CompactionChainAck.ConsensusInfoSignature)
-		if err != nil {
-			return err
-		}
-		if !b.ProposerID.Equal(crypto.Keccak256Hash(pubKey.Bytes())) {
-			return ErrIncorrectCompactionChainAck
-		}
-	}
+	*/
 	return nil
 }
 
@@ -199,7 +202,7 @@ func (con *Consensus) ProcessBlock(blockConv types.BlockConverter) (err error) {
 			if err = con.db.Update(*b); err != nil {
 				return
 			}
-			con.app.DeliverBlock(b.Hash, b.ConsensusInfo.Timestamp)
+			con.app.DeliverBlock(b.Hash, b.Notary.Timestamp)
 		}
 	}
 	return

@@ -26,32 +26,32 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
-func hashConsensusInfo(block *types.Block) (common.Hash, error) {
-	binaryTime, err := block.ConsensusInfo.Timestamp.MarshalBinary()
+func hashNotary(block *types.Block) (common.Hash, error) {
+	binaryTime, err := block.Notary.Timestamp.MarshalBinary()
 	if err != nil {
 		return common.Hash{}, err
 	}
 	binaryHeight := make([]byte, 8)
-	binary.LittleEndian.PutUint64(binaryHeight, block.ConsensusInfo.Height)
+	binary.LittleEndian.PutUint64(binaryHeight, block.Notary.Height)
 	hash := crypto.Keccak256Hash(
-		block.ConsensusInfoParentHash[:],
+		block.NotaryParentHash[:],
 		binaryTime,
 		binaryHeight)
 	return hash, nil
 }
 
-func signConsensusInfo(block *types.Block,
+func signNotary(block *types.Block,
 	prv crypto.PrivateKey) (crypto.Signature, error) {
-	hash, err := hashConsensusInfo(block)
+	hash, err := hashNotary(block)
 	if err != nil {
 		return crypto.Signature{}, err
 	}
 	return prv.Sign(hash)
 }
 
-func verifyConsensusInfoSignature(pubkey crypto.PublicKey,
-	ackingBlock *types.Block, sig crypto.Signature) (bool, error) {
-	hash, err := hashConsensusInfo(ackingBlock)
+func verifyNotarySignature(pubkey crypto.PublicKey,
+	notaryBlock *types.Block, sig crypto.Signature) (bool, error) {
+	hash, err := hashNotary(notaryBlock)
 	if err != nil {
 		return false, err
 	}
