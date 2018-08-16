@@ -44,9 +44,14 @@ func (e *ErrMissingBlockInfo) Error() string {
 
 // Errors for consensus core.
 var (
-	ErrIncorrectHash        = fmt.Errorf("hash of block is incorrect")
-	ErrIncorrectSignature   = fmt.Errorf("signature of block is incorrect")
-	ErrGenesisBlockNotEmpty = fmt.Errorf("genesis block should be empty")
+	ErrIncorrectHash = fmt.Errorf(
+		"hash of block is incorrect")
+	ErrIncorrectSignature = fmt.Errorf(
+		"signature of block is incorrect")
+	ErrIncorrectCompactionChainAck = fmt.Errorf(
+		"compaction chain ack of block is incorrect")
+	ErrGenesisBlockNotEmpty = fmt.Errorf(
+		"genesis block should be empty")
 )
 
 // Consensus implements DEXON Consensus algorithm.
@@ -115,11 +120,32 @@ func (con *Consensus) sanityCheck(blockConv types.BlockConverter) (err error) {
 		return ErrIncorrectSignature
 	}
 
+	// Check the compaction chain info.
+	if ackingBlockHash :=
+		b.CompactionChainAck.AckingBlockHash; (ackingBlockHash != common.Hash{}) {
+		ackingBlock, err := con.db.Get(ackingBlockHash)
+		if err != nil {
+			return err
+		}
+		hash, err := hashConsensusInfo(&ackingBlock)
+		if err != nil {
+			return err
+		}
+		pubKey, err := con.sigToPub(hash,
+			b.CompactionChainAck.ConsensusInfoSignature)
+		if err != nil {
+			return err
+		}
+		if !b.ProposerID.Equal(crypto.Keccak256Hash(pubKey.Bytes())) {
+			return ErrIncorrectCompactionChainAck
+		}
+	}
 	return nil
 }
 
 // ProcessBlock is the entry point to submit one block to a Consensus instance.
 func (con *Consensus) ProcessBlock(blockConv types.BlockConverter) (err error) {
+	// TODO(jimmy-dexon): BlockConverter.Block() is called twice in this method.
 	if err := con.sanityCheck(blockConv); err != nil {
 		return err
 	}
