@@ -18,15 +18,20 @@
 package simulation
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"net/http"
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -49,10 +54,6 @@ type TCPNetwork struct {
 
 // NewTCPNetwork returns pointer to a new Network instance.
 func NewTCPNetwork(local bool, peerServer string) *TCPNetwork {
-	port := 1024 + rand.Int()%1024
-	if !local {
-		port = peerPort
-	}
 	pServer := peerServer
 	if local {
 		pServer = "127.0.0.1"
@@ -69,7 +70,6 @@ func NewTCPNetwork(local bool, peerServer string) *TCPNetwork {
 	return &TCPNetwork{
 		local:       local,
 		peerServer:  pServer,
-		port:        port,
 		client:      client,
 		endpoints:   make(map[types.ValidatorID]string),
 		recieveChan: make(chan interface{}, msgBufferSize),
@@ -78,13 +78,58 @@ func NewTCPNetwork(local bool, peerServer string) *TCPNetwork {
 
 // Start starts the http server for accepting message.
 func (n *TCPNetwork) Start() {
-	addr := fmt.Sprintf("0.0.0.0:%d", n.port)
-	server := &http.Server{
-		Addr:    addr,
-		Handler: n,
-	}
-	fmt.Printf("Validator started at %s\n", addr)
-	server.ListenAndServe()
+	listenSuccess := make(chan struct{})
+	go func() {
+		for {
+			ctx, cancel := context.WithTimeout(context.Background(),
+				50*time.Millisecond)
+			defer cancel()
+			go func() {
+				<-ctx.Done()
+				if ctx.Err() != context.Canceled {
+					listenSuccess <- struct{}{}
+				}
+			}()
+			port := 1024 + rand.Int()%1024
+			if !n.local {
+				port = peerPort
+			}
+			addr := net.JoinHostPort("0.0.0.0", strconv.Itoa(port))
+			server := &http.Server{
+				Addr:    addr,
+				Handler: n,
+			}
+
+			n.port = port
+			if err := server.ListenAndServe(); err != nil {
+				cancel()
+				if err == http.ErrServerClosed {
+					break
+				}
+				if !n.local {
+					panic(err)
+				}
+				// In local-tcp, retry with other port.
+				operr, ok := err.(*net.OpError)
+				if !ok {
+					panic(err)
+				}
+				oserr, ok := operr.Err.(*os.SyscallError)
+				if !ok {
+					panic(operr)
+				}
+				errno, ok := oserr.Err.(syscall.Errno)
+				if !ok {
+					panic(oserr)
+				}
+				if errno != syscall.EADDRINUSE {
+					panic(errno)
+				}
+			}
+		}
+	}()
+	<-listenSuccess
+	fmt.Printf("Validator started at 0.0.0.0:%d\n", n.port)
 }
 
 // NumPeers returns the number of peers in the network.

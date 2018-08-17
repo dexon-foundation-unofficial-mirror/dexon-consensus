@@ -19,6 +19,7 @@ package simulation
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
@@ -56,15 +57,24 @@ func Run(configPath string) {
 				vs = append(vs, NewValidator(prv, eth.SigToPub, cfg.Validator, network))
 			}
 		} else if networkType == config.NetworkTypeTCPLocal {
+			lock := sync.Mutex{}
+			wg := sync.WaitGroup{}
 			for i := 0; i < cfg.Validator.Num; i++ {
 				prv, err := eth.NewPrivateKey()
 				if err != nil {
 					panic(err)
 				}
-				network := NewTCPNetwork(true, cfg.Networking.PeerServer)
-				go network.Start()
-				vs = append(vs, NewValidator(prv, eth.SigToPub, cfg.Validator, network))
+				wg.Add(1)
+				go func() {
+					network := NewTCPNetwork(true, cfg.Networking.PeerServer)
+					network.Start()
+					lock.Lock()
+					defer lock.Unlock()
+					vs = append(vs, NewValidator(prv, eth.SigToPub, cfg.Validator, network))
+					wg.Done()
+				}()
 			}
+			wg.Wait()
 		}
 
 		for i := 0; i < cfg.Validator.Num; i++ {
@@ -77,7 +87,7 @@ func Run(configPath string) {
 			panic(err)
 		}
 		network := NewTCPNetwork(false, cfg.Networking.PeerServer)
-		go network.Start()
+		network.Start()
 		v := NewValidator(prv, eth.SigToPub, cfg.Validator, network)
 		go v.Run()
 		vs = append(vs, v)
