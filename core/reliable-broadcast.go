@@ -25,20 +25,31 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
+// Status represents the block process state.
+type blockStatus int
+
+// Block Status.
+const (
+	blockStatusInit blockStatus = iota
+	blockStatusAcked
+	blockStatusOrdering
+	blockStatusFinal
+)
+
 // reliableBroadcast is a module for reliable broadcast.
 type reliableBroadcast struct {
-	// lattice stores blocks by its validator ID and height.
-	lattice map[types.ValidatorID]*reliableBroadcastValidatorStatus
+	// lattice stores validator's blocks and other info.
+	lattice map[types.ValidatorID]*rbcValidatorStatus
 
-	// blocks stores the hash to block map.
-	blocks map[common.Hash]*types.Block
+	// blockInfos stores block infos.
+	blockInfos map[common.Hash]*rbcBlockInfo
 
 	// receivedBlocks stores blocks which is received but its acks are not all
 	// in lattice.
 	receivedBlocks map[common.Hash]*types.Block
 }
 
-type reliableBroadcastValidatorStatus struct {
+type rbcValidatorStatus struct {
 	// blocks stores blocks proposed by specified validator in map which key is
 	// the height of the block.
 	blocks map[uint64]*types.Block
@@ -51,6 +62,13 @@ type reliableBroadcastValidatorStatus struct {
 
 	// nextOutput is the next output height of block, default to 0.
 	nextOutput uint64
+}
+
+type rbcBlockInfo struct {
+	block           *types.Block
+	receivedTime    time.Time
+	status          blockStatus
+	ackedValidators map[types.ValidatorID]struct{}
 }
 
 // Errors for sanity check error.
@@ -67,8 +85,8 @@ var (
 // newReliableBroadcast creates a new reliableBroadcast struct.
 func newReliableBroadcast() *reliableBroadcast {
 	return &reliableBroadcast{
-		lattice:        make(map[types.ValidatorID]*reliableBroadcastValidatorStatus),
-		blocks:         make(map[common.Hash]*types.Block),
+		lattice:        make(map[types.ValidatorID]*rbcValidatorStatus),
+		blockInfos:     make(map[common.Hash]*rbcBlockInfo),
 		receivedBlocks: make(map[common.Hash]*types.Block),
 	}
 }
@@ -92,15 +110,16 @@ func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 		if _, exist := b.Acks[b.ParentHash]; !exist {
 			return ErrNotAckParent
 		}
-		bParent, exists := rb.blocks[b.ParentHash]
-		if exists && bParent.Height != b.Height-1 {
+		bParentStat, exists := rb.blockInfos[b.ParentHash]
+		if exists && bParentStat.block.Height != b.Height-1 {
 			return ErrInvalidBlockHeight
 		}
 	}
 
 	// Check if it acks older blocks.
 	for hash := range b.Acks {
-		if bAck, exist := rb.blocks[hash]; exist {
+		if bAckStat, exist := rb.blockInfos[hash]; exist {
+			bAck := bAckStat.block
 			if bAck.Height < rb.lattice[b.ProposerID].nextAck[bAck.ProposerID] {
 				return ErrDoubleAck
 			}
@@ -129,10 +148,11 @@ func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 // areAllAcksReceived checks if all ack blocks of a block are all in lattice.
 func (rb *reliableBroadcast) areAllAcksInLattice(b *types.Block) bool {
 	for h := range b.Acks {
-		bAck, exist := rb.blocks[h]
+		bAckStat, exist := rb.blockInfos[h]
 		if !exist {
 			return false
 		}
+		bAck := bAckStat.block
 
 		bAckInLattice, exist := rb.lattice[bAck.ProposerID].blocks[bAck.Height]
 		if !exist {
@@ -152,12 +172,12 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 	if err = rb.sanityCheck(block); err != nil {
 		return
 	}
-	rb.blocks[block.Hash] = block
-	block.AckedValidators = make(map[types.ValidatorID]struct{})
-	block.ReceivedTime = time.Now().UTC()
+	rb.blockInfos[block.Hash] = &rbcBlockInfo{
+		block:           block,
+		receivedTime:    time.Now().UTC(),
+		ackedValidators: make(map[types.ValidatorID]struct{}),
+	}
 	rb.receivedBlocks[block.Hash] = block
-	block.AckedValidators = make(map[types.ValidatorID]struct{})
-	block.ReceivedTime = time.Now()
 
 	// Check blocks in receivedBlocks if its acks are all in lattice. If a block's
 	// acking blocks are all in lattice, execute sanity check and add the block
@@ -181,7 +201,7 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 			//  \ /   (added in receivedBlocks), and A comes, if sanity check is
 			//   A    not being executed here, B and C will both be added in lattice
 			if err = rb.sanityCheck(b); err != nil {
-				delete(rb.blocks, b.Hash)
+				delete(rb.blockInfos, b.Hash)
 				delete(rb.receivedBlocks, b.Hash)
 				continue
 				// TODO(mission): how to return for multiple errors?
@@ -189,48 +209,50 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 			rb.lattice[b.ProposerID].blocks[b.Height] = b
 			delete(rb.receivedBlocks, b.Hash)
 			for h := range b.Acks {
-				bAck := rb.blocks[h]
-				// Update nextAck only when bAck.Height + 1 is greater. A block might
-				// ack blocks proposed by same validator with different height.
-				if rb.lattice[b.ProposerID].nextAck[bAck.ProposerID] < bAck.Height+1 {
-					rb.lattice[b.ProposerID].nextAck[bAck.ProposerID] = bAck.Height + 1
+				bAckStat := rb.blockInfos[h]
+				// Update nextAck only when bAckStat.block.Height + 1 is greater. A
+				// block might ack blocks proposed by same validator with different
+				// height.
+				if rb.lattice[b.ProposerID].nextAck[bAckStat.block.ProposerID] < bAckStat.block.Height+1 {
+					rb.lattice[b.ProposerID].nextAck[bAckStat.block.ProposerID] = bAckStat.block.Height + 1
 				}
-				// Update AckedValidators for each ack blocks and its parents.
+				// Update ackedValidators for each ack blocks and its parents.
 				for {
-					if _, exist := bAck.AckedValidators[b.ProposerID]; exist {
+					if _, exist := bAckStat.ackedValidators[b.ProposerID]; exist {
 						break
 					}
-					if bAck.Status > types.BlockStatusInit {
+					if bAckStat.status > blockStatusInit {
 						break
 					}
-					bAck.AckedValidators[b.ProposerID] = struct{}{}
+					bAckStat.ackedValidators[b.ProposerID] = struct{}{}
 					// A block is strongly acked if it is acked by more than
 					// 2 * (maximum number of byzatine validators) unique validators.
-					if len(bAck.AckedValidators) > 2*((len(rb.lattice)-1)/3) {
-						blocksToAcked[bAck.Hash] = bAck
+					if len(bAckStat.ackedValidators) > 2*((len(rb.lattice)-1)/3) {
+						blocksToAcked[bAckStat.block.Hash] = bAckStat.block
 					}
-					if bAck.Height == 0 {
+					if bAckStat.block.Height == 0 {
 						break
 					}
-					bAck = rb.blocks[bAck.ParentHash]
+					bAckStat = rb.blockInfos[bAckStat.block.ParentHash]
 				}
 			}
 		}
 	}
 
 	for _, b := range blocksToAcked {
-		b.Status = types.BlockStatusAcked
+		rb.blockInfos[b.Hash].status = blockStatusAcked
 	}
 
 	// Delete blocks in received array when it is received a long time ago.
 	oldBlocks := []common.Hash{}
 	for h, b := range rb.receivedBlocks {
-		if time.Now().Sub(b.ReceivedTime) >= 30*time.Second {
+		if time.Now().Sub(rb.blockInfos[b.Hash].receivedTime) >= 30*time.Second {
 			oldBlocks = append(oldBlocks, h)
 		}
 	}
 	for _, h := range oldBlocks {
 		delete(rb.receivedBlocks, h)
+		delete(rb.blockInfos, h)
 	}
 
 	// Delete old blocks in "lattice" and "blocks" for release memory space.
@@ -258,9 +280,9 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 			if !exist {
 				break
 			}
-			if b.Status >= types.BlockStatusOrdering {
+			if rb.blockInfos[b.Hash].status >= blockStatusOrdering {
 				delete(rb.lattice[vid].blocks, b.Height)
-				delete(rb.blocks, b.Hash)
+				delete(rb.blockInfos, b.Hash)
 			}
 			if min == 0 {
 				break
@@ -272,15 +294,15 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 }
 
 // extractBlocks returns all blocks that can be inserted into total ordering's
-// DAG. This function changes the status of blocks from types.BlockStatusAcked
-// to blockStatusOrdering.
+// DAG. This function changes the status of blocks from blockStatusAcked to
+// blockStatusOrdering.
 func (rb *reliableBroadcast) extractBlocks() []*types.Block {
 	ret := []*types.Block{}
 	for {
 		updated := false
 		for vid := range rb.lattice {
 			b, exist := rb.lattice[vid].blocks[rb.lattice[vid].nextOutput]
-			if !exist || b.Status < types.BlockStatusAcked {
+			if !exist || rb.blockInfos[b.Hash].status < blockStatusAcked {
 				continue
 			}
 			allAcksInOrderingStatus := true
@@ -288,11 +310,11 @@ func (rb *reliableBroadcast) extractBlocks() []*types.Block {
 			// does not exist means that it deleted but its status is definitely Acked
 			// or ordering.
 			for ackHash := range b.Acks {
-				bAck, exist := rb.blocks[ackHash]
+				bAckStat, exist := rb.blockInfos[ackHash]
 				if !exist {
 					continue
 				}
-				if bAck.Status < types.BlockStatusOrdering {
+				if bAckStat.status < blockStatusOrdering {
 					allAcksInOrderingStatus = false
 					break
 				}
@@ -301,7 +323,7 @@ func (rb *reliableBroadcast) extractBlocks() []*types.Block {
 				continue
 			}
 			updated = true
-			b.Status = types.BlockStatusOrdering
+			rb.blockInfos[b.Hash].status = blockStatusOrdering
 			ret = append(ret, b)
 			rb.lattice[vid].nextOutput++
 		}
@@ -385,7 +407,7 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 
 // addValidator adds validator in the validator set.
 func (rb *reliableBroadcast) addValidator(h types.ValidatorID) {
-	rb.lattice[h] = &reliableBroadcastValidatorStatus{
+	rb.lattice[h] = &rbcValidatorStatus{
 		blocks:     make(map[uint64]*types.Block),
 		nextAck:    make(map[types.ValidatorID]uint64),
 		nextOutput: 0,

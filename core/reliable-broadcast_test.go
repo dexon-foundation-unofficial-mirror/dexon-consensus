@@ -343,11 +343,11 @@ func (s *ReliableBroadcastTest) TestStrongAck() {
 
 	// Check block 0-0 to 0-3 before adding 1-1 and 2-1.
 	for i := uint64(0); i < 4; i++ {
-		s.Require().Equal(types.BlockStatusInit, rb.lattice[vids[0]].blocks[i].Status)
+		s.Require().Equal(blockStatusInit, rb.blockInfos[rb.lattice[vids[0]].blocks[i].Hash].status)
 	}
 
 	// Add block 1-1 which acks 1-0 and 0-2, and block 0-0 to 0-3 are still
-	// in BlockStatusInit, because they are not strongly acked.
+	// in blockStatusInit, because they are not strongly acked.
 	b = &types.Block{
 		ProposerID: vids[1],
 		ParentHash: rb.lattice[vids[1]].blocks[0].Hash,
@@ -365,7 +365,8 @@ func (s *ReliableBroadcastTest) TestStrongAck() {
 	s.Require().Nil(rb.processBlock(b))
 	s.Require().NotNil(rb.lattice[vids[1]].blocks[1])
 	for i := uint64(0); i < 4; i++ {
-		s.Require().Equal(types.BlockStatusInit, rb.lattice[vids[0]].blocks[i].Status)
+		h := rb.lattice[vids[0]].blocks[i].Hash
+		s.Require().Equal(blockStatusInit, rb.blockInfos[h].status)
 	}
 
 	// Add block 2-1 which acks 0-2 and 2-0, block 0-0 to 0-2 are strongly acked but
@@ -385,10 +386,10 @@ func (s *ReliableBroadcastTest) TestStrongAck() {
 	s.Require().Nil(err)
 	s.Require().Nil(rb.processBlock(b))
 
-	s.Require().Equal(types.BlockStatusAcked, rb.lattice[vids[0]].blocks[0].Status)
-	s.Require().Equal(types.BlockStatusAcked, rb.lattice[vids[0]].blocks[1].Status)
-	s.Require().Equal(types.BlockStatusAcked, rb.lattice[vids[0]].blocks[2].Status)
-	s.Require().Equal(types.BlockStatusInit, rb.lattice[vids[0]].blocks[3].Status)
+	s.Require().Equal(blockStatusAcked, rb.blockInfos[rb.lattice[vids[0]].blocks[0].Hash].status)
+	s.Require().Equal(blockStatusAcked, rb.blockInfos[rb.lattice[vids[0]].blocks[1].Hash].status)
+	s.Require().Equal(blockStatusAcked, rb.blockInfos[rb.lattice[vids[0]].blocks[2].Hash].status)
+	s.Require().Equal(blockStatusInit, rb.blockInfos[rb.lattice[vids[0]].blocks[3].Hash].status)
 }
 
 func (s *ReliableBroadcastTest) TestExtractBlocks() {
@@ -439,7 +440,7 @@ func (s *ReliableBroadcastTest) TestExtractBlocks() {
 	hashExtracted := map[common.Hash]*types.Block{}
 	for _, b := range rb.extractBlocks() {
 		hashExtracted[b.Hash] = b
-		s.Require().Equal(types.BlockStatusOrdering, b.Status)
+		s.Require().Equal(blockStatusOrdering, rb.blockInfos[b.Hash].status)
 	}
 	for _, h := range hashes {
 		_, exist := hashExtracted[h]
@@ -492,8 +493,8 @@ func (s *ReliableBroadcastTest) TestRandomIntensiveAcking() {
 	extractedBlocks = append(extractedBlocks, rb.extractBlocks()...)
 	// The len of array extractedBlocks should be about 5000.
 	s.Require().True(len(extractedBlocks) > 4500)
-	// The len of rb.blocks should be small if deleting mechanism works.
-	// s.True(len(rb.blocks) < 500)
+	// The len of rb.blockInfos should be small if deleting mechanism works.
+	// s.True(len(rb.blockInfos) < 500)
 }
 
 func (s *ReliableBroadcastTest) TestRandomlyGeneratedBlocks() {

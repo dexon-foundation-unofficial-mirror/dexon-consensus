@@ -28,23 +28,20 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
-// Status represents the block process state.
-type Status int
-
-// Block Status.
-const (
-	BlockStatusInit Status = iota
-	BlockStatusAcked
-	BlockStatusOrdering
-	BlockStatusFinal
-)
-
 // NotaryAck represents the acking to the compaction chain.
 type NotaryAck struct {
 	NotaryBlockHash common.Hash `json:"notary_block_hash"`
 	// NotarySignature is the signature of the hash value of
 	// Block.NotaryParentHash and Block.Notary.
 	NotarySignature crypto.Signature `json:"notary_signature"`
+}
+
+// CompactionChainAck represents the acking to the compaction chain.
+type CompactionChainAck struct {
+	AckingBlockHash common.Hash `json:"acking_block_hash"`
+	// Signature is the signature of the hash value of
+	// Block.ConsensusInfoParentHash and Block.ConsensusInfo.
+	ConsensusSignature crypto.Signature `json:"consensus_signature"`
 }
 
 // Notary represents the consensus information on the compaction chain.
@@ -70,10 +67,7 @@ type Block struct {
 	// the compaction chain.
 	NotaryParentHash common.Hash `json:"notary_parent_hash"`
 
-	Ackeds          map[common.Hash]struct{} `json:"-"`
-	AckedValidators map[ValidatorID]struct{} `json:"-"`
-	Status          Status                   `json:"-"`
-	ReceivedTime    time.Time                `json:"-"`
+	ConsensusInfoParentHash common.Hash `json:"consensus_info_parent_hash"`
 }
 
 // Block implements BlockConverter interface.
