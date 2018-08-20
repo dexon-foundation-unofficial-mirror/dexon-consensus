@@ -28,28 +28,6 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
-// NotaryAck represents the acking to the compaction chain.
-type NotaryAck struct {
-	NotaryBlockHash common.Hash `json:"notary_block_hash"`
-	// NotarySignature is the signature of the hash value of
-	// Block.NotaryParentHash and Block.Notary.
-	NotarySignature crypto.Signature `json:"notary_signature"`
-}
-
-// CompactionChainAck represents the acking to the compaction chain.
-type CompactionChainAck struct {
-	AckingBlockHash common.Hash `json:"acking_block_hash"`
-	// Signature is the signature of the hash value of
-	// Block.ConsensusInfoParentHash and Block.ConsensusInfo.
-	ConsensusSignature crypto.Signature `json:"consensus_signature"`
-}
-
-// Notary represents the consensus information on the compaction chain.
-type Notary struct {
-	Timestamp time.Time `json:"timestamp"`
-	Height    uint64    `json:"height"`
-}
-
 // Block represents a single event broadcasted on the network.
 type Block struct {
 	ProposerID ValidatorID               `json:"proposer_id"`
@@ -58,16 +36,9 @@ type Block struct {
 	Height     uint64                    `json:"height"`
 	Timestamps map[ValidatorID]time.Time `json:"timestamps"`
 	Acks       map[common.Hash]struct{}  `json:"acks"`
-	//NotaryAck  NotaryAck                 `json:"notary_ack"`
-	Signature crypto.Signature `json:"signature"`
+	Signature  crypto.Signature          `json:"signature"`
 
 	Notary Notary `json:"notary"`
-	// NotaryParentHash is the hash value of Block.NotaryParentHash
-	// and Block.Notary, where Block is the previous block on
-	// the compaction chain.
-	NotaryParentHash common.Hash `json:"notary_parent_hash"`
-
-	ConsensusInfoParentHash common.Hash `json:"consensus_info_parent_hash"`
 }
 
 // Block implements BlockConverter interface.
@@ -106,22 +77,12 @@ func (b *Block) Clone() *Block {
 		Height:     b.Height,
 		Timestamps: make(map[ValidatorID]time.Time),
 		Acks:       make(map[common.Hash]struct{}),
-		/*
-			NotaryAck: NotaryAck{
-				NotaryBlockHash: b.NotaryAck.NotaryBlockHash,
-			},
-		*/
-		Signature: b.Signature,
+		Signature:  b.Signature,
 		Notary: Notary{
 			Timestamp: b.Notary.Timestamp,
 			Height:    b.Notary.Height,
 		},
-		NotaryParentHash: b.NotaryParentHash,
 	}
-	/*
-		bcopy.NotaryAck.NotarySignature = append(
-			crypto.Signature(nil), b.NotaryAck.NotarySignature...)
-	*/
 	for k, v := range b.Timestamps {
 		bcopy.Timestamps[k] = v
 	}

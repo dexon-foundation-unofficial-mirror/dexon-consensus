@@ -48,8 +48,6 @@ var (
 		"hash of block is incorrect")
 	ErrIncorrectSignature = fmt.Errorf(
 		"signature of block is incorrect")
-	ErrIncorrectNotaryAck = fmt.Errorf(
-		"compaction chain notary of block is incorrect")
 	ErrGenesisBlockNotEmpty = fmt.Errorf(
 		"genesis block should be empty")
 )
@@ -204,6 +202,12 @@ func (con *Consensus) ProcessBlock(blockConv types.BlockConverter) (err error) {
 			}
 			con.app.DeliverBlock(b.Hash, b.Notary.Timestamp)
 		}
+		var notaryAck types.NotaryAck
+		notaryAck, err = con.ccModule.prepareNotaryAck(con.prvKey)
+		if err != nil {
+			return
+		}
+		con.app.NotaryAck(notaryAck)
 	}
 	return
 }
@@ -234,10 +238,6 @@ func (con *Consensus) PrepareBlock(blockConv types.BlockConverter,
 		return
 	}
 	b.Signature, err = con.prvKey.Sign(b.Hash)
-	if err != nil {
-		return
-	}
-	err = con.ccModule.prepareBlock(b, con.prvKey)
 	if err != nil {
 		return
 	}
@@ -273,5 +273,21 @@ func (con *Consensus) PrepareGenesisBlock(blockConv types.BlockConverter,
 		return
 	}
 	blockConv.SetBlock(b)
+	return
+}
+
+// ProcessNotaryAck is the entry point to submit one notary ack.
+func (con *Consensus) ProcessNotaryAck(notaryAck types.NotaryAck) (err error) {
+	err = con.ccModule.processNotaryAck(notaryAck)
+	return
+}
+
+// NotaryAcks returns the latest NotaryAck received from all other validators.
+func (con *Consensus) NotaryAcks() (
+	notaryAcks map[types.ValidatorID]types.NotaryAck) {
+	notaryAcks = make(map[types.ValidatorID]types.NotaryAck)
+	for k, v := range con.ccModule.notaryAcks() {
+		notaryAcks[k] = v
+	}
 	return
 }

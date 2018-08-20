@@ -184,3 +184,7 @@ func (a *simApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 	}
 	a.Network.NotifyServer(msg)
 }
+
+// NotaryAck is called when a notary ack is created.
+func (a *simApp) NotaryAck(notaryAck types.NotaryAck) {
+}

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
 type stronglyAckedEvent struct {
@@ -123,4 +124,8 @@ func (app *nonBlockingApplication) TotalOrderingDeliver(
 func (app *nonBlockingApplication) DeliverBlock(
 	blockHash common.Hash, timestamp time.Time) {
 	app.addEvent(deliverBlockEvent{blockHash, timestamp})
+}
+
+// NotaryAck is called when a notary ack is created.
+func (app *nonBlockingApplication) NotaryAck(notaryAck types.NotaryAck) {
 }

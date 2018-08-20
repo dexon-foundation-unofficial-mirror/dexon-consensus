@@ -15,27 +15,29 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package core
+// TODO(jimmy-dexon): remove comments of NotaryAck before open source.
+
+package types
 
 import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
-// Application describes the application interface that interacts with DEXON
-// consensus core.
-type Application interface {
-	// StronglyAcked is called when a block is strongly acked.
-	StronglyAcked(blockHash common.Hash)
+// NotaryAck represents the acking to the compaction chain.
+type NotaryAck struct {
+	ProposerID      ValidatorID `json:"proposer_id"`
+	NotaryBlockHash common.Hash `json:"notary_block_hash"`
+	Hash            common.Hash `json:"hash"`
+	// NotarySignature is the signature of the hash value of BlockNotary.
+	Signature crypto.Signature `json:"signature"`
+}
 
-	// TotalOrderingDeliver is called when the total ordering algorithm deliver // a set of block.
-	TotalOrderingDeliver(blockHashes common.Hashes, early bool)
-
-	// DeliverBlock is called when a block is add to the compaction chain.
-	DeliverBlock(blockHash common.Hash, timestamp time.Time)
-
-	// NotaryAck is called when a notary ack is created.
-	NotaryAck(notaryAck types.NotaryAck)
+// Notary represents the consensus information on the compaction chain.
+type Notary struct {
+	ParentHash common.Hash `json:"parent_hash"`
+	Timestamp  time.Time   `json:"timestamp"`
+	Height     uint64      `json:"height"`
 }

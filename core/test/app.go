@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
 var (
@@ -103,6 +104,10 @@ func (app *App) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 
 	app.Delivered[blockHash] = timestamp
 	app.DeliverSequence = append(app.DeliverSequence, blockHash)
+}
+
+// NotaryAck implements Application interface.
+func (app *App) NotaryAck(notaryAck types.NotaryAck) {
 }
 
 // Compare performs these checks against another App instance

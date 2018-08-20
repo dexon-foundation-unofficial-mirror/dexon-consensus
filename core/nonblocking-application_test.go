@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
 type slowApp struct {
@@ -31,6 +32,7 @@ type slowApp struct {
 	stronglyAcked        map[common.Hash]struct{}
 	totalOrderingDeliver map[common.Hash]struct{}
 	deliverBlock         map[common.Hash]struct{}
+	notaryAck            map[common.Hash]struct{}
 }
 
 func newSlowApp(sleep time.Duration) *slowApp {
@@ -39,6 +41,7 @@ func newSlowApp(sleep time.Duration) *slowApp {
 		stronglyAcked:        make(map[common.Hash]struct{}),
 		totalOrderingDeliver: make(map[common.Hash]struct{}),
 		deliverBlock:         make(map[common.Hash]struct{}),
+		notaryAck:            make(map[common.Hash]struct{}),
 	}
 }
 
@@ -57,6 +60,11 @@ func (app *slowApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) 
 func (app *slowApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 	time.Sleep(app.sleep)
 	app.deliverBlock[blockHash] = struct{}{}
+}
+
+func (app *slowApp) NotaryAck(notaryAck types.NotaryAck) {
+	time.Sleep(app.sleep)
+	app.notaryAck[notaryAck.Hash] = struct{}{}
 }
 
 type NonBlockingAppTestSuite struct {

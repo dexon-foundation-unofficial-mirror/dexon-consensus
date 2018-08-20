@@ -69,19 +69,14 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 	s.Require().NotEqual(prevBlock.Hash, common.Hash{})
 	acks[parentHash] = struct{}{}
 	return &types.Block{
-		ParentHash:       prevBlock.Hash,
-		Acks:             acks,
-		Timestamps:       timestamps,
-		NotaryParentHash: parentHash,
-		Height:           prevBlock.Height + 1,
-		/*
-			NotaryAck: types.NotaryAck{
-				NotaryBlockHash: prevBlock.Hash,
-			},
-		*/
+		ParentHash: prevBlock.Hash,
+		Acks:       acks,
+		Timestamps: timestamps,
+		Height:     prevBlock.Height + 1,
 		Notary: types.Notary{
-			Timestamp: time.Now(),
-			Height:    prevBlock.Notary.Height + 1,
+			ParentHash: parentHash,
+			Timestamp:  time.Now(),
+			Height:     prevBlock.Notary.Height + 1,
 		},
 	}
 }
@@ -104,7 +99,7 @@ func (s *CryptoTestSuite) generateCompactionChain(
 		blocks[idx] = block
 		var err error
 		if idx > 0 {
-			block.NotaryParentHash, err = hashNotary(blocks[idx-1])
+			block.Notary.ParentHash, err = hashNotary(blocks[idx-1])
 			s.Require().Nil(err)
 			/*
 				block.NotaryAck.NotarySignature, err =

@@ -34,7 +34,7 @@ func hashNotary(block *types.Block) (common.Hash, error) {
 	binaryHeight := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryHeight, block.Notary.Height)
 	hash := crypto.Keccak256Hash(
-		block.NotaryParentHash[:],
+		block.Notary.ParentHash[:],
 		binaryTime,
 		binaryHeight)
 	return hash, nil

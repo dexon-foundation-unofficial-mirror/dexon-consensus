@@ -20,24 +20,37 @@
 package core
 
 import (
+	"fmt"
 	"sync"
 
-	//"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
+// Errors for compaction chain.
+var (
+	ErrIncorrectNotaryAck = fmt.Errorf(
+		"compaction chain notary of block is incorrect")
+)
+
 type compactionChain struct {
-	prevBlock *types.Block
-	lock      sync.RWMutex
+	prevBlock        *types.Block
+	lock             sync.RWMutex
+	latestNotaryAcks map[types.ValidatorID]types.NotaryAck
 }
 
 func newCompactionChain() *compactionChain {
 	return &compactionChain{}
 }
 
-func (cc *compactionChain) prepareBlock(
-	block *types.Block, prvKey crypto.PrivateKey) (err error) {
+func (cc *compactionChain) sanityCheck(notaryAck types.NotaryAck) bool {
+	return true
+}
+
+func (cc *compactionChain) processBlock(block *types.Block) (err error) {
+	cc.lock.Lock()
+	defer cc.lock.Unlock()
+	cc.prevBlock = block
 	/*
 		prevBlock := cc.lastBlock()
 		if prevBlock != nil {
@@ -51,8 +64,18 @@ func (cc *compactionChain) prepareBlock(
 	*/
 	return
 }
+func (cc *compactionChain) prepareNotaryAck(prvKey crypto.PrivateKey) (
+	notaryAck types.NotaryAck, err error) {
+	notaryAck.NotaryBlockHash = cc.lastBlock().Hash
+	return
+}
 
-func (cc *compactionChain) processBlock(block *types.Block) (err error) {
+func (cc *compactionChain) processNotaryAck(notaryAck types.NotaryAck) (
+	err error) {
+	if !cc.sanityCheck(notaryAck) {
+		err = ErrIncorrectNotaryAck
+		return
+	}
 	/*
 		prevBlock := cc.lastBlock()
 		if prevBlock == nil {
@@ -69,7 +92,12 @@ func (cc *compactionChain) processBlock(block *types.Block) (err error) {
 		defer cc.lock.Unlock()
 		cc.prevBlock = block
 	*/
+	cc.latestNotaryAcks[notaryAck.ProposerID] = notaryAck
 	return
+}
+
+func (cc *compactionChain) notaryAcks() map[types.ValidatorID]types.NotaryAck {
+	return cc.latestNotaryAcks
 }
 
 func (cc *compactionChain) lastBlock() *types.Block {
