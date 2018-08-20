@@ -34,7 +34,14 @@ func Run(configPath string) {
 
 	networkType := cfg.Networking.Type
 
-	var vs []*Validator
+	var (
+		vs           []*Validator
+		networkModel = &NormalNetwork{
+			Sigma:         cfg.Networking.Sigma,
+			Mean:          cfg.Networking.Mean,
+			LossRateValue: cfg.Networking.LossRateValue,
+		}
+	)
 
 	if networkType == config.NetworkTypeFake ||
 		networkType == config.NetworkTypeTCPLocal {
@@ -42,11 +49,6 @@ func Run(configPath string) {
 		var network Network
 
 		if networkType == config.NetworkTypeFake {
-			networkModel := &NormalNetwork{
-				Sigma:         cfg.Networking.Sigma,
-				Mean:          cfg.Networking.Mean,
-				LossRateValue: cfg.Networking.LossRateValue,
-			}
 			network = NewFakeNetwork(networkModel)
 
 			for i := 0; i < cfg.Validator.Num; i++ {
@@ -66,7 +68,7 @@ func Run(configPath string) {
 				}
 				wg.Add(1)
 				go func() {
-					network := NewTCPNetwork(true, cfg.Networking.PeerServer)
+					network := NewTCPNetwork(true, cfg.Networking.PeerServer, networkModel)
 					network.Start()
 					lock.Lock()
 					defer lock.Unlock()
@@ -86,7 +88,7 @@ func Run(configPath string) {
 		if err != nil {
 			panic(err)
 		}
-		network := NewTCPNetwork(false, cfg.Networking.PeerServer)
+		network := NewTCPNetwork(false, cfg.Networking.PeerServer, networkModel)
 		network.Start()
 		v := NewValidator(prv, eth.SigToPub, cfg.Validator, network)
 		go v.Run()

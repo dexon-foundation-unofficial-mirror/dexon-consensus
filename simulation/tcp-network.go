@@ -50,10 +50,11 @@ type TCPNetwork struct {
 	endpointMutex sync.RWMutex
 	endpoints     map[types.ValidatorID]string
 	recieveChan   chan interface{}
+	model         Model
 }
 
 // NewTCPNetwork returns pointer to a new Network instance.
-func NewTCPNetwork(local bool, peerServer string) *TCPNetwork {
+func NewTCPNetwork(local bool, peerServer string, model Model) *TCPNetwork {
 	pServer := peerServer
 	if local {
 		pServer = "127.0.0.1"
@@ -73,6 +74,7 @@ func NewTCPNetwork(local bool, peerServer string) *TCPNetwork {
 		client:      client,
 		endpoints:   make(map[types.ValidatorID]string),
 		recieveChan: make(chan interface{}, msgBufferSize),
+		model:       model,
 	}
 }
 
@@ -266,6 +268,7 @@ func (n *TCPNetwork) Send(destID types.ValidatorID, msg interface{}) {
 	msgURL := fmt.Sprintf("http://%s/msg", clientAddr)
 
 	go func() {
+		time.Sleep(n.model.Delay())
 		for i := 0; i < retries; i++ {
 			req, err := http.NewRequest(
 				http.MethodPost, msgURL, strings.NewReader(string(messageJSON)))
@@ -292,11 +295,12 @@ func (n *TCPNetwork) Send(destID types.ValidatorID, msg interface{}) {
 
 // BroadcastBlock broadcast blocks into the network.
 func (n *TCPNetwork) BroadcastBlock(block *types.Block) {
+	block = block.Clone()
 	for endpoint := range n.endpoints {
 		if endpoint == block.ProposerID {
 			continue
 		}
-		n.Send(endpoint, block.Clone())
+		n.Send(endpoint, block)
 	}
 }
 

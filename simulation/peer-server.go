@@ -227,11 +227,16 @@ func (p *PeerServer) Run(configPath string) {
 
 		switch m.Type {
 		case shutdownAck:
-			delete(p.peers, id)
-			log.Printf("%v shutdown, %d remains.\n", id, len(p.peers))
-			if len(p.peers) == 0 {
-				stopServer <- struct{}{}
-			}
+			func() {
+				p.peersMu.Lock()
+				defer p.peersMu.Unlock()
+
+				delete(p.peers, id)
+				log.Printf("%v shutdown, %d remains.\n", id, len(p.peers))
+				if len(p.peers) == 0 {
+					stopServer <- struct{}{}
+				}
+			}()
 			break
 		case blockTimestamp:
 			msgs := []TimestampMessage{}
