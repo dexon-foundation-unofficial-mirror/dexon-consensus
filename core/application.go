@@ -36,6 +36,6 @@ type Application interface {
 	// DeliverBlock is called when a block is add to the compaction chain.
 	DeliverBlock(blockHash common.Hash, timestamp time.Time)
 
-	// NotaryAck is called when a notary ack is created.
-	NotaryAck(notaryAck types.NotaryAck)
+	// NotaryAckDeliver is called when a notary ack is created.
+	NotaryAckDeliver(notaryAck *types.NotaryAck)
 }

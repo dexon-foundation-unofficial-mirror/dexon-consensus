@@ -106,8 +106,8 @@ func (app *App) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 	app.DeliverSequence = append(app.DeliverSequence, blockHash)
 }
 
-// NotaryAck implements Application interface.
-func (app *App) NotaryAck(notaryAck types.NotaryAck) {
+// NotaryAckDeliver implements Application interface.
+func (app *App) NotaryAckDeliver(notaryAck *types.NotaryAck) {
 }
 
 // Compare performs these checks against another App instance

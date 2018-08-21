@@ -90,63 +90,62 @@ func (s *CryptoTestSuite) newBlock(prevBlock *types.Block) *types.Block {
 }
 
 func (s *CryptoTestSuite) generateCompactionChain(
-	length int, prv crypto.PrivateKey) []*types.Block {
+	length int, prv crypto.PrivateKey) (
+	[]*types.Block, []types.NotaryAck) {
 	blocks := make([]*types.Block, length)
+	notaryAcks := make([]types.NotaryAck, length)
 	var prevBlock *types.Block
 	for idx := range blocks {
 		block := s.newBlock(prevBlock)
 		prevBlock = block
 		blocks[idx] = block
 		var err error
+		notaryAcks[idx].Hash, err = hashNotary(blocks[idx])
+		s.Require().Nil(err)
+		notaryAcks[idx].NotaryBlockHash = blocks[idx].Hash
+		notaryAcks[idx].Signature, err = prv.Sign(notaryAcks[idx].Hash)
+		s.Require().Nil(err)
 		if idx > 0 {
-			block.Notary.ParentHash, err = hashNotary(blocks[idx-1])
-			s.Require().Nil(err)
-			/*
-				block.NotaryAck.NotarySignature, err =
-					signNotary(blocks[idx-1], prv)
-				s.Require().Nil(err)
-			*/
+			block.Notary.ParentHash = notaryAcks[idx-1].Hash
 		}
 	}
-	return blocks
+	return blocks, notaryAcks
 }
 
 func (s *CryptoTestSuite) TestNotaryAckSignature() {
 	prv, err := eth.NewPrivateKey()
-	//pub := prv.PublicKey()
+	pub := prv.PublicKey()
 	s.Require().Nil(err)
-	blocks := s.generateCompactionChain(10, prv)
+	blocks, notaryAcks := s.generateCompactionChain(10, prv)
 	blockMap := make(map[common.Hash]*types.Block)
 	for _, block := range blocks {
 		blockMap[block.Hash] = block
 	}
-	for _, block := range blocks {
-		if block.Notary.Height == 0 {
+	parentBlock := blocks[0]
+	for _, notaryAck := range notaryAcks {
+		notaryBlock, exist := blockMap[notaryAck.NotaryBlockHash]
+		s.Require().True(exist)
+		if notaryBlock.Notary.Height == 0 {
 			continue
 		}
-		/*
-			ackingBlock, exist := blockMap[block.NotaryAck.NotaryBlockHash]
-			s.Require().True(exist)
-			s.True(ackingBlock.Notary.Height == block.Notary.Height-1)
-			hash, err := hashNotary(ackingBlock)
-			s.Require().Nil(err)
-			s.Equal(hash, block.NotaryParentHash)
-			s.True(verifyNotarySignature(
-				pub, ackingBlock, block.NotaryAck.NotarySignature))
-		*/
+		s.True(parentBlock.Notary.Height == notaryBlock.Notary.Height-1)
+		hash, err := hashNotary(parentBlock)
+		s.Require().Nil(err)
+		s.Equal(hash, notaryBlock.Notary.ParentHash)
+		s.True(verifyNotarySignature(
+			pub, notaryBlock, notaryAck.Signature))
+		parentBlock = notaryBlock
+
 	}
-	// Modify Block.ConsensusTime and verify signature again.
-	for _, block := range blocks {
+	// Modify Block.Notary.Timestamp and verify signature again.
+	for _, notaryAck := range notaryAcks {
+		block, exist := blockMap[notaryAck.NotaryBlockHash]
+		s.Require().True(exist)
 		block.Notary.Timestamp = time.Time{}
-		if block.Notary.Height == 0 {
-			continue
-		}
-		/*
-			ackingBlock, exist := blockMap[block.NotaryAck.NotaryBlockHash]
-			s.Require().True(exist)
-			s.False(verifyNotarySignature(
-				pub, ackingBlock, block.NotaryAck.NotarySignature))
-		*/
+		ackingBlock, exist := blockMap[notaryAck.NotaryBlockHash]
+		s.Require().True(exist)
+		s.False(verifyNotarySignature(
+			pub, ackingBlock, notaryAck.Signature))
 	}
 }
 

@@ -44,6 +44,8 @@ func (e *ErrMissingBlockInfo) Error() string {
 
 // Errors for consensus core.
 var (
+	ErrProposerNotValidator = fmt.Errorf(
+		"proposer is not a validator")
 	ErrIncorrectHash = fmt.Errorf(
 		"hash of block is incorrect")
 	ErrIncorrectSignature = fmt.Errorf(
@@ -91,7 +93,7 @@ func NewConsensus(
 		rbModule: rb,
 		toModule: to,
 		ctModule: newConsensusTimestamp(),
-		ccModule: newCompactionChain(),
+		ccModule: newCompactionChain(db, sigToPub),
 		app:      newNonBlockingApplication(app),
 		gov:      gov,
 		db:       db,
@@ -117,30 +119,6 @@ func (con *Consensus) sanityCheck(blockConv types.BlockConverter) (err error) {
 	if !b.ProposerID.Equal(crypto.Keccak256Hash(pubKey.Bytes())) {
 		return ErrIncorrectSignature
 	}
-
-	// TODO(jimmy-dexon): remove these comments before open source.
-	/*
-		// Check the notary ack.
-		if notaryBlockHash :=
-			b.NotaryAck.NotaryBlockHash; (notaryBlockHash != common.Hash{}) {
-			notaryBlock, err := con.db.Get(notaryBlockHash)
-			if err != nil {
-				return err
-			}
-			hash, err := hashNotary(&notaryBlock)
-			if err != nil {
-				return err
-			}
-			pubKey, err := con.sigToPub(hash,
-				b.NotaryAck.NotarySignature)
-			if err != nil {
-				return err
-			}
-			if !b.ProposerID.Equal(crypto.Keccak256Hash(pubKey.Bytes())) {
-				return ErrIncorrectNotaryAck
-			}
-		}
-	*/
 	return nil
 }
 
@@ -202,12 +180,12 @@ func (con *Consensus) ProcessBlock(blockConv types.BlockConverter) (err error) {
 			}
 			con.app.DeliverBlock(b.Hash, b.Notary.Timestamp)
 		}
-		var notaryAck types.NotaryAck
+		var notaryAck *types.NotaryAck
 		notaryAck, err = con.ccModule.prepareNotaryAck(con.prvKey)
 		if err != nil {
 			return
 		}
-		con.app.NotaryAck(notaryAck)
+		con.app.NotaryAckDeliver(notaryAck)
 	}
 	return
 }
@@ -277,17 +255,17 @@ func (con *Consensus) PrepareGenesisBlock(blockConv types.BlockConverter,
 }
 
 // ProcessNotaryAck is the entry point to submit one notary ack.
-func (con *Consensus) ProcessNotaryAck(notaryAck types.NotaryAck) (err error) {
+func (con *Consensus) ProcessNotaryAck(notaryAck *types.NotaryAck) (err error) {
+	notaryAck = notaryAck.Clone()
+	if _, exists := con.gov.GetValidatorSet()[notaryAck.ProposerID]; !exists {
+		err = ErrProposerNotValidator
+		return
+	}
 	err = con.ccModule.processNotaryAck(notaryAck)
 	return
 }
 
 // NotaryAcks returns the latest NotaryAck received from all other validators.
-func (con *Consensus) NotaryAcks() (
-	notaryAcks map[types.ValidatorID]types.NotaryAck) {
-	notaryAcks = make(map[types.ValidatorID]types.NotaryAck)
-	for k, v := range con.ccModule.notaryAcks() {
-		notaryAcks[k] = v
-	}
-	return
+func (con *Consensus) NotaryAcks() map[types.ValidatorID]*types.NotaryAck {
+	return con.ccModule.notaryAcks()
 }

@@ -35,6 +35,16 @@ type NotaryAck struct {
 	Signature crypto.Signature `json:"signature"`
 }
 
+// Clone returns a deep copy of a NotaryAck.
+func (a *NotaryAck) Clone() *NotaryAck {
+	return &NotaryAck{
+		ProposerID:      a.ProposerID,
+		NotaryBlockHash: a.NotaryBlockHash,
+		Hash:            a.Hash,
+		Signature:       a.Signature,
+	}
+}
+
 // Notary represents the consensus information on the compaction chain.
 type Notary struct {
 	ParentHash common.Hash `json:"parent_hash"`

@@ -40,15 +40,6 @@ func hashNotary(block *types.Block) (common.Hash, error) {
 	return hash, nil
 }
 
-func signNotary(block *types.Block,
-	prv crypto.PrivateKey) (crypto.Signature, error) {
-	hash, err := hashNotary(block)
-	if err != nil {
-		return crypto.Signature{}, err
-	}
-	return prv.Sign(hash)
-}
-
 func verifyNotarySignature(pubkey crypto.PublicKey,
 	notaryBlock *types.Block, sig crypto.Signature) (bool, error) {
 	hash, err := hashNotary(notaryBlock)

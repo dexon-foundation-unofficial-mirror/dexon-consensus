@@ -62,7 +62,7 @@ func (app *slowApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 	app.deliverBlock[blockHash] = struct{}{}
 }
 
-func (app *slowApp) NotaryAck(notaryAck types.NotaryAck) {
+func (app *slowApp) NotaryAckDeliver(notaryAck *types.NotaryAck) {
 	time.Sleep(app.sleep)
 	app.notaryAck[notaryAck.Hash] = struct{}{}
 }

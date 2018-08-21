@@ -126,6 +126,6 @@ func (app *nonBlockingApplication) DeliverBlock(
 	app.addEvent(deliverBlockEvent{blockHash, timestamp})
 }
 
-// NotaryAck is called when a notary ack is created.
-func (app *nonBlockingApplication) NotaryAck(notaryAck types.NotaryAck) {
+// NotaryAckDeliver is called when a notary ack is created.
+func (app *nonBlockingApplication) NotaryAckDeliver(notaryAck *types.NotaryAck) {
 }

@@ -19,76 +19,153 @@ package core
 
 import (
 	"testing"
+	"time"
 
-	/*
-		"github.com/dexon-foundation/dexon-consensus-core/common"
-		"github.com/dexon-foundation/dexon-consensus-core/core/types"
-		"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
-	*/
+	"github.com/dexon-foundation/dexon-consensus-core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
 	"github.com/stretchr/testify/suite"
 )
 
 type CompactionChainTestSuite struct {
 	suite.Suite
+	db blockdb.BlockDatabase
+}
+
+func (s *CompactionChainTestSuite) SetupTest() {
+	var err error
+	s.db, err = blockdb.NewMemBackedBlockDB()
+	s.Require().Nil(err)
+}
+
+func (s *CompactionChainTestSuite) newCompactionChain() *compactionChain {
+	return newCompactionChain(s.db, eth.SigToPub)
+}
+
+func (s *CompactionChainTestSuite) generateBlocks(
+	size int, cc *compactionChain) []*types.Block {
+	now := time.Now().UTC()
+	blocks := make([]*types.Block, size)
+	for idx := range blocks {
+		blocks[idx] = &types.Block{
+			Hash: common.NewRandomHash(),
+			Notary: types.Notary{
+				Timestamp: now,
+			},
+		}
+		now = now.Add(100 * time.Millisecond)
+	}
+	for _, block := range blocks {
+		err := cc.processBlock(block)
+		s.Require().Nil(err)
+	}
+	return blocks
 }
 
 func (s *CompactionChainTestSuite) TestProcessBlock() {
-	/*
-		cc := newCompactionChain()
-		blocks := make([]*types.Block, 10)
-		for idx := range blocks {
-			blocks[idx] = &types.Block{
-				Hash: common.NewRandomHash(),
-			}
+	cc := s.newCompactionChain()
+	now := time.Now().UTC()
+	blocks := make([]*types.Block, 10)
+	for idx := range blocks {
+		blocks[idx] = &types.Block{
+			Hash: common.NewRandomHash(),
+			Notary: types.Notary{
+				Timestamp: now,
+			},
 		}
-		var prevBlock *types.Block
-		for _, block := range blocks {
-			s.Equal(cc.prevBlock, prevBlock)
-			cc.processBlock(block)
-			if prevBlock != nil {
-				s.Equal(block.Notary.Height, prevBlock.Notary.Height+1)
-				prevHash, err := hashNotary(prevBlock)
-				s.Require().Nil(err)
-				s.Equal(prevHash, block.NotaryParentHash)
-			}
-			prevBlock = block
-		}
-	*/
-}
-
-func (s *CompactionChainTestSuite) TestPrepareBlock() {
-	/*
-		cc := newCompactionChain()
-		blocks := make([]*types.Block, 10)
-		for idx := range blocks {
-			blocks[idx] = &types.Block{
-				Hash: common.NewRandomHash(),
-				Notary: types.Notary{
-					Height: uint64(idx),
-				},
-			}
-			if idx > 0 {
-				var err error
-				blocks[idx].NotaryParentHash, err = hashNotary(blocks[idx-1])
-				s.Require().Nil(err)
-			}
-		}
-			prv, err := eth.NewPrivateKey()
+		now = now.Add(100 * time.Millisecond)
+	}
+	var prevBlock *types.Block
+	for _, block := range blocks {
+		s.Equal(cc.prevBlock, prevBlock)
+		err := cc.processBlock(block)
+		s.Require().Nil(err)
+		if prevBlock != nil {
+			s.Equal(block.Notary.Height, prevBlock.Notary.Height+1)
+			prevHash, err := hashNotary(prevBlock)
 			s.Require().Nil(err)
-			for _, block := range blocks {
-				cc.prepareBlock(block, prv)
-				if cc.prevBlock != nil {
-					s.True(verifyNotarySignature(
-						prv.PublicKey(),
-						cc.prevBlock,
-						block.NotaryAck.NotarySignature))
-					s.Equal(block.NotaryAck.NotaryBlockHash, cc.prevBlock.Hash)
-				}
-				cc.prevBlock = block
-			}
-	*/
+			s.Equal(prevHash, block.Notary.ParentHash)
+		}
+		prevBlock = block
+	}
 }
 
-func TestNotary(t *testing.T) {
+func (s *CompactionChainTestSuite) TestPrepareNotaryAck() {
+	cc := s.newCompactionChain()
+	blocks := s.generateBlocks(10, cc)
+	prv, err := eth.NewPrivateKey()
+	s.Require().Nil(err)
+	for _, block := range blocks {
+		notaryAck, err := cc.prepareNotaryAck(prv)
+		s.Require().Nil(err)
+		if cc.prevBlock != nil {
+			s.True(verifyNotarySignature(
+				prv.PublicKey(),
+				cc.prevBlock,
+				notaryAck.Signature))
+			s.Equal(notaryAck.NotaryBlockHash, cc.prevBlock.Hash)
+		}
+		cc.prevBlock = block
+	}
+}
+
+func (s *CompactionChainTestSuite) TestProcessNotaryAck() {
+	cc := s.newCompactionChain()
+	blocks := s.generateBlocks(10, cc)
+	prv1, err := eth.NewPrivateKey()
+	s.Require().Nil(err)
+	prv2, err := eth.NewPrivateKey()
+	s.Require().Nil(err)
+	vID1 := types.NewValidatorID(prv1.PublicKey())
+	vID2 := types.NewValidatorID(prv2.PublicKey())
+	notaryAcks1 := []*types.NotaryAck{}
+	notaryAcks2 := []*types.NotaryAck{}
+	for _, block := range blocks {
+		cc.prevBlock = block
+		notaryAck1, err := cc.prepareNotaryAck(prv1)
+		s.Require().Nil(err)
+		notaryAck2, err := cc.prepareNotaryAck(prv2)
+		s.Require().Nil(err)
+		notaryAcks1 = append(notaryAcks1, notaryAck1)
+		notaryAcks2 = append(notaryAcks2, notaryAck2)
+	}
+	// The acked block is not yet in db.
+	err = cc.processNotaryAck(notaryAcks1[0])
+	s.Nil(err)
+	s.Equal(0, len(cc.notaryAcks()))
+	err = cc.processNotaryAck(notaryAcks2[1])
+	s.Nil(err)
+	s.Equal(0, len(cc.notaryAcks()))
+	// Insert to block to db and trigger processPendingNotaryAck.
+	s.Require().Nil(s.db.Put(*blocks[0]))
+	s.Require().Nil(s.db.Put(*blocks[1]))
+	err = cc.processNotaryAck(notaryAcks1[2])
+	s.Nil(err)
+	s.Equal(2, len(cc.notaryAcks()))
+
+	// Test the notaryAcks should be the last notaryAck.
+	s.Require().Nil(s.db.Put(*blocks[2]))
+	s.Require().Nil(s.db.Put(*blocks[3]))
+	s.Nil(cc.processNotaryAck(notaryAcks1[3]))
+
+	acks := cc.notaryAcks()
+	s.Equal(blocks[3].Hash, acks[vID1].NotaryBlockHash)
+	s.Equal(blocks[1].Hash, acks[vID2].NotaryBlockHash)
+
+	// Test that notaryAck on less Notary.Height should be ignored.
+	s.Require().Nil(s.db.Put(*blocks[4]))
+	s.Require().Nil(s.db.Put(*blocks[5]))
+	s.Nil(cc.processNotaryAck(notaryAcks1[5]))
+	s.Nil(cc.processNotaryAck(notaryAcks2[5]))
+	s.Nil(cc.processNotaryAck(notaryAcks1[4]))
+	s.Nil(cc.processNotaryAck(notaryAcks2[4]))
+
+	acks = cc.notaryAcks()
+	s.Equal(blocks[5].Hash, acks[vID1].NotaryBlockHash)
+	s.Equal(blocks[5].Hash, acks[vID2].NotaryBlockHash)
+}
+
+func TestCompactionChain(t *testing.T) {
 	suite.Run(t, new(CompactionChainTestSuite))
 }
