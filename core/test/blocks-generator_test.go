@@ -103,6 +103,61 @@ func (s *BlocksGeneratorTestCase) TestGenerate() {
 	}
 }
 
+func (s *BlocksGeneratorTestCase) TestGenerateWithMaxAckCount() {
+	var (
+		validatorCount = 13
+		blockCount     = 50
+		gen            = NewBlocksGenerator(nil, stableRandomHash)
+		req            = s.Require()
+	)
+
+	// Generate with 0 acks.
+	db, err := blockdb.NewMemBackedBlockDB()
+	req.Nil(err)
+	req.Nil(gen.Generate(
+		validatorCount, blockCount, MaxAckingCountGenerator(0), db))
+	// Load blocks to check their acking count.
+	iter, err := db.GetAll()
+	req.Nil(err)
+	for {
+		block, err := iter.Next()
+		if err == blockdb.ErrIterationFinished {
+			break
+		}
+		req.Nil(err)
+		if block.IsGenesis() {
+			continue
+		}
+		req.Len(block.Acks, 1)
+	}
+
+	// Generate with acks as many as possible.
+	db, err = blockdb.NewMemBackedBlockDB()
+	req.Nil(err)
+	req.Nil(gen.Generate(
+		validatorCount, blockCount, MaxAckingCountGenerator(
+			validatorCount), db))
+	// Load blocks to verify the average acking count.
+	totalAckingCount := 0
+	totalBlockCount := 0
+	iter, err = db.GetAll()
+	req.Nil(err)
+	for {
+		block, err := iter.Next()
+		if err == blockdb.ErrIterationFinished {
+			break
+		}
+		req.Nil(err)
+		if block.IsGenesis() {
+			continue
+		}
+		totalAckingCount += len(block.Acks)
+		totalBlockCount++
+	}
+	req.NotZero(totalBlockCount)
+	req.True((totalAckingCount / totalBlockCount) >= (validatorCount / 2))
+}
+
 func TestBlocksGenerator(t *testing.T) {
 	suite.Run(t, new(BlocksGeneratorTestCase))
 }

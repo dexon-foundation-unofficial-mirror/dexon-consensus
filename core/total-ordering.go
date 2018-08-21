@@ -34,25 +34,69 @@ const (
 // didn't form a DAG.
 var ErrNotValidDAG = fmt.Errorf("not a valid dag")
 
-// ackingStatusVector describes the acking status, either globally or just
-// for one candidate.
-//
-// When block A acks block B, all blocks proposed from the same proposer
-// as block A with higher height would also acks block B. Therefore,
-// we just need to record:
-//  - the minimum height of acking block from that proposer
-//  - count of acking blocks from that proposer
-// to repsent the acking status for block A.
-type ackingStatusVector map[types.ValidatorID]*struct{ minHeight, count uint64 }
+// totalOrderinWinRecord caches which validators this candidate
+// wins another one based on their height vector.
+type totalOrderingWinRecord map[types.ValidatorID]struct{}
 
-// addBlock would update ackingStatusVector, it's caller's duty
+// grade implements the 'grade' potential function described in white paper.
+func (rec totalOrderingWinRecord) grade(
+	validatorCount, phi uint64,
+	globalAns map[types.ValidatorID]struct{}) int {
+
+	if uint64(len(rec)) >= phi {
+		return 1
+	} else if uint64(len(rec)) < phi-validatorCount+uint64(len(globalAns)) {
+		return 0
+	} else {
+		return -1
+	}
+}
+
+// totalOrderingHeightRecord records two things:
+//  - the minimum heiht of block from that validator acking this block.
+//  - the count of blocks from that validator acking this block.
+type totalOrderingHeightRecord struct{ minHeight, count uint64 }
+
+// totalOrderingCandidateInfo describes proceeding status for one candidate,
+// including:
+//  - acked status as height records, which could keep 'how many blocks from
+//    one validator acking this candidate.
+//  - cached height vector, which valid height based on K-level used for
+//    comparison in 'grade' function.
+//  - cached result of grade function to other candidates.
+//
+// Height Record:
+//  When block A acks block B, all blocks proposed from the same proposer
+//  as block A with higher height would also acks block B. Therefore,
+//  we just need to record:
+//   - the minimum height of acking block from that proposer
+//   - count of acking blocks from that proposer
+//  to repsent the acking status for block A.
+type totalOrderingCandidateInfo struct {
+	ackedStatus        map[types.ValidatorID]*totalOrderingHeightRecord
+	cachedHeightVector map[types.ValidatorID]uint64
+	winRecords         map[common.Hash]totalOrderingWinRecord
+}
+
+// newTotalOrderingCandidateInfo constructs an totalOrderingCandidateInfo
+// instance.
+func newTotalOrderingCandidateInfo() *totalOrderingCandidateInfo {
+	return &totalOrderingCandidateInfo{
+		ackedStatus: make(map[types.ValidatorID]*totalOrderingHeightRecord),
+		winRecords:  make(map[common.Hash]totalOrderingWinRecord),
+	}
+}
+
+func (v *totalOrderingCandidateInfo) clean(otherCandidate common.Hash) {
+	delete(v.winRecords, otherCandidate)
+}
+
+// addBlock would update totalOrderingCandidateInfo, it's caller's duty
 // to make sure the input block acutally acking the target block.
-func (v ackingStatusVector) addBlock(b *types.Block) (err error) {
-	rec, exists := v[b.ProposerID]
+func (v *totalOrderingCandidateInfo) addBlock(b *types.Block) (err error) {
+	rec, exists := v.ackedStatus[b.ProposerID]
 	if !exists {
-		v[b.ProposerID] = &struct {
-			minHeight, count uint64
-		}{
+		v.ackedStatus[b.ProposerID] = &totalOrderingHeightRecord{
 			minHeight: b.Height,
 			count:     1,
 		}
@@ -77,12 +121,13 @@ func (v ackingStatusVector) addBlock(b *types.Block) (err error) {
 //   - the global minimum acking height = 1,
 //   - k = 1
 //  then only block height >= 2 would be added to acking node set.
-func (v ackingStatusVector) getAckingNodeSet(
-	global ackingStatusVector, k uint64) map[types.ValidatorID]struct{} {
+func (v *totalOrderingCandidateInfo) getAckingNodeSet(
+	global *totalOrderingCandidateInfo,
+	k uint64) map[types.ValidatorID]struct{} {
 
 	ret := make(map[types.ValidatorID]struct{})
-	for vID, gRec := range global {
-		rec, exists := v[vID]
+	for vID, gRec := range global.ackedStatus {
+		rec, exists := v.ackedStatus[vID]
 		if !exists {
 			continue
 		}
@@ -97,34 +142,105 @@ func (v ackingStatusVector) getAckingNodeSet(
 	return ret
 }
 
-// getAckingHeightVector would convert 'ackingStatusVector' to
-// Acking Height Vector.
+// updateAckingHeightVector would cached acking height vector.
 //
 // Only block height equals to (global minimum block height + k) would be
 // taken into consideration.
-func (v ackingStatusVector) getAckingHeightVector(
-	global ackingStatusVector, k uint64) map[types.ValidatorID]uint64 {
+func (v *totalOrderingCandidateInfo) updateAckingHeightVector(
+	global *totalOrderingCandidateInfo,
+	k uint64,
+	dirtyValidators map[types.ValidatorID]struct{}) {
 
-	ret := make(map[types.ValidatorID]uint64)
-	for vID, gRec := range global {
-		rec, exists := v[vID]
-
-		if gRec.count <= k {
-			continue
-		} else if !exists {
-			ret[vID] = infinity
-		} else if rec.minHeight <= gRec.minHeight+k {
-			// This check is sufficient to make sure the block height:
-			//
-			//   gRec.minHeight + k
-			//
-			// would be included in this ackingStatusVector.
-			ret[vID] = gRec.minHeight + k
-		} else {
-			ret[vID] = infinity
+	// The reason not to merge the two loops is the iteration over map
+	// is expensive when validator count is large, iterating over dirty
+	// validators is cheaper.
+	// TODO(mission): merge the code in this if/else if the performance won't be
+	//                downgraded when adding a function for the shared part.
+	if v.cachedHeightVector == nil {
+		// Generate height vector from scratch.
+		v.cachedHeightVector = make(map[types.ValidatorID]uint64)
+		for vID, gRec := range global.ackedStatus {
+			rec, exists := v.ackedStatus[vID]
+			if gRec.count <= k {
+				delete(v.cachedHeightVector, vID)
+				continue
+			} else if !exists {
+				v.cachedHeightVector[vID] = infinity
+			} else if rec.minHeight <= gRec.minHeight+k {
+				// This check is sufficient to make sure the block height:
+				//
+				//   gRec.minHeight + k
+				//
+				// would be included in this totalOrderingCandidateInfo.
+				v.cachedHeightVector[vID] = gRec.minHeight + k
+			} else {
+				v.cachedHeightVector[vID] = infinity
+			}
+		}
+	} else {
+		// Return the cached one, only update dirty fields.
+		for vID := range dirtyValidators {
+			gRec, exists := global.ackedStatus[vID]
+			if !exists {
+				continue
+			}
+			rec, exists := v.ackedStatus[vID]
+			if gRec.count <= k {
+				delete(v.cachedHeightVector, vID)
+				continue
+			} else if !exists {
+				v.cachedHeightVector[vID] = infinity
+			} else if rec.minHeight <= gRec.minHeight+k {
+				v.cachedHeightVector[vID] = gRec.minHeight + k
+			} else {
+				v.cachedHeightVector[vID] = infinity
+			}
 		}
 	}
-	return ret
+	return
+}
+
+// updateWinRecord setup win records between two candidates.
+func (v *totalOrderingCandidateInfo) updateWinRecord(
+	otherCandidate common.Hash,
+	other *totalOrderingCandidateInfo,
+	dirtyValidators map[types.ValidatorID]struct{}) {
+
+	// The reason not to merge the two loops is the iteration over map
+	// is expensive when validator count is large, iterating over dirty
+	// validators is cheaper.
+	// TODO(mission): merge the code in this if/else if add a function won't
+	//                affect the performance.
+	win, exists := v.winRecords[otherCandidate]
+	if !exists {
+		win = make(map[types.ValidatorID]struct{})
+		v.winRecords[otherCandidate] = win
+		for vID, hFrom := range v.cachedHeightVector {
+			hTo, exists := other.cachedHeightVector[vID]
+			if !exists {
+				continue
+			}
+			if hFrom != infinity && hTo == infinity {
+				win[vID] = struct{}{}
+			}
+		}
+	} else {
+		for vID := range dirtyValidators {
+			hFrom, exists := v.cachedHeightVector[vID]
+			if !exists {
+				return
+			}
+			hTo, exists := other.cachedHeightVector[vID]
+			if !exists {
+				return
+			}
+			if hFrom != infinity && hTo == infinity {
+				win[vID] = struct{}{}
+			} else {
+				delete(win, vID)
+			}
+		}
+	}
 }
 
 // blockVector stores all blocks grouped by their proposers and
@@ -144,22 +260,20 @@ func (v blockVector) addBlock(b *types.Block) (err error) {
 	return
 }
 
-// getAckingStatusVector would convert a blockVector to
-// ackingStatusVectorAckingStatus.
-func (v blockVector) getAckingStatusVector() ackingStatusVector {
-	ret := ackingStatusVector{}
+// getCandidateInfo would convert a blockVector to
+// totalOrderingCandidateInfo.
+func (v blockVector) getCandidateInfo() (info *totalOrderingCandidateInfo) {
+	info = newTotalOrderingCandidateInfo()
 	for vID, vec := range v {
 		if len(vec) == 0 {
 			continue
 		}
-		ret[vID] = &struct {
-			minHeight, count uint64
-		}{
+		info.ackedStatus[vID] = &totalOrderingHeightRecord{
 			minHeight: vec[0].Height,
 			count:     uint64(len(vec)),
 		}
 	}
-	return ret
+	return
 }
 
 // totalOrdering represent a process unit to handle total ordering
@@ -187,23 +301,29 @@ type totalOrdering struct {
 	//  - picking candidates next round
 	globalVector blockVector
 
-	// candidateAckingStatusVectors caches ackingStatusVector of candidates.
-	candidateAckingStatusVectors map[common.Hash]ackingStatusVector
+	// candidates caches result of potential function during generating
+	// preceding sets.
+	candidates map[common.Hash]*totalOrderingCandidateInfo
 
 	// acked cache the 'block A acked by block B' relation by
 	// keeping a record in acked[A.Hash][B.Hash]
 	acked map[common.Hash]map[common.Hash]struct{}
+
+	// dirtyValidators records which validatorID that should be updated for
+	// all cached status (win record, acking status).
+	dirtyValidators map[types.ValidatorID]struct{}
 }
 
 func newTotalOrdering(k, phi, validatorCount uint64) *totalOrdering {
 	return &totalOrdering{
-		candidateAckingStatusVectors: make(map[common.Hash]ackingStatusVector),
-		pendings:                     make(map[common.Hash]*types.Block),
-		k:                            k,
-		phi:                          phi,
-		validatorCount:               validatorCount,
-		globalVector:                 blockVector{},
-		acked:                        make(map[common.Hash]map[common.Hash]struct{}),
+		candidates:      make(map[common.Hash]*totalOrderingCandidateInfo),
+		pendings:        make(map[common.Hash]*types.Block),
+		k:               k,
+		phi:             phi,
+		validatorCount:  validatorCount,
+		globalVector:    blockVector{},
+		dirtyValidators: make(map[types.ValidatorID]struct{}),
+		acked:           make(map[common.Hash]map[common.Hash]struct{}),
 	}
 }
 
@@ -242,7 +362,10 @@ func (to *totalOrdering) buildBlockRelation(b *types.Block) {
 func (to *totalOrdering) clean(h common.Hash) {
 	delete(to.acked, h)
 	delete(to.pendings, h)
-	delete(to.candidateAckingStatusVectors, h)
+	delete(to.candidates, h)
+	for _, info := range to.candidates {
+		info.clean(h)
+	}
 }
 
 // updateVectors is a helper function to update all cached vectors.
@@ -254,79 +377,44 @@ func (to *totalOrdering) updateVectors(b *types.Block) (err error) {
 	}
 
 	// Update acking status of candidates.
-	for candidate, vector := range to.candidateAckingStatusVectors {
+	for candidate, info := range to.candidates {
 		if _, acked := to.acked[candidate][b.Hash]; !acked {
 			continue
 		}
-		if err = vector.addBlock(b); err != nil {
+		if err = info.addBlock(b); err != nil {
 			return
 		}
 	}
 	return
 }
 
-// grade implements the 'grade' potential function described in white paper.
-func (to *totalOrdering) grade(
-	hvFrom, hvTo map[types.ValidatorID]uint64,
-	globalAns map[types.ValidatorID]struct{}) int {
-
-	count := uint64(0)
-	for vID, hFrom := range hvFrom {
-		hTo, exists := hvTo[vID]
-		if !exists {
-			continue
-		}
-
-		if hFrom != infinity && hTo == infinity {
-			count++
-		}
-	}
-
-	if count >= to.phi {
-		return 1
-	} else if count < to.phi-to.validatorCount+uint64(len(globalAns)) {
-		return 0
-	} else {
-		return -1
-	}
-}
-
-// buildAckingStatusVectorForNewCandidate is a helper function to
-// build ackingStatusVector for new candidate.
-func (to *totalOrdering) buildAckingStatusVectorForNewCandidate(
-	candidate *types.Block) (hVec ackingStatusVector) {
+// prepareCandidate is a helper function to
+// build totalOrderingCandidateInfo for new candidate.
+func (to *totalOrdering) prepareCandidate(
+	candidate *types.Block) (info *totalOrderingCandidateInfo) {
 
 	blocks := to.globalVector[candidate.ProposerID]
-	hVec = ackingStatusVector{
-		candidate.ProposerID: &struct {
-			minHeight, count uint64
-		}{
-			minHeight: candidate.Height,
-			count:     uint64(len(blocks)),
-		},
+	info = newTotalOrderingCandidateInfo()
+	info.ackedStatus[candidate.ProposerID] = &totalOrderingHeightRecord{
+		minHeight: candidate.Height,
+		count:     uint64(len(blocks)),
 	}
-
 	ackedsForCandidate, exists := to.acked[candidate.Hash]
 	if !exists {
 		// This candidate is acked by nobody.
 		return
 	}
-
 	for vID, blocks := range to.globalVector {
 		if vID == candidate.ProposerID {
 			continue
 		}
-
 		for i, b := range blocks {
 			if _, acked := ackedsForCandidate[b.Hash]; !acked {
 				continue
 			}
-
 			// If this block acks this candidate, all newer blocks
 			// from the same validator also 'indirect' acks it.
-			hVec[vID] = &struct {
-				minHeight, count uint64
-			}{
+			info.ackedStatus[vID] = &totalOrderingHeightRecord{
 				minHeight: b.Height,
 				count:     uint64(len(blocks) - i),
 			}
@@ -358,6 +446,7 @@ func (to *totalOrdering) output(precedings map[common.Hash]struct{}) (ret []*typ
 
 		// Remove block relations.
 		to.clean(p)
+		to.dirtyValidators[b.ProposerID] = struct{}{}
 	}
 	sort.Sort(types.ByHash(ret))
 
@@ -367,20 +456,16 @@ func (to *totalOrdering) output(precedings map[common.Hash]struct{}) (ret []*typ
 		if len(blocks) == 0 {
 			continue
 		}
-
 		tip := blocks[0]
 		if _, alreadyCandidate :=
-			to.candidateAckingStatusVectors[tip.Hash]; alreadyCandidate {
+			to.candidates[tip.Hash]; alreadyCandidate {
 			continue
 		}
-
 		if !to.isAckOnlyPrecedings(tip) {
 			continue
 		}
-
-		// Build ackingStatusVector for new candidate.
-		to.candidateAckingStatusVectors[tip.Hash] =
-			to.buildAckingStatusVectorForNewCandidate(tip)
+		// Build totalOrderingCandidateInfo for new candidate.
+		to.candidates[tip.Hash] = to.prepareCandidate(tip)
 	}
 	return ret
 }
@@ -391,44 +476,56 @@ func (to *totalOrdering) output(precedings map[common.Hash]struct{}) (ret []*typ
 func (to *totalOrdering) generateDeliverSet() (
 	delivered map[common.Hash]struct{}, early bool) {
 
-	globalAckingStatusVector := to.globalVector.getAckingStatusVector()
-	ahvs := map[common.Hash]map[types.ValidatorID]uint64{}
-	for candidate, v := range to.candidateAckingStatusVectors {
-		ahvs[candidate] = v.getAckingHeightVector(globalAckingStatusVector, to.k)
+	globalCandidatesInfo := to.globalVector.getCandidateInfo()
+	for _, info := range to.candidates {
+		info.updateAckingHeightVector(
+			globalCandidatesInfo, to.k, to.dirtyValidators)
 	}
-
-	globalAns := globalAckingStatusVector.getAckingNodeSet(
-		globalAckingStatusVector, to.k)
-	precedings := make(map[common.Hash]struct{})
-
-CheckNextCandidateLoop:
-	for candidate := range to.candidateAckingStatusVectors {
-		for otherCandidate := range to.candidateAckingStatusVectors {
+	// Update winning records for each candidate.
+	for candidate, info := range to.candidates {
+		for otherCandidate, otherInfo := range to.candidates {
 			if candidate == otherCandidate {
 				continue
 			}
-			if to.grade(ahvs[otherCandidate], ahvs[candidate], globalAns) != 0 {
+			info.updateWinRecord(otherCandidate, otherInfo, to.dirtyValidators)
+		}
+	}
+	// Reset dirty validators.
+	to.dirtyValidators = make(map[types.ValidatorID]struct{})
+
+	globalAns := globalCandidatesInfo.getAckingNodeSet(
+		globalCandidatesInfo, to.k)
+	precedings := make(map[common.Hash]struct{})
+
+CheckNextCandidateLoop:
+	for candidate := range to.candidates {
+		for otherCandidate, otherInfo := range to.candidates {
+			if candidate == otherCandidate {
+				continue
+			}
+			if otherInfo.winRecords[candidate].grade(
+				to.validatorCount, to.phi, globalAns) != 0 {
+
 				continue CheckNextCandidateLoop
 			}
 		}
 		precedings[candidate] = struct{}{}
 	}
-
 	if len(precedings) == 0 {
 		return
 	}
 
 	// internal is a helper function to verify internal stability.
 	internal := func() bool {
-		for candidate := range to.candidateAckingStatusVectors {
+		for candidate := range to.candidates {
 			if _, isPreceding := precedings[candidate]; isPreceding {
 				continue
 			}
 
 			beaten := false
 			for p := range precedings {
-				if beaten =
-					to.grade(ahvs[p], ahvs[candidate], globalAns) == 1; beaten {
+				if beaten = to.candidates[p].winRecords[candidate].grade(
+					to.validatorCount, to.phi, globalAns) == 1; beaten {
 					break
 				}
 			}
@@ -445,12 +542,12 @@ CheckNextCandidateLoop:
 	checkAHV := func() bool {
 		for p := range precedings {
 			count := uint64(0)
-			for _, v := range ahvs[p] {
+			status := to.candidates[p]
+			for _, v := range status.cachedHeightVector {
 				if v != infinity {
 					count++
 				}
 			}
-
 			if count > to.phi {
 				return true
 			}
@@ -463,24 +560,23 @@ CheckNextCandidateLoop:
 	// to be delivered.
 	checkANS := func() bool {
 		for p := range precedings {
-			validatorAns := to.candidateAckingStatusVectors[p].getAckingNodeSet(
-				globalAckingStatusVector, to.k)
+			validatorAns := to.candidates[p].getAckingNodeSet(
+				globalCandidatesInfo, to.k)
 			if uint64(len(validatorAns)) < to.validatorCount-to.phi {
 				return false
 			}
 		}
-
 		return true
-	}
-
-	// Check internal stability first.
-	if !internal() {
-		return
 	}
 
 	// If all validators propose enough blocks, we should force
 	// to deliver since the whole picture of the DAG is revealed.
 	if uint64(len(globalAns)) != to.validatorCount {
+		// Check internal stability first.
+		if !internal() {
+			return
+		}
+
 		// The whole picture is not ready, we need to check if
 		// exteranl stability is met, and we can deliver earlier.
 		if checkAHV() && checkANS() {
@@ -508,9 +604,10 @@ func (to *totalOrdering) processBlock(b *types.Block) (
 		return
 	}
 	if to.isAckOnlyPrecedings(b) {
-		to.candidateAckingStatusVectors[b.Hash] =
-			to.buildAckingStatusVectorForNewCandidate(b)
+		to.candidates[b.Hash] = to.prepareCandidate(b)
 	}
+	// Mark the proposer of incoming block as dirty.
+	to.dirtyValidators[b.ProposerID] = struct{}{}
 
 	// Not-Incremental part (yet).
 	//  - generate ahv for each candidate

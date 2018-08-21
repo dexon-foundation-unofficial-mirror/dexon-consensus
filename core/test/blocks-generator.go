@@ -189,6 +189,12 @@ func normalAckingCountGenerator(
 	}
 }
 
+// MaxAckingCountGenerator return generator which returns
+// fixed maximum acking count.
+func MaxAckingCountGenerator(count int) func() int {
+	return func() int { return count }
+}
+
 // generateValidatorPicker is a function generator, which would generate
 // a function to randomly pick one validator ID from a slice of validator ID.
 func generateValidatorPicker() func([]types.ValidatorID) types.ValidatorID {
