@@ -243,7 +243,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		// its ConsensusTimestamp is not interpolated.
 		t, err := getMedianTime(b11)
 		req.Nil(err)
-		req.Equal(t, app.Delivered[b11.Hash])
+		req.Equal(t, app.Delivered[b11.Hash].ConsensusTime)
 	}
 	for _, obj := range objs {
 		app := *obj.app

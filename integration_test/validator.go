@@ -41,13 +41,17 @@ type consensusEventPayload struct {
 	PiggyBack interface{}
 }
 
-func newProposeBlockEvent(vID types.ValidatorID, when time.Time) *test.Event {
+// NewProposeBlockEvent constructs an test.Event that would trigger
+// block proposing.
+func NewProposeBlockEvent(vID types.ValidatorID, when time.Time) *test.Event {
 	return test.NewEvent(vID, when, &consensusEventPayload{
 		Type: evtProposeBlock,
 	})
 }
 
-func newReceiveBlockEvent(
+// NewReceiveBlockEvent constructs an test.Event that would trigger
+// block received.
+func NewReceiveBlockEvent(
 	vID types.ValidatorID, when time.Time, block *types.Block) *test.Event {
 
 	return test.NewEvent(vID, when, &consensusEventPayload{
@@ -56,7 +60,8 @@ func newReceiveBlockEvent(
 	})
 }
 
-type validator struct {
+// Validator is designed to work with test.Scheduler.
+type Validator struct {
 	ID               types.ValidatorID
 	cons             *core.Consensus
 	gov              core.Governance
@@ -64,16 +69,17 @@ type validator struct {
 	proposingLatency LatencyModel
 }
 
-func newValidator(
+// NewValidator constructs an instance of Validator.
+func NewValidator(
 	app core.Application,
 	gov core.Governance,
 	db blockdb.BlockDatabase,
 	privateKey crypto.PrivateKey,
 	vID types.ValidatorID,
 	networkLatency LatencyModel,
-	proposingLatency LatencyModel) *validator {
+	proposingLatency LatencyModel) *Validator {
 
-	return &validator{
+	return &Validator{
 		ID:               vID,
 		gov:              gov,
 		networkLatency:   networkLatency,
@@ -83,7 +89,8 @@ func newValidator(
 	}
 }
 
-func (v *validator) Handle(e *test.Event) (events []*test.Event) {
+// Handle implements test.EventHandler interface.
+func (v *Validator) Handle(e *test.Event) (events []*test.Event) {
 	payload := e.Payload.(*consensusEventPayload)
 	switch payload.Type {
 	case evtProposeBlock:
@@ -96,7 +103,7 @@ func (v *validator) Handle(e *test.Event) (events []*test.Event) {
 	return
 }
 
-func (v *validator) handleProposeBlock(when time.Time, piggyback interface{}) (
+func (v *Validator) handleProposeBlock(when time.Time, piggyback interface{}) (
 	events []*test.Event, err error) {
 
 	b := &types.Block{ProposerID: v.ID}
@@ -111,16 +118,16 @@ func (v *validator) handleProposeBlock(when time.Time, piggyback interface{}) (
 		if vID == v.ID {
 			continue
 		}
-		events = append(events, newReceiveBlockEvent(
+		events = append(events, NewReceiveBlockEvent(
 			vID, when.Add(v.networkLatency.Delay()), b.Clone()))
 	}
 	// Create next 'block proposing' event for this validators.
-	events = append(events, newProposeBlockEvent(
+	events = append(events, NewProposeBlockEvent(
 		v.ID, when.Add(v.proposingLatency.Delay())))
 	return
 }
 
-func (v *validator) handleReceiveBlock(piggyback interface{}) (
+func (v *Validator) handleReceiveBlock(piggyback interface{}) (
 	events []*test.Event, err error) {
 
 	err = v.cons.ProcessBlock(piggyback.(*types.Block))

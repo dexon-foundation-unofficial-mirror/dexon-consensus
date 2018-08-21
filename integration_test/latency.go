@@ -28,17 +28,27 @@ type LatencyModel interface {
 	Delay() time.Duration
 }
 
-// normalLatencyModel would return latencies in normal distribution.
-type normalLatencyModel struct {
+// NormalLatencyModel would return latencies in normal distribution.
+type NormalLatencyModel struct {
 	Sigma float64
 	Mean  float64
 }
 
 // Delay implements LatencyModel interface.
-func (m *normalLatencyModel) Delay() time.Duration {
+func (m *NormalLatencyModel) Delay() time.Duration {
 	delay := rand.NormFloat64()*m.Sigma + m.Mean
 	if delay < 0 {
 		delay = m.Sigma / 2
 	}
 	return time.Duration(delay) * time.Millisecond
+}
+
+// FixedLatencyModel return fixed latencies.
+type FixedLatencyModel struct {
+	Latency float64
+}
+
+// Delay implements LatencyModel interface.
+func (m *FixedLatencyModel) Delay() time.Duration {
+	return time.Duration(m.Latency) * time.Millisecond
 }

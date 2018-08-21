@@ -165,12 +165,6 @@ func (sch *Scheduler) workerRoutine(wg *sync.WaitGroup) {
 			if sch.stopper.ShouldStop(e.ValidatorID) {
 				sch.cancelFunc()
 			}
-			// Include the execution interval of parent event to the expected time
-			// to execute child events.
-			for _, newEvent := range newEvents {
-				newEvent.ParentTime = e.Time
-				newEvent.Time = newEvent.Time.Add(e.ExecInterval)
-			}
 			return newEvents
 		}()
 		// Record executed events as history.
@@ -178,8 +172,15 @@ func (sch *Scheduler) workerRoutine(wg *sync.WaitGroup) {
 			sch.historyLock.Lock()
 			defer sch.historyLock.Unlock()
 
+			e.HistoryIndex = len(sch.history)
 			sch.history = append(sch.history, e)
 		}()
+		// Include the execution interval of parent event to the expected time
+		// to execute child events.
+		for _, newEvent := range newEvents {
+			newEvent.ParentHistoryIndex = e.HistoryIndex
+			newEvent.Time = newEvent.Time.Add(e.ExecInterval)
+		}
 		// Add derivated events back to event queue.
 		func() {
 			sch.eventsLock.Lock()

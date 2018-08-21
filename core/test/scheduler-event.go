@@ -25,6 +25,8 @@ import (
 
 // Event defines a scheduler event.
 type Event struct {
+	// HistoryIndex is the index of this event in history.
+	HistoryIndex int
 	// ValidatorID is the ID of handler that this event deginated to.
 	ValidatorID types.ValidatorID
 	// Time is the expected execution time of this event.
@@ -33,9 +35,8 @@ type Event struct {
 	ExecError error
 	// Payload is application specific data carried by this event.
 	Payload interface{}
-	// ParentTime is the time of parent event, this field is essential when
-	// we need to calculate the latency the handler assigned.
-	ParentTime time.Time
+	// ParentHistoryIndex is the index of parent event in history.
+	ParentHistoryIndex int
 	// ExecInterval is the latency to execute this event
 	ExecInterval time.Duration
 }
@@ -69,8 +70,10 @@ func NewEvent(
 	vID types.ValidatorID, when time.Time, payload interface{}) *Event {
 
 	return &Event{
-		ValidatorID: vID,
-		Time:        when,
-		Payload:     payload,
+		HistoryIndex:       -1,
+		ParentHistoryIndex: -1,
+		ValidatorID:        vID,
+		Time:               when,
+		Payload:            payload,
 	}
 }

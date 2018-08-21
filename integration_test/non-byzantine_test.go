@@ -33,11 +33,11 @@ type NonByzantineTestSuite struct {
 
 func (s *NonByzantineTestSuite) TestNonByzantine() {
 	var (
-		networkLatency = &normalLatencyModel{
+		networkLatency = &NormalLatencyModel{
 			Sigma: 20,
 			Mean:  250,
 		}
-		proposingLatency = &normalLatencyModel{
+		proposingLatency = &NormalLatencyModel{
 			Sigma: 30,
 			Mean:  500,
 		}
@@ -46,42 +46,19 @@ func (s *NonByzantineTestSuite) TestNonByzantine() {
 		req  = s.Require()
 	)
 
-	gov, err := test.NewGovernance(25, 700)
+	apps, dbs, validators, err := PrepareValidators(
+		25, networkLatency, proposingLatency)
 	req.Nil(err)
 	now := time.Now().UTC()
-	for vID := range gov.GetValidatorSet() {
-		apps[vID] = test.NewApp()
-
-		db, err := blockdb.NewMemBackedBlockDB()
-		req.Nil(err)
-		dbs[vID] = db
-	}
-	stopper := test.NewStopByConfirmedBlocks(50, apps, dbs)
-	sch := test.NewScheduler(stopper)
-	for vID := range gov.GetValidatorSet() {
-		key, err := gov.GetPrivateKey(vID)
-		req.Nil(err)
-		v := newValidator(
-			apps[vID],
-			gov,
-			dbs[vID],
-			key,
-			vID,
-			networkLatency,
-			proposingLatency)
+	sch := test.NewScheduler(test.NewStopByConfirmedBlocks(50, apps, dbs))
+	for vID, v := range validators {
 		sch.RegisterEventHandler(vID, v)
-		req.Nil(sch.Seed(newProposeBlockEvent(vID, now)))
+		req.Nil(sch.Seed(NewProposeBlockEvent(vID, now)))
 	}
 	sch.Run(10)
 	// Check results by comparing test.App instances.
-	for vFrom := range gov.GetValidatorSet() {
-		req.Nil(apps[vFrom].Verify())
-		for vTo := range gov.GetValidatorSet() {
-			if vFrom == vTo {
-				continue
-			}
-			req.Nil(apps[vFrom].Compare(apps[vTo]))
-		}
+	if err = VerifyApps(apps); err != nil {
+		panic(err)
 	}
 }
 

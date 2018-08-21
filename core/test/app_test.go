@@ -11,18 +11,18 @@ import (
 type AppTestSuite struct {
 	suite.Suite
 
-	to1, to2, to3 *totalOrderDeliver
+	to1, to2, to3 *AppTotalOrderRecord
 }
 
 func (s *AppTestSuite) SetupSuite() {
-	s.to1 = &totalOrderDeliver{
+	s.to1 = &AppTotalOrderRecord{
 		BlockHashes: common.Hashes{
 			common.NewRandomHash(),
 			common.NewRandomHash(),
 		},
 		Early: false,
 	}
-	s.to2 = &totalOrderDeliver{
+	s.to2 = &AppTotalOrderRecord{
 		BlockHashes: common.Hashes{
 			common.NewRandomHash(),
 			common.NewRandomHash(),
@@ -30,7 +30,7 @@ func (s *AppTestSuite) SetupSuite() {
 		},
 		Early: false,
 	}
-	s.to3 = &totalOrderDeliver{
+	s.to3 = &AppTotalOrderRecord{
 		BlockHashes: common.Hashes{
 			common.NewRandomHash(),
 		},
@@ -39,7 +39,7 @@ func (s *AppTestSuite) SetupSuite() {
 }
 
 func (s *AppTestSuite) setupAppByTotalOrderDeliver(
-	app *App, to *totalOrderDeliver) {
+	app *App, to *AppTotalOrderRecord) {
 
 	for _, h := range to.BlockHashes {
 		app.StronglyAcked(h)

@@ -42,6 +42,8 @@ make pre-submit
 
 ## Simulation
 
+### Simulation with Nodes connected by HTTP
+
 1. Setup the configuration under `./test.toml`
 2. Compile and install the cmd `dexon-simulation`
 
@@ -49,8 +51,23 @@ make pre-submit
 make
 ```
 
-4. Run simulation:
+3. Run simulation:
 
 ```
 dexcon-simulation -config test.toml -init
+```
+
+### Simulation with test.Scheduler
+
+1. Setup the configuration under `./test.toml`
+2. Compile and install the cmd `dexon-simulation-with-scheduler`
+
+```
+make
+```
+
+3. Run simulation with 10 workers:
+
+```
+dexcon-simulation-with-scheduler -config test.toml -workercount 10
 ```

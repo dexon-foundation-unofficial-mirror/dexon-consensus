@@ -165,7 +165,8 @@ func (s *SchedulerTestSuite) TestChildEvent() {
 		req.True(e.Time.Sub(curEvent.Time) >= 1300*time.Millisecond)
 		// Make sure ParentTime field is set and is equal to parent event's
 		// time.
-		req.Equal(e.ParentTime, curEvent.Time)
+		req.NotEqual(-1, e.ParentHistoryIndex)
+		req.Equal(e.ParentHistoryIndex, curEvent.HistoryIndex)
 		curEvent = e
 	}
 }

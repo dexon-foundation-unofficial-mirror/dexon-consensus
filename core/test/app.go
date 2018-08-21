@@ -52,29 +52,47 @@ var (
 		"mismatch total ordering and delivered sequence")
 )
 
-type totalOrderDeliver struct {
+// AppAckedRecord caches information when this application received
+// a strongly-acked notification.
+type AppAckedRecord struct {
+	When time.Time
+}
+
+// AppTotalOrderRecord caches information when this application received
+// a total-ordering deliver notification.
+type AppTotalOrderRecord struct {
 	BlockHashes common.Hashes
 	Early       bool
+	When        time.Time
+}
+
+// AppDeliveredRecord caches information when this application received
+// a block delivered notification.
+type AppDeliveredRecord struct {
+	ConsensusTime time.Time
+	When          time.Time
 }
 
 // App implements Application interface for testing purpose.
 type App struct {
-	Acked            map[common.Hash]struct{}
-	ackedLock        sync.RWMutex
-	TotalOrdered     []*totalOrderDeliver
-	totalOrderedLock sync.RWMutex
-	Delivered        map[common.Hash]time.Time
-	DeliverSequence  common.Hashes
-	deliveredLock    sync.RWMutex
+	Acked              map[common.Hash]*AppAckedRecord
+	ackedLock          sync.RWMutex
+	TotalOrdered       []*AppTotalOrderRecord
+	TotalOrderedByHash map[common.Hash]*AppTotalOrderRecord
+	totalOrderedLock   sync.RWMutex
+	Delivered          map[common.Hash]*AppDeliveredRecord
+	DeliverSequence    common.Hashes
+	deliveredLock      sync.RWMutex
 }
 
 // NewApp constructs a TestApp instance.
 func NewApp() *App {
 	return &App{
-		Acked:           make(map[common.Hash]struct{}),
-		TotalOrdered:    []*totalOrderDeliver{},
-		Delivered:       make(map[common.Hash]time.Time),
-		DeliverSequence: common.Hashes{},
+		Acked:              make(map[common.Hash]*AppAckedRecord),
+		TotalOrdered:       []*AppTotalOrderRecord{},
+		TotalOrderedByHash: make(map[common.Hash]*AppTotalOrderRecord),
+		Delivered:          make(map[common.Hash]*AppDeliveredRecord),
+		DeliverSequence:    common.Hashes{},
 	}
 }
 
@@ -83,7 +101,7 @@ func (app *App) StronglyAcked(blockHash common.Hash) {
 	app.ackedLock.Lock()
 	defer app.ackedLock.Unlock()
 
-	app.Acked[blockHash] = struct{}{}
+	app.Acked[blockHash] = &AppAckedRecord{When: time.Now().UTC()}
 }
 
 // TotalOrderingDeliver implements Application interface.
@@ -91,10 +109,18 @@ func (app *App) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 	app.totalOrderedLock.Lock()
 	defer app.totalOrderedLock.Unlock()
 
-	app.TotalOrdered = append(app.TotalOrdered, &totalOrderDeliver{
+	rec := &AppTotalOrderRecord{
 		BlockHashes: blockHashes,
 		Early:       early,
-	})
+		When:        time.Now().UTC(),
+	}
+	app.TotalOrdered = append(app.TotalOrdered, rec)
+	for _, h := range blockHashes {
+		if _, exists := app.TotalOrderedByHash[h]; exists {
+			panic(fmt.Errorf("deliver duplicated blocks from total ordering"))
+		}
+		app.TotalOrderedByHash[h] = rec
+	}
 }
 
 // DeliverBlock implements Application interface.
@@ -102,7 +128,10 @@ func (app *App) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 	app.deliveredLock.Lock()
 	defer app.deliveredLock.Unlock()
 
-	app.Delivered[blockHash] = timestamp
+	app.Delivered[blockHash] = &AppDeliveredRecord{
+		ConsensusTime: timestamp,
+		When:          time.Now().UTC(),
+	}
 	app.DeliverSequence = append(app.DeliverSequence, blockHash)
 }
 
@@ -132,7 +161,7 @@ func (app *App) Compare(other *App) error {
 		if hOther != h {
 			return ErrMismatchBlockHashSequence
 		}
-		if app.Delivered[h] != other.Delivered[h] {
+		if app.Delivered[h].ConsensusTime != other.Delivered[h].ConsensusTime {
 			return ErrMismatchConsensusTime
 		}
 	}
@@ -160,16 +189,17 @@ func (app *App) Verify() error {
 		if _, acked := app.Acked[h]; !acked {
 			return ErrDeliveredBlockNotAcked
 		}
-		t, exists := app.Delivered[h]
+		rec, exists := app.Delivered[h]
 		if !exists {
 			return ErrApplicationIntegrityFailed
 		}
 		// Make sure the consensus time is incremental.
-		ok := prevTime.Before(t) || prevTime.Equal(t)
+		ok := prevTime.Before(rec.ConsensusTime) ||
+			prevTime.Equal(rec.ConsensusTime)
 		if !ok {
 			return ErrConsensusTimestampOutOfOrder
 		}
-		prevTime = t
+		prevTime = rec.ConsensusTime
 	}
 	// Make sure the order of delivered and total ordering are the same by
 	// comparing the concated string.
@@ -178,8 +208,8 @@ func (app *App) Verify() error {
 
 	hashSequenceIdx := 0
 Loop:
-	for _, totalOrderDeliver := range app.TotalOrdered {
-		for _, h := range totalOrderDeliver.BlockHashes {
+	for _, rec := range app.TotalOrdered {
+		for _, h := range rec.BlockHashes {
 			if hashSequenceIdx >= len(app.DeliverSequence) {
 				break Loop
 			}

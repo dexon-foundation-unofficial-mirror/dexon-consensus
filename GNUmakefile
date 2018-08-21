@@ -40,7 +40,8 @@ endef
 
 COMPONENTS = \
 	dexcon-simulation \
-	dexcon-simulation-peer-server
+	dexcon-simulation-peer-server \
+	dexcon-simulation-with-scheduler
 
 .PHONY: clean default
 
