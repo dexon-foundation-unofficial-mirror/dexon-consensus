@@ -80,6 +80,7 @@ type Network interface {
 	NumPeers() int
 	Join(endpoint Endpoint) chan interface{}
 	BroadcastBlock(block *types.Block)
+	BroadcastNotaryAck(notaryAck *types.NotaryAck)
 	Endpoints() types.ValidatorIDs
 }
 

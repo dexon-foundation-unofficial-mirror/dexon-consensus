@@ -86,6 +86,7 @@ func (s *NonBlockingAppTestSuite) TestNonBlockingApplication() {
 	for _, hash := range hashes {
 		nbapp.StronglyAcked(hash)
 		nbapp.DeliverBlock(hash, time.Now().UTC())
+		nbapp.NotaryAckDeliver(&types.NotaryAck{Hash: hash})
 	}
 	nbapp.TotalOrderingDeliver(hashes, true)
 
@@ -97,6 +98,7 @@ func (s *NonBlockingAppTestSuite) TestNonBlockingApplication() {
 		s.Contains(app.stronglyAcked, hash)
 		s.Contains(app.totalOrderingDeliver, hash)
 		s.Contains(app.deliverBlock, hash)
+		s.Contains(app.notaryAck, hash)
 	}
 }
 

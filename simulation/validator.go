@@ -155,6 +155,10 @@ func (v *Validator) MsgServer(
 				fmt.Println(err)
 				//panic(err)
 			}
+		case *types.NotaryAck:
+			if err := v.consensus.ProcessNotaryAck(val); err != nil {
+				fmt.Println(err)
+			}
 		}
 	}
 }

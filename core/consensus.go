@@ -185,6 +185,10 @@ func (con *Consensus) ProcessBlock(blockConv types.BlockConverter) (err error) {
 		if err != nil {
 			return
 		}
+		err = con.ProcessNotaryAck(notaryAck)
+		if err != nil {
+			return
+		}
 		con.app.NotaryAckDeliver(notaryAck)
 	}
 	return

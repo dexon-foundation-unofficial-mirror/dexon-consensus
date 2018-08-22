@@ -40,6 +40,10 @@ type deliverBlockEvent struct {
 	timestamp time.Time
 }
 
+type notaryAckEvent struct {
+	notaryAck *types.NotaryAck
+}
+
 // nonBlockingApplication implements Application and is a decorator for
 // Application that makes the methods to be non-blocking.
 type nonBlockingApplication struct {
@@ -90,6 +94,8 @@ func (app *nonBlockingApplication) run() {
 			app.app.TotalOrderingDeliver(e.blockHashes, e.early)
 		case deliverBlockEvent:
 			app.app.DeliverBlock(e.blockHash, e.timestamp)
+		case notaryAckEvent:
+			app.app.NotaryAckDeliver(e.notaryAck)
 		default:
 			fmt.Printf("Unknown event %v.", e)
 		}
@@ -128,4 +134,5 @@ func (app *nonBlockingApplication) DeliverBlock(
 
 // NotaryAckDeliver is called when a notary ack is created.
 func (app *nonBlockingApplication) NotaryAckDeliver(notaryAck *types.NotaryAck) {
+	app.addEvent(notaryAckEvent{notaryAck})
 }

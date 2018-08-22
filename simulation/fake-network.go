@@ -93,6 +93,16 @@ func (n *FakeNetwork) BroadcastBlock(block *types.Block) {
 	}
 }
 
+// BroadcastNotaryAck broadcast notaryAck into the network.
+func (n *FakeNetwork) BroadcastNotaryAck(notaryAck *types.NotaryAck) {
+	n.endpointMutex.Lock()
+	defer n.endpointMutex.Unlock()
+
+	for endpoint := range n.endpoints {
+		n.Send(endpoint, notaryAck)
+	}
+}
+
 // DeliverBlocks sends blocks to peerServer.
 func (n *FakeNetwork) DeliverBlocks(blocks BlockList) {
 	// TODO(jimmy-dexon): Implement this method.
