@@ -7,6 +7,7 @@ RUN mkdir -p /opt/dexon/
 # Copy data.
 COPY build/dexcon-simulation /opt/dexon
 COPY build/dexcon-simulation-peer-server /opt/dexon
+COPY build/dexcon-simulation-with-scheduler /opt/dexon
 COPY entrypoint.sh /opt/dexon
 COPY config.toml /opt/dexon
 

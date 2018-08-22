@@ -66,8 +66,8 @@ dexcon-simulation -config test.toml -init
 make
 ```
 
-3. Run simulation with 10 workers:
+3. Run simulation with scheduler:
 
 ```
-dexcon-simulation-with-scheduler -config test.toml -workercount 10
+dexcon-simulation-with-scheduler -config test.toml
 ```

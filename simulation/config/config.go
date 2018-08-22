@@ -59,11 +59,17 @@ type Networking struct {
 	LossRateValue float64
 }
 
+// Scheduler Settings.
+type Scheduler struct {
+	WorkerNum int
+}
+
 // Config represents the configuration for simulation.
 type Config struct {
 	Title      string
 	Validator  Validator
 	Networking Networking
+	Scheduler  Scheduler
 }
 
 // GenerateDefault generates a default configuration file.
@@ -92,6 +98,9 @@ func GenerateDefault(path string) error {
 			Mean:          100,
 			Sigma:         10,
 			LossRateValue: 0,
+		},
+		Scheduler: Scheduler{
+			WorkerNum: 2,
 		},
 	}
 

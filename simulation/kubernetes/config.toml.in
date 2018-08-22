@@ -16,3 +16,6 @@ peer_server = "peer-server-svc.default.svc.cluster.local"
 mean = 1e+02
 sigma = 1e+01
 loss_rate_value = 0e+00
+
+[scheduler]
+worker_num = 2

@@ -16,10 +16,9 @@ import (
 )
 
 var (
-	configFile  = flag.String("config", "", "path to simulation config file")
-	cpuprofile  = flag.String("cpuprofile", "", "write cpu profile to `file`")
-	memprofile  = flag.String("memprofile", "", "write memory profile to `file`")
-	workerCount = flag.Int("workercount", 1, "count of concurrent workers")
+	configFile = flag.String("config", "", "path to simulation config file")
+	cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
+	memprofile = flag.String("memprofile", "", "write memory profile to `file`")
 )
 
 func main() {
@@ -72,7 +71,7 @@ func main() {
 		}
 	}
 	// Run the simulation.
-	sch.Run(*workerCount)
+	sch.Run(cfg.Scheduler.WorkerNum)
 	if err = integration.VerifyApps(apps); err != nil {
 		log.Fatal("consensus result is not incorrect: ", err)
 	}

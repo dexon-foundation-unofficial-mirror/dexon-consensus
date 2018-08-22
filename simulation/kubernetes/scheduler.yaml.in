@@ -1,0 +1,37 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: dexcon-simulation-with-scheduler
+  labels:
+    app: dexcon-simulation-with-scheduler
+spec:
+  revisionHistoryLimit: 5
+  replicas: 1
+  template:
+    metadata:
+      name: dexcon-simulation-with-scheduler
+      labels:
+        app: dexcon-simulation-with-scheduler
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-nodepool: default-pool
+      volumes:
+        - name: ssl-certs
+          hostPath:
+            path: /etc/ssh/certs
+      containers:
+        - name: dexcon-simulation-with-scheduler
+          image: asia.gcr.io/cobinhood/dexcon-simulation:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: {{numCPUs}}
+              memory: 4Gi
+            limits:
+              cpu: {{numCPUs}}
+              memory: 4Gi
+          env:
+            - name: ROLE
+              value: "scheduler"
