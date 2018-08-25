@@ -29,7 +29,6 @@ type NetworkType string
 
 // NetworkType enums.
 const (
-	NetworkTypeFake     NetworkType = "fake"
 	NetworkTypeTCP      NetworkType = "tcp"
 	NetworkTypeTCPLocal NetworkType = "tcp-local"
 )
@@ -93,7 +92,7 @@ func GenerateDefault(path string) error {
 			MaxBlock:             math.MaxUint64,
 		},
 		Networking: Networking{
-			Type:          NetworkTypeFake,
+			Type:          NetworkTypeTCPLocal,
 			PeerServer:    "peer.server",
 			Mean:          100,
 			Sigma:         10,

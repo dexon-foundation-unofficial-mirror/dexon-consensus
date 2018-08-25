@@ -43,41 +43,25 @@ func Run(configPath string) {
 		}
 	)
 
-	if networkType == config.NetworkTypeFake ||
-		networkType == config.NetworkTypeTCPLocal {
-
-		var network Network
-
-		if networkType == config.NetworkTypeFake {
-			network = NewFakeNetwork(networkModel)
-
-			for i := 0; i < cfg.Validator.Num; i++ {
-				prv, err := eth.NewPrivateKey()
-				if err != nil {
-					panic(err)
-				}
+	if networkType == config.NetworkTypeTCPLocal {
+		lock := sync.Mutex{}
+		wg := sync.WaitGroup{}
+		for i := 0; i < cfg.Validator.Num; i++ {
+			prv, err := eth.NewPrivateKey()
+			if err != nil {
+				panic(err)
+			}
+			wg.Add(1)
+			go func() {
+				network := NewTCPNetwork(true, cfg.Networking.PeerServer, networkModel)
+				network.Start()
+				lock.Lock()
+				defer lock.Unlock()
 				vs = append(vs, NewValidator(prv, eth.SigToPub, cfg.Validator, network))
-			}
-		} else if networkType == config.NetworkTypeTCPLocal {
-			lock := sync.Mutex{}
-			wg := sync.WaitGroup{}
-			for i := 0; i < cfg.Validator.Num; i++ {
-				prv, err := eth.NewPrivateKey()
-				if err != nil {
-					panic(err)
-				}
-				wg.Add(1)
-				go func() {
-					network := NewTCPNetwork(true, cfg.Networking.PeerServer, networkModel)
-					network.Start()
-					lock.Lock()
-					defer lock.Unlock()
-					vs = append(vs, NewValidator(prv, eth.SigToPub, cfg.Validator, network))
-					wg.Done()
-				}()
-			}
-			wg.Wait()
+				wg.Done()
+			}()
 		}
+		wg.Wait()
 
 		for i := 0; i < cfg.Validator.Num; i++ {
 			fmt.Printf("Validator %d: %s\n", i, vs[i].ID)
