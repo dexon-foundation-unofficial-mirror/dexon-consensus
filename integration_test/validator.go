@@ -107,6 +107,7 @@ func (v *Validator) handleProposeBlock(when time.Time, piggyback interface{}) (
 	events []*test.Event, err error) {
 
 	b := &types.Block{ProposerID: v.ID}
+	defer types.RecycleBlock(b)
 	if err = v.cons.PrepareBlock(b, when); err != nil {
 		return
 	}

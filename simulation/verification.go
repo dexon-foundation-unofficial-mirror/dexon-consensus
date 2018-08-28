@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -201,7 +202,7 @@ func VerifyTotalOrder(id types.ValidatorID,
 		if hasError {
 			log.Printf("[%d] Hash is %v from %v\n", i, hash, id)
 		} else {
-			log.Printf("Block %v confirmed\n", hash)
+			//log.Printf("Block %v confirmed\n", hash)
 		}
 	}
 
@@ -223,8 +224,38 @@ func LogStatus(peerTotalOrder PeerTotalOrder) {
 			totalOrder.CalculateBlocksPerSecond())
 		log.Printf("    Confirm Latency: %.2fms\n",
 			totalOrder.CalculateAverageConfirmLatency()*1000)
+		log.Printf("    Confirm Blocks: %v\n", len(totalOrder.status.confirmLatency))
 		intLatency, extLatency := totalOrder.CalculateAverageTimestampLatency()
 		log.Printf("    Internal Timestamp Latency: %.2fms\n", intLatency*1000)
 		log.Printf("    External Timestamp Latency: %.2fms\n", extLatency*1000)
 	}
+	logOverallLatency(peerTotalOrder)
+}
+
+// logOverallLatency prints overall status related to latency.
+func logOverallLatency(peerTotalOrder PeerTotalOrder) {
+	// Let's use brute-force way since the simulation should be done
+	// at this moment.
+	var (
+		overallConfirmLatency           []time.Duration
+		overallInternalTimestampLatency []time.Duration
+		overallExternalTimestampLatency []time.Duration
+	)
+	for _, totalOrder := range peerTotalOrder {
+		overallConfirmLatency = append(
+			overallConfirmLatency, totalOrder.status.confirmLatency...)
+		overallInternalTimestampLatency = append(
+			overallInternalTimestampLatency,
+			totalOrder.status.internalTimestampLatency...)
+		overallExternalTimestampLatency = append(
+			overallExternalTimestampLatency,
+			totalOrder.status.externalTimestampLatency...)
+	}
+	log.Print("[Overall]\n")
+	avg, dev := test.CalcLatencyStatistics(overallConfirmLatency)
+	log.Printf("    Confirm Latency: %v, dev: %v\n", avg, dev)
+	avg, dev = test.CalcLatencyStatistics(overallInternalTimestampLatency)
+	log.Printf("    Interal Timestamp Latency: %v, dev: %v\n", avg, dev)
+	avg, dev = test.CalcLatencyStatistics(overallExternalTimestampLatency)
+	log.Printf("    External Timestamp Latency: %v, dev: %v\n", avg, dev)
 }

@@ -153,8 +153,8 @@ func (v *Validator) MsgServer(
 			v.app.addBlock(val)
 			if err := v.consensus.ProcessBlock(val); err != nil {
 				fmt.Println(err)
-				//panic(err)
 			}
+			types.RecycleBlock(val)
 		case *types.NotaryAck:
 			if err := v.consensus.ProcessNotaryAck(val); err != nil {
 				fmt.Println(err)

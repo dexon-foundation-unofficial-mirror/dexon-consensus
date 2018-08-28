@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 
 	"github.com/syndtr/goleveldb/leveldb"
-	"github.com/syndtr/goleveldb/leveldb/opt"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -93,9 +92,7 @@ func (lvl *LevelDBBackedBlockDB) Update(block types.Block) (err error) {
 	err = lvl.db.Put(
 		[]byte(block.Hash[:]),
 		marshaled,
-		&opt.WriteOptions{
-			Sync: true,
-		})
+		nil)
 	if err != nil {
 		return
 	}
@@ -112,15 +109,10 @@ func (lvl *LevelDBBackedBlockDB) Put(block types.Block) (err error) {
 		err = ErrBlockExists
 		return
 	}
-	syncedOpt := &opt.WriteOptions{
-		// We should force to sync for each write, it's safer
-		// from crash.
-		Sync: true,
-	}
 	err = lvl.db.Put(
 		[]byte(block.Hash[:]),
 		marshaled,
-		syncedOpt)
+		nil)
 	if err != nil {
 		return
 	}

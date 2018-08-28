@@ -22,11 +22,43 @@ package types
 import (
 	"bytes"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
+
+var (
+	// blockPool is the blocks cache to reuse allocated blocks.
+	blockPool = sync.Pool{
+		New: func() interface{} {
+			return &Block{}
+		},
+	}
+)
+
+// RecycleBlock put unused block into cache, which might be reused if
+// not garbage collected.
+func RecycleBlock(b *Block) {
+	blockPool.Put(b)
+}
+
+// NewBlock initiate a block.
+func NewBlock() (b *Block) {
+	b = blockPool.Get().(*Block)
+	if b.Acks != nil {
+		for k := range b.Acks {
+			delete(b.Acks, k)
+		}
+	}
+	if b.Timestamps != nil {
+		for k := range b.Timestamps {
+			delete(b.Timestamps, k)
+		}
+	}
+	return
+}
 
 // Block represents a single event broadcasted on the network.
 type Block struct {
@@ -71,27 +103,29 @@ func (b *Block) String() string {
 }
 
 // Clone returns a deep copy of a block.
-func (b *Block) Clone() *Block {
-	bcopy := &Block{
-		ProposerID: b.ProposerID,
-		ParentHash: b.ParentHash,
-		Hash:       b.Hash,
-		Height:     b.Height,
-		Timestamps: make(map[ValidatorID]time.Time),
-		Acks:       make(map[common.Hash]struct{}),
-		Signature:  b.Signature.Clone(),
-		Notary: Notary{
-			Timestamp: b.Notary.Timestamp,
-			Height:    b.Notary.Height,
-		},
+func (b *Block) Clone() (bcopy *Block) {
+	bcopy = NewBlock()
+	bcopy.ProposerID = b.ProposerID
+	bcopy.ParentHash = b.ParentHash
+	bcopy.Hash = b.Hash
+	bcopy.Height = b.Height
+	bcopy.Signature = b.Signature.Clone()
+	bcopy.Notary.Timestamp = b.Notary.Timestamp
+	bcopy.Notary.Height = b.Notary.Height
+	if bcopy.Timestamps == nil {
+		bcopy.Timestamps = make(
+			map[ValidatorID]time.Time, len(b.Timestamps))
 	}
 	for k, v := range b.Timestamps {
 		bcopy.Timestamps[k] = v
 	}
+	if bcopy.Acks == nil {
+		bcopy.Acks = make(map[common.Hash]struct{}, len(b.Acks))
+	}
 	for k, v := range b.Acks {
 		bcopy.Acks[k] = v
 	}
-	return bcopy
+	return
 }
 
 // IsGenesis checks if the block is a genesisBlock

@@ -184,6 +184,10 @@ func (con *Consensus) ProcessBlock(blockConv types.BlockConverter) (err error) {
 				return
 			}
 			con.app.DeliverBlock(b.Hash, b.Notary.Timestamp)
+			// TODO(mission): Find a way to safely recycle the block.
+			//                We should deliver block directly to
+			//                nonBlockingApplication and let them recycle the
+			//                block.
 		}
 		var notaryAck *types.NotaryAck
 		notaryAck, err = con.ccModule.prepareNotaryAck(con.prvKey)

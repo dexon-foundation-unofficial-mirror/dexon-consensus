@@ -18,6 +18,9 @@
 package test
 
 import (
+	"math"
+	"time"
+
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
@@ -36,5 +39,28 @@ func GenerateRandomValidatorIDs(validatorCount int) (vIDs types.ValidatorIDs) {
 	for i := 0; i < validatorCount; i++ {
 		vIDs = append(vIDs, types.ValidatorID{Hash: common.NewRandomHash()})
 	}
+	return
+}
+
+// CalcLatencyStatistics calculates average and deviation from a slice
+// of latencies.
+func CalcLatencyStatistics(latencies []time.Duration) (avg, dev time.Duration) {
+	var (
+		sum             float64
+		sumOfSquareDiff float64
+	)
+
+	// Calculate average.
+	for _, v := range latencies {
+		sum += float64(v)
+	}
+	avgAsFloat := sum / float64(len(latencies))
+	avg = time.Duration(avgAsFloat)
+	// Calculate deviation
+	for _, v := range latencies {
+		diff := math.Abs(float64(v) - avgAsFloat)
+		sumOfSquareDiff += diff * diff
+	}
+	dev = time.Duration(math.Sqrt(sumOfSquareDiff / float64(len(latencies)-1)))
 	return
 }
