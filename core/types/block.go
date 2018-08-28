@@ -33,6 +33,8 @@ type Block struct {
 	ProposerID ValidatorID               `json:"proposer_id"`
 	ParentHash common.Hash               `json:"parent_hash"`
 	Hash       common.Hash               `json:"hash"`
+	ShardID    uint64                    `json:"shard_id"`
+	ChainID    uint64                    `json:"chain_id"`
 	Height     uint64                    `json:"height"`
 	Timestamps map[ValidatorID]time.Time `json:"timestamps"`
 	Acks       map[common.Hash]struct{}  `json:"acks"`
@@ -77,7 +79,7 @@ func (b *Block) Clone() *Block {
 		Height:     b.Height,
 		Timestamps: make(map[ValidatorID]time.Time),
 		Acks:       make(map[common.Hash]struct{}),
-		Signature:  b.Signature,
+		Signature:  b.Signature.Clone(),
 		Notary: Notary{
 			Timestamp: b.Notary.Timestamp,
 			Height:    b.Notary.Height,

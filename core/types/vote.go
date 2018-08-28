@@ -15,21 +15,48 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package crypto
+package types
 
 import (
-	"github.com/ethereum/go-ethereum/crypto"
+	"fmt"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
-// Keccak256Hash calculates and returns the Keccak256 hash of the input data,
-// converting it to an internal Hash data structure.
-func Keccak256Hash(data ...[]byte) (h common.Hash) {
-	return common.Hash(crypto.Keccak256Hash(data...))
+// VoteType is the type of vote.
+type VoteType byte
+
+// VoteType enum.
+const (
+	VoteAck VoteType = iota
+	VoteConfirm
+	VotePass
+	// Do not add any type below MaxVoteType.
+	MaxVoteType
+)
+
+// Vote is the vote structure defined in Crypto Shuffle Algorithm.
+type Vote struct {
+	ProposerID ValidatorID
+	Type       VoteType
+	BlockHash  common.Hash
+	Period     uint64
+	Signature  crypto.Signature
 }
 
-// Clone returns a deep copy of a signature.
-func (sig Signature) Clone() Signature {
-	return append(Signature{}, sig...)
+func (v *Vote) String() string {
+	return fmt.Sprintf("Vote(%d:%d):%s",
+		v.Period, v.Type, v.BlockHash.String()[:6])
+}
+
+// Clone returns a deep copy of a vote.
+func (v *Vote) Clone() *Vote {
+	return &Vote{
+		ProposerID: v.ProposerID,
+		Type:       v.Type,
+		BlockHash:  v.BlockHash,
+		Period:     v.Period,
+		Signature:  v.Signature.Clone(),
+	}
 }

@@ -257,6 +257,9 @@ func (n *TCPNetwork) Send(destID types.ValidatorID, msg interface{}) {
 	case *types.NotaryAck:
 		message.Type = "notaryAck"
 		message.Payload = v
+	case *types.Vote:
+		message.Type = "vote"
+		message.Payload = v
 	default:
 		fmt.Println("error: invalid message type")
 		return
@@ -315,6 +318,17 @@ func (n *TCPNetwork) BroadcastNotaryAck(notaryAck *types.NotaryAck) {
 			continue
 		}
 		n.Send(endpoint, notaryAck)
+	}
+}
+
+// BroadcastVote broadcast vote into the network.
+func (n *TCPNetwork) BroadcastVote(vote *types.Vote) {
+	vote = vote.Clone()
+	for endpoint := range n.endpoints {
+		if endpoint == vote.ProposerID {
+			continue
+		}
+		n.Send(endpoint, vote)
 	}
 }
 

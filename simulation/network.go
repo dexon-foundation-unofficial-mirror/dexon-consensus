@@ -81,6 +81,7 @@ type Network interface {
 	Join(endpoint Endpoint) chan interface{}
 	BroadcastBlock(block *types.Block)
 	BroadcastNotaryAck(notaryAck *types.NotaryAck)
+	BroadcastVote(vote *types.Vote)
 	Endpoints() types.ValidatorIDs
 }
 

@@ -51,8 +51,8 @@ func verifyNotarySignature(pubkey crypto.PublicKey,
 
 func hashBlock(blockConv types.BlockConverter) (common.Hash, error) {
 	block := blockConv.Block()
-	binaryHeight := make([]byte, 8)
-	binary.LittleEndian.PutUint64(binaryHeight, block.Height)
+
+	hashPosition := hashPosition(block.ShardID, block.ChainID, block.Height)
 	// Handling Block.Acks.
 	acks := make(common.Hashes, 0, len(block.Acks))
 	for ack := range block.Acks {
@@ -85,7 +85,7 @@ func hashBlock(blockConv types.BlockConverter) (common.Hash, error) {
 	hash := crypto.Keccak256Hash(
 		block.ProposerID.Hash[:],
 		block.ParentHash[:],
-		binaryHeight,
+		hashPosition[:],
 		hashAcks[:],
 		hashTimestamps[:],
 		payloadHash[:])
@@ -99,4 +99,46 @@ func verifyBlockSignature(pubkey crypto.PublicKey,
 		return false, err
 	}
 	return pubkey.VerifySignature(hash, sig), nil
+}
+
+func hashVote(vote *types.Vote) common.Hash {
+	binaryPeriod := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryPeriod, vote.Period)
+
+	hash := crypto.Keccak256Hash(
+		vote.ProposerID.Hash[:],
+		vote.BlockHash[:],
+		binaryPeriod,
+		[]byte{byte(vote.Type)},
+	)
+	return hash
+}
+
+func verifyVoteSignature(vote *types.Vote, sigToPub SigToPubFn) (bool, error) {
+	hash := hashVote(vote)
+	pubKey, err := sigToPub(hash, vote.Signature)
+	if err != nil {
+		return false, err
+	}
+	if vote.ProposerID != types.NewValidatorID(pubKey) {
+		return false, nil
+	}
+	return true, nil
+}
+
+func hashPosition(shardID, chainID, height uint64) common.Hash {
+	binaryShardID := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryShardID, shardID)
+
+	binaryChainID := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryChainID, chainID)
+
+	binaryHeight := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryHeight, height)
+
+	return crypto.Keccak256Hash(
+		binaryShardID,
+		binaryChainID,
+		binaryHeight,
+	)
 }

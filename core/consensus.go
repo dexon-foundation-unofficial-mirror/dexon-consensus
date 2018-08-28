@@ -102,6 +102,11 @@ func NewConsensus(
 	}
 }
 
+// ProcessVote is the entry point to submit ont vote to a Consensus instance.
+func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
+	return
+}
+
 // sanityCheck checks if the block is a valid block
 func (con *Consensus) sanityCheck(blockConv types.BlockConverter) (err error) {
 	b := blockConv.Block()

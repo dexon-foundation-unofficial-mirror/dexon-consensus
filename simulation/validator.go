@@ -159,6 +159,10 @@ func (v *Validator) MsgServer(
 			if err := v.consensus.ProcessNotaryAck(val); err != nil {
 				fmt.Println(err)
 			}
+		case *types.Vote:
+			if err := v.consensus.ProcessVote(val); err != nil {
+				fmt.Println(err)
+			}
 		}
 	}
 }
