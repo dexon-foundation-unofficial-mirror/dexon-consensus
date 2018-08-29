@@ -55,6 +55,13 @@ func newVoteListMap() []map[types.ValidatorID]*types.Vote {
 	return listMap
 }
 
+// agreementReceiver is the interface receiving agreement event.
+type agreementReceiver interface {
+	proposeVote(vote *types.Vote)
+	proposeBlock(common.Hash)
+	confirmBlock(common.Hash)
+}
+
 // position is the current round of the agreement.
 type position struct {
 	ShardID uint64
@@ -64,8 +71,7 @@ type position struct {
 
 // agreementData is the data for agreementState.
 type agreementData struct {
-	voteChan  chan *types.Vote
-	blockChan chan common.Hash
+	recv agreementReceiver
 
 	ID            types.ValidatorID
 	leader        *leaderSelector
@@ -80,8 +86,6 @@ type agreementData struct {
 
 // agreement is the agreement protocal describe in the Crypto Shuffle Algorithm.
 type agreement struct {
-	confirmChan chan common.Hash
-
 	state      agreementState
 	data       *agreementData
 	aID        *atomic.Value
@@ -93,32 +97,22 @@ type agreement struct {
 // newAgreement creates a agreement instance.
 func newAgreement(
 	ID types.ValidatorID,
+	recv agreementReceiver,
 	validators types.ValidatorIDs,
 	sigToPub SigToPubFn,
-	blockProposer blockProposerFn) (
-	*agreement,
-	<-chan *types.Vote,
-	<-chan common.Hash,
-	<-chan common.Hash,
-) {
-	// TODO(jimmy-dexon): use callback instead of channel.
-	voteChan := make(chan *types.Vote, 3)
-	blockChan := make(chan common.Hash)
-	confirmChan := make(chan common.Hash)
+	blockProposer blockProposerFn) *agreement {
 	agreement := &agreement{
-		confirmChan: confirmChan,
 		data: &agreementData{
+			recv:          recv,
 			ID:            ID,
 			leader:        newLeaderSelector(),
-			voteChan:      voteChan,
-			blockChan:     blockChan,
 			blockProposer: blockProposer,
 		},
 		aID:      &atomic.Value{},
 		sigToPub: sigToPub,
 	}
 	agreement.restart(validators)
-	return agreement, voteChan, blockChan, confirmChan
+	return agreement
 }
 
 // terminate the current running state.
@@ -213,7 +207,7 @@ func (a *agreement) processVote(vote *types.Vote) error {
 			if len(a.data.votes[vote.Period][types.VoteConfirm]) >=
 				a.data.requiredVote {
 				a.hasOutput = true
-				a.confirmChan <- vote.BlockHash
+				a.data.recv.confirmBlock(vote.BlockHash)
 			}
 		}
 		return true

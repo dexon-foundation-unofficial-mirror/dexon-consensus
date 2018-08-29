@@ -39,6 +39,22 @@ type AgreementTestSuite struct {
 	block       map[common.Hash]*types.Block
 }
 
+type agreementTestReceiver struct {
+	s *AgreementTestSuite
+}
+
+func (r *agreementTestReceiver) proposeVote(vote *types.Vote) {
+	r.s.voteChan <- vote
+}
+
+func (r *agreementTestReceiver) proposeBlock(block common.Hash) {
+	r.s.blockChan <- block
+}
+
+func (r *agreementTestReceiver) confirmBlock(block common.Hash) {
+	r.s.confirmChan <- block
+}
+
 func (s *AgreementTestSuite) blockProposer() *types.Block {
 	block := &types.Block{
 		ProposerID: s.ID,
@@ -88,27 +104,13 @@ func (s *AgreementTestSuite) newAgreement(numValidator int) *agreement {
 		s.prvKey[validators[i]] = prvKey
 	}
 	validators = append(validators, s.ID)
-	agreement, voteChan, blockChan, confirmChan := newAgreement(
+	agreement := newAgreement(
 		s.ID,
+		&agreementTestReceiver{s},
 		validators,
 		eth.SigToPub,
 		s.blockProposer,
 	)
-	go func() {
-		for {
-			s.voteChan <- <-voteChan
-		}
-	}()
-	go func() {
-		for {
-			s.blockChan <- <-blockChan
-		}
-	}()
-	go func() {
-		for {
-			s.confirmChan <- <-confirmChan
-		}
-	}()
 	return agreement
 }
 
@@ -122,15 +124,10 @@ func (s *AgreementTestSuite) TestPrepareState() {
 	a.data.period = 1
 	newState, err := state.nextState()
 	s.Require().Nil(err)
-	var proposedBlock common.Hash
-	select {
-	case proposedBlock = <-s.blockChan:
-		s.NotEqual(common.Hash{}, proposedBlock)
-		err := a.processBlock(s.block[proposedBlock])
-		s.Require().Nil(err)
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Expecting a proposed block.\n")
-	}
+	s.Require().True(len(s.blockChan) > 0)
+	proposedBlock := <-s.blockChan
+	s.NotEqual(common.Hash{}, proposedBlock)
+	s.Require().Nil(a.processBlock(s.block[proposedBlock]))
 	s.Equal(stateAck, newState.state())
 
 	// For period >= 2, if the pass-vote for block b equal to {}
@@ -146,12 +143,9 @@ func (s *AgreementTestSuite) TestPrepareState() {
 
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	select {
-	case hash := <-s.blockChan:
-		s.Equal(proposedBlock, hash)
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Expecting a proposed block.\n")
-	}
+	s.Require().True(len(s.blockChan) > 0)
+	hash := <-s.blockChan
+	s.Equal(proposedBlock, hash)
 	s.Equal(stateAck, newState.state())
 
 	// For period >= 2, if the pass-vote for block v not equal to {}
@@ -168,12 +162,9 @@ func (s *AgreementTestSuite) TestPrepareState() {
 
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	select {
-	case hash := <-s.blockChan:
-		s.Equal(block.Hash, hash)
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Expecting a proposed block.\n")
-	}
+	s.Require().True(len(s.blockChan) > 0)
+	hash = <-s.blockChan
+	s.Equal(block.Hash, hash)
 	s.Equal(stateAck, newState.state())
 }
 
@@ -195,13 +186,10 @@ func (s *AgreementTestSuite) TestAckState() {
 	a.data.period = 1
 	newState, err := state.nextState()
 	s.Require().Nil(err)
-	select {
-	case vote := <-s.voteChan:
-		s.Equal(types.VoteAck, vote.Type)
-		s.NotEqual(common.Hash{}, vote.BlockHash)
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Expecting a proposed vote.\n")
-	}
+	s.Require().True(len(s.voteChan) > 0)
+	vote := <-s.voteChan
+	s.Equal(types.VoteAck, vote.Type)
+	s.NotEqual(common.Hash{}, vote.BlockHash)
 	s.Equal(stateConfirm, newState.state())
 
 	// For period >= 2, if block v equal to {} has more than 2f+1 pass-vote
@@ -213,13 +201,10 @@ func (s *AgreementTestSuite) TestAckState() {
 	}
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	select {
-	case vote := <-s.voteChan:
-		s.Equal(types.VoteAck, vote.Type)
-		s.NotEqual(common.Hash{}, vote.BlockHash)
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Expecting a proposed vote.\n")
-	}
+	s.Require().True(len(s.voteChan) > 0)
+	vote = <-s.voteChan
+	s.Equal(types.VoteAck, vote.Type)
+	s.NotEqual(common.Hash{}, vote.BlockHash)
 	s.Equal(stateConfirm, newState.state())
 
 	// For period >= 2, if block v not equal to {} has more than 2f+1 pass-vote
@@ -232,13 +217,10 @@ func (s *AgreementTestSuite) TestAckState() {
 	}
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	select {
-	case vote := <-s.voteChan:
-		s.Equal(types.VoteAck, vote.Type)
-		s.Equal(hash, vote.BlockHash)
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Expecting a proposed vote.\n")
-	}
+	s.Require().True(len(s.voteChan) > 0)
+	vote = <-s.voteChan
+	s.Equal(types.VoteAck, vote.Type)
+	s.Equal(hash, vote.BlockHash)
 	s.Equal(stateConfirm, newState.state())
 }
 
@@ -260,13 +242,10 @@ func (s *AgreementTestSuite) TestConfirmState() {
 	s.Require().Nil(state.receiveVote())
 	newState, err := state.nextState()
 	s.Require().Nil(err)
-	select {
-	case vote := <-s.voteChan:
-		s.Equal(types.VoteConfirm, vote.Type)
-		s.Equal(block.Hash, vote.BlockHash)
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Expecting a proposed vote.\n")
-	}
+	s.Require().True(len(s.voteChan) > 0)
+	vote := <-s.voteChan
+	s.Equal(types.VoteConfirm, vote.Type)
+	s.Equal(block.Hash, vote.BlockHash)
 	s.Equal(statePass1, newState.state())
 
 	// Else, no vote is propose in this state.
@@ -274,11 +253,7 @@ func (s *AgreementTestSuite) TestConfirmState() {
 	s.Require().Nil(state.receiveVote())
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	select {
-	case <-s.voteChan:
-		s.FailNow("Unexpected proposed vote.\n")
-	case <-time.After(50 * time.Millisecond):
-	}
+	s.Require().True(len(s.voteChan) == 0)
 	s.Equal(statePass1, newState.state())
 
 	// If there are 2f+1 ack-vote for block v equal to {},
@@ -291,11 +266,7 @@ func (s *AgreementTestSuite) TestConfirmState() {
 	s.Require().Nil(state.receiveVote())
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	select {
-	case <-s.voteChan:
-		s.FailNow("Unexpected proposed vote.\n")
-	case <-time.After(50 * time.Millisecond):
-	}
+	s.Require().True(len(s.voteChan) == 0)
 	s.Equal(statePass1, newState.state())
 }
 
@@ -313,13 +284,10 @@ func (s *AgreementTestSuite) TestPass1State() {
 	s.Require().Nil(a.processVote(vote))
 	newState, err := state.nextState()
 	s.Require().Nil(err)
-	select {
-	case vote := <-s.voteChan:
-		s.Equal(types.VotePass, vote.Type)
-		s.Equal(hash, vote.BlockHash)
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Expecting a proposed vote.\n")
-	}
+	s.Require().True(len(s.voteChan) > 0)
+	vote = <-s.voteChan
+	s.Equal(types.VotePass, vote.Type)
+	s.Equal(hash, vote.BlockHash)
 	s.Equal(statePass2, newState.state())
 
 	// Else if period >= 2 and has 2f+1 pass-vote in period-1 for block {},
@@ -333,13 +301,10 @@ func (s *AgreementTestSuite) TestPass1State() {
 	s.Require().Nil(a.processVote(vote))
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	select {
-	case vote := <-s.voteChan:
-		s.Equal(types.VotePass, vote.Type)
-		s.Equal(common.Hash{}, vote.BlockHash)
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Expecting a proposed vote.\n")
-	}
+	s.Require().True(len(s.voteChan) > 0)
+	vote = <-s.voteChan
+	s.Equal(types.VotePass, vote.Type)
+	s.Equal(common.Hash{}, vote.BlockHash)
 	s.Equal(statePass2, newState.state())
 
 	// Else, propose pass-vote for default block.
@@ -355,13 +320,10 @@ func (s *AgreementTestSuite) TestPass1State() {
 	s.Require().Nil(a.processVote(vote))
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	select {
-	case vote := <-s.voteChan:
-		s.Equal(types.VotePass, vote.Type)
-		s.Equal(block.Hash, vote.BlockHash)
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Expecting a proposed vote.\n")
-	}
+	s.Require().True(len(s.voteChan) > 0)
+	vote = <-s.voteChan
+	s.Equal(types.VotePass, vote.Type)
+	s.Equal(block.Hash, vote.BlockHash)
 	s.Equal(statePass2, newState.state())
 
 	// Period == 1 is also else condition.
@@ -375,13 +337,10 @@ func (s *AgreementTestSuite) TestPass1State() {
 	s.Require().Nil(a.processVote(vote))
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	select {
-	case vote := <-s.voteChan:
-		s.Equal(types.VotePass, vote.Type)
-		s.Equal(block.Hash, vote.BlockHash)
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Expecting a proposed vote.\n")
-	}
+	s.Require().True(len(s.voteChan) > 0)
+	vote = <-s.voteChan
+	s.Equal(types.VotePass, vote.Type)
+	s.Equal(block.Hash, vote.BlockHash)
 	s.Equal(statePass2, newState.state())
 
 	// No enought pass-vote for period-1.
@@ -390,13 +349,10 @@ func (s *AgreementTestSuite) TestPass1State() {
 	s.Require().Nil(a.processVote(vote))
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	select {
-	case vote := <-s.voteChan:
-		s.Equal(types.VotePass, vote.Type)
-		s.Equal(block.Hash, vote.BlockHash)
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Expecting a proposed vote.\n")
-	}
+	s.Require().True(len(s.voteChan) > 0)
+	vote = <-s.voteChan
+	s.Equal(types.VotePass, vote.Type)
+	s.Equal(block.Hash, vote.BlockHash)
 	s.Equal(statePass2, newState.state())
 }
 
@@ -414,20 +370,13 @@ func (s *AgreementTestSuite) TestPass2State() {
 		s.Require().Nil(a.processVote(vote))
 	}
 	s.Require().Nil(state.receiveVote())
-	select {
-	case vote := <-s.voteChan:
-		s.Equal(types.VotePass, vote.Type)
-		s.Equal(block.Hash, vote.BlockHash)
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Expecting a proposed vote.\n")
-	}
+	s.Require().True(len(s.voteChan) > 0)
+	vote := <-s.voteChan
+	s.Equal(types.VotePass, vote.Type)
+	s.Equal(block.Hash, vote.BlockHash)
 	// Only propose one vote.
 	s.Require().Nil(state.receiveVote())
-	select {
-	case <-s.voteChan:
-		s.FailNow("Unexpected proposed vote.\n")
-	case <-time.After(50 * time.Millisecond):
-	}
+	s.Require().True(len(s.voteChan) == 0)
 
 	// If period >= 2 and
 	// there are 2f+1 pass-vote in period-1 for block v equal to {} and
@@ -439,16 +388,13 @@ func (s *AgreementTestSuite) TestPass2State() {
 		vote := s.prepareVote(vID, types.VotePass, common.Hash{}, 1)
 		s.Require().Nil(a.processVote(vote))
 	}
-	vote := s.prepareVote(s.ID, types.VoteAck, common.Hash{}, 2)
+	vote = s.prepareVote(s.ID, types.VoteAck, common.Hash{}, 2)
 	s.Require().Nil(a.processVote(vote))
 	s.Require().Nil(state.receiveVote())
-	select {
-	case vote := <-s.voteChan:
-		s.Equal(types.VotePass, vote.Type)
-		s.Equal(common.Hash{}, vote.BlockHash)
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Expecting a proposed vote.\n")
-	}
+	s.Require().True(len(s.voteChan) > 0)
+	vote = <-s.voteChan
+	s.Equal(types.VotePass, vote.Type)
+	s.Equal(common.Hash{}, vote.BlockHash)
 
 	// Test terminate.
 	ok := make(chan struct{})

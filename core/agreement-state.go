@@ -81,7 +81,7 @@ func (s *prepareState) nextState() (agreementState, error) {
 			delete(s.a.blocks, s.a.ID)
 		}
 	}
-	s.a.blockChan <- hash
+	s.a.recv.proposeBlock(hash)
 	return newAckState(s.a), nil
 }
 func (s *prepareState) receiveVote() error { return nil }
@@ -112,11 +112,11 @@ func (s *ackState) nextState() (agreementState, error) {
 	if hash == nullBlockHash {
 		hash = s.a.leader.leaderBlockHash()
 	}
-	s.a.voteChan <- &types.Vote{
+	s.a.recv.proposeVote(&types.Vote{
 		Type:      types.VoteAck,
 		BlockHash: hash,
 		Period:    s.a.period,
-	}
+	})
 	return newConfirmState(s.a), nil
 }
 func (s *ackState) receiveVote() error { return nil }
@@ -151,11 +151,11 @@ func (s *confirmState) receiveVote() error {
 		return nil
 	}
 	if hash != nullBlockHash {
-		s.a.voteChan <- &types.Vote{
+		s.a.recv.proposeVote(&types.Vote{
 			Type:      types.VoteConfirm,
 			BlockHash: hash,
 			Period:    s.a.period,
-		}
+		})
 	}
 	s.voted.Store(true)
 	return nil
@@ -179,22 +179,22 @@ func (s *pass1State) nextState() (agreementState, error) {
 	defer s.a.votesLock.RUnlock()
 	if vote, exist :=
 		s.a.votes[s.a.period][types.VoteConfirm][s.a.ID]; exist {
-		s.a.voteChan <- &types.Vote{
+		s.a.recv.proposeVote(&types.Vote{
 			Type:      types.VotePass,
 			BlockHash: vote.BlockHash,
 			Period:    s.a.period,
-		}
+		})
 	} else if s.a.period == 1 {
 		voteDefault = true
 	} else {
 		hash, ok := s.a.countVote(s.a.period-1, types.VotePass)
 		if ok {
 			if hash == nullBlockHash {
-				s.a.voteChan <- &types.Vote{
+				s.a.recv.proposeVote(&types.Vote{
 					Type:      types.VotePass,
 					BlockHash: hash,
 					Period:    s.a.period,
-				}
+				})
 			} else {
 				voteDefault = true
 			}
@@ -203,11 +203,11 @@ func (s *pass1State) nextState() (agreementState, error) {
 		}
 	}
 	if voteDefault {
-		s.a.voteChan <- &types.Vote{
+		s.a.recv.proposeVote(&types.Vote{
 			Type:      types.VotePass,
 			BlockHash: s.a.defaultBlock,
 			Period:    s.a.period,
-		}
+		})
 	}
 	return newPass2State(s.a), nil
 }
@@ -227,7 +227,7 @@ func newPass2State(a *agreementData) *pass2State {
 	return &pass2State{
 		a:              a,
 		voted:          voted,
-		enoughPassVote: make(chan common.Hash),
+		enoughPassVote: make(chan common.Hash, 1),
 		terminateChan:  make(chan struct{}),
 	}
 }
@@ -259,30 +259,29 @@ func (s *pass2State) receiveVote() error {
 	}
 	ackHash, ok := s.a.countVote(s.a.period, types.VoteAck)
 	if ok && ackHash != nullBlockHash {
-		s.a.voteChan <- &types.Vote{
+		s.a.recv.proposeVote(&types.Vote{
 			Type:      types.VotePass,
 			BlockHash: ackHash,
 			Period:    s.a.period,
-		}
+		})
+		s.voted.Store(true)
 	} else if s.a.period > 1 {
 		if _, exist :=
 			s.a.votes[s.a.period][types.VoteConfirm][s.a.ID]; !exist {
 			hash, ok := s.a.countVote(s.a.period-1, types.VotePass)
 			if ok && hash == nullBlockHash {
-				s.a.voteChan <- &types.Vote{
+				s.a.recv.proposeVote(&types.Vote{
 					Type:      types.VotePass,
 					BlockHash: hash,
 					Period:    s.a.period,
-				}
+				})
+				s.voted.Store(true)
 			}
 		}
 	}
-	go func() {
-		hash, ok := s.a.countVote(s.a.period, types.VotePass)
-		if ok {
-			s.enoughPassVote <- hash
-		}
-	}()
-	s.voted.Store(true)
+	hash, ok := s.a.countVote(s.a.period, types.VotePass)
+	if ok {
+		s.enoughPassVote <- hash
+	}
 	return nil
 }
