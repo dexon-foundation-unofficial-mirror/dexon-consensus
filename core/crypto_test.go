@@ -191,6 +191,24 @@ func (s *CryptoTestSuite) TestBlockSignature() {
 	}
 }
 
+func (s *CryptoTestSuite) TestVoteSignature() {
+	prv, err := eth.NewPrivateKey()
+	s.Require().Nil(err)
+	pub := prv.PublicKey()
+	vID := types.NewValidatorID(pub)
+	vote := &types.Vote{
+		ProposerID: vID,
+		Type:       types.VoteAck,
+		BlockHash:  common.NewRandomHash(),
+		Period:     1,
+	}
+	vote.Signature, err = prv.Sign(hashVote(vote))
+	s.Require().Nil(err)
+	s.True(verifyVoteSignature(vote, eth.SigToPub))
+	vote.Type = types.VoteConfirm
+	s.False(verifyVoteSignature(vote, eth.SigToPub))
+}
+
 func TestCrypto(t *testing.T) {
 	suite.Run(t, new(CryptoTestSuite))
 }
