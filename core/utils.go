@@ -92,3 +92,14 @@ func getMedianTime(block *types.Block) (t time.Time, err error) {
 	return
 
 }
+
+func removeFromSortedIntSlice(xs []int, x int) []int {
+	indexToRemove := sort.Search(len(xs), func(idx int) bool {
+		return xs[idx] >= x
+	})
+	if indexToRemove == len(xs) || xs[indexToRemove] != x {
+		// This value is not found.
+		return xs
+	}
+	return append(xs[:indexToRemove], xs[indexToRemove+1:]...)
+}

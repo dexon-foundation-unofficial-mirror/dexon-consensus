@@ -236,7 +236,8 @@ func (gen *BlocksGenerator) Generate(
 	validatorCount int,
 	blockCount int,
 	ackingCountGenerator func() int,
-	writer blockdb.Writer) (err error) {
+	writer blockdb.Writer) (
+	validators types.ValidatorIDs, err error) {
 
 	if ackingCountGenerator == nil {
 		ackingCountGenerator = normalAckingCountGenerator(
@@ -244,7 +245,7 @@ func (gen *BlocksGenerator) Generate(
 			float64(validatorCount/2),
 			float64(validatorCount/4+1))
 	}
-	validators := []types.ValidatorID{}
+	validators = types.ValidatorIDs{}
 	for i := 0; i < validatorCount; i++ {
 		validators = append(
 			validators, types.ValidatorID{Hash: common.NewRandomHash()})

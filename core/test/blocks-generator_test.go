@@ -39,9 +39,10 @@ func (s *BlocksGeneratorTestCase) TestGenerate() {
 	db, err := blockdb.NewMemBackedBlockDB()
 	s.Require().Nil(err)
 
-	err = gen.Generate(
+	validators, err := gen.Generate(
 		validatorCount, blockCount, nil, db)
 	s.Require().Nil(err)
+	s.Require().Len(validators, validatorCount)
 
 	// Load all blocks in that database for further checking.
 	iter, err := db.GetAll()
@@ -114,8 +115,10 @@ func (s *BlocksGeneratorTestCase) TestGenerateWithMaxAckCount() {
 	// Generate with 0 acks.
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.Nil(err)
-	req.Nil(gen.Generate(
-		validatorCount, blockCount, MaxAckingCountGenerator(0), db))
+	validators, err := gen.Generate(
+		validatorCount, blockCount, MaxAckingCountGenerator(0), db)
+	req.Nil(err)
+	req.Len(validators, validatorCount)
 	// Load blocks to check their acking count.
 	iter, err := db.GetAll()
 	req.Nil(err)
@@ -134,9 +137,11 @@ func (s *BlocksGeneratorTestCase) TestGenerateWithMaxAckCount() {
 	// Generate with acks as many as possible.
 	db, err = blockdb.NewMemBackedBlockDB()
 	req.Nil(err)
-	req.Nil(gen.Generate(
+	validators, err = gen.Generate(
 		validatorCount, blockCount, MaxAckingCountGenerator(
-			validatorCount), db))
+			validatorCount), db)
+	req.Nil(err)
+	req.Len(validators, validatorCount)
 	// Load blocks to verify the average acking count.
 	totalAckingCount := 0
 	totalBlockCount := 0

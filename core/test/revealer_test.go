@@ -45,9 +45,10 @@ func (s *RevealerTestSuite) SetupSuite() {
 
 	// Randomly generate blocks.
 	gen := NewBlocksGenerator(nil, stableRandomHash)
-	err = gen.Generate(
+	validators, err := gen.Generate(
 		validatorCount, blockCount, nil, s.db)
 	s.Require().Nil(err)
+	s.Require().Len(validators, validatorCount)
 
 	// Cache the count of total generated block.
 	iter, err := s.db.GetAll()

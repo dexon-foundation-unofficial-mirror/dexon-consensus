@@ -514,7 +514,8 @@ func (s *ReliableBroadcastTest) TestRandomlyGeneratedBlocks() {
 		}
 	}()
 	gen := test.NewBlocksGenerator(nil, hashBlock)
-	s.Require().Nil(gen.Generate(validatorCount, blockCount, nil, db))
+	_, err = gen.Generate(validatorCount, blockCount, nil, db)
+	s.Require().Nil(err)
 	iter, err := db.GetAll()
 	s.Require().Nil(err)
 	// Setup a revealer that would reveal blocks randomly.

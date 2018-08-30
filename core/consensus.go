@@ -84,10 +84,14 @@ func NewConsensus(
 	}
 
 	// Setup sequencer by information returned from Governace.
+	var validators types.ValidatorIDs
+	for vID := range validatorSet {
+		validators = append(validators, vID)
+	}
 	to := newTotalOrdering(
 		uint64(gov.GetTotalOrderingK()),
 		uint64(float32(len(validatorSet)-1)*gov.GetPhiRatio()+1),
-		uint64(len(validatorSet)))
+		validators)
 
 	return &Consensus{
 		rbModule: rb,
