@@ -110,6 +110,8 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.ProposerID = b.ProposerID
 	bcopy.ParentHash = b.ParentHash
 	bcopy.Hash = b.Hash
+	bcopy.ShardID = b.ShardID
+	bcopy.ChainID = b.ChainID
 	bcopy.Height = b.Height
 	bcopy.Signature = b.Signature.Clone()
 	bcopy.CRSSignature = b.CRSSignature.Clone()
