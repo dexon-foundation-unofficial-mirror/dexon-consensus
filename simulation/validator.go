@@ -19,6 +19,7 @@ package simulation
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/blockdb"
@@ -41,6 +42,7 @@ type Validator struct {
 	isFinished chan struct{}
 
 	ID              types.ValidatorID
+	chainID         uint64
 	prvKey          crypto.PrivateKey
 	sigToPub        core.SigToPubFn
 	consensus       *core.Consensus
@@ -84,14 +86,24 @@ func (v *Validator) GetID() types.ValidatorID {
 func (v *Validator) Run() {
 	v.msgChannel = v.network.Join(v)
 
+	hashes := make(common.Hashes, 0, v.network.NumPeers())
 	for _, vID := range v.network.Endpoints() {
 		v.gov.addValidator(vID)
+		hashes = append(hashes, vID.Hash)
+	}
+	sort.Sort(hashes)
+	for i, hash := range hashes {
+		if hash == v.ID.Hash {
+			v.chainID = uint64(i)
+			break
+		}
 	}
 	v.consensus = core.NewConsensus(
 		v.app, v.gov, v.db, v.prvKey, v.sigToPub)
 
 	genesisBlock := &types.Block{
 		ProposerID: v.ID,
+		ChainID:    v.chainID,
 	}
 	err := v.consensus.PrepareGenesisBlock(genesisBlock, time.Now().UTC())
 	if err != nil {
@@ -188,6 +200,7 @@ ProposingBlockLoop:
 
 		block := &types.Block{
 			ProposerID: v.ID,
+			ChainID:    v.chainID,
 			Hash:       common.NewRandomHash(),
 		}
 		if err := v.consensus.PrepareBlock(block, time.Now().UTC()); err != nil {

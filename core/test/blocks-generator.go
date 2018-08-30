@@ -163,6 +163,11 @@ func (vs *validatorSetStatus) proposeBlock(
 		Timestamps: ts,
 		// TODO(mission.liao): Generate timestamp.
 	}
+	for i, vID := range vs.validatorIDs {
+		if vID == proposerID {
+			newBlock.ChainID = uint64(i)
+		}
+	}
 	var err error
 	newBlock.Hash, err = vs.hashBlock(newBlock)
 	if err != nil {

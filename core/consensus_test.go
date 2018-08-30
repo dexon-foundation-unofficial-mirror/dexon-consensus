@@ -36,10 +36,12 @@ type ConsensusTestSuite struct {
 
 func (s *ConsensusTestSuite) prepareGenesisBlock(
 	proposerID types.ValidatorID,
+	chainID uint64,
 	con *Consensus) *types.Block {
 
 	block := &types.Block{
 		ProposerID: proposerID,
+		ChainID:    chainID,
 	}
 	err := con.PrepareGenesisBlock(block, time.Now().UTC())
 	s.Require().Nil(err)
@@ -102,13 +104,13 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		}
 	}
 	// Genesis blocks
-	b00 := s.prepareGenesisBlock(validators[0], objs[validators[0]].con)
+	b00 := s.prepareGenesisBlock(validators[0], 0, objs[validators[0]].con)
 	time.Sleep(minInterval)
-	b10 := s.prepareGenesisBlock(validators[1], objs[validators[1]].con)
+	b10 := s.prepareGenesisBlock(validators[1], 1, objs[validators[1]].con)
 	time.Sleep(minInterval)
-	b20 := s.prepareGenesisBlock(validators[2], objs[validators[2]].con)
+	b20 := s.prepareGenesisBlock(validators[2], 2, objs[validators[2]].con)
 	time.Sleep(minInterval)
-	b30 := s.prepareGenesisBlock(validators[3], objs[validators[3]].con)
+	b30 := s.prepareGenesisBlock(validators[3], 3, objs[validators[3]].con)
 	broadcast(b00)
 	broadcast(b10)
 	broadcast(b20)
@@ -117,6 +119,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b11 := &types.Block{
 		ProposerID: validators[1],
+		ChainID:    1,
 	}
 	b11.Hash, err = hashBlock(b11)
 	s.Require().Nil(err)
@@ -131,6 +134,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b01 := &types.Block{
 		ProposerID: validators[0],
+		ChainID:    0,
 		Hash:       common.NewRandomHash(),
 	}
 	req.Nil(objs[validators[0]].con.PrepareBlock(b01, time.Now().UTC()))
@@ -140,6 +144,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b21 := &types.Block{
 		ProposerID: validators[2],
+		ChainID:    2,
 		Hash:       common.NewRandomHash(),
 	}
 	req.Nil(objs[validators[2]].con.PrepareBlock(b21, time.Now().UTC()))
@@ -149,6 +154,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b31 := &types.Block{
 		ProposerID: validators[3],
+		ChainID:    3,
 		Hash:       common.NewRandomHash(),
 	}
 	req.Nil(objs[validators[3]].con.PrepareBlock(b31, time.Now().UTC()))
@@ -163,6 +169,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b02 := &types.Block{
 		ProposerID: validators[0],
+		ChainID:    0,
 		Hash:       common.NewRandomHash(),
 	}
 	req.Nil(objs[validators[0]].con.PrepareBlock(b02, time.Now().UTC()))
@@ -174,6 +181,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b12 := &types.Block{
 		ProposerID: validators[1],
+		ChainID:    1,
 		Hash:       common.NewRandomHash(),
 	}
 	req.Nil(objs[validators[1]].con.PrepareBlock(b12, time.Now().UTC()))
@@ -186,6 +194,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b22 := &types.Block{
 		ProposerID: validators[2],
+		ChainID:    2,
 		Hash:       common.NewRandomHash(),
 	}
 	req.Nil(objs[validators[2]].con.PrepareBlock(b22, time.Now().UTC()))
@@ -197,6 +206,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b32 := &types.Block{
 		ProposerID: validators[3],
+		ChainID:    3,
 		Hash:       common.NewRandomHash(),
 	}
 	req.Nil(objs[validators[3]].con.PrepareBlock(b32, time.Now().UTC()))
@@ -286,10 +296,10 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 			con *Consensus
 		}{app, con}
 	}
-	b00 := s.prepareGenesisBlock(validators[0], objs[validators[0]].con)
-	b10 := s.prepareGenesisBlock(validators[1], objs[validators[1]].con)
-	b20 := s.prepareGenesisBlock(validators[2], objs[validators[2]].con)
-	b30 := s.prepareGenesisBlock(validators[3], objs[validators[3]].con)
+	b00 := s.prepareGenesisBlock(validators[0], 0, objs[validators[0]].con)
+	b10 := s.prepareGenesisBlock(validators[1], 1, objs[validators[1]].con)
+	b20 := s.prepareGenesisBlock(validators[2], 2, objs[validators[2]].con)
+	b30 := s.prepareGenesisBlock(validators[3], 3, objs[validators[3]].con)
 	for _, obj := range objs {
 		con := obj.con
 		req.Nil(con.ProcessBlock(b00))

@@ -79,6 +79,7 @@ func NewConsensus(
 
 	// Setup acking by information returned from Governace.
 	rb := newReliableBroadcast()
+	rb.setChainNum(len(validatorSet))
 	for vID := range validatorSet {
 		rb.addValidator(vID)
 	}

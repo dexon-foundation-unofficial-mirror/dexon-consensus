@@ -56,6 +56,12 @@ func (s *ReliableBroadcastTest) prepareGenesisBlock(
 		Acks:       make(map[common.Hash]struct{}),
 		Timestamps: genTimestamps(validatorIDs),
 	}
+	for i, vID := range validatorIDs {
+		if proposerID == vID {
+			b.ChainID = uint64(i)
+			break
+		}
+	}
 	for _, vID := range validatorIDs {
 		b.Timestamps[vID] = time.Time{}
 	}
@@ -94,6 +100,7 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 		rb.addValidator(vid)
 		vids = append(vids, vid)
 	}
+	rb.setChainNum(len(vids))
 	// Add genesis blocks.
 	for _, vid := range vids {
 		b = s.prepareGenesisBlock(vid, vids)
@@ -101,13 +108,14 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 	}
 
 	// Add block 0-1 which acks 0-0.
-	h = rb.lattice[vids[0]].blocks[0].Hash
+	h = rb.lattice[0].blocks[0].Hash
 	b = &types.Block{
 		ProposerID: vids[0],
 		ParentHash: h,
 		Hash:       common.NewRandomHash(),
 		Timestamps: genTimestamps(vids),
 		Height:     1,
+		ChainID:    0,
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 		},
@@ -116,33 +124,35 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
 	s.Require().Nil(rb.processBlock(b))
-	s.Require().NotNil(rb.lattice[vids[0]].blocks[1])
+	s.Require().NotNil(rb.lattice[0].blocks[1])
 
 	// Add block 0-2 which acks 0-1 and 1-0.
-	h = rb.lattice[vids[0]].blocks[1].Hash
+	h = rb.lattice[0].blocks[1].Hash
 	b = &types.Block{
 		ProposerID: vids[0],
 		ParentHash: h,
 		Height:     2,
+		ChainID:    0,
 		Timestamps: genTimestamps(vids),
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
-			rb.lattice[vids[1]].blocks[0].Hash: struct{}{},
+			rb.lattice[1].blocks[0].Hash: struct{}{},
 		},
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
 	s.Require().Nil(rb.processBlock(b))
-	s.Require().NotNil(rb.lattice[vids[0]].blocks[2])
+	s.Require().NotNil(rb.lattice[0].blocks[2])
 
 	// Add block 0-3 which acks 0-2.
-	h = rb.lattice[vids[0]].blocks[2].Hash
+	h = rb.lattice[0].blocks[2].Hash
 	b = &types.Block{
 		ProposerID: vids[0],
 		ParentHash: h,
 		Hash:       common.NewRandomHash(),
 		Timestamps: genTimestamps(vids),
 		Height:     3,
+		ChainID:    0,
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 		},
@@ -150,16 +160,17 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
 	s.Require().Nil(rb.processBlock(b))
-	s.Require().NotNil(rb.lattice[vids[0]].blocks[3])
+	s.Require().NotNil(rb.lattice[0].blocks[3])
 
 	// Add block 3-1 which acks 3-0.
-	h = rb.lattice[vids[3]].blocks[0].Hash
+	h = rb.lattice[3].blocks[0].Hash
 	b = &types.Block{
 		ProposerID: vids[3],
 		ParentHash: h,
 		Hash:       common.NewRandomHash(),
 		Timestamps: genTimestamps(vids),
 		Height:     1,
+		ChainID:    3,
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 		},
@@ -167,7 +178,7 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
 	s.Require().Nil(rb.processBlock(b))
-	s.Require().NotNil(rb.lattice[vids[3]].blocks[0])
+	s.Require().NotNil(rb.lattice[3].blocks[0])
 
 	return vids
 }
@@ -195,6 +206,7 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 		ProposerID: vids[0],
 		ParentHash: common.NewRandomHash(),
 		Height:     10,
+		ChainID:    0,
 		Acks:       make(map[common.Hash]struct{}),
 	}
 	b.Hash, err = hashBlock(b)
@@ -208,8 +220,9 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 		ProposerID: vids[1],
 		ParentHash: common.NewRandomHash(),
 		Height:     1,
+		ChainID:    1,
 		Acks: map[common.Hash]struct{}{
-			rb.lattice[vids[2]].blocks[0].Hash: struct{}{},
+			rb.lattice[2].blocks[0].Hash: struct{}{},
 		},
 	}
 	b.Hash, err = hashBlock(b)
@@ -219,11 +232,12 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 	s.Require().Equal(ErrNotAckParent.Error(), err.Error())
 
 	// Non-genesis block which acks its parent but the height is invalid.
-	h = rb.lattice[vids[1]].blocks[0].Hash
+	h = rb.lattice[1].blocks[0].Hash
 	b = &types.Block{
 		ProposerID: vids[1],
 		ParentHash: h,
 		Height:     2,
+		ChainID:    1,
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 		},
@@ -235,7 +249,7 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 	s.Require().Equal(ErrInvalidBlockHeight.Error(), err.Error())
 
 	// Invalid proposer ID.
-	h = rb.lattice[vids[1]].blocks[0].Hash
+	h = rb.lattice[1].blocks[0].Hash
 	b = &types.Block{
 		ProposerID: types.ValidatorID{Hash: common.NewRandomHash()},
 		ParentHash: h,
@@ -250,12 +264,30 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 	s.Require().NotNil(err)
 	s.Require().Equal(ErrInvalidProposerID.Error(), err.Error())
 
+	// Invalid chain ID.
+	h = rb.lattice[1].blocks[0].Hash
+	b = &types.Block{
+		ProposerID: vids[1],
+		ParentHash: h,
+		Height:     1,
+		ChainID:    100,
+		Acks: map[common.Hash]struct{}{
+			h: struct{}{},
+		},
+	}
+	b.Hash, err = hashBlock(b)
+	s.Require().Nil(err)
+	err = rb.sanityCheck(b)
+	s.Require().NotNil(err)
+	s.Require().Equal(ErrInvalidChainID.Error(), err.Error())
+
 	// Fork block.
-	h = rb.lattice[vids[0]].blocks[0].Hash
+	h = rb.lattice[0].blocks[0].Hash
 	b = &types.Block{
 		ProposerID: vids[0],
 		ParentHash: h,
 		Height:     1,
+		ChainID:    0,
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 		},
@@ -270,14 +302,15 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 	s.Require().Equal(ErrForkBlock.Error(), err.Error())
 
 	// Replicated ack.
-	h = rb.lattice[vids[0]].blocks[3].Hash
+	h = rb.lattice[0].blocks[3].Hash
 	b = &types.Block{
 		ProposerID: vids[0],
 		ParentHash: h,
 		Height:     4,
+		ChainID:    0,
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
-			rb.lattice[vids[1]].blocks[0].Hash: struct{}{},
+			rb.lattice[1].blocks[0].Hash: struct{}{},
 		},
 	}
 	b.Hash, err = hashBlock(b)
@@ -287,11 +320,12 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 	s.Require().Equal(ErrDoubleAck.Error(), err.Error())
 
 	// Normal block.
-	h = rb.lattice[vids[1]].blocks[0].Hash
+	h = rb.lattice[1].blocks[0].Hash
 	b = &types.Block{
 		ProposerID: vids[1],
 		ParentHash: h,
 		Height:     1,
+		ChainID:    1,
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 			common.NewRandomHash(): struct{}{},
@@ -306,9 +340,8 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 
 func (s *ReliableBroadcastTest) TestAreAllAcksInLattice() {
 	var b *types.Block
-	var vids []types.ValidatorID
 	rb := newReliableBroadcast()
-	vids = genTestCase1(s, rb)
+	genTestCase1(s, rb)
 
 	// Empty ack should get true, although won't pass sanity check.
 	b = &types.Block{
@@ -319,8 +352,8 @@ func (s *ReliableBroadcastTest) TestAreAllAcksInLattice() {
 	// Acks blocks in lattice
 	b = &types.Block{
 		Acks: map[common.Hash]struct{}{
-			rb.lattice[vids[0]].blocks[0].Hash: struct{}{},
-			rb.lattice[vids[0]].blocks[1].Hash: struct{}{},
+			rb.lattice[0].blocks[0].Hash: struct{}{},
+			rb.lattice[0].blocks[1].Hash: struct{}{},
 		},
 	}
 	s.Require().True(rb.areAllAcksInLattice(b))
@@ -343,29 +376,30 @@ func (s *ReliableBroadcastTest) TestStrongAck() {
 
 	// Check block 0-0 to 0-3 before adding 1-1 and 2-1.
 	for i := uint64(0); i < 4; i++ {
-		s.Require().Equal(blockStatusInit, rb.blockInfos[rb.lattice[vids[0]].blocks[i].Hash].status)
+		s.Require().Equal(blockStatusInit, rb.blockInfos[rb.lattice[0].blocks[i].Hash].status)
 	}
 
 	// Add block 1-1 which acks 1-0 and 0-2, and block 0-0 to 0-3 are still
 	// in blockStatusInit, because they are not strongly acked.
 	b = &types.Block{
 		ProposerID: vids[1],
-		ParentHash: rb.lattice[vids[1]].blocks[0].Hash,
+		ParentHash: rb.lattice[1].blocks[0].Hash,
 		Hash:       common.NewRandomHash(),
 		Height:     1,
+		ChainID:    1,
 		Timestamps: genTimestamps(vids),
 		Acks: map[common.Hash]struct{}{
-			rb.lattice[vids[0]].blocks[2].Hash: struct{}{},
-			rb.lattice[vids[1]].blocks[0].Hash: struct{}{},
+			rb.lattice[0].blocks[2].Hash: struct{}{},
+			rb.lattice[1].blocks[0].Hash: struct{}{},
 		},
 	}
 	var err error
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
 	s.Require().Nil(rb.processBlock(b))
-	s.Require().NotNil(rb.lattice[vids[1]].blocks[1])
+	s.Require().NotNil(rb.lattice[1].blocks[1])
 	for i := uint64(0); i < 4; i++ {
-		h := rb.lattice[vids[0]].blocks[i].Hash
+		h := rb.lattice[0].blocks[i].Hash
 		s.Require().Equal(blockStatusInit, rb.blockInfos[h].status)
 	}
 
@@ -373,23 +407,24 @@ func (s *ReliableBroadcastTest) TestStrongAck() {
 	// 0-3 is still not.
 	b = &types.Block{
 		ProposerID: vids[2],
-		ParentHash: rb.lattice[vids[2]].blocks[0].Hash,
+		ParentHash: rb.lattice[2].blocks[0].Hash,
 		Hash:       common.NewRandomHash(),
 		Height:     1,
+		ChainID:    2,
 		Timestamps: genTimestamps(vids),
 		Acks: map[common.Hash]struct{}{
-			rb.lattice[vids[0]].blocks[2].Hash: struct{}{},
-			rb.lattice[vids[2]].blocks[0].Hash: struct{}{},
+			rb.lattice[0].blocks[2].Hash: struct{}{},
+			rb.lattice[2].blocks[0].Hash: struct{}{},
 		},
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
 	s.Require().Nil(rb.processBlock(b))
 
-	s.Require().Equal(blockStatusAcked, rb.blockInfos[rb.lattice[vids[0]].blocks[0].Hash].status)
-	s.Require().Equal(blockStatusAcked, rb.blockInfos[rb.lattice[vids[0]].blocks[1].Hash].status)
-	s.Require().Equal(blockStatusAcked, rb.blockInfos[rb.lattice[vids[0]].blocks[2].Hash].status)
-	s.Require().Equal(blockStatusInit, rb.blockInfos[rb.lattice[vids[0]].blocks[3].Hash].status)
+	s.Require().Equal(blockStatusAcked, rb.blockInfos[rb.lattice[0].blocks[0].Hash].status)
+	s.Require().Equal(blockStatusAcked, rb.blockInfos[rb.lattice[0].blocks[1].Hash].status)
+	s.Require().Equal(blockStatusAcked, rb.blockInfos[rb.lattice[0].blocks[2].Hash].status)
+	s.Require().Equal(blockStatusInit, rb.blockInfos[rb.lattice[0].blocks[3].Hash].status)
 }
 
 func (s *ReliableBroadcastTest) TestExtractBlocks() {
@@ -400,14 +435,15 @@ func (s *ReliableBroadcastTest) TestExtractBlocks() {
 	// Add block 1-1 which acks 1-0, 0-2, 3-0.
 	b = &types.Block{
 		ProposerID: vids[1],
-		ParentHash: rb.lattice[vids[1]].blocks[0].Hash,
+		ParentHash: rb.lattice[1].blocks[0].Hash,
 		Hash:       common.NewRandomHash(),
 		Height:     1,
+		ChainID:    1,
 		Timestamps: genTimestamps(vids),
 		Acks: map[common.Hash]struct{}{
-			rb.lattice[vids[0]].blocks[2].Hash: struct{}{},
-			rb.lattice[vids[1]].blocks[0].Hash: struct{}{},
-			rb.lattice[vids[3]].blocks[0].Hash: struct{}{},
+			rb.lattice[0].blocks[2].Hash: struct{}{},
+			rb.lattice[1].blocks[0].Hash: struct{}{},
+			rb.lattice[3].blocks[0].Hash: struct{}{},
 		},
 	}
 	var err error
@@ -418,14 +454,15 @@ func (s *ReliableBroadcastTest) TestExtractBlocks() {
 	// Add block 2-1 which acks 0-2, 2-0, 3-0.
 	b = &types.Block{
 		ProposerID: vids[2],
-		ParentHash: rb.lattice[vids[2]].blocks[0].Hash,
+		ParentHash: rb.lattice[2].blocks[0].Hash,
 		Hash:       common.NewRandomHash(),
 		Height:     1,
+		ChainID:    2,
 		Timestamps: genTimestamps(vids),
 		Acks: map[common.Hash]struct{}{
-			rb.lattice[vids[0]].blocks[2].Hash: struct{}{},
-			rb.lattice[vids[2]].blocks[0].Hash: struct{}{},
-			rb.lattice[vids[3]].blocks[0].Hash: struct{}{},
+			rb.lattice[0].blocks[2].Hash: struct{}{},
+			rb.lattice[2].blocks[0].Hash: struct{}{},
+			rb.lattice[3].blocks[0].Hash: struct{}{},
 		},
 	}
 	b.Hash, err = hashBlock(b)
@@ -433,9 +470,9 @@ func (s *ReliableBroadcastTest) TestExtractBlocks() {
 	s.Require().Nil(rb.processBlock(b))
 
 	hashes := []common.Hash{
-		rb.lattice[vids[0]].blocks[0].Hash,
-		rb.lattice[vids[0]].blocks[1].Hash,
-		rb.lattice[vids[3]].blocks[0].Hash,
+		rb.lattice[0].blocks[0].Hash,
+		rb.lattice[0].blocks[1].Hash,
+		rb.lattice[3].blocks[0].Hash,
 	}
 	hashExtracted := map[common.Hash]*types.Block{}
 	for _, b := range rb.extractBlocks() {
@@ -458,6 +495,7 @@ func (s *ReliableBroadcastTest) TestRandomIntensiveAcking() {
 	for _, vid := range vids {
 		rb.addValidator(vid)
 	}
+	rb.setChainNum(len(vids))
 	// Generate genesis blocks.
 	for _, vid := range vids {
 		b := s.prepareGenesisBlock(vid, vids)
@@ -466,13 +504,14 @@ func (s *ReliableBroadcastTest) TestRandomIntensiveAcking() {
 	}
 
 	for i := 0; i < 5000; i++ {
-		vid := vids[rand.Int()%len(vids)]
+		id := rand.Int() % len(vids)
+		vid := vids[id]
 		height := heights[vid]
 		heights[vid]++
-		parentHash := rb.lattice[vid].blocks[height-1].Hash
+		parentHash := rb.lattice[id].blocks[height-1].Hash
 		acks := map[common.Hash]struct{}{}
-		for _, vid2 := range vids {
-			if b, exist := rb.lattice[vid2].blocks[rb.lattice[vid].nextAck[vid2]]; exist {
+		for id2 := range vids {
+			if b, exist := rb.lattice[id2].blocks[rb.lattice[id].nextAck[id2]]; exist {
 				acks[b.Hash] = struct{}{}
 			}
 		}
@@ -480,6 +519,7 @@ func (s *ReliableBroadcastTest) TestRandomIntensiveAcking() {
 			ProposerID: vid,
 			ParentHash: parentHash,
 			Height:     height,
+			ChainID:    uint64(id),
 			Timestamps: genTimestamps(vids),
 			Acks:       acks,
 		}
@@ -526,6 +566,7 @@ func (s *ReliableBroadcastTest) TestRandomlyGeneratedBlocks() {
 	for i := 0; i < repeat; i++ {
 		validators := map[types.ValidatorID]struct{}{}
 		rb := newReliableBroadcast()
+		rb.setChainNum(validatorCount)
 		stronglyAckedHashes := common.Hashes{}
 		revealer.Reset()
 
@@ -580,6 +621,7 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 	for _, vID := range validators {
 		rb.addValidator(vID)
 	}
+	rb.setChainNum(len(validators))
 	// Setup genesis blocks.
 	b00 := s.prepareGenesisBlock(validators[0], validators)
 	time.Sleep(minInterval)
@@ -597,6 +639,7 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 	// prepareBlock.
 	b11 := &types.Block{
 		ProposerID: validators[1],
+		ChainID:    1,
 	}
 	rb.prepareBlock(b11)
 	var err error
@@ -620,6 +663,7 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 	// Propose/Process a block based on collected info.
 	b12 := &types.Block{
 		ProposerID: validators[1],
+		ChainID:    1,
 	}
 	rb.prepareBlock(b12)
 	b12.Hash, err = hashBlock(b12)
@@ -633,6 +677,7 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 	// get 4 blocks to ack.
 	b01 := &types.Block{
 		ProposerID: validators[0],
+		ChainID:    0,
 	}
 	rb.prepareBlock(b01)
 	b01.Hash, err = hashBlock(b01)

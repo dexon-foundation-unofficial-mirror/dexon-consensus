@@ -39,7 +39,7 @@ const (
 // reliableBroadcast is a module for reliable broadcast.
 type reliableBroadcast struct {
 	// lattice stores validator's blocks and other info.
-	lattice map[types.ValidatorID]*rbcValidatorStatus
+	lattice []*rbcValidatorStatus
 
 	// blockInfos stores block infos.
 	blockInfos map[common.Hash]*rbcBlockInfo
@@ -47,6 +47,9 @@ type reliableBroadcast struct {
 	// receivedBlocks stores blocks which is received but its acks are not all
 	// in lattice.
 	receivedBlocks map[common.Hash]*types.Block
+
+	// validators stores validator set.
+	validators map[types.ValidatorID]struct{}
 }
 
 type rbcValidatorStatus struct {
@@ -58,21 +61,22 @@ type rbcValidatorStatus struct {
 	// acked height + 1. Initialized to 0, when genesis blocks are still not
 	// being acked. For example, rb.lattice[vid1].NextAck[vid2] - 1 is the last
 	// acked height by vid1 acking vid2.
-	nextAck map[types.ValidatorID]uint64
+	nextAck []uint64
 
 	// nextOutput is the next output height of block, default to 0.
 	nextOutput uint64
 }
 
 type rbcBlockInfo struct {
-	block           *types.Block
-	receivedTime    time.Time
-	status          blockStatus
-	ackedValidators map[types.ValidatorID]struct{}
+	block        *types.Block
+	receivedTime time.Time
+	status       blockStatus
+	ackedChain   map[uint64]struct{}
 }
 
 // Errors for sanity check error.
 var (
+	ErrInvalidChainID     = fmt.Errorf("invalid chain id")
 	ErrInvalidProposerID  = fmt.Errorf("invalid proposer id")
 	ErrInvalidTimestamp   = fmt.Errorf("invalid timestamp")
 	ErrForkBlock          = fmt.Errorf("fork block")
@@ -85,20 +89,25 @@ var (
 // newReliableBroadcast creates a new reliableBroadcast struct.
 func newReliableBroadcast() *reliableBroadcast {
 	return &reliableBroadcast{
-		lattice:        make(map[types.ValidatorID]*rbcValidatorStatus),
 		blockInfos:     make(map[common.Hash]*rbcBlockInfo),
 		receivedBlocks: make(map[common.Hash]*types.Block),
+		validators:     make(map[types.ValidatorID]struct{}),
 	}
 }
 
 func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
+	// Check if the chain id is valid.
+	if b.ChainID >= uint64(len(rb.lattice)) {
+		return ErrInvalidChainID
+	}
+
 	// Check if its proposer is in validator set.
-	if _, exist := rb.lattice[b.ProposerID]; !exist {
+	if _, exist := rb.validators[b.ProposerID]; !exist {
 		return ErrInvalidProposerID
 	}
 
 	// Check if it forks.
-	if bInLattice, exist := rb.lattice[b.ProposerID].blocks[b.Height]; exist {
+	if bInLattice, exist := rb.lattice[b.ChainID].blocks[b.Height]; exist {
 		if b.Hash != bInLattice.Hash {
 			return ErrForkBlock
 		}
@@ -120,20 +129,24 @@ func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 	for hash := range b.Acks {
 		if bAckStat, exist := rb.blockInfos[hash]; exist {
 			bAck := bAckStat.block
-			if bAck.Height < rb.lattice[b.ProposerID].nextAck[bAck.ProposerID] {
+			if bAck.Height < rb.lattice[b.ChainID].nextAck[bAck.ChainID] {
 				return ErrDoubleAck
 			}
 		}
 	}
 
-	// Check if its timestamp is valid.
-	for h := range rb.lattice {
-		if _, exist := b.Timestamps[h]; !exist {
-			return ErrInvalidTimestamp
+	// TODO(jimmy-dexon): verify the timestamps.
+	/*
+		// Check if its timestamp is valid.
+		for h := range rb.lattice {
+			if _, exist := b.Timestamps[h]; !exist {
+				return ErrInvalidTimestamp
+			}
 		}
-	}
-	if bParent, exist := rb.lattice[b.ProposerID].blocks[b.Height-1]; exist {
-		for hash := range rb.lattice {
+	*/
+
+	if bParent, exist := rb.lattice[b.ChainID].blocks[b.Height-1]; exist {
+		for hash := range b.Timestamps {
 			if b.Timestamps[hash].Before(bParent.Timestamps[hash]) {
 				return ErrInvalidTimestamp
 			}
@@ -154,7 +167,7 @@ func (rb *reliableBroadcast) areAllAcksInLattice(b *types.Block) bool {
 		}
 		bAck := bAckStat.block
 
-		bAckInLattice, exist := rb.lattice[bAck.ProposerID].blocks[bAck.Height]
+		bAckInLattice, exist := rb.lattice[bAck.ChainID].blocks[bAck.Height]
 		if !exist {
 			return false
 		}
@@ -173,9 +186,9 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 		return
 	}
 	rb.blockInfos[block.Hash] = &rbcBlockInfo{
-		block:           block,
-		receivedTime:    time.Now().UTC(),
-		ackedValidators: make(map[types.ValidatorID]struct{}),
+		block:        block,
+		receivedTime: time.Now().UTC(),
+		ackedChain:   make(map[uint64]struct{}),
 	}
 	rb.receivedBlocks[block.Hash] = block
 
@@ -206,28 +219,28 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 				continue
 				// TODO(mission): how to return for multiple errors?
 			}
-			rb.lattice[b.ProposerID].blocks[b.Height] = b
+			rb.lattice[b.ChainID].blocks[b.Height] = b
 			delete(rb.receivedBlocks, b.Hash)
 			for h := range b.Acks {
 				bAckStat := rb.blockInfos[h]
 				// Update nextAck only when bAckStat.block.Height + 1 is greater. A
 				// block might ack blocks proposed by same validator with different
 				// height.
-				if rb.lattice[b.ProposerID].nextAck[bAckStat.block.ProposerID] < bAckStat.block.Height+1 {
-					rb.lattice[b.ProposerID].nextAck[bAckStat.block.ProposerID] = bAckStat.block.Height + 1
+				if rb.lattice[b.ChainID].nextAck[bAckStat.block.ChainID] < bAckStat.block.Height+1 {
+					rb.lattice[b.ChainID].nextAck[bAckStat.block.ChainID] = bAckStat.block.Height + 1
 				}
-				// Update ackedValidators for each ack blocks and its parents.
+				// Update ackedChain for each ack blocks and its parents.
 				for {
-					if _, exist := bAckStat.ackedValidators[b.ProposerID]; exist {
+					if _, exist := bAckStat.ackedChain[b.ChainID]; exist {
 						break
 					}
 					if bAckStat.status > blockStatusInit {
 						break
 					}
-					bAckStat.ackedValidators[b.ProposerID] = struct{}{}
+					bAckStat.ackedChain[b.ChainID] = struct{}{}
 					// A block is strongly acked if it is acked by more than
 					// 2 * (maximum number of byzatine validators) unique validators.
-					if len(bAckStat.ackedValidators) > 2*((len(rb.lattice)-1)/3) {
+					if len(bAckStat.ackedChain) > 2*((len(rb.lattice)-1)/3) {
 						blocksToAcked[bAckStat.block.Hash] = bAckStat.block
 					}
 					if bAckStat.block.Height == 0 {
@@ -371,19 +384,19 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 	}
 	// Initial timestamps with current validator set.
 	times := make(map[types.ValidatorID]time.Time)
-	for vID := range rb.lattice {
+	for vID := range rb.validators {
 		times[vID] = time.Time{}
 	}
 	acks := make(map[common.Hash]struct{})
-	for vID := range rb.lattice {
+	for chainID := range rb.lattice {
 		// find height of the latest block for that validator.
 		var (
 			curBlock   *types.Block
-			nextHeight = rb.lattice[block.ProposerID].nextAck[vID]
+			nextHeight = rb.lattice[block.ChainID].nextAck[chainID]
 		)
 
 		for {
-			tmpBlock, exists := rb.lattice[vID].blocks[nextHeight]
+			tmpBlock, exists := rb.lattice[chainID].blocks[nextHeight]
 			if !exists {
 				break
 			}
@@ -395,7 +408,7 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 		}
 		acks[curBlock.Hash] = struct{}{}
 		accumulateTimestamps(times, curBlock)
-		if vID == block.ProposerID {
+		if uint64(chainID) == block.ChainID {
 			block.ParentHash = curBlock.Hash
 			block.Height = curBlock.Height + 1
 		}
@@ -407,17 +420,22 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 
 // addValidator adds validator in the validator set.
 func (rb *reliableBroadcast) addValidator(h types.ValidatorID) {
-	rb.lattice[h] = &rbcValidatorStatus{
-		blocks:     make(map[uint64]*types.Block),
-		nextAck:    make(map[types.ValidatorID]uint64),
-		nextOutput: 0,
-	}
+	rb.validators[h] = struct{}{}
 }
 
 // deleteValidator deletes validator in validator set.
 func (rb *reliableBroadcast) deleteValidator(h types.ValidatorID) {
-	for h := range rb.lattice {
-		delete(rb.lattice[h].nextAck, h)
+	delete(rb.validators, h)
+}
+
+// setChainNum set the number of chains.
+func (rb *reliableBroadcast) setChainNum(num int) {
+	rb.lattice = make([]*rbcValidatorStatus, num)
+	for i := range rb.lattice {
+		rb.lattice[i] = &rbcValidatorStatus{
+			blocks:     make(map[uint64]*types.Block),
+			nextAck:    make([]uint64, num),
+			nextOutput: 0,
+		}
 	}
-	delete(rb.lattice, h)
 }

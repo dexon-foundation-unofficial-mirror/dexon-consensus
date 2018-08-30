@@ -19,9 +19,11 @@ package integration
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -63,6 +65,7 @@ func NewReceiveBlockEvent(
 // Validator is designed to work with test.Scheduler.
 type Validator struct {
 	ID               types.ValidatorID
+	chainID          uint64
 	cons             *core.Consensus
 	gov              core.Governance
 	networkLatency   LatencyModel
@@ -79,8 +82,22 @@ func NewValidator(
 	networkLatency LatencyModel,
 	proposingLatency LatencyModel) *Validator {
 
+	hashes := make(common.Hashes, 0)
+	for vID := range gov.GetValidatorSet() {
+		hashes = append(hashes, vID.Hash)
+	}
+	sort.Sort(hashes)
+	chainID := uint64(0)
+	for i, hash := range hashes {
+		if hash == vID.Hash {
+			chainID = uint64(i)
+			break
+		}
+	}
+
 	return &Validator{
 		ID:               vID,
+		chainID:          chainID,
 		gov:              gov,
 		networkLatency:   networkLatency,
 		proposingLatency: proposingLatency,
@@ -106,7 +123,10 @@ func (v *Validator) Handle(e *test.Event) (events []*test.Event) {
 func (v *Validator) handleProposeBlock(when time.Time, piggyback interface{}) (
 	events []*test.Event, err error) {
 
-	b := &types.Block{ProposerID: v.ID}
+	b := &types.Block{
+		ProposerID: v.ID,
+		ChainID:    v.chainID,
+	}
 	defer types.RecycleBlock(b)
 	if err = v.cons.PrepareBlock(b, when); err != nil {
 		return
