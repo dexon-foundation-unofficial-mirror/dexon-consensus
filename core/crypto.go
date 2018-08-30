@@ -126,6 +126,24 @@ func verifyVoteSignature(vote *types.Vote, sigToPub SigToPubFn) (bool, error) {
 	return true, nil
 }
 
+func hashCRS(block *types.Block, crs common.Hash) common.Hash {
+	hashPos := hashPosition(block.ShardID, block.ChainID, block.Height)
+	return crypto.Keccak256Hash(crs[:], hashPos[:])
+}
+
+func verifyCRSSignature(block *types.Block, crs common.Hash, sigToPub SigToPubFn) (
+	bool, error) {
+	hash := hashCRS(block, crs)
+	pubKey, err := sigToPub(hash, block.CRSSignature)
+	if err != nil {
+		return false, err
+	}
+	if block.ProposerID != types.NewValidatorID(pubKey) {
+		return false, nil
+	}
+	return true, nil
+}
+
 func hashPosition(shardID, chainID, height uint64) common.Hash {
 	binaryShardID := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryShardID, shardID)

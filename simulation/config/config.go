@@ -35,8 +35,8 @@ const (
 
 // Agreement settings.
 type Agreement struct {
-	CRS string
-	K   int
+	GenesisCRS string `toml:"genesis_crs"`
+	K          int
 }
 
 // Consensus settings.
@@ -91,8 +91,8 @@ func GenerateDefault(path string) error {
 		Validator: Validator{
 			Consensus: Consensus{
 				Agreement: Agreement{
-					CRS: "In DEXON we trust.",
-					K:   50,
+					GenesisCRS: "In DEXON we trust.",
+					K:          50,
 				},
 				PhiRatio: float32(2) / 3,
 				K:        1,

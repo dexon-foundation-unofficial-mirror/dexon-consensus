@@ -34,6 +34,8 @@ type simGovernance struct {
 	expectedNumValidators int
 	k                     int
 	phiRatio              float32
+	crs                   string
+	agreementK            int
 }
 
 // newSimGovernance returns a new simGovernance instance.
@@ -42,8 +44,10 @@ func newSimGovernance(
 	return &simGovernance{
 		validatorSet:          make(map[types.ValidatorID]decimal.Decimal),
 		expectedNumValidators: numValidators,
-		k:        consensusConfig.K,
-		phiRatio: consensusConfig.PhiRatio,
+		k:          consensusConfig.K,
+		phiRatio:   consensusConfig.PhiRatio,
+		crs:        consensusConfig.Agreement.GenesisCRS,
+		agreementK: consensusConfig.Agreement.K,
 	}
 }
 
@@ -82,6 +86,16 @@ func (g *simGovernance) GetBlockProposingInterval() int {
 func (g *simGovernance) GetConfigurationChangeEvent(
 	epoch int) []types.ConfigurationChangeEvent {
 	return nil
+}
+
+// GetGenesisCRS returns CRS.
+func (g *simGovernance) GetGenesisCRS() string {
+	return g.crs
+}
+
+// GetAgreementK returns K for agreement.
+func (g *simGovernance) GetAgreementK() int {
+	return g.agreementK
 }
 
 // addValidator add a new validator into the simulated governance contract.

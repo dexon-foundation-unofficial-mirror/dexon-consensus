@@ -72,6 +72,8 @@ type Block struct {
 	Acks       map[common.Hash]struct{}  `json:"acks"`
 	Signature  crypto.Signature          `json:"signature"`
 
+	CRSSignature crypto.Signature `json:"crs_signature"`
+
 	Notary Notary `json:"notary"`
 }
 
@@ -110,6 +112,7 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.Hash = b.Hash
 	bcopy.Height = b.Height
 	bcopy.Signature = b.Signature.Clone()
+	bcopy.CRSSignature = b.CRSSignature.Clone()
 	bcopy.Notary.Timestamp = b.Notary.Timestamp
 	bcopy.Notary.Height = b.Notary.Height
 	if bcopy.Timestamps == nil {

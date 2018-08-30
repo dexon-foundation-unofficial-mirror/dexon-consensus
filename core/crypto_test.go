@@ -209,6 +209,22 @@ func (s *CryptoTestSuite) TestVoteSignature() {
 	s.False(verifyVoteSignature(vote, eth.SigToPub))
 }
 
+func (s *CryptoTestSuite) TestCRSSignature() {
+	crs := common.NewRandomHash()
+	prv, err := eth.NewPrivateKey()
+	s.Require().Nil(err)
+	pub := prv.PublicKey()
+	vID := types.NewValidatorID(pub)
+	block := &types.Block{
+		ProposerID: vID,
+	}
+	block.CRSSignature, err = prv.Sign(hashCRS(block, crs))
+	s.Require().Nil(err)
+	s.True(verifyCRSSignature(block, crs, eth.SigToPub))
+	block.Height++
+	s.False(verifyCRSSignature(block, crs, eth.SigToPub))
+}
+
 func TestCrypto(t *testing.T) {
 	suite.Run(t, new(CryptoTestSuite))
 }

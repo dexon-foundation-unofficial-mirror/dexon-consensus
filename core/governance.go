@@ -41,4 +41,9 @@ type Governance interface {
 
 	// Get configuration change events after a certain epoch.
 	GetConfigurationChangeEvent(epoch int) []types.ConfigurationChangeEvent
+
+	// Get Genesis CRS.
+	GetGenesisCRS() string
+	// GetAgreementK returns number of blocks for a CRS.
+	GetAgreementK() int
 }

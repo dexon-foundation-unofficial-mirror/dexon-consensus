@@ -88,6 +88,16 @@ func (g *Governance) GetConfigurationChangeEvent(
 	return nil
 }
 
+// GetGenesisCRS returns the CRS string.
+func (g *Governance) GetGenesisCRS() string {
+	return "🆕 DEXON"
+}
+
+// GetAgreementK returns number of blocks for a CRS.
+func (g *Governance) GetAgreementK() int {
+	return 20
+}
+
 // GetPrivateKey return the private key for that validator, this function
 // is a test utility and not a general core.Governance interface.
 func (g *Governance) GetPrivateKey(

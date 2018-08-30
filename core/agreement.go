@@ -99,13 +99,14 @@ func newAgreement(
 	ID types.ValidatorID,
 	recv agreementReceiver,
 	validators types.ValidatorIDs,
+	leader *leaderSelector,
 	sigToPub SigToPubFn,
 	blockProposer blockProposerFn) *agreement {
 	agreement := &agreement{
 		data: &agreementData{
 			recv:          recv,
 			ID:            ID,
-			leader:        newLeaderSelector(),
+			leader:        leader,
 			blockProposer: blockProposer,
 		},
 		aID:      &atomic.Value{},
@@ -226,7 +227,9 @@ func (a *agreement) processBlock(block *types.Block) error {
 		return nil
 	}
 	a.data.blocks[block.ProposerID] = block
-	a.data.leader.processBlock(block)
+	if err := a.data.leader.processBlock(block); err != nil {
+		return err
+	}
 	return nil
 }
 

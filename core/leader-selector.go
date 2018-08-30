@@ -18,26 +18,100 @@
 package core
 
 import (
-	"sort"
+	"fmt"
+	"math/big"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
-type leaderSelector struct {
-	common.Hashes
+// Errors for leader module.
+var (
+	ErrIncorrectCRSSignature = fmt.Errorf("incorrect CRS signature")
+)
+
+// Some constant value.
+var (
+	maxHash *big.Int
+	one     *big.Rat
+)
+
+func init() {
+	hash := make([]byte, common.HashLength)
+	for i := range hash {
+		hash[i] = 0xff
+	}
+	maxHash = big.NewInt(0).SetBytes(hash)
+	one = big.NewRat(1, 1)
 }
 
-func newLeaderSelector() *leaderSelector {
-	return &leaderSelector{}
+type leaderSelector struct {
+	hashCRS      common.Hash
+	numCRS       *big.Int
+	minCRSBlock  *big.Int
+	minBlockHash common.Hash
+
+	sigToPub SigToPubFn
+}
+
+func newGenesisLeaderSelector(
+	crs string,
+	sigToPub SigToPubFn) *leaderSelector {
+	hash := crypto.Keccak256Hash([]byte(crs[:]))
+	return newLeaderSelector(hash, sigToPub)
+}
+
+func newLeaderSelector(
+	crs common.Hash,
+	sigToPub SigToPubFn) *leaderSelector {
+	numCRS := big.NewInt(0)
+	numCRS.SetBytes(crs[:])
+	return &leaderSelector{
+		numCRS:      numCRS,
+		hashCRS:     crs,
+		minCRSBlock: maxHash,
+		sigToPub:    sigToPub,
+	}
+}
+
+func (l *leaderSelector) distance(sig crypto.Signature) *big.Int {
+	hash := crypto.Keccak256Hash(sig[:])
+	num := big.NewInt(0)
+	num.SetBytes(hash[:])
+	num.Abs(num.Sub(l.numCRS, num))
+	return num
+}
+
+func (l *leaderSelector) probability(sig crypto.Signature) float64 {
+	dis := l.distance(sig)
+	prob := big.NewRat(1, 1).SetFrac(dis, maxHash)
+	p, _ := prob.Sub(one, prob).Float64()
+	return p
 }
 
 func (l *leaderSelector) leaderBlockHash() common.Hash {
-	// TODO(jimmy-dexon): return leader based on paper.
-	sort.Sort(l.Hashes)
-	return l.Hashes[len(l.Hashes)-1]
+	return l.minBlockHash
 }
 
-func (l *leaderSelector) processBlock(block *types.Block) {
-	l.Hashes = append(l.Hashes, block.Hash)
+func (l *leaderSelector) prepareBlock(
+	block *types.Block, prv crypto.PrivateKey) (err error) {
+	block.CRSSignature, err = prv.Sign(hashCRS(block, l.hashCRS))
+	return
+}
+
+func (l *leaderSelector) processBlock(block *types.Block) error {
+	ok, err := verifyCRSSignature(block, l.hashCRS, l.sigToPub)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrIncorrectCRSSignature
+	}
+	dist := l.distance(block.CRSSignature)
+	if l.minCRSBlock.Cmp(dist) == 1 {
+		l.minCRSBlock = dist
+		l.minBlockHash = block.Hash
+	}
+	return nil
 }

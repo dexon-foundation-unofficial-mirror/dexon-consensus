@@ -55,12 +55,14 @@ func (r *agreementTestReceiver) confirmBlock(block common.Hash) {
 	r.s.confirmChan <- block
 }
 
-func (s *AgreementTestSuite) blockProposer() *types.Block {
+func (s *AgreementTestSuite) proposeBlock(
+	leader *leaderSelector) *types.Block {
 	block := &types.Block{
 		ProposerID: s.ID,
 		Hash:       common.NewRandomHash(),
 	}
 	s.block[block.Hash] = block
+	s.Require().Nil(leader.prepareBlock(block, s.prvKey[s.ID]))
 	return block
 }
 
@@ -96,6 +98,11 @@ func (s *AgreementTestSuite) SetupTest() {
 }
 
 func (s *AgreementTestSuite) newAgreement(numValidator int) *agreement {
+	leader := newGenesisLeaderSelector("I ❤️ DEXON", eth.SigToPub)
+	blockProposer := func() *types.Block {
+		return s.proposeBlock(leader)
+	}
+
 	validators := make(types.ValidatorIDs, numValidator-1)
 	for i := range validators {
 		prvKey, err := eth.NewPrivateKey()
@@ -108,8 +115,9 @@ func (s *AgreementTestSuite) newAgreement(numValidator int) *agreement {
 		s.ID,
 		&agreementTestReceiver{s},
 		validators,
+		leader,
 		eth.SigToPub,
-		s.blockProposer,
+		blockProposer,
 	)
 	return agreement
 }
@@ -151,10 +159,12 @@ func (s *AgreementTestSuite) TestPrepareState() {
 	// For period >= 2, if the pass-vote for block v not equal to {}
 	// is more than 2f+1, proposing the block v.
 	a.data.period = 3
-	block := s.blockProposer()
-	block.ProposerID.Hash = common.NewRandomHash()
-	err = a.processBlock(block)
+	block := s.proposeBlock(a.data.leader)
+	prv, err := eth.NewPrivateKey()
 	s.Require().Nil(err)
+	block.ProposerID = types.NewValidatorID(prv.PublicKey())
+	s.Require().Nil(a.data.leader.prepareBlock(block, prv))
+	s.Require().Nil(a.processBlock(block))
 	for vID := range a.validators {
 		vote := s.prepareVote(vID, types.VotePass, block.Hash, 2)
 		s.Require().Nil(a.processVote(vote))
@@ -176,10 +186,12 @@ func (s *AgreementTestSuite) TestAckState() {
 
 	blocks := make([]*types.Block, 3)
 	for i := range blocks {
-		blocks[i] = s.blockProposer()
-		blocks[i].ProposerID.Hash = common.NewRandomHash()
-		err := a.processBlock(blocks[i])
+		blocks[i] = s.proposeBlock(a.data.leader)
+		prv, err := eth.NewPrivateKey()
 		s.Require().Nil(err)
+		blocks[i].ProposerID = types.NewValidatorID(prv.PublicKey())
+		s.Require().Nil(a.data.leader.prepareBlock(blocks[i], prv))
+		s.Require().Nil(a.processBlock(blocks[i]))
 	}
 
 	// For period 1, propose ack-vote for the block having largest potential.
@@ -233,7 +245,7 @@ func (s *AgreementTestSuite) TestConfirmState() {
 	// If there are 2f+1 ack-votes for block v not equal to {},
 	// propose a confirm-vote for block v.
 	a.data.period = 1
-	block := s.blockProposer()
+	block := s.proposeBlock(a.data.leader)
 	s.Require().Nil(a.processBlock(block))
 	for vID := range a.validators {
 		vote := s.prepareVote(vID, types.VoteAck, block.Hash, 1)
@@ -309,7 +321,7 @@ func (s *AgreementTestSuite) TestPass1State() {
 
 	// Else, propose pass-vote for default block.
 	a.data.period = 3
-	block := s.blockProposer()
+	block := s.proposeBlock(a.data.leader)
 	a.data.defaultBlock = block.Hash
 	hash = common.NewRandomHash()
 	for vID := range a.validators {
@@ -330,7 +342,7 @@ func (s *AgreementTestSuite) TestPass1State() {
 	a = s.newAgreement(4)
 	state = newPass1State(a.data)
 	a.data.period = 1
-	block = s.blockProposer()
+	block = s.proposeBlock(a.data.leader)
 	a.data.defaultBlock = block.Hash
 	hash = common.NewRandomHash()
 	vote = s.prepareVote(s.ID, types.VoteAck, common.Hash{}, 1)
@@ -363,7 +375,7 @@ func (s *AgreementTestSuite) TestPass2State() {
 
 	// If there are 2f+1 ack-vote for block v not equal to {},
 	// propose pass-vote for v.
-	block := s.blockProposer()
+	block := s.proposeBlock(a.data.leader)
 	s.Require().Nil(a.processBlock(block))
 	for vID := range a.validators {
 		vote := s.prepareVote(vID, types.VoteAck, block.Hash, 1)
