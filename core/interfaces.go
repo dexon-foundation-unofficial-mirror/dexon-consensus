@@ -27,10 +27,14 @@ import (
 // Application describes the application interface that interacts with DEXON
 // consensus core.
 type Application interface {
+	// PreparePayload is called when consensus core is preparing a block.
+	PreparePayloads(shardID, chainID, height uint64) [][]byte
+
 	// StronglyAcked is called when a block is strongly acked.
 	StronglyAcked(blockHash common.Hash)
 
-	// TotalOrderingDeliver is called when the total ordering algorithm deliver // a set of block.
+	// TotalOrderingDeliver is called when the total ordering algorithm deliver
+	// a set of block.
 	TotalOrderingDeliver(blockHashes common.Hashes, early bool)
 
 	// DeliverBlock is called when a block is add to the compaction chain.
@@ -38,4 +42,17 @@ type Application interface {
 
 	// NotaryAckDeliver is called when a notary ack is created.
 	NotaryAckDeliver(notaryAck *types.NotaryAck)
+}
+
+// Network describs the network interface that interacts with DEXON consensus
+// core.
+type Network interface {
+	// BroadcastVote broadcasts vote to all nodes in DEXON network.
+	BroadcastVote(vote *types.Vote)
+	// BroadcastBlock broadcasts block to all nodes in DEXON network.
+	BroadcastBlock(block *types.Block)
+	// BroadcastNotaryAck broadcasts notaryAck to all nodes in DEXON network.
+	BroadcastNotaryAck(notaryAck *types.NotaryAck)
+	// ReceiveChan returns a channel to receive messages from DEXON network.
+	ReceiveChan() <-chan interface{}
 }

@@ -39,7 +39,7 @@ type validatorStatus struct {
 	lastAckingHeight map[types.ValidatorID]uint64
 }
 
-type hashBlockFn func(types.BlockConverter) (common.Hash, error)
+type hashBlockFn func(*types.Block) (common.Hash, error)
 
 // getAckedBlockHash would randomly pick one block between
 // last acked one to current head.

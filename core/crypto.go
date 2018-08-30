@@ -49,9 +49,7 @@ func verifyNotarySignature(pubkey crypto.PublicKey,
 	return pubkey.VerifySignature(hash, sig), nil
 }
 
-func hashBlock(blockConv types.BlockConverter) (common.Hash, error) {
-	block := blockConv.Block()
-
+func hashBlock(block *types.Block) (common.Hash, error) {
 	hashPosition := hashPosition(block.ShardID, block.ChainID, block.Height)
 	// Handling Block.Acks.
 	acks := make(common.Hashes, 0, len(block.Acks))
@@ -80,7 +78,7 @@ func hashBlock(blockConv types.BlockConverter) (common.Hash, error) {
 		}
 	}
 	hashTimestamps := crypto.Keccak256Hash(binaryTimestamps...)
-	payloadHash := crypto.Keccak256Hash(blockConv.Payloads()...)
+	payloadHash := crypto.Keccak256Hash(block.Payloads...)
 
 	hash := crypto.Keccak256Hash(
 		block.ProposerID.Hash[:],
@@ -93,8 +91,8 @@ func hashBlock(blockConv types.BlockConverter) (common.Hash, error) {
 }
 
 func verifyBlockSignature(pubkey crypto.PublicKey,
-	blockConv types.BlockConverter, sig crypto.Signature) (bool, error) {
-	hash, err := hashBlock(blockConv)
+	block *types.Block, sig crypto.Signature) (bool, error) {
+	hash, err := hashBlock(block)
 	if err != nil {
 		return false, err
 	}

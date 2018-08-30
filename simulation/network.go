@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -76,12 +77,10 @@ type Endpoint interface {
 // Network is the interface for network related functions.
 type Network interface {
 	PeerServerNetwork
+	core.Network
 	Start()
 	NumPeers() int
-	Join(endpoint Endpoint) chan interface{}
-	BroadcastBlock(block *types.Block)
-	BroadcastNotaryAck(notaryAck *types.NotaryAck)
-	BroadcastVote(vote *types.Vote)
+	Join(endpoint Endpoint)
 	Endpoints() types.ValidatorIDs
 }
 

@@ -70,34 +70,12 @@ type Block struct {
 	Height     uint64                    `json:"height"`
 	Timestamps map[ValidatorID]time.Time `json:"timestamps"`
 	Acks       map[common.Hash]struct{}  `json:"acks"`
+	Payloads   [][]byte                  `json:"payloads"`
 	Signature  crypto.Signature          `json:"signature"`
 
 	CRSSignature crypto.Signature `json:"crs_signature"`
 
 	Notary Notary `json:"notary"`
-}
-
-// Block implements BlockConverter interface.
-func (b *Block) Block() *Block {
-	return b
-}
-
-// Payloads impelmemnts BlockConverter interface.
-func (b *Block) Payloads() [][]byte {
-	return [][]byte{}
-}
-
-// SetBlock implments BlockConverter interface.
-func (b *Block) SetBlock(block *Block) {
-	*b = *block
-}
-
-// BlockConverter interface define the interface for extracting block
-// information from an existing object.
-type BlockConverter interface {
-	Block() *Block
-	Payloads() [][]byte
-	SetBlock(block *Block)
 }
 
 func (b *Block) String() string {
@@ -129,6 +107,11 @@ func (b *Block) Clone() (bcopy *Block) {
 	}
 	for k, v := range b.Acks {
 		bcopy.Acks[k] = v
+	}
+	bcopy.Payloads = make([][]byte, len(b.Payloads))
+	for k, v := range b.Payloads {
+		bcopy.Payloads[k] = make([]byte, len(v))
+		copy(bcopy.Payloads[k], v)
 	}
 	return
 }

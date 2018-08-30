@@ -34,22 +34,6 @@ type CryptoTestSuite struct {
 
 var myVID = types.ValidatorID{Hash: common.NewRandomHash()}
 
-type simpleBlock struct {
-	block *types.Block
-}
-
-func (sb *simpleBlock) Block() *types.Block {
-	return sb.block
-}
-
-func (sb *simpleBlock) Payloads() [][]byte {
-	return [][]byte{}
-}
-
-func (sb *simpleBlock) SetBlock(block *types.Block) {
-	*sb.block = *block
-}
-
 func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 	acks := make(map[common.Hash]struct{})
 	timestamps := make(map[types.ValidatorID]time.Time)
@@ -84,7 +68,7 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 func (s *CryptoTestSuite) newBlock(prevBlock *types.Block) *types.Block {
 	block := s.prepareBlock(prevBlock)
 	var err error
-	block.Hash, err = hashBlock(&simpleBlock{block: block})
+	block.Hash, err = hashBlock(block)
 	s.Require().Nil(err)
 	return block
 }
@@ -177,17 +161,17 @@ func (s *CryptoTestSuite) TestBlockSignature() {
 			parentBlock, exist := blockMap[block.ParentHash]
 			s.Require().True(exist)
 			s.True(parentBlock.Height == block.Height-1)
-			hash, err := hashBlock(&simpleBlock{block: parentBlock})
+			hash, err := hashBlock(parentBlock)
 			s.Require().Nil(err)
 			s.Equal(hash, block.ParentHash)
 		}
-		s.True(verifyBlockSignature(pub, &simpleBlock{block: block}, block.Signature))
+		s.True(verifyBlockSignature(pub, block, block.Signature))
 	}
 	// Modify Block.Acks and verify signature again.
 	for _, block := range blocks {
 		block.Acks[common.NewRandomHash()] = struct{}{}
 		s.False(verifyBlockSignature(
-			pub, &simpleBlock{block: block}, block.Signature))
+			pub, block, block.Signature))
 	}
 }
 

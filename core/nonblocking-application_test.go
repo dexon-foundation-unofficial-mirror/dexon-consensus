@@ -45,6 +45,10 @@ func newSlowApp(sleep time.Duration) *slowApp {
 	}
 }
 
+func (app *slowApp) PreparePayloads(_, _, _ uint64) [][]byte {
+	return [][]byte{}
+}
+
 func (app *slowApp) StronglyAcked(blockHash common.Hash) {
 	time.Sleep(app.sleep)
 	app.stronglyAcked[blockHash] = struct{}{}

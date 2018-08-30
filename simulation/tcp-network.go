@@ -176,7 +176,7 @@ func (n *TCPNetwork) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Join allow a client to join the network. It reutnrs a interface{} channel for
 // the client to recieve information.
-func (n *TCPNetwork) Join(endpoint Endpoint) chan interface{} {
+func (n *TCPNetwork) Join(endpoint Endpoint) {
 	n.endpointMutex.Lock()
 	defer n.endpointMutex.Unlock()
 
@@ -235,6 +235,10 @@ func (n *TCPNetwork) Join(endpoint Endpoint) chan interface{} {
 	for key, val := range peerList {
 		n.endpoints[key] = val
 	}
+}
+
+// ReceiveChan return the receive channel.
+func (n *TCPNetwork) ReceiveChan() <-chan interface{} {
 	return n.recieveChan
 }
 

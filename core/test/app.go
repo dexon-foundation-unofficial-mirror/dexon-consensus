@@ -102,6 +102,11 @@ func NewApp() *App {
 	}
 }
 
+// PreparePayloads implements Application interface.
+func (app *App) PreparePayloads(shardID, chainID, height uint64) [][]byte {
+	return [][]byte{}
+}
+
 // StronglyAcked implements Application interface.
 func (app *App) StronglyAcked(blockHash common.Hash) {
 	app.ackedLock.Lock()

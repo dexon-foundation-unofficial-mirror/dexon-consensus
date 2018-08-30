@@ -113,10 +113,9 @@ func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
 }
 
 // sanityCheck checks if the block is a valid block
-func (con *Consensus) sanityCheck(blockConv types.BlockConverter) (err error) {
-	b := blockConv.Block()
+func (con *Consensus) sanityCheck(b *types.Block) (err error) {
 	// Check the hash of block.
-	hash, err := hashBlock(blockConv)
+	hash, err := hashBlock(b)
 	if err != nil || hash != b.Hash {
 		return ErrIncorrectHash
 	}
@@ -133,12 +132,11 @@ func (con *Consensus) sanityCheck(blockConv types.BlockConverter) (err error) {
 }
 
 // ProcessBlock is the entry point to submit one block to a Consensus instance.
-func (con *Consensus) ProcessBlock(blockConv types.BlockConverter) (err error) {
+func (con *Consensus) ProcessBlock(b *types.Block) (err error) {
 	// TODO(jimmy-dexon): BlockConverter.Block() is called twice in this method.
-	if err := con.sanityCheck(blockConv); err != nil {
+	if err := con.sanityCheck(b); err != nil {
 		return err
 	}
-	b := blockConv.Block()
 	var (
 		deliveredBlocks []*types.Block
 		earlyDelivered  bool
@@ -218,9 +216,8 @@ func (con *Consensus) checkPrepareBlock(
 }
 
 // PrepareBlock would setup header fields of block based on its ProposerID.
-func (con *Consensus) PrepareBlock(blockConv types.BlockConverter,
+func (con *Consensus) PrepareBlock(b *types.Block,
 	proposeTime time.Time) (err error) {
-	b := blockConv.Block()
 	if err = con.checkPrepareBlock(b, proposeTime); err != nil {
 		return
 	}
@@ -229,6 +226,7 @@ func (con *Consensus) PrepareBlock(blockConv types.BlockConverter,
 
 	con.rbModule.prepareBlock(b)
 	b.Timestamps[b.ProposerID] = proposeTime
+	b.Payloads = con.app.PreparePayloads(b.ShardID, b.ChainID, b.Height)
 	b.Hash, err = hashBlock(b)
 	if err != nil {
 		return
@@ -237,18 +235,16 @@ func (con *Consensus) PrepareBlock(blockConv types.BlockConverter,
 	if err != nil {
 		return
 	}
-	blockConv.SetBlock(b)
 	return
 }
 
 // PrepareGenesisBlock would setup header fields for genesis block.
-func (con *Consensus) PrepareGenesisBlock(blockConv types.BlockConverter,
+func (con *Consensus) PrepareGenesisBlock(b *types.Block,
 	proposeTime time.Time) (err error) {
-	b := blockConv.Block()
 	if err = con.checkPrepareBlock(b, proposeTime); err != nil {
 		return
 	}
-	if len(b.Payloads()) != 0 {
+	if len(b.Payloads) != 0 {
 		err = ErrGenesisBlockNotEmpty
 		return
 	}
@@ -268,7 +264,6 @@ func (con *Consensus) PrepareGenesisBlock(blockConv types.BlockConverter,
 	if err != nil {
 		return
 	}
-	blockConv.SetBlock(b)
 	return
 }
 

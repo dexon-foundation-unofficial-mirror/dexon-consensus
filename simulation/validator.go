@@ -38,7 +38,7 @@ type Validator struct {
 	db      blockdb.BlockDatabase
 
 	config     config.Validator
-	msgChannel chan interface{}
+	msgChannel <-chan interface{}
 	isFinished chan struct{}
 
 	ID              types.ValidatorID
@@ -84,7 +84,8 @@ func (v *Validator) GetID() types.ValidatorID {
 
 // Run starts the validator.
 func (v *Validator) Run() {
-	v.msgChannel = v.network.Join(v)
+	v.network.Join(v)
+	v.msgChannel = v.network.ReceiveChan()
 
 	hashes := make(common.Hashes, 0, v.network.NumPeers())
 	for _, vID := range v.network.Endpoints() {

@@ -88,6 +88,11 @@ func (a *simApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
 	return
 }
 
+// PreparePayloads implements core.Application.
+func (a *simApp) PreparePayloads(shardID, chainID, height uint64) [][]byte {
+	return [][]byte{}
+}
+
 // StronglyAcked is called when a block is strongly acked by DEXON
 // Reliabe Broadcast algorithm.
 func (a *simApp) StronglyAcked(blockHash common.Hash) {

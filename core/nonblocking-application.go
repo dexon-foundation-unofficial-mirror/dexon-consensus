@@ -114,6 +114,12 @@ func (app *nonBlockingApplication) wait() {
 	app.running.Wait()
 }
 
+// PreparePayloads cannot be non-blocking.
+func (app *nonBlockingApplication) PreparePayloads(
+	shardID, chainID, height uint64) [][]byte {
+	return app.app.PreparePayloads(shardID, chainID, height)
+}
+
 // StronglyAcked is called when a block is strongly acked.
 func (app *nonBlockingApplication) StronglyAcked(blockHash common.Hash) {
 	app.addEvent(stronglyAckedEvent{blockHash})

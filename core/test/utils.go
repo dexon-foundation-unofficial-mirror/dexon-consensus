@@ -25,8 +25,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-func stableRandomHash(blockConv types.BlockConverter) (common.Hash, error) {
-	block := blockConv.Block()
+func stableRandomHash(block *types.Block) (common.Hash, error) {
 	if (block.Hash != common.Hash{}) {
 		return block.Hash, nil
 	}
