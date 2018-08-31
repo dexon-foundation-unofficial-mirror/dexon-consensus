@@ -100,7 +100,10 @@ func (v *Validator) Run() {
 		}
 	}
 	v.consensus = core.NewConsensus(
-		v.app, v.gov, v.db, v.prvKey, v.sigToPub)
+		v.app, v.gov, v.db, v.network,
+		time.NewTicker(
+			time.Duration(v.config.ProposeIntervalMean)*time.Millisecond),
+		v.prvKey, v.sigToPub)
 
 	genesisBlock := &types.Block{
 		ProposerID: v.ID,

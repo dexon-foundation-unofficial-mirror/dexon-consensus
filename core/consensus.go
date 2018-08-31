@@ -19,6 +19,7 @@ package core
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -56,6 +57,7 @@ var (
 
 // Consensus implements DEXON Consensus algorithm.
 type Consensus struct {
+	ID       types.ValidatorID
 	app      Application
 	gov      Governance
 	rbModule *reliableBroadcast
@@ -63,9 +65,12 @@ type Consensus struct {
 	ctModule *consensusTimestamp
 	ccModule *compactionChain
 	db       blockdb.BlockDatabase
+	network  Network
+	tick     *time.Ticker
 	prvKey   crypto.PrivateKey
 	sigToPub SigToPubFn
 	lock     sync.RWMutex
+	stopChan chan struct{}
 }
 
 // NewConsensus construct an Consensus instance.
@@ -73,6 +78,8 @@ func NewConsensus(
 	app Application,
 	gov Governance,
 	db blockdb.BlockDatabase,
+	network Network,
+	tick *time.Ticker,
 	prv crypto.PrivateKey,
 	sigToPub SigToPubFn) *Consensus {
 	validatorSet := gov.GetValidatorSet()
@@ -95,6 +102,7 @@ func NewConsensus(
 		validators)
 
 	return &Consensus{
+		ID:       types.NewValidatorID(prv.PublicKey()),
 		rbModule: rb,
 		toModule: to,
 		ctModule: newConsensusTimestamp(),
@@ -102,8 +110,94 @@ func NewConsensus(
 		app:      newNonBlockingApplication(app),
 		gov:      gov,
 		db:       db,
+		network:  network,
+		tick:     tick,
 		prvKey:   prv,
 		sigToPub: sigToPub,
+		stopChan: make(chan struct{}),
+	}
+}
+
+// Run starts running Consensus core.
+func (con *Consensus) Run() {
+	go con.processMsg(con.network.ReceiveChan())
+
+	chainID := uint64(0)
+	hashes := make(common.Hashes, 0, len(con.gov.GetValidatorSet()))
+	for vID := range con.gov.GetValidatorSet() {
+		hashes = append(hashes, vID.Hash)
+	}
+	sort.Sort(hashes)
+	for i, hash := range hashes {
+		if hash == con.ID.Hash {
+			chainID = uint64(i)
+			break
+		}
+	}
+
+	genesisBlock := &types.Block{
+		ProposerID: con.ID,
+		ChainID:    chainID,
+	}
+	if err := con.PrepareGenesisBlock(genesisBlock, time.Now().UTC()); err != nil {
+		fmt.Println(err)
+	}
+	if err := con.ProcessBlock(genesisBlock); err != nil {
+		fmt.Println(err)
+	}
+	con.network.BroadcastBlock(genesisBlock)
+
+ProposingBlockLoop:
+	for {
+		select {
+		case <-con.tick.C:
+		case <-con.stopChan:
+			break ProposingBlockLoop
+		}
+		block := &types.Block{
+			ProposerID: con.ID,
+			ChainID:    chainID,
+		}
+		if err := con.PrepareBlock(block, time.Now().UTC()); err != nil {
+			fmt.Println(err)
+		}
+		if err := con.ProcessBlock(block); err != nil {
+			fmt.Println(err)
+		}
+		con.network.BroadcastBlock(block)
+	}
+}
+
+// Stop the Consensus core.
+func (con *Consensus) Stop() {
+	con.stopChan <- struct{}{}
+	con.stopChan <- struct{}{}
+}
+
+func (con *Consensus) processMsg(msgChan <-chan interface{}) {
+	for {
+		var msg interface{}
+		select {
+		case msg = <-msgChan:
+		case <-con.stopChan:
+			return
+		}
+
+		switch val := msg.(type) {
+		case *types.Block:
+			if err := con.ProcessBlock(val); err != nil {
+				fmt.Println(err)
+			}
+			types.RecycleBlock(val)
+		case *types.NotaryAck:
+			if err := con.ProcessNotaryAck(val); err != nil {
+				fmt.Println(err)
+			}
+		case *types.Vote:
+			if err := con.ProcessVote(val); err != nil {
+				fmt.Println(err)
+			}
+		}
 	}
 }
 

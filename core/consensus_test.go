@@ -30,6 +30,26 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+// network implements core.Network.
+type network struct {
+}
+
+// BroadcastVote broadcasts vote to all nodes in DEXON network.
+func (n *network) BroadcastVote(vote *types.Vote) {}
+
+// BroadcastBlock broadcasts block to all nodes in DEXON network.
+func (n *network) BroadcastBlock(block *types.Block) {
+}
+
+// BroadcastNotaryAck broadcasts notaryAck to all nodes in DEXON network.
+func (n *network) BroadcastNotaryAck(notaryAck *types.NotaryAck) {
+}
+
+// ReceiveChan returns a channel to receive messages from DEXON network.
+func (n *network) ReceiveChan() <-chan interface{} {
+	return make(chan interface{})
+}
+
 type ConsensusTestSuite struct {
 	suite.Suite
 }
@@ -56,7 +76,8 @@ func (s *ConsensusTestSuite) prepareConsensus(
 	s.Require().Nil(err)
 	prv, exist := gov.PrivateKeys[vID]
 	s.Require().True(exist)
-	con := NewConsensus(app, gov, db, prv, eth.SigToPub)
+	con := NewConsensus(app, gov, db,
+		&network{}, time.NewTicker(1), prv, eth.SigToPub)
 	return &con.app, con
 }
 
