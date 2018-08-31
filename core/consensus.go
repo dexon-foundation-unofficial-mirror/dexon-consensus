@@ -245,6 +245,7 @@ func (con *Consensus) ProcessBlock(b *types.Block) (err error) {
 	if err = con.rbModule.processBlock(b); err != nil {
 		return err
 	}
+	con.app.BlockConfirmed(b.Clone())
 	for _, b := range con.rbModule.extractBlocks() {
 		// Notify application layer that some block is strongly acked.
 		con.app.StronglyAcked(b.Hash)

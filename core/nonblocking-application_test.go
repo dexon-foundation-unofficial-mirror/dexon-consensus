@@ -29,6 +29,7 @@ import (
 
 type slowApp struct {
 	sleep                time.Duration
+	blockConfirmed       map[common.Hash]struct{}
 	stronglyAcked        map[common.Hash]struct{}
 	totalOrderingDeliver map[common.Hash]struct{}
 	deliverBlock         map[common.Hash]struct{}
@@ -38,6 +39,7 @@ type slowApp struct {
 func newSlowApp(sleep time.Duration) *slowApp {
 	return &slowApp{
 		sleep:                sleep,
+		blockConfirmed:       make(map[common.Hash]struct{}),
 		stronglyAcked:        make(map[common.Hash]struct{}),
 		totalOrderingDeliver: make(map[common.Hash]struct{}),
 		deliverBlock:         make(map[common.Hash]struct{}),
@@ -47,6 +49,15 @@ func newSlowApp(sleep time.Duration) *slowApp {
 
 func (app *slowApp) PreparePayloads(_, _, _ uint64) [][]byte {
 	return [][]byte{}
+}
+
+func (app *slowApp) VerifyPayloads(_ [][]byte) bool {
+	return true
+}
+
+func (app *slowApp) BlockConfirmed(block *types.Block) {
+	time.Sleep(app.sleep)
+	app.blockConfirmed[block.Hash] = struct{}{}
 }
 
 func (app *slowApp) StronglyAcked(blockHash common.Hash) {
@@ -88,6 +99,7 @@ func (s *NonBlockingAppTestSuite) TestNonBlockingApplication() {
 
 	// Start doing some 'heavy' job.
 	for _, hash := range hashes {
+		nbapp.BlockConfirmed(&types.Block{Hash: hash})
 		nbapp.StronglyAcked(hash)
 		nbapp.DeliverBlock(hash, time.Now().UTC())
 		nbapp.NotaryAckDeliver(&types.NotaryAck{Hash: hash})
@@ -99,6 +111,7 @@ func (s *NonBlockingAppTestSuite) TestNonBlockingApplication() {
 
 	nbapp.wait()
 	for _, hash := range hashes {
+		s.Contains(app.blockConfirmed, hash)
 		s.Contains(app.stronglyAcked, hash)
 		s.Contains(app.totalOrderingDeliver, hash)
 		s.Contains(app.deliverBlock, hash)

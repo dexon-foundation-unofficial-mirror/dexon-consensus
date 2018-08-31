@@ -30,6 +30,12 @@ type Application interface {
 	// PreparePayload is called when consensus core is preparing a block.
 	PreparePayloads(shardID, chainID, height uint64) [][]byte
 
+	// VerifyPayloads verifies if the payloads are valid.
+	VerifyPayloads(payloads [][]byte) bool
+
+	// BlockConfirmed is called when a block is confirmed and added to lattice.
+	BlockConfirmed(block *types.Block)
+
 	// StronglyAcked is called when a block is strongly acked.
 	StronglyAcked(blockHash common.Hash)
 

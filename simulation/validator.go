@@ -105,26 +105,15 @@ func (v *Validator) Run() {
 			time.Duration(v.config.ProposeIntervalMean)*time.Millisecond),
 		v.prvKey, v.sigToPub)
 
-	genesisBlock := &types.Block{
-		ProposerID: v.ID,
-		ChainID:    v.chainID,
-	}
-	err := v.consensus.PrepareGenesisBlock(genesisBlock, time.Now().UTC())
-	if err != nil {
-		panic(err)
-	}
-	isStopped := make(chan struct{}, 2)
+	go v.consensus.Run()
+
 	isShutdown := make(chan struct{})
 
-	v.app.addBlock(genesisBlock)
-	v.consensus.ProcessBlock(genesisBlock)
-	v.BroadcastGenesisBlock(genesisBlock)
-	go v.MsgServer(isStopped)
 	go v.CheckServerInfo(isShutdown)
-	go v.BlockProposer(isStopped, isShutdown)
 
 	// Blocks forever.
-	<-isStopped
+	<-isShutdown
+	v.consensus.Stop()
 	if err := v.db.Close(); err != nil {
 		fmt.Println(err)
 	}
@@ -149,80 +138,5 @@ func (v *Validator) CheckServerInfo(isShutdown chan struct{}) {
 			break
 		}
 		time.Sleep(250 * time.Millisecond)
-	}
-}
-
-// MsgServer listen to the network channel for message and handle it.
-func (v *Validator) MsgServer(
-	isStopped chan struct{}) {
-
-	for {
-		var msg interface{}
-		select {
-		case msg = <-v.msgChannel:
-		case <-isStopped:
-			return
-		}
-
-		switch val := msg.(type) {
-		case *types.Block:
-			v.app.addBlock(val)
-			if err := v.consensus.ProcessBlock(val); err != nil {
-				fmt.Println(err)
-			}
-			types.RecycleBlock(val)
-		case *types.NotaryAck:
-			if err := v.consensus.ProcessNotaryAck(val); err != nil {
-				fmt.Println(err)
-			}
-		case *types.Vote:
-			if err := v.consensus.ProcessVote(val); err != nil {
-				fmt.Println(err)
-			}
-		}
-	}
-}
-
-// BroadcastGenesisBlock broadcasts genesis block to all peers.
-func (v *Validator) BroadcastGenesisBlock(genesisBlock *types.Block) {
-	// Wait until all peer joined the network.
-	for v.network.NumPeers() != v.config.Num {
-		time.Sleep(time.Second)
-	}
-	v.network.BroadcastBlock(genesisBlock)
-}
-
-// BlockProposer propose blocks to be send to the DEXON network.
-func (v *Validator) BlockProposer(isStopped, isShutdown chan struct{}) {
-	model := &NormalNetwork{
-		Sigma: v.config.ProposeIntervalSigma,
-		Mean:  v.config.ProposeIntervalMean,
-	}
-ProposingBlockLoop:
-	for {
-		time.Sleep(model.Delay())
-
-		block := &types.Block{
-			ProposerID: v.ID,
-			ChainID:    v.chainID,
-			Hash:       common.NewRandomHash(),
-		}
-		if err := v.consensus.PrepareBlock(block, time.Now().UTC()); err != nil {
-			panic(err)
-		}
-		v.app.addBlock(block)
-		if err := v.consensus.ProcessBlock(block); err != nil {
-			fmt.Println(err)
-			//panic(err)
-		}
-		v.network.BroadcastBlock(block)
-		select {
-		case <-isShutdown:
-			isStopped <- struct{}{}
-			isStopped <- struct{}{}
-			break ProposingBlockLoop
-		default:
-			break
-		}
 	}
 }

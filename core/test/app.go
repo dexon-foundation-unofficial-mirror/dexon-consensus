@@ -107,6 +107,15 @@ func (app *App) PreparePayloads(shardID, chainID, height uint64) [][]byte {
 	return [][]byte{}
 }
 
+// VerifyPayloads implements Application.
+func (app *App) VerifyPayloads(payloads [][]byte) bool {
+	return true
+}
+
+// BlockConfirmed implements Application interface.
+func (app *App) BlockConfirmed(block *types.Block) {
+}
+
 // StronglyAcked implements Application interface.
 func (app *App) StronglyAcked(blockHash common.Hash) {
 	app.ackedLock.Lock()

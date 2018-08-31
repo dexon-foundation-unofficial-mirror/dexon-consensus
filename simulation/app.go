@@ -54,12 +54,18 @@ func newSimApp(id types.ValidatorID, Network PeerServerNetwork) *simApp {
 	}
 }
 
-func (a *simApp) addBlock(block *types.Block) {
+// BlockConfirmed implements core.Application.
+func (a *simApp) BlockConfirmed(block *types.Block) {
 	a.blockByHashMutex.Lock()
 	defer a.blockByHashMutex.Unlock()
 
 	// TODO(jimmy-dexon) : Remove block in this hash if it's no longer needed.
 	a.blockByHash[block.Hash] = block
+}
+
+// VerifyPayloads implements core.Application.
+func (a *simApp) VerifyPayloads(payloads [][]byte) bool {
+	return true
 }
 
 // getAckedBlocks will return all unconfirmed blocks' hash with lower Height
@@ -101,7 +107,6 @@ func (a *simApp) StronglyAcked(blockHash common.Hash) {
 // TotalOrderingDeliver is called when blocks are delivered by the total
 // ordering algorithm.
 func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
-
 	now := time.Now()
 	blocks := make([]*types.Block, len(blockHashes))
 	a.blockByHashMutex.RLock()

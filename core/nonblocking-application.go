@@ -26,6 +26,10 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
+type blockConfirmedEvent struct {
+	block *types.Block
+}
+
 type stronglyAckedEvent struct {
 	blockHash common.Hash
 }
@@ -90,6 +94,8 @@ func (app *nonBlockingApplication) run() {
 		switch e := event.(type) {
 		case stronglyAckedEvent:
 			app.app.StronglyAcked(e.blockHash)
+		case blockConfirmedEvent:
+			app.app.BlockConfirmed(e.block)
 		case totalOrderingDeliverEvent:
 			app.app.TotalOrderingDeliver(e.blockHashes, e.early)
 		case deliverBlockEvent:
@@ -118,6 +124,16 @@ func (app *nonBlockingApplication) wait() {
 func (app *nonBlockingApplication) PreparePayloads(
 	shardID, chainID, height uint64) [][]byte {
 	return app.app.PreparePayloads(shardID, chainID, height)
+}
+
+// VerifyPayloads cannot be non-blocking.
+func (app *nonBlockingApplication) VerifyPayloads(payloads [][]byte) bool {
+	return true
+}
+
+// BlockConfirmed is called when a block is confirmed and added to lattice.
+func (app *nonBlockingApplication) BlockConfirmed(block *types.Block) {
+	app.addEvent(blockConfirmedEvent{block})
 }
 
 // StronglyAcked is called when a block is strongly acked.
