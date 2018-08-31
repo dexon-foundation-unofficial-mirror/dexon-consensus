@@ -128,7 +128,7 @@ func (app *nonBlockingApplication) PreparePayloads(
 
 // VerifyPayloads cannot be non-blocking.
 func (app *nonBlockingApplication) VerifyPayloads(payloads [][]byte) bool {
-	return true
+	return app.app.VerifyPayloads(payloads)
 }
 
 // BlockConfirmed is called when a block is confirmed and added to lattice.
