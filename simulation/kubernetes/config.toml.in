@@ -9,10 +9,8 @@ max_block = 1000
 [validator.consensus]
 phi_ratio = 6.66670024394989e-01
 k = 1
-
-[validator.consensus.agreement]
+chain_num = 7
 genesis_crs = "In DEXON we trust."
-k = 50
 
 [networking]
 type = "tcp"

@@ -34,8 +34,8 @@ type simGovernance struct {
 	expectedNumValidators int
 	k                     int
 	phiRatio              float32
+	chainNum              uint32
 	crs                   string
-	agreementK            int
 }
 
 // newSimGovernance returns a new simGovernance instance.
@@ -44,10 +44,10 @@ func newSimGovernance(
 	return &simGovernance{
 		validatorSet:          make(map[types.ValidatorID]decimal.Decimal),
 		expectedNumValidators: numValidators,
-		k:          consensusConfig.K,
-		phiRatio:   consensusConfig.PhiRatio,
-		crs:        consensusConfig.Agreement.GenesisCRS,
-		agreementK: consensusConfig.Agreement.K,
+		k:        consensusConfig.K,
+		phiRatio: consensusConfig.PhiRatio,
+		chainNum: consensusConfig.ChainNum,
+		crs:      consensusConfig.GenesisCRS,
 	}
 }
 
@@ -79,6 +79,11 @@ func (g *simGovernance) GetPhiRatio() float32 {
 // GetBlockProposingInterval returns block proposing interval.
 func (g *simGovernance) GetBlockProposingInterval() int {
 	return 0
+}
+
+// GetChainNumber returns number of chain.
+func (g *simGovernance) GetChainNumber() uint32 {
+	return g.chainNum
 }
 
 // GetConfigurationChangeEvent returns configuration change event since last

@@ -84,6 +84,9 @@ type Governance interface {
 	// Get block proposing interval (in milliseconds).
 	GetBlockProposingInterval() int
 
+	// Get Number of Chains.
+	GetChainNumber() uint32
+
 	// Get Genesis CRS.
 	GetGenesisCRS() string
 

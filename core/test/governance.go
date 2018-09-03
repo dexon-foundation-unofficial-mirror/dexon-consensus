@@ -81,6 +81,11 @@ func (g *Governance) GetPhiRatio() float32 {
 	return 0.667
 }
 
+// GetChainNumber returns the number of chains.
+func (g *Governance) GetChainNumber() uint32 {
+	return uint32(len(g.Validators))
+}
+
 // GetConfigurationChangeEvent Get configuration change events after a certain
 // epoch.
 func (g *Governance) GetConfigurationChangeEvent(

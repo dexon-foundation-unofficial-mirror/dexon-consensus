@@ -33,17 +33,12 @@ const (
 	NetworkTypeTCPLocal NetworkType = "tcp-local"
 )
 
-// Agreement settings.
-type Agreement struct {
-	GenesisCRS string `toml:"genesis_crs"`
-	K          int
-}
-
 // Consensus settings.
 type Consensus struct {
-	Agreement Agreement
-	PhiRatio  float32
-	K         int
+	PhiRatio   float32
+	K          int
+	ChainNum   uint32
+	GenesisCRS string `toml:"genesis_crs"`
 }
 
 // Validator config for the simulation.
@@ -90,12 +85,10 @@ func GenerateDefault(path string) error {
 		Title: "DEXON Consensus Simulation Config",
 		Validator: Validator{
 			Consensus: Consensus{
-				Agreement: Agreement{
-					GenesisCRS: "In DEXON we trust.",
-					K:          50,
-				},
-				PhiRatio: float32(2) / 3,
-				K:        1,
+				PhiRatio:   float32(2) / 3,
+				K:          1,
+				ChainNum:   7,
+				GenesisCRS: "In DEXON we trust.",
 			},
 			Num:                  7,
 			ProposeIntervalMean:  500,
