@@ -74,7 +74,7 @@ func (s *BlocksGeneratorTestCase) TestGenerate() {
 		// Check genesis block.
 		genesisBlock := blocks[0]
 		s.Equal(genesisBlock.ParentHash, common.Hash{})
-		s.Equal(genesisBlock.Height, uint64(0))
+		s.Equal(genesisBlock.Position.Height, uint64(0))
 		s.Empty(genesisBlock.Acks)
 
 		// Check normal blocks.
@@ -90,14 +90,14 @@ func (s *BlocksGeneratorTestCase) TestGenerate() {
 				prevAckingHeight, exists :=
 					lastAckingHeights[ackedBlock.ProposerID]
 				if exists {
-					s.True(prevAckingHeight < ackedBlock.Height)
+					s.True(prevAckingHeight < ackedBlock.Position.Height)
 				}
-				lastAckingHeights[ackedBlock.ProposerID] = ackedBlock.Height
+				lastAckingHeights[ackedBlock.ProposerID] = ackedBlock.Position.Height
 				// Block Height should always incremental by 1.
 				//
 				// Because we iterate blocks slice from 1,
 				// we need to add 1 to the index.
-				s.Equal(block.Height, uint64(index+1))
+				s.Equal(block.Position.Height, uint64(index+1))
 			}
 			s.True(parentAcked)
 		}

@@ -114,7 +114,7 @@ func (s *LeaderSelectorTestSuite) TestPrepareBlock() {
 	}
 	s.Require().Nil(leader.prepareBlock(block, prv))
 	s.Nil(leader.processBlock(block))
-	block.Height++
+	block.Position.Height++
 	s.Error(ErrIncorrectCRSSignature, leader.processBlock(block))
 }
 

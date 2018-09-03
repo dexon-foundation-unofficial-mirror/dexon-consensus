@@ -65,9 +65,7 @@ type Block struct {
 	ProposerID ValidatorID               `json:"proposer_id"`
 	ParentHash common.Hash               `json:"parent_hash"`
 	Hash       common.Hash               `json:"hash"`
-	ShardID    uint64                    `json:"shard_id"`
-	ChainID    uint64                    `json:"chain_id"`
-	Height     uint64                    `json:"height"`
+	Position   Position                  `json:"position"`
 	Timestamps map[ValidatorID]time.Time `json:"timestamps"`
 	Acks       map[common.Hash]struct{}  `json:"acks"`
 	Payloads   [][]byte                  `json:"payloads"`
@@ -88,9 +86,9 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.ProposerID = b.ProposerID
 	bcopy.ParentHash = b.ParentHash
 	bcopy.Hash = b.Hash
-	bcopy.ShardID = b.ShardID
-	bcopy.ChainID = b.ChainID
-	bcopy.Height = b.Height
+	bcopy.Position.ShardID = b.Position.ShardID
+	bcopy.Position.ChainID = b.Position.ChainID
+	bcopy.Position.Height = b.Position.Height
 	bcopy.Signature = b.Signature.Clone()
 	bcopy.CRSSignature = b.CRSSignature.Clone()
 	bcopy.Notary.Timestamp = b.Notary.Timestamp
@@ -118,7 +116,7 @@ func (b *Block) Clone() (bcopy *Block) {
 
 // IsGenesis checks if the block is a genesisBlock
 func (b *Block) IsGenesis() bool {
-	return b.Height == 0 && b.ParentHash == common.Hash{}
+	return b.Position.Height == 0 && b.ParentHash == common.Hash{}
 }
 
 // ByHash is the helper type for sorting slice of blocks by hash.
@@ -144,7 +142,7 @@ func (b ByHeight) Len() int {
 }
 
 func (b ByHeight) Less(i int, j int) bool {
-	return b[i].Height < b[j].Height
+	return b[i].Position.Height < b[j].Position.Height
 }
 
 func (b ByHeight) Swap(i int, j int) {

@@ -122,7 +122,7 @@ func NewConsensus(
 func (con *Consensus) Run() {
 	go con.processMsg(con.network.ReceiveChan())
 
-	chainID := uint64(0)
+	chainID := uint32(0)
 	hashes := make(common.Hashes, 0, len(con.gov.GetValidatorSet()))
 	for vID := range con.gov.GetValidatorSet() {
 		hashes = append(hashes, vID.Hash)
@@ -130,14 +130,16 @@ func (con *Consensus) Run() {
 	sort.Sort(hashes)
 	for i, hash := range hashes {
 		if hash == con.ID.Hash {
-			chainID = uint64(i)
+			chainID = uint32(i)
 			break
 		}
 	}
 
 	genesisBlock := &types.Block{
 		ProposerID: con.ID,
-		ChainID:    chainID,
+		Position: types.Position{
+			ChainID: chainID,
+		},
 	}
 	if err := con.PrepareGenesisBlock(genesisBlock, time.Now().UTC()); err != nil {
 		fmt.Println(err)
@@ -156,7 +158,9 @@ ProposingBlockLoop:
 		}
 		block := &types.Block{
 			ProposerID: con.ID,
-			ChainID:    chainID,
+			Position: types.Position{
+				ChainID: chainID,
+			},
 		}
 		if err := con.PrepareBlock(block, time.Now().UTC()); err != nil {
 			fmt.Println(err)
@@ -321,7 +325,7 @@ func (con *Consensus) PrepareBlock(b *types.Block,
 
 	con.rbModule.prepareBlock(b)
 	b.Timestamps[b.ProposerID] = proposeTime
-	b.Payloads = con.app.PreparePayloads(b.ShardID, b.ChainID, b.Height)
+	b.Payloads = con.app.PreparePayloads(b.Position)
 	b.Hash, err = hashBlock(b)
 	if err != nil {
 		return
@@ -343,7 +347,7 @@ func (con *Consensus) PrepareGenesisBlock(b *types.Block,
 		err = ErrGenesisBlockNotEmpty
 		return
 	}
-	b.Height = 0
+	b.Position.Height = 0
 	b.ParentHash = common.Hash{}
 	b.Acks = make(map[common.Hash]struct{})
 	b.Timestamps = make(map[types.ValidatorID]time.Time)

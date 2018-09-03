@@ -52,13 +52,15 @@ func (s *ReliableBroadcastTest) prepareGenesisBlock(
 	b = &types.Block{
 		ProposerID: proposerID,
 		ParentHash: common.Hash{},
-		Height:     0,
+		Position: types.Position{
+			Height: 0,
+		},
 		Acks:       make(map[common.Hash]struct{}),
 		Timestamps: genTimestamps(validatorIDs),
 	}
 	for i, vID := range validatorIDs {
 		if proposerID == vID {
-			b.ChainID = uint64(i)
+			b.Position.ChainID = uint32(i)
 			break
 		}
 	}
@@ -114,8 +116,10 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 		ParentHash: h,
 		Hash:       common.NewRandomHash(),
 		Timestamps: genTimestamps(vids),
-		Height:     1,
-		ChainID:    0,
+		Position: types.Position{
+			ChainID: 0,
+			Height:  1,
+		},
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 		},
@@ -131,8 +135,10 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 	b = &types.Block{
 		ProposerID: vids[0],
 		ParentHash: h,
-		Height:     2,
-		ChainID:    0,
+		Position: types.Position{
+			ChainID: 0,
+			Height:  2,
+		},
 		Timestamps: genTimestamps(vids),
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
@@ -151,8 +157,10 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 		ParentHash: h,
 		Hash:       common.NewRandomHash(),
 		Timestamps: genTimestamps(vids),
-		Height:     3,
-		ChainID:    0,
+		Position: types.Position{
+			ChainID: 0,
+			Height:  3,
+		},
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 		},
@@ -169,8 +177,10 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 		ParentHash: h,
 		Hash:       common.NewRandomHash(),
 		Timestamps: genTimestamps(vids),
-		Height:     1,
-		ChainID:    3,
+		Position: types.Position{
+			ChainID: 3,
+			Height:  1,
+		},
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 		},
@@ -205,9 +215,11 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 	b = &types.Block{
 		ProposerID: vids[0],
 		ParentHash: common.NewRandomHash(),
-		Height:     10,
-		ChainID:    0,
-		Acks:       make(map[common.Hash]struct{}),
+		Position: types.Position{
+			ChainID: 0,
+			Height:  10,
+		},
+		Acks: make(map[common.Hash]struct{}),
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
@@ -219,8 +231,10 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 	b = &types.Block{
 		ProposerID: vids[1],
 		ParentHash: common.NewRandomHash(),
-		Height:     1,
-		ChainID:    1,
+		Position: types.Position{
+			ChainID: 1,
+			Height:  1,
+		},
 		Acks: map[common.Hash]struct{}{
 			rb.lattice[2].blocks[0].Hash: struct{}{},
 		},
@@ -236,8 +250,10 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 	b = &types.Block{
 		ProposerID: vids[1],
 		ParentHash: h,
-		Height:     2,
-		ChainID:    1,
+		Position: types.Position{
+			ChainID: 1,
+			Height:  2,
+		},
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 		},
@@ -253,7 +269,9 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 	b = &types.Block{
 		ProposerID: types.ValidatorID{Hash: common.NewRandomHash()},
 		ParentHash: h,
-		Height:     1,
+		Position: types.Position{
+			Height: 1,
+		},
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 		},
@@ -269,8 +287,10 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 	b = &types.Block{
 		ProposerID: vids[1],
 		ParentHash: h,
-		Height:     1,
-		ChainID:    100,
+		Position: types.Position{
+			ChainID: 100,
+			Height:  1,
+		},
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 		},
@@ -286,8 +306,10 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 	b = &types.Block{
 		ProposerID: vids[0],
 		ParentHash: h,
-		Height:     1,
-		ChainID:    0,
+		Position: types.Position{
+			ChainID: 0,
+			Height:  1,
+		},
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 		},
@@ -306,8 +328,10 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 	b = &types.Block{
 		ProposerID: vids[0],
 		ParentHash: h,
-		Height:     4,
-		ChainID:    0,
+		Position: types.Position{
+			ChainID: 0,
+			Height:  4,
+		},
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 			rb.lattice[1].blocks[0].Hash: struct{}{},
@@ -324,8 +348,10 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 	b = &types.Block{
 		ProposerID: vids[1],
 		ParentHash: h,
-		Height:     1,
-		ChainID:    1,
+		Position: types.Position{
+			ChainID: 1,
+			Height:  1,
+		},
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 			common.NewRandomHash(): struct{}{},
@@ -385,8 +411,10 @@ func (s *ReliableBroadcastTest) TestStrongAck() {
 		ProposerID: vids[1],
 		ParentHash: rb.lattice[1].blocks[0].Hash,
 		Hash:       common.NewRandomHash(),
-		Height:     1,
-		ChainID:    1,
+		Position: types.Position{
+			ChainID: 1,
+			Height:  1,
+		},
 		Timestamps: genTimestamps(vids),
 		Acks: map[common.Hash]struct{}{
 			rb.lattice[0].blocks[2].Hash: struct{}{},
@@ -409,8 +437,10 @@ func (s *ReliableBroadcastTest) TestStrongAck() {
 		ProposerID: vids[2],
 		ParentHash: rb.lattice[2].blocks[0].Hash,
 		Hash:       common.NewRandomHash(),
-		Height:     1,
-		ChainID:    2,
+		Position: types.Position{
+			ChainID: 2,
+			Height:  1,
+		},
 		Timestamps: genTimestamps(vids),
 		Acks: map[common.Hash]struct{}{
 			rb.lattice[0].blocks[2].Hash: struct{}{},
@@ -437,8 +467,10 @@ func (s *ReliableBroadcastTest) TestExtractBlocks() {
 		ProposerID: vids[1],
 		ParentHash: rb.lattice[1].blocks[0].Hash,
 		Hash:       common.NewRandomHash(),
-		Height:     1,
-		ChainID:    1,
+		Position: types.Position{
+			ChainID: 1,
+			Height:  1,
+		},
 		Timestamps: genTimestamps(vids),
 		Acks: map[common.Hash]struct{}{
 			rb.lattice[0].blocks[2].Hash: struct{}{},
@@ -456,8 +488,10 @@ func (s *ReliableBroadcastTest) TestExtractBlocks() {
 		ProposerID: vids[2],
 		ParentHash: rb.lattice[2].blocks[0].Hash,
 		Hash:       common.NewRandomHash(),
-		Height:     1,
-		ChainID:    2,
+		Position: types.Position{
+			ChainID: 2,
+			Height:  1,
+		},
 		Timestamps: genTimestamps(vids),
 		Acks: map[common.Hash]struct{}{
 			rb.lattice[0].blocks[2].Hash: struct{}{},
@@ -518,8 +552,10 @@ func (s *ReliableBroadcastTest) TestRandomIntensiveAcking() {
 		b := &types.Block{
 			ProposerID: vid,
 			ParentHash: parentHash,
-			Height:     height,
-			ChainID:    uint64(id),
+			Position: types.Position{
+				ChainID: uint32(id),
+				Height:  height,
+			},
 			Timestamps: genTimestamps(vids),
 			Acks:       acks,
 		}
@@ -639,7 +675,9 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 	// prepareBlock.
 	b11 := &types.Block{
 		ProposerID: validators[1],
-		ChainID:    1,
+		Position: types.Position{
+			ChainID: 1,
+		},
 	}
 	rb.prepareBlock(b11)
 	var err error
@@ -658,12 +696,14 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 	req.Equal(b11.Timestamps[validators[3]],
 		b30.Timestamps[b30.ProposerID].Add(time.Millisecond))
 	req.Equal(b11.ParentHash, b10.Hash)
-	req.Equal(b11.Height, uint64(1))
+	req.Equal(b11.Position.Height, uint64(1))
 	s.Require().Nil(rb.processBlock(b11))
 	// Propose/Process a block based on collected info.
 	b12 := &types.Block{
 		ProposerID: validators[1],
-		ChainID:    1,
+		Position: types.Position{
+			ChainID: 1,
+		},
 	}
 	rb.prepareBlock(b12)
 	b12.Hash, err = hashBlock(b12)
@@ -672,12 +712,14 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 	req.Len(b12.Acks, 1)
 	req.Contains(b12.Acks, b11.Hash)
 	req.Equal(b12.ParentHash, b11.Hash)
-	req.Equal(b12.Height, uint64(2))
+	req.Equal(b12.Position.Height, uint64(2))
 	// When calling with other validator ID, we should be able to
 	// get 4 blocks to ack.
 	b01 := &types.Block{
 		ProposerID: validators[0],
-		ChainID:    0,
+		Position: types.Position{
+			ChainID: 0,
+		},
 	}
 	rb.prepareBlock(b01)
 	b01.Hash, err = hashBlock(b01)
@@ -688,7 +730,7 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 	req.Contains(b01.Acks, b20.Hash)
 	req.Contains(b01.Acks, b30.Hash)
 	req.Equal(b01.ParentHash, b00.Hash)
-	req.Equal(b01.Height, uint64(1))
+	req.Equal(b01.Position.Height, uint64(1))
 }
 
 func TestReliableBroadcast(t *testing.T) {

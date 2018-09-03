@@ -41,14 +41,18 @@ func (s *MemBackedBlockDBTestSuite) SetupSuite() {
 		ProposerID: s.v0,
 		ParentHash: genesisHash,
 		Hash:       genesisHash,
-		Height:     0,
-		Acks:       make(map[common.Hash]struct{}),
+		Position: types.Position{
+			Height: 0,
+		},
+		Acks: make(map[common.Hash]struct{}),
 	}
 	s.b01 = &types.Block{
 		ProposerID: s.v0,
 		ParentHash: s.b00.Hash,
 		Hash:       common.NewRandomHash(),
-		Height:     1,
+		Position: types.Position{
+			Height: 1,
+		},
 		Acks: map[common.Hash]struct{}{
 			s.b00.Hash: struct{}{},
 		},
@@ -57,7 +61,9 @@ func (s *MemBackedBlockDBTestSuite) SetupSuite() {
 		ProposerID: s.v0,
 		ParentHash: s.b01.Hash,
 		Hash:       common.NewRandomHash(),
-		Height:     2,
+		Position: types.Position{
+			Height: 2,
+		},
 		Acks: map[common.Hash]struct{}{
 			s.b01.Hash: struct{}{},
 		},

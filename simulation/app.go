@@ -81,7 +81,7 @@ func (a *simApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
 		return
 	}
 	for i, blockHash := range hashes {
-		if a.blockByHash[blockHash].Height > ackBlock.Height {
+		if a.blockByHash[blockHash].Position.Height > ackBlock.Position.Height {
 			output, a.unconfirmedBlocks[ackBlock.ProposerID] = hashes[:i], hashes[i:]
 			break
 		}
@@ -95,7 +95,7 @@ func (a *simApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
 }
 
 // PreparePayloads implements core.Application.
-func (a *simApp) PreparePayloads(shardID, chainID, height uint64) [][]byte {
+func (a *simApp) PreparePayloads(position types.Position) [][]byte {
 	return [][]byte{}
 }
 

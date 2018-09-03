@@ -65,7 +65,7 @@ func NewReceiveBlockEvent(
 // Validator is designed to work with test.Scheduler.
 type Validator struct {
 	ID               types.ValidatorID
-	chainID          uint64
+	chainID          uint32
 	cons             *core.Consensus
 	gov              core.Governance
 	networkLatency   LatencyModel
@@ -87,10 +87,10 @@ func NewValidator(
 		hashes = append(hashes, vID.Hash)
 	}
 	sort.Sort(hashes)
-	chainID := uint64(0)
+	chainID := uint32(0)
 	for i, hash := range hashes {
 		if hash == vID.Hash {
-			chainID = uint64(i)
+			chainID = uint32(i)
 			break
 		}
 	}
@@ -125,7 +125,9 @@ func (v *Validator) handleProposeBlock(when time.Time, piggyback interface{}) (
 
 	b := &types.Block{
 		ProposerID: v.ID,
-		ChainID:    v.chainID,
+		Position: types.Position{
+			ChainID: v.chainID,
+		},
 	}
 	defer types.RecycleBlock(b)
 	if err = v.cons.PrepareBlock(b, when); err != nil {

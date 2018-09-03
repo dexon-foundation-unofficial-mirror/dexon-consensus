@@ -103,7 +103,7 @@ func NewApp() *App {
 }
 
 // PreparePayloads implements Application interface.
-func (app *App) PreparePayloads(shardID, chainID, height uint64) [][]byte {
+func (app *App) PreparePayloads(position types.Position) [][]byte {
 	return [][]byte{}
 }
 

@@ -47,7 +47,7 @@ func newSlowApp(sleep time.Duration) *slowApp {
 	}
 }
 
-func (app *slowApp) PreparePayloads(_, _, _ uint64) [][]byte {
+func (app *slowApp) PreparePayloads(_ types.Position) [][]byte {
 	return [][]byte{}
 }
 

@@ -56,7 +56,9 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 		ParentHash: prevBlock.Hash,
 		Acks:       acks,
 		Timestamps: timestamps,
-		Height:     prevBlock.Height + 1,
+		Position: types.Position{
+			Height: prevBlock.Position.Height + 1,
+		},
 		Notary: types.Notary{
 			ParentHash: parentHash,
 			Timestamp:  time.Now(),
@@ -160,7 +162,7 @@ func (s *CryptoTestSuite) TestBlockSignature() {
 		if !block.IsGenesis() {
 			parentBlock, exist := blockMap[block.ParentHash]
 			s.Require().True(exist)
-			s.True(parentBlock.Height == block.Height-1)
+			s.True(parentBlock.Position.Height == block.Position.Height-1)
 			hash, err := hashBlock(parentBlock)
 			s.Require().Nil(err)
 			s.Equal(hash, block.ParentHash)
@@ -205,7 +207,7 @@ func (s *CryptoTestSuite) TestCRSSignature() {
 	block.CRSSignature, err = prv.Sign(hashCRS(block, crs))
 	s.Require().Nil(err)
 	s.True(verifyCRSSignature(block, crs, eth.SigToPub))
-	block.Height++
+	block.Position.Height++
 	s.False(verifyCRSSignature(block, crs, eth.SigToPub))
 }
 

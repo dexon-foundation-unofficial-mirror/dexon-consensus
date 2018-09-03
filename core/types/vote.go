@@ -38,11 +38,12 @@ const (
 
 // Vote is the vote structure defined in Crypto Shuffle Algorithm.
 type Vote struct {
-	ProposerID ValidatorID
-	Type       VoteType
-	BlockHash  common.Hash
-	Period     uint64
-	Signature  crypto.Signature
+	ProposerID ValidatorID      `json:"proposer_id"`
+	Type       VoteType         `json:"type"`
+	BlockHash  common.Hash      `json:"block_hash"`
+	Period     uint64           `json:"period"`
+	Position   Position         `json:"position"`
+	Signature  crypto.Signature `json:"signature"`
 }
 
 func (v *Vote) String() string {
@@ -57,6 +58,11 @@ func (v *Vote) Clone() *Vote {
 		Type:       v.Type,
 		BlockHash:  v.BlockHash,
 		Period:     v.Period,
-		Signature:  v.Signature.Clone(),
+		Position: Position{
+			ShardID: v.Position.ShardID,
+			ChainID: v.Position.ChainID,
+			Height:  v.Position.Height,
+		},
+		Signature: v.Signature.Clone(),
 	}
 }

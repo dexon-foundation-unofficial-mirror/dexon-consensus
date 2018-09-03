@@ -300,10 +300,10 @@ func (v *totalOrderingCandidateInfo) addBlock(
 
 	rec := v.ackedStatus[proposerIndex]
 	if rec.count == 0 {
-		rec.minHeight = b.Height
+		rec.minHeight = b.Position.Height
 		rec.count = 1
 	} else {
-		if b.Height < rec.minHeight {
+		if b.Position.Height < rec.minHeight {
 			err = ErrNotValidDAG
 			return
 		}
@@ -489,7 +489,7 @@ func (global *totalOrderingGlobalVector) addBlock(
 	blocksFromProposer := global.blocks[proposerIndex]
 	if len(blocksFromProposer) > 0 {
 		lastBlock := blocksFromProposer[len(blocksFromProposer)-1]
-		if b.Height-lastBlock.Height != 1 {
+		if b.Position.Height-lastBlock.Position.Height != 1 {
 			err = ErrNotValidDAG
 			return
 		}
@@ -516,7 +516,7 @@ func (global *totalOrderingGlobalVector) updateCandidateInfo(
 				continue
 			}
 			rec = info.ackedStatus[idx]
-			rec.minHeight = blocks[0].Height
+			rec.minHeight = blocks[0].Position.Height
 			rec.count = uint64(len(blocks))
 		}
 		global.cachedCandidateInfo = info
@@ -529,7 +529,7 @@ func (global *totalOrderingGlobalVector) updateCandidateInfo(
 				continue
 			}
 			rec = info.ackedStatus[idx]
-			rec.minHeight = blocks[0].Height
+			rec.minHeight = blocks[0].Position.Height
 			rec.count = uint64(len(blocks))
 		}
 	}
@@ -716,7 +716,7 @@ func (to *totalOrdering) prepareCandidate(
 	sort.Ints(to.allocatedCandidateSlotIndexes)
 
 	info.ackedStatus[proposerIndex] = &totalOrderingHeightRecord{
-		minHeight: candidate.Height,
+		minHeight: candidate.Position.Height,
 		count:     uint64(len(to.globalVector.blocks[proposerIndex])),
 	}
 	ackedsForCandidate, exists := to.acked[candidate.Hash]
@@ -736,7 +736,7 @@ func (to *totalOrdering) prepareCandidate(
 			// If this block acks this candidate, all newer blocks
 			// from the same validator also 'indirect' acks it.
 			rec = info.ackedStatus[idx]
-			rec.minHeight = b.Height
+			rec.minHeight = b.Position.Height
 			rec.count = uint64(len(blocks) - i)
 			break
 		}

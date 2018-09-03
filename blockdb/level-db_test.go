@@ -55,7 +55,9 @@ func (s *LevelDBTestSuite) TestBasicUsage() {
 	block1 := types.Block{
 		ProposerID: validator1,
 		Hash:       hash1,
-		Height:     1,
+		Position: types.Position{
+			Height: 1,
+		},
 	}
 	err = db.Update(block1)
 	s.Equal(ErrBlockDoesNotExist, err)
@@ -102,7 +104,9 @@ func (s *LevelDBTestSuite) TestSyncIndex() {
 		block := types.Block{
 			ProposerID: types.ValidatorID{Hash: common.NewRandomHash()},
 			Hash:       common.NewRandomHash(),
-			Height:     uint64(i),
+			Position: types.Position{
+				Height: uint64(i),
+			},
 		}
 		db.Put(block)
 		blocks[i] = block
@@ -121,7 +125,7 @@ func (s *LevelDBTestSuite) TestSyncIndex() {
 		queried, err := db.Get(block.Hash)
 		s.Nil(err)
 		s.Equal(block.ProposerID, queried.ProposerID)
-		s.Equal(block.Height, queried.Height)
+		s.Equal(block.Position.Height, queried.Position.Height)
 	}
 }
 

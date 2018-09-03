@@ -49,10 +49,10 @@ func (s *BlockTestSuite) TestSortByHash() {
 }
 
 func (s *BlockTestSuite) TestSortByHeight() {
-	b0 := &Block{Height: 0}
-	b1 := &Block{Height: 1}
-	b2 := &Block{Height: 2}
-	b3 := &Block{Height: 3}
+	b0 := &Block{Position: Position{Height: 0}}
+	b1 := &Block{Position: Position{Height: 1}}
+	b2 := &Block{Position: Position{Height: 2}}
+	b3 := &Block{Position: Position{Height: 3}}
 
 	blocks := []*Block{b3, b2, b1, b0}
 	sort.Sort(ByHeight(blocks))
@@ -64,17 +64,23 @@ func (s *BlockTestSuite) TestSortByHeight() {
 
 func (s *BlockTestSuite) TestGenesisBlock() {
 	b0 := &Block{
-		Height:     0,
+		Position: Position{
+			Height: 0,
+		},
 		ParentHash: common.Hash{},
 	}
 	s.True(b0.IsGenesis())
 	b1 := &Block{
-		Height:     1,
+		Position: Position{
+			Height: 1,
+		},
 		ParentHash: common.Hash{},
 	}
 	s.False(b1.IsGenesis())
 	b2 := &Block{
-		Height:     0,
+		Position: Position{
+			Height: 0,
+		},
 		ParentHash: common.NewRandomHash(),
 	}
 	s.False(b2.IsGenesis())

@@ -62,13 +62,6 @@ type agreementReceiver interface {
 	confirmBlock(common.Hash)
 }
 
-// position is the current round of the agreement.
-type position struct {
-	ShardID uint64
-	ChainID uint64
-	Height  uint64
-}
-
 // agreementData is the data for agreementState.
 type agreementData struct {
 	recv agreementReceiver
@@ -146,12 +139,12 @@ func (a *agreement) clocks() int {
 }
 
 // agreementID returns the current agreementID.
-func (a *agreement) agreementID() position {
-	return a.aID.Load().(position)
+func (a *agreement) agreementID() types.Position {
+	return a.aID.Load().(types.Position)
 }
 
 // setAgreementID sets the current agreementID.
-func (a *agreement) setAgreementID(ID position) {
+func (a *agreement) setAgreementID(ID types.Position) {
 	a.aID.Store(ID)
 }
 

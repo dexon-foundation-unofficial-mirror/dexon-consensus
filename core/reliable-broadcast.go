@@ -71,7 +71,7 @@ type rbcBlockInfo struct {
 	block        *types.Block
 	receivedTime time.Time
 	status       blockStatus
-	ackedChain   map[uint64]struct{}
+	ackedChain   map[uint32]struct{}
 }
 
 // Errors for sanity check error.
@@ -97,7 +97,7 @@ func newReliableBroadcast() *reliableBroadcast {
 
 func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 	// Check if the chain id is valid.
-	if b.ChainID >= uint64(len(rb.lattice)) {
+	if b.Position.ChainID >= uint32(len(rb.lattice)) {
 		return ErrInvalidChainID
 	}
 
@@ -107,7 +107,8 @@ func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 	}
 
 	// Check if it forks.
-	if bInLattice, exist := rb.lattice[b.ChainID].blocks[b.Height]; exist {
+	if bInLattice, exist :=
+		rb.lattice[b.Position.ChainID].blocks[b.Position.Height]; exist {
 		if b.Hash != bInLattice.Hash {
 			return ErrForkBlock
 		}
@@ -115,12 +116,12 @@ func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 	}
 
 	// Check non-genesis blocks if it acks its parent.
-	if b.Height > 0 {
+	if b.Position.Height > 0 {
 		if _, exist := b.Acks[b.ParentHash]; !exist {
 			return ErrNotAckParent
 		}
 		bParentStat, exists := rb.blockInfos[b.ParentHash]
-		if exists && bParentStat.block.Height != b.Height-1 {
+		if exists && bParentStat.block.Position.Height != b.Position.Height-1 {
 			return ErrInvalidBlockHeight
 		}
 	}
@@ -129,7 +130,8 @@ func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 	for hash := range b.Acks {
 		if bAckStat, exist := rb.blockInfos[hash]; exist {
 			bAck := bAckStat.block
-			if bAck.Height < rb.lattice[b.ChainID].nextAck[bAck.ChainID] {
+			if bAck.Position.Height <
+				rb.lattice[b.Position.ChainID].nextAck[bAck.Position.ChainID] {
 				return ErrDoubleAck
 			}
 		}
@@ -145,7 +147,8 @@ func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 		}
 	*/
 
-	if bParent, exist := rb.lattice[b.ChainID].blocks[b.Height-1]; exist {
+	if bParent, exist :=
+		rb.lattice[b.Position.ChainID].blocks[b.Position.Height-1]; exist {
 		for hash := range b.Timestamps {
 			if b.Timestamps[hash].Before(bParent.Timestamps[hash]) {
 				return ErrInvalidTimestamp
@@ -167,7 +170,8 @@ func (rb *reliableBroadcast) areAllAcksInLattice(b *types.Block) bool {
 		}
 		bAck := bAckStat.block
 
-		bAckInLattice, exist := rb.lattice[bAck.ChainID].blocks[bAck.Height]
+		bAckInLattice, exist :=
+			rb.lattice[bAck.Position.ChainID].blocks[bAck.Position.Height]
 		if !exist {
 			return false
 		}
@@ -188,7 +192,7 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 	rb.blockInfos[block.Hash] = &rbcBlockInfo{
 		block:        block,
 		receivedTime: time.Now().UTC(),
-		ackedChain:   make(map[uint64]struct{}),
+		ackedChain:   make(map[uint32]struct{}),
 	}
 	rb.receivedBlocks[block.Hash] = block
 
@@ -219,31 +223,34 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 				continue
 				// TODO(mission): how to return for multiple errors?
 			}
-			rb.lattice[b.ChainID].blocks[b.Height] = b
+			chainID := b.Position.ChainID
+			rb.lattice[chainID].blocks[b.Position.Height] = b
 			delete(rb.receivedBlocks, b.Hash)
 			for h := range b.Acks {
 				bAckStat := rb.blockInfos[h]
-				// Update nextAck only when bAckStat.block.Height + 1 is greater. A
-				// block might ack blocks proposed by same validator with different
-				// height.
-				if rb.lattice[b.ChainID].nextAck[bAckStat.block.ChainID] < bAckStat.block.Height+1 {
-					rb.lattice[b.ChainID].nextAck[bAckStat.block.ChainID] = bAckStat.block.Height + 1
+				// Update nextAck only when bAckStat.block.Position.Height + 1
+				// is greater. A block might ack blocks proposed by same validator with
+				// different height.
+				if rb.lattice[chainID].nextAck[bAckStat.block.Position.ChainID] <
+					bAckStat.block.Position.Height+1 {
+					rb.lattice[chainID].nextAck[bAckStat.block.Position.ChainID] =
+						bAckStat.block.Position.Height + 1
 				}
 				// Update ackedChain for each ack blocks and its parents.
 				for {
-					if _, exist := bAckStat.ackedChain[b.ChainID]; exist {
+					if _, exist := bAckStat.ackedChain[chainID]; exist {
 						break
 					}
 					if bAckStat.status > blockStatusInit {
 						break
 					}
-					bAckStat.ackedChain[b.ChainID] = struct{}{}
+					bAckStat.ackedChain[chainID] = struct{}{}
 					// A block is strongly acked if it is acked by more than
 					// 2 * (maximum number of byzatine validators) unique validators.
 					if len(bAckStat.ackedChain) > 2*((len(rb.lattice)-1)/3) {
 						blocksToAcked[bAckStat.block.Hash] = bAckStat.block
 					}
-					if bAckStat.block.Height == 0 {
+					if bAckStat.block.Position.Height == 0 {
 						break
 					}
 					bAckStat = rb.blockInfos[bAckStat.block.ParentHash]
@@ -294,7 +301,7 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 				break
 			}
 			if rb.blockInfos[b.Hash].status >= blockStatusOrdering {
-				delete(rb.lattice[vid].blocks, b.Height)
+				delete(rb.lattice[vid].blocks, b.Position.Height)
 				delete(rb.blockInfos, b.Hash)
 			}
 			if min == 0 {
@@ -355,7 +362,7 @@ func (rb *reliableBroadcast) extractBlocks() []*types.Block {
 //    parent, these fields would be setup like a genesis block.
 func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 	// Reset fields to make sure we got these information from parent block.
-	block.Height = 0
+	block.Position.Height = 0
 	block.ParentHash = common.Hash{}
 	// The helper function to accumulate timestamps.
 	accumulateTimestamps := func(
@@ -392,7 +399,7 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 		// find height of the latest block for that validator.
 		var (
 			curBlock   *types.Block
-			nextHeight = rb.lattice[block.ChainID].nextAck[chainID]
+			nextHeight = rb.lattice[block.Position.ChainID].nextAck[chainID]
 		)
 
 		for {
@@ -408,9 +415,9 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 		}
 		acks[curBlock.Hash] = struct{}{}
 		accumulateTimestamps(times, curBlock)
-		if uint64(chainID) == block.ChainID {
+		if uint32(chainID) == block.Position.ChainID {
 			block.ParentHash = curBlock.Hash
-			block.Height = curBlock.Height + 1
+			block.Position.Height = curBlock.Position.Height + 1
 		}
 	}
 	block.Timestamps = times

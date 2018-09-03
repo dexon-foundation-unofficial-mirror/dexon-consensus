@@ -50,7 +50,7 @@ func verifyNotarySignature(pubkey crypto.PublicKey,
 }
 
 func hashBlock(block *types.Block) (common.Hash, error) {
-	hashPosition := hashPosition(block.ShardID, block.ChainID, block.Height)
+	hashPosition := hashPosition(block.Position)
 	// Handling Block.Acks.
 	acks := make(common.Hashes, 0, len(block.Acks))
 	for ack := range block.Acks {
@@ -103,10 +103,13 @@ func hashVote(vote *types.Vote) common.Hash {
 	binaryPeriod := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryPeriod, vote.Period)
 
+	hashPosition := hashPosition(vote.Position)
+
 	hash := crypto.Keccak256Hash(
 		vote.ProposerID.Hash[:],
 		vote.BlockHash[:],
 		binaryPeriod,
+		hashPosition[:],
 		[]byte{byte(vote.Type)},
 	)
 	return hash
@@ -125,7 +128,7 @@ func verifyVoteSignature(vote *types.Vote, sigToPub SigToPubFn) (bool, error) {
 }
 
 func hashCRS(block *types.Block, crs common.Hash) common.Hash {
-	hashPos := hashPosition(block.ShardID, block.ChainID, block.Height)
+	hashPos := hashPosition(block.Position)
 	return crypto.Keccak256Hash(crs[:], hashPos[:])
 }
 
@@ -142,15 +145,15 @@ func verifyCRSSignature(block *types.Block, crs common.Hash, sigToPub SigToPubFn
 	return true, nil
 }
 
-func hashPosition(shardID, chainID, height uint64) common.Hash {
-	binaryShardID := make([]byte, 8)
-	binary.LittleEndian.PutUint64(binaryShardID, shardID)
+func hashPosition(position types.Position) common.Hash {
+	binaryShardID := make([]byte, 4)
+	binary.LittleEndian.PutUint32(binaryShardID, position.ShardID)
 
-	binaryChainID := make([]byte, 8)
-	binary.LittleEndian.PutUint64(binaryChainID, chainID)
+	binaryChainID := make([]byte, 4)
+	binary.LittleEndian.PutUint32(binaryChainID, position.ChainID)
 
 	binaryHeight := make([]byte, 8)
-	binary.LittleEndian.PutUint64(binaryHeight, height)
+	binary.LittleEndian.PutUint64(binaryHeight, position.Height)
 
 	return crypto.Keccak256Hash(
 		binaryShardID,

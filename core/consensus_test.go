@@ -56,12 +56,14 @@ type ConsensusTestSuite struct {
 
 func (s *ConsensusTestSuite) prepareGenesisBlock(
 	proposerID types.ValidatorID,
-	chainID uint64,
+	chainID uint32,
 	con *Consensus) *types.Block {
 
 	block := &types.Block{
 		ProposerID: proposerID,
-		ChainID:    chainID,
+		Position: types.Position{
+			ChainID: chainID,
+		},
 	}
 	err := con.PrepareGenesisBlock(block, time.Now().UTC())
 	s.Require().Nil(err)
@@ -140,7 +142,9 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b11 := &types.Block{
 		ProposerID: validators[1],
-		ChainID:    1,
+		Position: types.Position{
+			ChainID: 1,
+		},
 	}
 	b11.Hash, err = hashBlock(b11)
 	s.Require().Nil(err)
@@ -155,8 +159,10 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b01 := &types.Block{
 		ProposerID: validators[0],
-		ChainID:    0,
-		Hash:       common.NewRandomHash(),
+		Position: types.Position{
+			ChainID: 0,
+		},
+		Hash: common.NewRandomHash(),
 	}
 	req.Nil(objs[validators[0]].con.PrepareBlock(b01, time.Now().UTC()))
 	req.Len(b01.Acks, 4)
@@ -165,8 +171,10 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b21 := &types.Block{
 		ProposerID: validators[2],
-		ChainID:    2,
-		Hash:       common.NewRandomHash(),
+		Position: types.Position{
+			ChainID: 2,
+		},
+		Hash: common.NewRandomHash(),
 	}
 	req.Nil(objs[validators[2]].con.PrepareBlock(b21, time.Now().UTC()))
 	req.Len(b21.Acks, 4)
@@ -175,8 +183,10 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b31 := &types.Block{
 		ProposerID: validators[3],
-		ChainID:    3,
-		Hash:       common.NewRandomHash(),
+		Position: types.Position{
+			ChainID: 3,
+		},
+		Hash: common.NewRandomHash(),
 	}
 	req.Nil(objs[validators[3]].con.PrepareBlock(b31, time.Now().UTC()))
 	req.Len(b31.Acks, 4)
@@ -190,8 +200,10 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b02 := &types.Block{
 		ProposerID: validators[0],
-		ChainID:    0,
-		Hash:       common.NewRandomHash(),
+		Position: types.Position{
+			ChainID: 0,
+		},
+		Hash: common.NewRandomHash(),
 	}
 	req.Nil(objs[validators[0]].con.PrepareBlock(b02, time.Now().UTC()))
 	req.Len(b02.Acks, 3)
@@ -202,8 +214,10 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b12 := &types.Block{
 		ProposerID: validators[1],
-		ChainID:    1,
-		Hash:       common.NewRandomHash(),
+		Position: types.Position{
+			ChainID: 1,
+		},
+		Hash: common.NewRandomHash(),
 	}
 	req.Nil(objs[validators[1]].con.PrepareBlock(b12, time.Now().UTC()))
 	req.Len(b12.Acks, 4)
@@ -215,8 +229,10 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b22 := &types.Block{
 		ProposerID: validators[2],
-		ChainID:    2,
-		Hash:       common.NewRandomHash(),
+		Position: types.Position{
+			ChainID: 2,
+		},
+		Hash: common.NewRandomHash(),
 	}
 	req.Nil(objs[validators[2]].con.PrepareBlock(b22, time.Now().UTC()))
 	req.Len(b22.Acks, 3)
@@ -227,8 +243,10 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	time.Sleep(minInterval)
 	b32 := &types.Block{
 		ProposerID: validators[3],
-		ChainID:    3,
-		Hash:       common.NewRandomHash(),
+		Position: types.Position{
+			ChainID: 3,
+		},
+		Hash: common.NewRandomHash(),
 	}
 	req.Nil(objs[validators[3]].con.PrepareBlock(b32, time.Now().UTC()))
 	req.Len(b32.Acks, 3)

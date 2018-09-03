@@ -122,8 +122,8 @@ func (app *nonBlockingApplication) wait() {
 
 // PreparePayloads cannot be non-blocking.
 func (app *nonBlockingApplication) PreparePayloads(
-	shardID, chainID, height uint64) [][]byte {
-	return app.app.PreparePayloads(shardID, chainID, height)
+	position types.Position) [][]byte {
+	return app.app.PreparePayloads(position)
 }
 
 // VerifyPayloads cannot be non-blocking.
