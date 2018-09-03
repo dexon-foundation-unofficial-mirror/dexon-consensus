@@ -20,6 +20,8 @@ package core
 import (
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
@@ -55,10 +57,36 @@ type Application interface {
 type Network interface {
 	// BroadcastVote broadcasts vote to all nodes in DEXON network.
 	BroadcastVote(vote *types.Vote)
+
 	// BroadcastBlock broadcasts block to all nodes in DEXON network.
 	BroadcastBlock(block *types.Block)
+
 	// BroadcastNotaryAck broadcasts notaryAck to all nodes in DEXON network.
 	BroadcastNotaryAck(notaryAck *types.NotaryAck)
+
 	// ReceiveChan returns a channel to receive messages from DEXON network.
 	ReceiveChan() <-chan interface{}
+}
+
+// Governance interface specifies interface to control the governance contract.
+// Note that there are a lot more methods in the governance contract, that this
+// interface only define those that are required to run the consensus algorithm.
+type Governance interface {
+	// Get the current validator set and it's corresponding stake.
+	GetValidatorSet() map[types.ValidatorID]decimal.Decimal
+
+	// Get K.
+	GetTotalOrderingK() int
+
+	// Get PhiRatio.
+	GetPhiRatio() float32
+
+	// Get block proposing interval (in milliseconds).
+	GetBlockProposingInterval() int
+
+	// Get Genesis CRS.
+	GetGenesisCRS() string
+
+	// Get configuration change events after an epoch.
+	GetConfigurationChangeEvent(epoch int) []types.ConfigurationChangeEvent
 }

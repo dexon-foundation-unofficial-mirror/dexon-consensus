@@ -23,19 +23,13 @@ type ConfigurationChangeEventType int
 // Event enums.
 const (
 	KChanged ConfigurationChangeEventType = iota
-	MembershipAdd
-	MembershipRemove
+	PhiRatioChanged
+	BlockProposingIntervalChanged
 )
 
 // IntegerEventPayload is a general payload for integer type value.
 type IntegerEventPayload struct {
 	Value int64
-}
-
-// MembershipEventPayload is the payload type for membership event.
-type MembershipEventPayload struct {
-	ID       ValidatorID
-	Evidence []byte
 }
 
 // ConfigurationChangeEvent specifies the event of membership changes.

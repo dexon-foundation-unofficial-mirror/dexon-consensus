@@ -93,11 +93,6 @@ func (g *simGovernance) GetGenesisCRS() string {
 	return g.crs
 }
 
-// GetAgreementK returns K for agreement.
-func (g *simGovernance) GetAgreementK() int {
-	return g.agreementK
-}
-
 // addValidator add a new validator into the simulated governance contract.
 func (g *simGovernance) addValidator(vID types.ValidatorID) {
 	g.lock.Lock()
