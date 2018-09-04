@@ -29,7 +29,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
 )
 
-type AgreementTestSuite struct {
+type AgreementStateTestSuite struct {
 	suite.Suite
 	ID          types.ValidatorID
 	prvKey      map[types.ValidatorID]crypto.PrivateKey
@@ -39,23 +39,23 @@ type AgreementTestSuite struct {
 	block       map[common.Hash]*types.Block
 }
 
-type agreementTestReceiver struct {
-	s *AgreementTestSuite
+type agreementStateTestReceiver struct {
+	s *AgreementStateTestSuite
 }
 
-func (r *agreementTestReceiver) proposeVote(vote *types.Vote) {
+func (r *agreementStateTestReceiver) proposeVote(vote *types.Vote) {
 	r.s.voteChan <- vote
 }
 
-func (r *agreementTestReceiver) proposeBlock(block common.Hash) {
+func (r *agreementStateTestReceiver) proposeBlock(block common.Hash) {
 	r.s.blockChan <- block
 }
 
-func (r *agreementTestReceiver) confirmBlock(block common.Hash) {
+func (r *agreementStateTestReceiver) confirmBlock(block common.Hash) {
 	r.s.confirmChan <- block
 }
 
-func (s *AgreementTestSuite) proposeBlock(
+func (s *AgreementStateTestSuite) proposeBlock(
 	leader *leaderSelector) *types.Block {
 	block := &types.Block{
 		ProposerID: s.ID,
@@ -66,7 +66,7 @@ func (s *AgreementTestSuite) proposeBlock(
 	return block
 }
 
-func (s *AgreementTestSuite) prepareVote(
+func (s *AgreementStateTestSuite) prepareVote(
 	vID types.ValidatorID, voteType types.VoteType, blockHash common.Hash,
 	period uint64) (
 	vote *types.Vote) {
@@ -84,7 +84,7 @@ func (s *AgreementTestSuite) prepareVote(
 	return
 }
 
-func (s *AgreementTestSuite) SetupTest() {
+func (s *AgreementStateTestSuite) SetupTest() {
 	prvKey, err := eth.NewPrivateKey()
 	s.Require().Nil(err)
 	s.ID = types.NewValidatorID(prvKey.PublicKey())
@@ -97,7 +97,7 @@ func (s *AgreementTestSuite) SetupTest() {
 	s.block = make(map[common.Hash]*types.Block)
 }
 
-func (s *AgreementTestSuite) newAgreement(numValidator int) *agreement {
+func (s *AgreementStateTestSuite) newAgreement(numValidator int) *agreement {
 	leader := newGenesisLeaderSelector("I ❤️ DEXON", eth.SigToPub)
 	blockProposer := func() *types.Block {
 		return s.proposeBlock(leader)
@@ -113,7 +113,7 @@ func (s *AgreementTestSuite) newAgreement(numValidator int) *agreement {
 	validators = append(validators, s.ID)
 	agreement := newAgreement(
 		s.ID,
-		&agreementTestReceiver{s},
+		&agreementStateTestReceiver{s},
 		validators,
 		leader,
 		eth.SigToPub,
@@ -122,7 +122,7 @@ func (s *AgreementTestSuite) newAgreement(numValidator int) *agreement {
 	return agreement
 }
 
-func (s *AgreementTestSuite) TestPrepareState() {
+func (s *AgreementStateTestSuite) TestPrepareState() {
 	a := s.newAgreement(4)
 	state := newPrepareState(a.data)
 	s.Equal(statePrepare, state.state())
@@ -178,7 +178,7 @@ func (s *AgreementTestSuite) TestPrepareState() {
 	s.Equal(stateAck, newState.state())
 }
 
-func (s *AgreementTestSuite) TestAckState() {
+func (s *AgreementStateTestSuite) TestAckState() {
 	a := s.newAgreement(4)
 	state := newAckState(a.data)
 	s.Equal(stateAck, state.state())
@@ -236,7 +236,7 @@ func (s *AgreementTestSuite) TestAckState() {
 	s.Equal(stateConfirm, newState.state())
 }
 
-func (s *AgreementTestSuite) TestConfirmState() {
+func (s *AgreementStateTestSuite) TestConfirmState() {
 	a := s.newAgreement(4)
 	state := newConfirmState(a.data)
 	s.Equal(stateConfirm, state.state())
@@ -282,7 +282,7 @@ func (s *AgreementTestSuite) TestConfirmState() {
 	s.Equal(statePass1, newState.state())
 }
 
-func (s *AgreementTestSuite) TestPass1State() {
+func (s *AgreementStateTestSuite) TestPass1State() {
 	a := s.newAgreement(4)
 	state := newPass1State(a.data)
 	s.Equal(statePass1, state.state())
@@ -368,7 +368,7 @@ func (s *AgreementTestSuite) TestPass1State() {
 	s.Equal(statePass2, newState.state())
 }
 
-func (s *AgreementTestSuite) TestPass2State() {
+func (s *AgreementStateTestSuite) TestPass2State() {
 	a := s.newAgreement(4)
 	state := newPass2State(a.data)
 	s.Equal(statePass2, state.state())
@@ -446,6 +446,6 @@ func (s *AgreementTestSuite) TestPass2State() {
 	}
 }
 
-func TestAgreement(t *testing.T) {
-	suite.Run(t, new(AgreementTestSuite))
+func TestAgreementState(t *testing.T) {
+	suite.Run(t, new(AgreementStateTestSuite))
 }

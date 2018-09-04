@@ -116,7 +116,7 @@ func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 	}
 	a.Outputs = blocks
 	a.Early = early
-	//fmt.Println("OUTPUT", a.ValidatorID, a.Early, a.Outputs)
+	fmt.Println("OUTPUT", a.ValidatorID, a.Early, a.Outputs)
 
 	confirmLatency := []time.Duration{}
 

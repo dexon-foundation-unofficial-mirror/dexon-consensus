@@ -77,7 +77,8 @@ type Block struct {
 }
 
 func (b *Block) String() string {
-	return fmt.Sprintf("Block(%v)", b.Hash.String()[:6])
+	return fmt.Sprintf("Block(%v:%d:%d)", b.Hash.String()[:6],
+		b.Position.ChainID, b.Position.Height)
 }
 
 // Clone returns a deep copy of a block.

@@ -168,6 +168,20 @@ func (n *TCPNetwork) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		n.recieveChan <- block
+	case "vote":
+		vote := &types.Vote{}
+		if err := json.Unmarshal(m.Payload, vote); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		n.recieveChan <- vote
+	case "notaryAck":
+		ack := &types.NotaryAck{}
+		if err := json.Unmarshal(m.Payload, ack); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		n.recieveChan <- ack
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 		return

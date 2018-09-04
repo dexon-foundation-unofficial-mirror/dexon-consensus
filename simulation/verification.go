@@ -202,7 +202,7 @@ func VerifyTotalOrder(id types.ValidatorID,
 		if hasError {
 			log.Printf("[%d] Hash is %v from %v\n", i, hash, id)
 		} else {
-			//log.Printf("Block %v confirmed\n", hash)
+			log.Printf("Block %v confirmed\n", hash)
 		}
 	}
 

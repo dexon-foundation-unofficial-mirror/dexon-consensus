@@ -18,6 +18,8 @@
 package crypto
 
 import (
+	"encoding/hex"
+
 	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
@@ -32,4 +34,8 @@ func Keccak256Hash(data ...[]byte) (h common.Hash) {
 // Clone returns a deep copy of a signature.
 func (sig Signature) Clone() Signature {
 	return append(Signature{}, sig...)
+}
+
+func (sig Signature) String() string {
+	return hex.EncodeToString([]byte(sig[:]))
 }

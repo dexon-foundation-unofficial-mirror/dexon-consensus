@@ -90,6 +90,11 @@ func (l *leaderSelector) probability(sig crypto.Signature) float64 {
 	return p
 }
 
+func (l *leaderSelector) restart() {
+	l.minCRSBlock = maxHash
+	l.minBlockHash = common.Hash{}
+}
+
 func (l *leaderSelector) leaderBlockHash() common.Hash {
 	return l.minBlockHash
 }

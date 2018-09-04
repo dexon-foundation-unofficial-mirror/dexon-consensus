@@ -65,6 +65,9 @@ type rbcValidatorStatus struct {
 
 	// nextOutput is the next output height of block, default to 0.
 	nextOutput uint64
+
+	// nextHeight is the next height of block to be prepared.
+	nextHeight uint64
 }
 
 type rbcBlockInfo struct {
@@ -195,6 +198,9 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 		ackedChain:   make(map[uint32]struct{}),
 	}
 	rb.receivedBlocks[block.Hash] = block
+	if rb.lattice[block.Position.ChainID].nextHeight <= block.Position.Height {
+		rb.lattice[block.Position.ChainID].nextHeight = block.Position.Height + 1
+	}
 
 	// Check blocks in receivedBlocks if its acks are all in lattice. If a block's
 	// acking blocks are all in lattice, execute sanity check and add the block
@@ -417,7 +423,9 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 		accumulateTimestamps(times, curBlock)
 		if uint32(chainID) == block.Position.ChainID {
 			block.ParentHash = curBlock.Hash
-			block.Position.Height = curBlock.Position.Height + 1
+			if block.Position.Height == 0 {
+				block.Position.Height = curBlock.Position.Height + 1
+			}
 		}
 	}
 	block.Timestamps = times
@@ -436,13 +444,23 @@ func (rb *reliableBroadcast) deleteValidator(h types.ValidatorID) {
 }
 
 // setChainNum set the number of chains.
-func (rb *reliableBroadcast) setChainNum(num int) {
+func (rb *reliableBroadcast) setChainNum(num uint32) {
 	rb.lattice = make([]*rbcValidatorStatus, num)
 	for i := range rb.lattice {
 		rb.lattice[i] = &rbcValidatorStatus{
 			blocks:     make(map[uint64]*types.Block),
 			nextAck:    make([]uint64, num),
 			nextOutput: 0,
+			nextHeight: 0,
 		}
 	}
+}
+
+func (rb *reliableBroadcast) chainNum() uint32 {
+	return uint32(len(rb.lattice))
+}
+
+// nextHeight returns the next height for the chain.
+func (rb *reliableBroadcast) nextHeight(chainID uint32) uint64 {
+	return rb.lattice[chainID].nextHeight
 }

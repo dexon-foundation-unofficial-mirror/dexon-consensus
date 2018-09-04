@@ -102,7 +102,7 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 		rb.addValidator(vid)
 		vids = append(vids, vid)
 	}
-	rb.setChainNum(len(vids))
+	rb.setChainNum(uint32(len(vids)))
 	// Add genesis blocks.
 	for _, vid := range vids {
 		b = s.prepareGenesisBlock(vid, vids)
@@ -529,7 +529,7 @@ func (s *ReliableBroadcastTest) TestRandomIntensiveAcking() {
 	for _, vid := range vids {
 		rb.addValidator(vid)
 	}
-	rb.setChainNum(len(vids))
+	rb.setChainNum(uint32(len(vids)))
 	// Generate genesis blocks.
 	for _, vid := range vids {
 		b := s.prepareGenesisBlock(vid, vids)
@@ -602,7 +602,7 @@ func (s *ReliableBroadcastTest) TestRandomlyGeneratedBlocks() {
 	for i := 0; i < repeat; i++ {
 		validators := map[types.ValidatorID]struct{}{}
 		rb := newReliableBroadcast()
-		rb.setChainNum(validatorCount)
+		rb.setChainNum(uint32(validatorCount))
 		stronglyAckedHashes := common.Hashes{}
 		revealer.Reset()
 
@@ -657,7 +657,7 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 	for _, vID := range validators {
 		rb.addValidator(vID)
 	}
-	rb.setChainNum(len(validators))
+	rb.setChainNum(uint32(len(validators)))
 	// Setup genesis blocks.
 	b00 := s.prepareGenesisBlock(validators[0], validators)
 	time.Sleep(minInterval)

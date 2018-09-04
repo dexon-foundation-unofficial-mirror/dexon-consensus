@@ -19,7 +19,7 @@ package core
 
 import (
 	"fmt"
-	"sync/atomic"
+	"sync"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -124,15 +124,13 @@ func (s *ackState) receiveVote() error { return nil }
 // ----- ConfirmState -----
 type confirmState struct {
 	a     *agreementData
-	voted *atomic.Value
+	lock  sync.Mutex
+	voted bool
 }
 
 func newConfirmState(a *agreementData) *confirmState {
-	voted := &atomic.Value{}
-	voted.Store(false)
 	return &confirmState{
-		a:     a,
-		voted: voted,
+		a: a,
 	}
 }
 
@@ -143,7 +141,9 @@ func (s *confirmState) nextState() (agreementState, error) {
 	return newPass1State(s.a), nil
 }
 func (s *confirmState) receiveVote() error {
-	if s.voted.Load().(bool) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if s.voted {
 		return nil
 	}
 	hash, ok := s.a.countVote(s.a.period, types.VoteAck)
@@ -156,8 +156,8 @@ func (s *confirmState) receiveVote() error {
 			BlockHash: hash,
 			Period:    s.a.period,
 		})
+		s.voted = true
 	}
-	s.voted.Store(true)
 	return nil
 }
 
@@ -175,10 +175,12 @@ func (s *pass1State) clocks() int               { return 0 }
 func (s *pass1State) terminate()                {}
 func (s *pass1State) nextState() (agreementState, error) {
 	voteDefault := false
-	s.a.votesLock.RLock()
-	defer s.a.votesLock.RUnlock()
-	if vote, exist :=
-		s.a.votes[s.a.period][types.VoteConfirm][s.a.ID]; exist {
+	if vote, exist := func() (*types.Vote, bool) {
+		s.a.votesLock.RLock()
+		defer s.a.votesLock.RUnlock()
+		v, e := s.a.votes[s.a.period][types.VoteConfirm][s.a.ID]
+		return v, e
+	}(); exist {
 		s.a.recv.proposeVote(&types.Vote{
 			Type:      types.VotePass,
 			BlockHash: vote.BlockHash,
@@ -216,17 +218,15 @@ func (s *pass1State) receiveVote() error { return nil }
 // ----- Pass2State -----
 type pass2State struct {
 	a              *agreementData
-	voted          *atomic.Value
+	lock           sync.Mutex
+	voted          bool
 	enoughPassVote chan common.Hash
 	terminateChan  chan struct{}
 }
 
 func newPass2State(a *agreementData) *pass2State {
-	voted := &atomic.Value{}
-	voted.Store(false)
 	return &pass2State{
 		a:              a,
-		voted:          voted,
 		enoughPassVote: make(chan common.Hash, 1),
 		terminateChan:  make(chan struct{}),
 	}
@@ -254,7 +254,9 @@ func (s *pass2State) nextState() (agreementState, error) {
 	return newPrepareState(s.a), nil
 }
 func (s *pass2State) receiveVote() error {
-	if s.voted.Load().(bool) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if s.voted {
 		return nil
 	}
 	ackHash, ok := s.a.countVote(s.a.period, types.VoteAck)
@@ -264,7 +266,7 @@ func (s *pass2State) receiveVote() error {
 			BlockHash: ackHash,
 			Period:    s.a.period,
 		})
-		s.voted.Store(true)
+		s.voted = true
 	} else if s.a.period > 1 {
 		if _, exist :=
 			s.a.votes[s.a.period][types.VoteConfirm][s.a.ID]; !exist {
@@ -275,7 +277,7 @@ func (s *pass2State) receiveVote() error {
 					BlockHash: hash,
 					Period:    s.a.period,
 				})
-				s.voted.Store(true)
+				s.voted = true
 			}
 		}
 	}
