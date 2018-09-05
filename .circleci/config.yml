@@ -9,6 +9,11 @@ jobs:
     environment:
 
     steps:
+      - run: 
+          name: Install Dependency Libraries
+          command: |
+            sudo apt-get update
+            sudo apt-get install openssl libssl-dev libgmp-dev
       - checkout
       - restore_cache:
           keys:
@@ -27,7 +32,7 @@ jobs:
           key: v1-vendor-{{ .Branch }}-{{ checksum "Gopkg.lock" }}
           paths:
             - vendor
-      - run: make eth-dep
+      - run: make dep
       - run: make lint
       - run: make vet
       - run: make test

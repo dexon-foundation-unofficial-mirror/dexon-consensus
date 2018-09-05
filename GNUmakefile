@@ -51,12 +51,13 @@ all: $(COMPONENTS)
 
 $(foreach component, $(COMPONENTS), $(eval $(call BUILD_RULE,$(component))))
 
-pre-build: eth-dep
+pre-build: dep
 
-pre-submit: eth-dep check-format lint test vet
+pre-submit: dep check-format lint test vet
 
-eth-dep:
+dep:
 	@bin/install_eth_dep.sh
+	@bin/install_dkg_dep.sh
 
 format:
 	@go fmt `go list ./... | grep -v 'vendor'`

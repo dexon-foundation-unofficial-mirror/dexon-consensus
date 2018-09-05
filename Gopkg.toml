@@ -41,6 +41,10 @@
   branch = "master"
   name = "github.com/syndtr/goleveldb"
 
+[[constraint]]
+  branch = "master"
+  name = "github.com/herumi/bls"
+
 [prune]
   go-tests = true
   unused-packages = true
