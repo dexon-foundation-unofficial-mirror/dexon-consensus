@@ -58,9 +58,9 @@ func newVoteListMap() []map[types.ValidatorID]*types.Vote {
 
 // agreementReceiver is the interface receiving agreement event.
 type agreementReceiver interface {
-	proposeVote(vote *types.Vote)
-	proposeBlock(common.Hash)
-	confirmBlock(common.Hash)
+	ProposeVote(vote *types.Vote)
+	ProposeBlock(common.Hash)
+	ConfirmBlock(common.Hash)
 }
 
 type pendingBlock struct {
@@ -230,18 +230,20 @@ func (a *agreement) sanityCheck(vote *types.Vote) error {
 	if !ok {
 		return ErrIncorrectVoteSignature
 	}
-	if exist := func() bool {
+
+	if err := func() error {
 		a.data.votesLock.RLock()
 		defer a.data.votesLock.RUnlock()
-		_, exist := a.data.votes[vote.Period]
-		return exist
-	}(); exist {
-		if oldVote, exist :=
-			a.data.votes[vote.Period][vote.Type][vote.ProposerID]; exist {
-			if vote.BlockHash != oldVote.BlockHash {
-				return ErrForkVote
+		if votes, exist := a.data.votes[vote.Period]; exist {
+			if oldVote, exist := votes[vote.Type][vote.ProposerID]; exist {
+				if vote.BlockHash != oldVote.BlockHash {
+					return ErrForkVote
+				}
 			}
 		}
+		return nil
+	}(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -262,6 +264,8 @@ func (a *agreement) processVote(vote *types.Vote) error {
 		return err
 	}
 	if vote.Position != a.agreementID() {
+		a.lock.Lock()
+		defer a.lock.Unlock()
 		a.pendingVote = append(a.pendingVote, pendingVote{
 			vote:         vote,
 			receivedTime: time.Now().UTC(),
@@ -279,7 +283,7 @@ func (a *agreement) processVote(vote *types.Vote) error {
 			if len(a.data.votes[vote.Period][types.VoteConfirm]) >=
 				a.data.requiredVote {
 				a.hasOutput = true
-				a.data.recv.confirmBlock(vote.BlockHash)
+				a.data.recv.ConfirmBlock(vote.BlockHash)
 			}
 		}
 		return true

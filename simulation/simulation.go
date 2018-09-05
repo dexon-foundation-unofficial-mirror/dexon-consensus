@@ -26,7 +26,7 @@ import (
 )
 
 // Run starts the simulation.
-func Run(configPath string) {
+func Run(configPath string, legacy bool) {
 	cfg, err := config.Read(configPath)
 	if err != nil {
 		panic(err)
@@ -65,7 +65,7 @@ func Run(configPath string) {
 
 		for i := 0; i < cfg.Validator.Num; i++ {
 			fmt.Printf("Validator %d: %s\n", i, vs[i].ID)
-			go vs[i].Run()
+			go vs[i].Run(legacy)
 		}
 	} else if networkType == config.NetworkTypeTCP {
 		prv, err := eth.NewPrivateKey()
@@ -75,7 +75,7 @@ func Run(configPath string) {
 		network := NewTCPNetwork(false, cfg.Networking.PeerServer, networkModel)
 		network.Start()
 		v := NewValidator(prv, eth.SigToPub, cfg.Validator, network)
-		go v.Run()
+		go v.Run(legacy)
 		vs = append(vs, v)
 	}
 

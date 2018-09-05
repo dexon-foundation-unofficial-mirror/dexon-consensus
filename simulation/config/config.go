@@ -41,13 +41,19 @@ type Consensus struct {
 	GenesisCRS string `toml:"genesis_crs"`
 }
 
-// Validator config for the simulation.
-type Validator struct {
-	Consensus            Consensus
-	Num                  int
+// Legacy config.
+type Legacy struct {
 	ProposeIntervalMean  float64
 	ProposeIntervalSigma float64
-	MaxBlock             uint64
+}
+
+// Validator config for the simulation.
+type Validator struct {
+	Consensus Consensus
+	Legacy    Legacy
+	Num       int
+	Lambda    int
+	MaxBlock  uint64
 }
 
 // Networking config.
@@ -90,10 +96,13 @@ func GenerateDefault(path string) error {
 				ChainNum:   7,
 				GenesisCRS: "In DEXON we trust.",
 			},
-			Num:                  7,
-			ProposeIntervalMean:  500,
-			ProposeIntervalSigma: 30,
-			MaxBlock:             math.MaxUint64,
+			Legacy: Legacy{
+				ProposeIntervalMean:  500,
+				ProposeIntervalSigma: 50,
+			},
+			Num:      7,
+			Lambda:   250,
+			MaxBlock: math.MaxUint64,
 		},
 		Networking: Networking{
 			Type:          NetworkTypeTCPLocal,

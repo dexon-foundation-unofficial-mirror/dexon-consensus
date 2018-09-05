@@ -43,15 +43,15 @@ type agreementStateTestReceiver struct {
 	s *AgreementStateTestSuite
 }
 
-func (r *agreementStateTestReceiver) proposeVote(vote *types.Vote) {
+func (r *agreementStateTestReceiver) ProposeVote(vote *types.Vote) {
 	r.s.voteChan <- vote
 }
 
-func (r *agreementStateTestReceiver) proposeBlock(block common.Hash) {
+func (r *agreementStateTestReceiver) ProposeBlock(block common.Hash) {
 	r.s.blockChan <- block
 }
 
-func (r *agreementStateTestReceiver) confirmBlock(block common.Hash) {
+func (r *agreementStateTestReceiver) ConfirmBlock(block common.Hash) {
 	r.s.confirmChan <- block
 }
 

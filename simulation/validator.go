@@ -83,7 +83,7 @@ func (v *Validator) GetID() types.ValidatorID {
 }
 
 // Run starts the validator.
-func (v *Validator) Run() {
+func (v *Validator) Run(legacy bool) {
 	v.network.Join(v)
 	v.msgChannel = v.network.ReceiveChan()
 
@@ -99,13 +99,23 @@ func (v *Validator) Run() {
 			break
 		}
 	}
-	v.consensus = core.NewConsensus(
-		v.app, v.gov, v.db, v.network,
-		time.NewTicker(
-			time.Duration(v.config.ProposeIntervalMean)*time.Millisecond),
-		v.prvKey, v.sigToPub)
+	if legacy {
+		v.consensus = core.NewConsensus(
+			v.app, v.gov, v.db, v.network,
+			time.NewTicker(
+				time.Duration(v.config.Legacy.ProposeIntervalMean)*time.Millisecond),
+			v.prvKey, v.sigToPub)
 
-	go v.consensus.Run()
+		go v.consensus.RunLegacy()
+	} else {
+		v.consensus = core.NewConsensus(
+			v.app, v.gov, v.db, v.network,
+			time.NewTicker(
+				time.Duration(v.config.Lambda)*time.Millisecond),
+			v.prvKey, v.sigToPub)
+
+		go v.consensus.Run()
+	}
 
 	isShutdown := make(chan struct{})
 

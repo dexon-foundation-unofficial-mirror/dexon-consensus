@@ -2,8 +2,7 @@ title = "DEXON Consensus Simulation Config"
 
 [validator]
 num = {{numValidators}}
-propose_interval_mean = 5e+02
-propose_interval_sigma = 3e+01
+lambda = 250
 max_block = 1000
 
 [validator.consensus]
@@ -11,6 +10,10 @@ phi_ratio = 6.66670024394989e-01
 k = 1
 chain_num = 7
 genesis_crs = "In DEXON we trust."
+
+[validator.legacy]
+propose_interval_mean = 5e+02
+propose_interval_sigma = 5e+01
 
 [networking]
 type = "tcp"

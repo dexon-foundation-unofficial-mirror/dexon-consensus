@@ -70,8 +70,7 @@ type consensusReceiver struct {
 	restart   chan struct{}
 }
 
-func (recv *consensusReceiver) proposeVote(vote *types.Vote) {
-	// TODO(jimmy-dexon): move prepareVote() into agreement.
+func (recv *consensusReceiver) ProposeVote(vote *types.Vote) {
 	if err := recv.consensus.prepareVote(recv.chainID, vote); err != nil {
 		fmt.Println(err)
 		return
@@ -84,7 +83,8 @@ func (recv *consensusReceiver) proposeVote(vote *types.Vote) {
 		recv.consensus.network.BroadcastVote(vote)
 	}()
 }
-func (recv *consensusReceiver) proposeBlock(hash common.Hash) {
+
+func (recv *consensusReceiver) ProposeBlock(hash common.Hash) {
 	block, exist := recv.consensus.baModules[recv.chainID].findCandidateBlock(hash)
 	if !exist {
 		fmt.Println(ErrUnknownBlockProposed)
@@ -97,17 +97,18 @@ func (recv *consensusReceiver) proposeBlock(hash common.Hash) {
 	}
 	recv.consensus.network.BroadcastBlock(block)
 }
-func (recv *consensusReceiver) confirmBlock(hash common.Hash) {
+
+func (recv *consensusReceiver) ConfirmBlock(hash common.Hash) {
 	block, exist := recv.consensus.baModules[recv.chainID].findCandidateBlock(hash)
 	if !exist {
 		fmt.Println(ErrUnknownBlockConfirmed, hash)
 		return
 	}
-	recv.restart <- struct{}{}
 	if err := recv.consensus.ProcessBlock(block); err != nil {
 		fmt.Println(err)
 		return
 	}
+	recv.restart <- struct{}{}
 }
 
 // Consensus implements DEXON Consensus algorithm.

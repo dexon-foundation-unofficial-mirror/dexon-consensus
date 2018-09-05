@@ -49,8 +49,8 @@ func main() {
 		Mean:  cfg.Networking.Mean,
 	}
 	proposingLatency := &integration.NormalLatencyModel{
-		Sigma: cfg.Validator.ProposeIntervalSigma,
-		Mean:  cfg.Validator.ProposeIntervalMean,
+		Sigma: cfg.Validator.Legacy.ProposeIntervalSigma,
+		Mean:  cfg.Validator.Legacy.ProposeIntervalMean,
 	}
 	// Setup validators and other consensus related stuffs.
 	apps, dbs, validators, err := integration.PrepareValidators(
