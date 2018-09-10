@@ -44,11 +44,11 @@ func main() {
 		log.Fatal("unable to read config: ", err)
 	}
 	// Setup latencies, validators.
-	networkLatency := &integration.NormalLatencyModel{
+	networkLatency := &test.NormalLatencyModel{
 		Sigma: cfg.Networking.Sigma,
 		Mean:  cfg.Networking.Mean,
 	}
-	proposingLatency := &integration.NormalLatencyModel{
+	proposingLatency := &test.NormalLatencyModel{
 		Sigma: cfg.Validator.Legacy.ProposeIntervalSigma,
 		Mean:  cfg.Validator.Legacy.ProposeIntervalMean,
 	}

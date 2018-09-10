@@ -68,8 +68,8 @@ type Validator struct {
 	chainID          uint32
 	cons             *core.Consensus
 	gov              core.Governance
-	networkLatency   LatencyModel
-	proposingLatency LatencyModel
+	networkLatency   test.LatencyModel
+	proposingLatency test.LatencyModel
 }
 
 // NewValidator constructs an instance of Validator.
@@ -79,8 +79,8 @@ func NewValidator(
 	db blockdb.BlockDatabase,
 	privateKey crypto.PrivateKey,
 	vID types.ValidatorID,
-	networkLatency LatencyModel,
-	proposingLatency LatencyModel) *Validator {
+	networkLatency test.LatencyModel,
+	proposingLatency test.LatencyModel) *Validator {
 
 	hashes := make(common.Hashes, 0)
 	for vID := range gov.GetValidatorSet() {

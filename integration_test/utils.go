@@ -10,7 +10,7 @@ import (
 // PrepareValidators setups validators for testing.
 func PrepareValidators(
 	validatorCount int,
-	networkLatency, proposingLatency LatencyModel) (
+	networkLatency, proposingLatency test.LatencyModel) (
 	apps map[types.ValidatorID]*test.App,
 	dbs map[types.ValidatorID]blockdb.BlockDatabase,
 	validators map[types.ValidatorID]*Validator,

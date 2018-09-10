@@ -16,8 +16,8 @@ func (s *EventStatsTestSuite) TestCalculate() {
 	// Setup a test with fixed latency in proposing and network,
 	// and make sure the calculated statistics is expected.
 	var (
-		networkLatency   = &FixedLatencyModel{Latency: 100}
-		proposingLatency = &FixedLatencyModel{Latency: 300}
+		networkLatency   = &test.FixedLatencyModel{Latency: 100}
+		proposingLatency = &test.FixedLatencyModel{Latency: 300}
 		req              = s.Require()
 	)
 

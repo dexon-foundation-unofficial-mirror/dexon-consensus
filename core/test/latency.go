@@ -15,7 +15,7 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package integration
+package test
 
 import (
 	"math/rand"

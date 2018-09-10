@@ -33,11 +33,11 @@ type NonByzantineTestSuite struct {
 
 func (s *NonByzantineTestSuite) TestNonByzantine() {
 	var (
-		networkLatency = &NormalLatencyModel{
+		networkLatency = &test.NormalLatencyModel{
 			Sigma: 20,
 			Mean:  250,
 		}
-		proposingLatency = &NormalLatencyModel{
+		proposingLatency = &test.NormalLatencyModel{
 			Sigma: 30,
 			Mean:  500,
 		}
