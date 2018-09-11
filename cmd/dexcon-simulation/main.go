@@ -66,7 +66,11 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	simulation.Run(*configFile, *legacy)
+	cfg, err := config.Read(*configFile)
+	if err != nil {
+		panic(err)
+	}
+	simulation.Run(cfg, *legacy)
 
 	if *memprofile != "" {
 		f, err := os.Create(*memprofile)

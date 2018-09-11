@@ -99,7 +99,7 @@ func (totalOrder *TotalOrderResult) PushBlocks(blocks BlockList) (ready bool) {
 }
 
 // PushTimestamp log the information in the msg.
-func (totalOrder *TotalOrderResult) PushTimestamp(msg TimestampMessage) bool {
+func (totalOrder *TotalOrderResult) PushTimestamp(msg timestampMessage) bool {
 	pushLatency := func(latency *[]time.Duration, t1, t2 time.Time) {
 		*latency = append(*latency, t2.Sub(t1))
 	}

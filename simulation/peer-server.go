@@ -21,275 +21,163 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"net"
-	"net/http"
+	"reflect"
 	"sync"
-	"time"
 
+	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
 
-// PeerServer is the main object for maintaining peer list.
+// PeerServer is the main object to collect results and monitor simulation.
 type PeerServer struct {
-	peers            map[types.ValidatorID]string
-	peersMu          sync.Mutex
+	peers            map[types.ValidatorID]struct{}
+	msgChannel       chan *test.TransportEnvelope
+	trans            test.TransportServer
 	peerTotalOrder   PeerTotalOrder
 	peerTotalOrderMu sync.Mutex
 	verifiedLen      uint64
+	cfg              *config.Config
+	ctx              context.Context
+	ctxCancel        context.CancelFunc
 }
 
-// NewPeerServer returns a new peer server.
+// NewPeerServer returns a new PeerServer instance.
 func NewPeerServer() *PeerServer {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &PeerServer{
-		peers:          make(map[types.ValidatorID]string),
+		peers:          make(map[types.ValidatorID]struct{}),
 		peerTotalOrder: make(PeerTotalOrder),
+		ctx:            ctx,
+		ctxCancel:      cancel,
 	}
 }
 
 // isValidator checks if vID is in p.peers. If peer server restarts but
 // validators are not, it will cause panic if validators send message.
 func (p *PeerServer) isValidator(vID types.ValidatorID) bool {
-	p.peersMu.Lock()
-	defer p.peersMu.Unlock()
 	_, exist := p.peers[vID]
 	return exist
 }
 
-// Run starts the peer server.
-func (p *PeerServer) Run(configPath string) {
-	cfg, err := config.Read(configPath)
-	if err != nil {
-		panic(err)
+// handleBlockList is the handler for messages with BlockList as payload.
+func (p *PeerServer) handleBlockList(id types.ValidatorID, blocks *BlockList) {
+	p.peerTotalOrderMu.Lock()
+	defer p.peerTotalOrderMu.Unlock()
+
+	readyForVerify := p.peerTotalOrder[id].PushBlocks(*blocks)
+	if !readyForVerify {
+		return
 	}
-
-	resetHandler := func(w http.ResponseWriter, r *http.Request) {
-		p.peersMu.Lock()
-		defer p.peersMu.Unlock()
-
-		p.peers = make(map[types.ValidatorID]string)
-		log.Printf("Peer server has been reset.")
-	}
-
-	joinHandler := func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-
-		idString := r.Header.Get("ID")
-		portString := r.Header.Get("PORT")
-
-		id := types.ValidatorID{}
-		id.UnmarshalText([]byte(idString))
-
-		p.peersMu.Lock()
-		defer p.peersMu.Unlock()
-
-		host, _, _ := net.SplitHostPort(r.RemoteAddr)
-		p.peers[id] = net.JoinHostPort(host, portString)
-		p.peerTotalOrder[id] = NewTotalOrderResult(id)
-		log.Printf("Peer %s joined from %s", id, p.peers[id])
-
-		if len(p.peers) == cfg.Validator.Num {
-			log.Println("All peers connected.")
-		}
-		w.WriteHeader(http.StatusOK)
-	}
-
-	peersHandler := func(w http.ResponseWriter, r *http.Request) {
-		p.peersMu.Lock()
-		defer p.peersMu.Unlock()
-		defer r.Body.Close()
-
-		if len(p.peers) != cfg.Validator.Num {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		jsonText, err := json.Marshal(p.peers)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(jsonText)
-	}
-
-	infoHandler := func(w http.ResponseWriter, r *http.Request) {
-		p.peersMu.Lock()
-		defer p.peersMu.Unlock()
-		defer r.Body.Close()
-
-		msg := InfoMessage{
-			Status: statusNormal,
-			Peers:  p.peers,
-		}
-
-		if len(p.peers) < cfg.Validator.Num {
-			msg.Status = statusInit
-		}
-
-		// Determine msg.status.
-		if p.verifiedLen >= cfg.Validator.MaxBlock {
-			msg.Status = statusShutdown
-		}
-
-		jsonText, err := json.Marshal(msg)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(jsonText)
-	}
-
-	deliveryHandler := func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-
-		idString := r.Header.Get("ID")
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		m := BlockList{}
-		if err := json.Unmarshal(body, &m); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		id := types.ValidatorID{}
-		if err := id.UnmarshalText([]byte(idString)); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if !p.isValidator(id) {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-
+	// Verify the total order result.
+	go func(id types.ValidatorID) {
 		p.peerTotalOrderMu.Lock()
 		defer p.peerTotalOrderMu.Unlock()
 
-		readyForVerify := p.peerTotalOrder[id].PushBlocks(m)
-		if !readyForVerify {
-			return
+		var correct bool
+		var length int
+		p.peerTotalOrder, correct, length = VerifyTotalOrder(id, p.peerTotalOrder)
+		if !correct {
+			log.Printf("The result of Total Ordering Algorithm has error.\n")
 		}
-
-		// Verify the total order result.
-		go func(id types.ValidatorID) {
-			p.peerTotalOrderMu.Lock()
-			defer p.peerTotalOrderMu.Unlock()
-
-			var correct bool
-			var length int
-			p.peerTotalOrder, correct, length = VerifyTotalOrder(id, p.peerTotalOrder)
-			if !correct {
-				log.Printf("The result of Total Ordering Algorithm has error.\n")
+		p.verifiedLen += uint64(length)
+		if p.verifiedLen >= p.cfg.Validator.MaxBlock {
+			if err := p.trans.Broadcast(statusShutdown); err != nil {
+				panic(err)
 			}
-			p.verifiedLen += uint64(length)
-		}(id)
+		}
+	}(id)
+}
+
+// handleMessage is the handler for messages with Message as payload.
+func (p *PeerServer) handleMessage(id types.ValidatorID, m *message) {
+	switch m.Type {
+	case shutdownAck:
+		delete(p.peers, id)
+		log.Printf("%v shutdown, %d remains.\n", id, len(p.peers))
+		if len(p.peers) == 0 {
+			p.ctxCancel()
+		}
+	case blockTimestamp:
+		msgs := []timestampMessage{}
+		if err := json.Unmarshal(m.Payload, &msgs); err != nil {
+			panic(err)
+		}
+		for _, msg := range msgs {
+			if ok := p.peerTotalOrder[id].PushTimestamp(msg); !ok {
+				panic(fmt.Errorf("unable to push timestamp: %v", m))
+			}
+		}
+	default:
+		panic(fmt.Errorf("unknown simulation message type: %v", m))
 	}
+}
 
-	stopServer := make(chan struct{})
-
-	messageHandler := func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-
-		idString := r.Header.Get("ID")
-		id := types.ValidatorID{}
-		id.UnmarshalText([]byte(idString))
-
-		if !p.isValidator(id) {
-			w.WriteHeader(http.StatusForbidden)
+func (p *PeerServer) mainLoop() {
+	for {
+		select {
+		case <-p.ctx.Done():
 			return
-		}
-
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		m := Message{}
-		if err := json.Unmarshal(body, &m); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		switch m.Type {
-		case shutdownAck:
-			func() {
-				p.peersMu.Lock()
-				defer p.peersMu.Unlock()
-
-				delete(p.peers, id)
-				log.Printf("%v shutdown, %d remains.\n", id, len(p.peers))
-				if len(p.peers) == 0 {
-					stopServer <- struct{}{}
-				}
-			}()
-			break
-		case blockTimestamp:
-			msgs := []TimestampMessage{}
-			if err := json.Unmarshal(m.Payload, &msgs); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			for _, msg := range msgs {
-				if ok := p.peerTotalOrder[id].PushTimestamp(msg); !ok {
-					w.WriteHeader(http.StatusBadRequest)
-					return
-				}
-			}
-			break
 		default:
-			w.WriteHeader(http.StatusBadRequest)
+		}
+		select {
+		case <-p.ctx.Done():
 			return
+		case e := <-p.msgChannel:
+			if !p.isValidator(e.From) {
+				break
+			}
+			// Handle messages based on their type.
+			switch val := e.Msg.(type) {
+			case *BlockList:
+				p.handleBlockList(e.From, val)
+			case *message:
+				p.handleMessage(e.From, val)
+			default:
+				panic(fmt.Errorf("unknown message: %v", reflect.TypeOf(e.Msg)))
+			}
 		}
-		w.WriteHeader(http.StatusOK)
 	}
+}
 
-	http.HandleFunc("/reset", resetHandler)
-	http.HandleFunc("/join", joinHandler)
-	http.HandleFunc("/peers", peersHandler)
-	http.HandleFunc("/info", infoHandler)
-	http.HandleFunc("/delivery", deliveryHandler)
-	http.HandleFunc("/message", messageHandler)
-
-	addr := fmt.Sprintf("0.0.0.0:%d", peerPort)
-	log.Printf("Peer server started at %s", addr)
-
-	server := &http.Server{Addr: addr}
-
-	go func() {
-		<-stopServer
-
-		LogStatus(p.peerTotalOrder)
-
-		log.Printf("Shutting down peerServer.\n")
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := server.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down peerServer: %v\n", err)
-		}
-	}()
-
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Error starting server %v\n", err)
+// Setup prepares simualtion.
+func (p *PeerServer) Setup(
+	cfg *config.Config) (serverEndpoint interface{}, err error) {
+	// Setup transport layer.
+	switch cfg.Networking.Type {
+	case "tcp", "tcp-local":
+		p.trans = test.NewTCPTransportServer(&jsonMarshaller{}, peerPort)
+	case "fake":
+		p.trans = test.NewFakeTransportServer()
+	default:
+		panic(fmt.Errorf("unknown network type: %v", cfg.Networking.Type))
 	}
+	p.msgChannel, err = p.trans.Host()
+	if err != nil {
+		return
+	}
+	p.cfg = cfg
+	serverEndpoint = p.msgChannel
+	return
+}
 
-	// Do not exit when we are in TCP node, since k8s will restart the pod and
-	// cause confusions.
-	if cfg.Networking.Type == config.NetworkTypeTCP {
-		select {}
+// Run the simulation.
+func (p *PeerServer) Run() {
+	if err := p.trans.WaitForPeers(p.cfg.Validator.Num); err != nil {
+		panic(err)
+	}
+	// Cache peers' info.
+	p.peers = p.trans.Peers()
+	// Initialize total order result cache.
+	for id := range p.peers {
+		p.peerTotalOrder[id] = NewTotalOrderResult(id)
+	}
+	// Block to handle incoming messages.
+	p.mainLoop()
+	// The simulation is done, clean up.
+	LogStatus(p.peerTotalOrder)
+	if err := p.trans.Close(); err != nil {
+		log.Printf("Error shutting down peerServer: %v\n", err)
 	}
 }

@@ -18,7 +18,6 @@
 package simulation
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
@@ -26,63 +25,51 @@ import (
 )
 
 // Run starts the simulation.
-func Run(configPath string, legacy bool) {
-	cfg, err := config.Read(configPath)
-	if err != nil {
-		panic(err)
-	}
-
-	networkType := cfg.Networking.Type
-
+func Run(cfg *config.Config, legacy bool) {
 	var (
-		vs           []*Validator
-		networkModel = &NormalNetwork{
-			Sigma:         cfg.Networking.Sigma,
-			Mean:          cfg.Networking.Mean,
-			LossRateValue: cfg.Networking.LossRateValue,
-		}
+		networkType = cfg.Networking.Type
+		server      *PeerServer
+		wg          sync.WaitGroup
+		err         error
 	)
 
-	if networkType == config.NetworkTypeTCPLocal {
-		lock := sync.Mutex{}
-		wg := sync.WaitGroup{}
-		for i := 0; i < cfg.Validator.Num; i++ {
-			prv, err := eth.NewPrivateKey()
-			if err != nil {
-				panic(err)
-			}
-			wg.Add(1)
-			go func() {
-				network := NewTCPNetwork(true, cfg.Networking.PeerServer, networkModel)
-				network.Start()
-				lock.Lock()
-				defer lock.Unlock()
-				vs = append(vs, NewValidator(prv, eth.SigToPub, cfg.Validator, network))
-				wg.Done()
-			}()
-		}
-		wg.Wait()
-
-		for i := 0; i < cfg.Validator.Num; i++ {
-			fmt.Printf("Validator %d: %s\n", i, vs[i].ID)
-			go vs[i].Run(legacy)
-		}
-	} else if networkType == config.NetworkTypeTCP {
+	// init is a function to init a validator.
+	init := func(serverEndpoint interface{}) {
 		prv, err := eth.NewPrivateKey()
 		if err != nil {
 			panic(err)
 		}
-		network := NewTCPNetwork(false, cfg.Networking.PeerServer, networkModel)
-		network.Start()
-		v := NewValidator(prv, eth.SigToPub, cfg.Validator, network)
-		go v.Run(legacy)
-		vs = append(vs, v)
+		v := newValidator(prv, eth.SigToPub, *cfg)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			v.run(serverEndpoint, legacy)
+		}()
 	}
 
-	for _, v := range vs {
-		v.Wait()
-		fmt.Printf("Validator %s is shutdown\n", v.GetID())
+	switch networkType {
+	case config.NetworkTypeTCP:
+		// Intialized a simulation on multiple remotely peers.
+		// The peer-server would be initialized with another command.
+		init(nil)
+	case config.NetworkTypeTCPLocal, config.NetworkTypeFake:
+		// Initialize a local simulation with a peer server.
+		var serverEndpoint interface{}
+		server = NewPeerServer()
+		if serverEndpoint, err = server.Setup(cfg); err != nil {
+			panic(err)
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			server.Run()
+		}()
+		// Initialize all validators.
+		for i := 0; i < cfg.Validator.Num; i++ {
+			init(serverEndpoint)
+		}
 	}
+	wg.Wait()
 
 	// Do not exit when we are in TCP node, since k8s will restart the pod and
 	// cause confusions.

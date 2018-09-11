@@ -30,15 +30,14 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
 
-// Validator represents a validator in DexCon.
-type Validator struct {
-	network Network
-	app     *simApp
-	gov     *simGovernance
-	db      blockdb.BlockDatabase
+// validator represents a validator in DexCon.
+type validator struct {
+	app *simApp
+	gov *simGovernance
+	db  blockdb.BlockDatabase
 
 	config     config.Validator
-	msgChannel <-chan interface{}
+	netModule  *network
 	isFinished chan struct{}
 
 	ID              types.ValidatorID
@@ -49,46 +48,50 @@ type Validator struct {
 	compactionChain *core.BlockChain
 }
 
-// NewValidator returns a new empty validator.
-func NewValidator(
+// newValidator returns a new empty validator.
+func newValidator(
 	prvKey crypto.PrivateKey,
 	sigToPub core.SigToPubFn,
-	config config.Validator,
-	network Network) *Validator {
+	config config.Config) *validator {
 
 	id := types.NewValidatorID(prvKey.PublicKey())
-
+	netModule := newNetwork(id, config.Networking)
 	db, err := blockdb.NewMemBackedBlockDB(
 		id.String() + ".blockdb")
 	if err != nil {
 		panic(err)
 	}
-	gov := newSimGovernance(config.Num, config.Consensus)
-	return &Validator{
+	gov := newSimGovernance(config.Validator.Num, config.Validator.Consensus)
+	return &validator{
 		ID:         id,
 		prvKey:     prvKey,
 		sigToPub:   sigToPub,
-		config:     config,
-		network:    network,
-		app:        newSimApp(id, network),
+		config:     config.Validator,
+		app:        newSimApp(id, netModule),
 		gov:        gov,
 		db:         db,
+		netModule:  netModule,
 		isFinished: make(chan struct{}),
 	}
 }
 
 // GetID returns the ID of validator.
-func (v *Validator) GetID() types.ValidatorID {
+func (v *validator) GetID() types.ValidatorID {
 	return v.ID
 }
 
-// Run starts the validator.
-func (v *Validator) Run(legacy bool) {
-	v.network.Join(v)
-	v.msgChannel = v.network.ReceiveChan()
-
-	hashes := make(common.Hashes, 0, v.network.NumPeers())
-	for _, vID := range v.network.Endpoints() {
+// run starts the validator.
+func (v *validator) run(serverEndpoint interface{}, legacy bool) {
+	// Run network.
+	if err := v.netModule.setup(serverEndpoint); err != nil {
+		panic(err)
+	}
+	msgChannel := v.netModule.receiveChanForValidator()
+	peers := v.netModule.peers()
+	go v.netModule.run()
+	// Run consensus.
+	hashes := make(common.Hashes, 0, len(peers))
+	for vID := range peers {
 		v.gov.addValidator(vID)
 		hashes = append(hashes, vID.Hash)
 	}
@@ -101,15 +104,16 @@ func (v *Validator) Run(legacy bool) {
 	}
 	if legacy {
 		v.consensus = core.NewConsensus(
-			v.app, v.gov, v.db, v.network,
+			v.app, v.gov, v.db, v.netModule,
 			time.NewTicker(
-				time.Duration(v.config.Legacy.ProposeIntervalMean)*time.Millisecond),
+				time.Duration(
+					v.config.Legacy.ProposeIntervalMean)*time.Millisecond),
 			v.prvKey, v.sigToPub)
 
 		go v.consensus.RunLegacy()
 	} else {
 		v.consensus = core.NewConsensus(
-			v.app, v.gov, v.db, v.network,
+			v.app, v.gov, v.db, v.netModule,
 			time.NewTicker(
 				time.Duration(v.config.Lambda)*time.Millisecond),
 			v.prvKey, v.sigToPub)
@@ -117,36 +121,28 @@ func (v *Validator) Run(legacy bool) {
 		go v.consensus.Run()
 	}
 
-	isShutdown := make(chan struct{})
-
-	go v.CheckServerInfo(isShutdown)
-
 	// Blocks forever.
-	<-isShutdown
+MainLoop:
+	for {
+		msg := <-msgChannel
+		switch val := msg.(type) {
+		case infoStatus:
+			if val == statusShutdown {
+				break MainLoop
+			}
+		default:
+			panic(fmt.Errorf("unexpected message from server: %v", val))
+		}
+	}
+	// Cleanup.
 	v.consensus.Stop()
 	if err := v.db.Close(); err != nil {
 		fmt.Println(err)
 	}
-	v.network.NotifyServer(Message{
+	v.netModule.report(&message{
 		Type: shutdownAck,
 	})
-	v.isFinished <- struct{}{}
-}
-
-// Wait for the validator to stop (if peerServer told it to).
-func (v *Validator) Wait() {
-	<-v.isFinished
-}
-
-// CheckServerInfo will check the info from the peerServer and update
-// validator's status if needed.
-func (v *Validator) CheckServerInfo(isShutdown chan struct{}) {
-	for {
-		infoMsg := v.network.GetServerInfo()
-		if infoMsg.Status == statusShutdown {
-			isShutdown <- struct{}{}
-			break
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
+	// TODO(mission): once we have a way to know if consensus is stopped, stop
+	//                the network module.
+	return
 }

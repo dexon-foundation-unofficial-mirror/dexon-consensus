@@ -23,6 +23,7 @@ import (
 	"os"
 
 	"github.com/dexon-foundation/dexon-consensus-core/simulation"
+	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
 
 var configFile = flag.String("config", "", "path to simulation config file")
@@ -35,6 +36,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	cfg, err := config.Read(*configFile)
+	if err != nil {
+		panic(err)
+	}
 	server := simulation.NewPeerServer()
-	server.Run(*configFile)
+	if _, err := server.Setup(cfg); err != nil {
+		panic(err)
+	}
+	server.Run()
 }

@@ -31,6 +31,7 @@ type NetworkType string
 const (
 	NetworkTypeTCP      NetworkType = "tcp"
 	NetworkTypeTCPLocal NetworkType = "tcp-local"
+	NetworkTypeFake     NetworkType = "fake"
 )
 
 // Consensus settings.

@@ -32,7 +32,7 @@ type simApp struct {
 	ValidatorID types.ValidatorID
 	Outputs     []*types.Block
 	Early       bool
-	Network     PeerServerNetwork
+	netModule   *network
 	DeliverID   int
 	// blockSeen stores the time when block is delivered by Total Ordering.
 	blockSeen map[common.Hash]time.Time
@@ -43,10 +43,10 @@ type simApp struct {
 }
 
 // newSimApp returns point to a new instance of simApp.
-func newSimApp(id types.ValidatorID, Network PeerServerNetwork) *simApp {
+func newSimApp(id types.ValidatorID, netModule *network) *simApp {
 	return &simApp{
 		ValidatorID:       id,
-		Network:           Network,
+		netModule:         netModule,
 		DeliverID:         0,
 		blockSeen:         make(map[common.Hash]time.Time),
 		unconfirmedBlocks: make(map[types.ValidatorID]common.Hashes),
@@ -120,7 +120,7 @@ func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 
 	confirmLatency := []time.Duration{}
 
-	payload := []TimestampMessage{}
+	payload := []timestampMessage{}
 	for _, block := range blocks {
 		if block.ProposerID == a.ValidatorID {
 			confirmLatency = append(confirmLatency,
@@ -128,7 +128,7 @@ func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 		}
 		for hash := range block.Acks {
 			for _, blockHash := range a.getAckedBlocks(hash) {
-				payload = append(payload, TimestampMessage{
+				payload = append(payload, timestampMessage{
 					BlockHash: blockHash,
 					Event:     timestampAck,
 					Timestamp: now,
@@ -142,20 +142,20 @@ func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 		if err != nil {
 			fmt.Println(err)
 		} else {
-			msg := Message{
+			msg := &message{
 				Type:    blockTimestamp,
 				Payload: jsonPayload,
 			}
-			a.Network.NotifyServer(msg)
+			a.netModule.report(msg)
 		}
 	}
 
-	blockList := BlockList{
+	blockList := &BlockList{
 		ID:             a.DeliverID,
 		BlockHash:      blockHashes,
 		ConfirmLatency: confirmLatency,
 	}
-	a.Network.DeliverBlocks(blockList)
+	a.netModule.report(blockList)
 	a.DeliverID++
 	for _, block := range blocks {
 		a.blockSeen[block.Hash] = now
@@ -171,7 +171,7 @@ func (a *simApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 		return
 	}
 	now := time.Now()
-	payload := []TimestampMessage{
+	payload := []timestampMessage{
 		{
 			BlockHash: blockHash,
 			Event:     blockSeen,
@@ -188,11 +188,11 @@ func (a *simApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 		fmt.Println(err)
 		return
 	}
-	msg := Message{
+	msg := &message{
 		Type:    blockTimestamp,
 		Payload: jsonPayload,
 	}
-	a.Network.NotifyServer(msg)
+	a.netModule.report(msg)
 }
 
 // NotaryAckDeliver is called when a notary ack is created.

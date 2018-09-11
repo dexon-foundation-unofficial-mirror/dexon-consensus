@@ -346,7 +346,6 @@ func (con *Consensus) processMsg(
 			if err := blockProcesser(val); err != nil {
 				fmt.Println(err)
 			}
-			//types.RecycleBlock(val)
 		case *types.NotaryAck:
 			if err := con.ProcessNotaryAck(val); err != nil {
 				fmt.Println(err)

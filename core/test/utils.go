@@ -18,7 +18,9 @@
 package test
 
 import (
+	"fmt"
 	"math"
+	"net"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
@@ -61,5 +63,28 @@ func CalcLatencyStatistics(latencies []time.Duration) (avg, dev time.Duration) {
 		sumOfSquareDiff += diff * diff
 	}
 	dev = time.Duration(math.Sqrt(sumOfSquareDiff / float64(len(latencies)-1)))
+	return
+}
+
+// FindMyIP returns local IP address.
+func FindMyIP() (ip string, err error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return
+	}
+	for _, a := range addrs {
+		ipnet, ok := a.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		if ipnet.IP.IsLoopback() {
+			continue
+		}
+		if ipnet.IP.To4() != nil {
+			ip = ipnet.IP.String()
+			return
+		}
+	}
+	err = fmt.Errorf("unable to find IP")
 	return
 }
