@@ -290,7 +290,12 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		// Check timestamps, there is no direct way to know which block is
 		// selected as main chain, we can only detect it by making sure
 		// its ConsensusTimestamp is not interpolated.
-		t, err := getMedianTime(b11)
+		timestamps := make([]time.Time, 4)
+		timestamps[0] = b00.Timestamp
+		timestamps[1] = b10.Timestamp
+		timestamps[2] = b20.Timestamp
+		timestamps[3] = b30.Timestamp
+		t, err := getMedianTime(timestamps)
 		req.Nil(err)
 		req.Equal(t, app.Delivered[b11.Hash].ConsensusTime)
 	}
@@ -355,8 +360,8 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 	// Make sure we would assign 'now' to the timestamp belongs to
 	// the proposer.
 	req.True(
-		b11.Timestamps[validators[1]].Sub(
-			b10.Timestamps[validators[1]]) > 100*time.Millisecond)
+		b11.Timestamp.Sub(
+			b10.Timestamp) > 100*time.Millisecond)
 	for _, obj := range objs {
 		con := obj.con
 		req.Nil(con.ProcessBlock(b11))

@@ -467,8 +467,7 @@ func (con *Consensus) ProcessBlock(block *types.Block) (err error) {
 		}
 		con.app.TotalOrderingDeliver(hashes, earlyDelivered)
 		// Perform timestamp generation.
-		deliveredBlocks, _, err = con.ctModule.processBlocks(
-			deliveredBlocks)
+		err = con.ctModule.processBlocks(deliveredBlocks)
 		if err != nil {
 			return
 		}
@@ -518,7 +517,7 @@ func (con *Consensus) PrepareBlock(b *types.Block,
 	defer con.lock.RUnlock()
 
 	con.rbModule.prepareBlock(b)
-	b.Timestamps[b.ProposerID] = proposeTime
+	b.Timestamp = proposeTime
 	b.Payloads = con.app.PreparePayloads(b.Position)
 	b.Hash, err = hashBlock(b)
 	if err != nil {
@@ -544,11 +543,7 @@ func (con *Consensus) PrepareGenesisBlock(b *types.Block,
 	b.Position.Height = 0
 	b.ParentHash = common.Hash{}
 	b.Acks = make(map[common.Hash]struct{})
-	b.Timestamps = make(map[types.ValidatorID]time.Time)
-	for vID := range con.gov.GetValidatorSet() {
-		b.Timestamps[vID] = time.Time{}
-	}
-	b.Timestamps[b.ProposerID] = proposeTime
+	b.Timestamp = proposeTime
 	b.Hash, err = hashBlock(b)
 	if err != nil {
 		return

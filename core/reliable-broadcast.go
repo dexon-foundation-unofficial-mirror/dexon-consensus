@@ -140,22 +140,11 @@ func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 		}
 	}
 
-	// TODO(jimmy-dexon): verify the timestamps.
-	/*
-		// Check if its timestamp is valid.
-		for h := range rb.lattice {
-			if _, exist := b.Timestamps[h]; !exist {
-				return ErrInvalidTimestamp
-			}
-		}
-	*/
-
+	// Check if its timestamp is valid.
 	if bParent, exist :=
 		rb.lattice[b.Position.ChainID].blocks[b.Position.Height-1]; exist {
-		for hash := range b.Timestamps {
-			if b.Timestamps[hash].Before(bParent.Timestamps[hash]) {
-				return ErrInvalidTimestamp
-			}
+		if !b.Timestamp.After(bParent.Timestamp) {
+			return ErrInvalidTimestamp
 		}
 	}
 
@@ -370,36 +359,6 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 	// Reset fields to make sure we got these information from parent block.
 	block.Position.Height = 0
 	block.ParentHash = common.Hash{}
-	// The helper function to accumulate timestamps.
-	accumulateTimestamps := func(
-		times map[types.ValidatorID]time.Time, b *types.Block) {
-
-		// Update timestamps with the block's proposer time.
-		// TODO (mission): make epslon configurable.
-		times[b.ProposerID] = b.Timestamps[b.ProposerID].Add(
-			1 * time.Millisecond)
-
-		// Update timestamps from the block if it's later than
-		// current cached ones.
-		for vID, t := range b.Timestamps {
-			cachedTime, exists := times[vID]
-			if !exists {
-				// This means the block contains timestamps from
-				// removed validators.
-				continue
-			}
-			if cachedTime.After(t) {
-				continue
-			}
-			times[vID] = t
-		}
-		return
-	}
-	// Initial timestamps with current validator set.
-	times := make(map[types.ValidatorID]time.Time)
-	for vID := range rb.validators {
-		times[vID] = time.Time{}
-	}
 	acks := make(map[common.Hash]struct{})
 	for chainID := range rb.lattice {
 		// find height of the latest block for that validator.
@@ -420,15 +379,17 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 			continue
 		}
 		acks[curBlock.Hash] = struct{}{}
-		accumulateTimestamps(times, curBlock)
 		if uint32(chainID) == block.Position.ChainID {
 			block.ParentHash = curBlock.Hash
+			if block.Timestamp.Before(curBlock.Timestamp) {
+				// TODO (mission): make epslon configurable.
+				block.Timestamp = curBlock.Timestamp.Add(1 * time.Millisecond)
+			}
 			if block.Position.Height == 0 {
 				block.Position.Height = curBlock.Position.Height + 1
 			}
 		}
 	}
-	block.Timestamps = times
 	block.Acks = acks
 	return
 }

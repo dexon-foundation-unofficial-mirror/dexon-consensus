@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
 var (
@@ -72,25 +71,25 @@ func interpoTime(t1 time.Time, t2 time.Time, sep int) []time.Time {
 	}
 	return timestamps
 }
-func getMedianTime(block *types.Block) (t time.Time, err error) {
-	timestamps := []time.Time{}
-	for _, timestamp := range block.Timestamps {
-		timestamps = append(timestamps, timestamp)
-	}
+
+func getMedianTime(timestamps []time.Time) (t time.Time, err error) {
 	if len(timestamps) == 0 {
 		err = ErrEmptyTimestamps
 		return
 	}
-	sort.Sort(common.ByTime(timestamps))
-	if len(timestamps)%2 == 0 {
-		t1 := timestamps[len(timestamps)/2-1]
-		t2 := timestamps[len(timestamps)/2]
+	tscopy := make([]time.Time, 0, len(timestamps))
+	for _, ts := range timestamps {
+		tscopy = append(tscopy, ts)
+	}
+	sort.Sort(common.ByTime(tscopy))
+	if len(tscopy)%2 == 0 {
+		t1 := tscopy[len(tscopy)/2-1]
+		t2 := tscopy[len(tscopy)/2]
 		t = interpoTime(t1, t2, 1)[0]
 	} else {
-		t = timestamps[len(timestamps)/2]
+		t = tscopy[len(tscopy)/2]
 	}
 	return
-
 }
 
 func removeFromSortedIntSlice(xs []int, x int) []int {

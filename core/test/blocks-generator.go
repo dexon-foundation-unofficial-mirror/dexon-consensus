@@ -70,25 +70,33 @@ func (vs *validatorStatus) getAckedBlockHash(
 // validatorSetStatus is a state holder for all validators
 // during generating blocks.
 type validatorSetStatus struct {
-	status       map[types.ValidatorID]*validatorStatus
-	validatorIDs []types.ValidatorID
-	randGen      *rand.Rand
-	hashBlock    hashBlockFn
+	status        map[types.ValidatorID]*validatorStatus
+	proposerChain map[types.ValidatorID]uint32
+	timestamps    []time.Time
+	validatorIDs  []types.ValidatorID
+	randGen       *rand.Rand
+	hashBlock     hashBlockFn
 }
 
 func newValidatorSetStatus(vIDs []types.ValidatorID, hashBlock hashBlockFn) *validatorSetStatus {
 	status := make(map[types.ValidatorID]*validatorStatus)
-	for _, vID := range vIDs {
+	timestamps := make([]time.Time, 0, len(vIDs))
+	proposerChain := make(map[types.ValidatorID]uint32)
+	for i, vID := range vIDs {
 		status[vID] = &validatorStatus{
 			blocks:           []*types.Block{},
 			lastAckingHeight: make(map[types.ValidatorID]uint64),
 		}
+		timestamps = append(timestamps, time.Now().UTC())
+		proposerChain[vID] = uint32(i)
 	}
 	return &validatorSetStatus{
-		status:       status,
-		validatorIDs: vIDs,
-		randGen:      rand.New(rand.NewSource(time.Now().UnixNano())),
-		hashBlock:    hashBlock,
+		status:        status,
+		proposerChain: proposerChain,
+		timestamps:    timestamps,
+		validatorIDs:  vIDs,
+		randGen:       rand.New(rand.NewSource(time.Now().UnixNano())),
+		hashBlock:     hashBlock,
 	}
 }
 
@@ -150,20 +158,18 @@ func (vs *validatorSetStatus) proposeBlock(
 	if len(status.blocks) > 0 {
 		parentHash = status.blocks[len(status.blocks)-1].Hash
 	}
+	chainID := vs.proposerChain[proposerID]
+	vs.timestamps[chainID] = vs.timestamps[chainID].Add(time.Second)
 
-	ts := map[types.ValidatorID]time.Time{}
-	for vid := range vs.status {
-		ts[vid] = time.Time{}
-	}
 	newBlock := &types.Block{
 		ProposerID: proposerID,
 		ParentHash: parentHash,
 		Position: types.Position{
-			Height: uint64(len(status.blocks)),
+			Height:  uint64(len(status.blocks)),
+			ChainID: chainID,
 		},
-		Acks:       acks,
-		Timestamps: ts,
-		// TODO(mission.liao): Generate timestamp.
+		Acks:      acks,
+		Timestamp: vs.timestamps[chainID],
 	}
 	for i, vID := range vs.validatorIDs {
 		if vID == proposerID {

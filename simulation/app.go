@@ -124,7 +124,7 @@ func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 	for _, block := range blocks {
 		if block.ProposerID == a.ValidatorID {
 			confirmLatency = append(confirmLatency,
-				now.Sub(block.Timestamps[a.ValidatorID]))
+				now.Sub(block.Timestamp))
 		}
 		for hash := range block.Acks {
 			for _, blockHash := range a.getAckedBlocks(hash) {

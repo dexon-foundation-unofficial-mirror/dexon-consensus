@@ -73,9 +73,7 @@ func (s *LevelDBTestSuite) TestBasicUsage() {
 
 	// Test Update.
 	now := time.Now().UTC()
-	queried.Timestamps = map[types.ValidatorID]time.Time{
-		queried.ProposerID: now,
-	}
+	queried.Timestamp = now
 
 	err = db.Update(queried)
 	s.Nil(err)
@@ -84,7 +82,7 @@ func (s *LevelDBTestSuite) TestBasicUsage() {
 	queried, err = db.Get(block1.Hash)
 
 	s.Nil(err)
-	s.Equal(now, queried.Timestamps[queried.ProposerID])
+	s.Equal(now, queried.Timestamp)
 }
 
 func (s *LevelDBTestSuite) TestSyncIndex() {

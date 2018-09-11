@@ -55,8 +55,8 @@ func (s *ReliableBroadcastTest) prepareGenesisBlock(
 		Position: types.Position{
 			Height: 0,
 		},
-		Acks:       make(map[common.Hash]struct{}),
-		Timestamps: genTimestamps(validatorIDs),
+		Acks:      make(map[common.Hash]struct{}),
+		Timestamp: time.Now().UTC(),
 	}
 	for i, vID := range validatorIDs {
 		if proposerID == vID {
@@ -64,22 +64,11 @@ func (s *ReliableBroadcastTest) prepareGenesisBlock(
 			break
 		}
 	}
-	for _, vID := range validatorIDs {
-		b.Timestamps[vID] = time.Time{}
-	}
-	b.Timestamps[proposerID] = time.Now().UTC()
+	b.Timestamp = time.Now().UTC()
 	var err error
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
 	return
-}
-
-func genTimestamps(vids []types.ValidatorID) map[types.ValidatorID]time.Time {
-	ts := make(map[types.ValidatorID]time.Time)
-	for _, vid := range vids {
-		ts[vid] = time.Now().UTC()
-	}
-	return ts
 }
 
 // genTestCase1 generates test case 1,
@@ -115,7 +104,7 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 		ProposerID: vids[0],
 		ParentHash: h,
 		Hash:       common.NewRandomHash(),
-		Timestamps: genTimestamps(vids),
+		Timestamp:  time.Now().UTC(),
 		Position: types.Position{
 			ChainID: 0,
 			Height:  1,
@@ -139,7 +128,7 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 			ChainID: 0,
 			Height:  2,
 		},
-		Timestamps: genTimestamps(vids),
+		Timestamp: time.Now().UTC(),
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 			rb.lattice[1].blocks[0].Hash: struct{}{},
@@ -156,7 +145,7 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 		ProposerID: vids[0],
 		ParentHash: h,
 		Hash:       common.NewRandomHash(),
-		Timestamps: genTimestamps(vids),
+		Timestamp:  time.Now().UTC(),
 		Position: types.Position{
 			ChainID: 0,
 			Height:  3,
@@ -176,7 +165,7 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 		ProposerID: vids[3],
 		ParentHash: h,
 		Hash:       common.NewRandomHash(),
-		Timestamps: genTimestamps(vids),
+		Timestamp:  time.Now().UTC(),
 		Position: types.Position{
 			ChainID: 3,
 			Height:  1,
@@ -313,9 +302,7 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 		Acks: map[common.Hash]struct{}{
 			h: struct{}{},
 		},
-		Timestamps: map[types.ValidatorID]time.Time{
-			vids[0]: time.Now().UTC(),
-		},
+		Timestamp: time.Now().UTC(),
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
@@ -356,7 +343,7 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 			h: struct{}{},
 			common.NewRandomHash(): struct{}{},
 		},
-		Timestamps: genTimestamps(vids),
+		Timestamp: time.Now().UTC(),
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
@@ -415,7 +402,7 @@ func (s *ReliableBroadcastTest) TestStrongAck() {
 			ChainID: 1,
 			Height:  1,
 		},
-		Timestamps: genTimestamps(vids),
+		Timestamp: time.Now().UTC(),
 		Acks: map[common.Hash]struct{}{
 			rb.lattice[0].blocks[2].Hash: struct{}{},
 			rb.lattice[1].blocks[0].Hash: struct{}{},
@@ -441,7 +428,7 @@ func (s *ReliableBroadcastTest) TestStrongAck() {
 			ChainID: 2,
 			Height:  1,
 		},
-		Timestamps: genTimestamps(vids),
+		Timestamp: time.Now().UTC(),
 		Acks: map[common.Hash]struct{}{
 			rb.lattice[0].blocks[2].Hash: struct{}{},
 			rb.lattice[2].blocks[0].Hash: struct{}{},
@@ -471,7 +458,7 @@ func (s *ReliableBroadcastTest) TestExtractBlocks() {
 			ChainID: 1,
 			Height:  1,
 		},
-		Timestamps: genTimestamps(vids),
+		Timestamp: time.Now().UTC(),
 		Acks: map[common.Hash]struct{}{
 			rb.lattice[0].blocks[2].Hash: struct{}{},
 			rb.lattice[1].blocks[0].Hash: struct{}{},
@@ -492,7 +479,7 @@ func (s *ReliableBroadcastTest) TestExtractBlocks() {
 			ChainID: 2,
 			Height:  1,
 		},
-		Timestamps: genTimestamps(vids),
+		Timestamp: time.Now().UTC(),
 		Acks: map[common.Hash]struct{}{
 			rb.lattice[0].blocks[2].Hash: struct{}{},
 			rb.lattice[2].blocks[0].Hash: struct{}{},
@@ -556,8 +543,8 @@ func (s *ReliableBroadcastTest) TestRandomIntensiveAcking() {
 				ChainID: uint32(id),
 				Height:  height,
 			},
-			Timestamps: genTimestamps(vids),
-			Acks:       acks,
+			Timestamp: time.Now().UTC(),
+			Acks:      acks,
 		}
 		var err error
 		b.Hash, err = hashBlock(b)
@@ -687,14 +674,8 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 	req.Contains(b11.Acks, b10.Hash)
 	req.Contains(b11.Acks, b20.Hash)
 	req.Contains(b11.Acks, b30.Hash)
-	req.Equal(b11.Timestamps[validators[0]],
-		b00.Timestamps[b00.ProposerID].Add(time.Millisecond))
-	req.Equal(b11.Timestamps[validators[1]],
-		b10.Timestamps[b10.ProposerID].Add(time.Millisecond))
-	req.Equal(b11.Timestamps[validators[2]],
-		b20.Timestamps[b20.ProposerID].Add(time.Millisecond))
-	req.Equal(b11.Timestamps[validators[3]],
-		b30.Timestamps[b30.ProposerID].Add(time.Millisecond))
+	req.Equal(b11.Timestamp,
+		b10.Timestamp.Add(time.Millisecond))
 	req.Equal(b11.ParentHash, b10.Hash)
 	req.Equal(b11.Position.Height, uint64(1))
 	s.Require().Nil(rb.processBlock(b11))

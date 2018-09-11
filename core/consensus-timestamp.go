@@ -19,20 +19,20 @@ package core
 
 import (
 	"errors"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
 // consensusTimestamp is for Concensus Timestamp Algorithm.
 type consensusTimestamp struct {
-	lastMainChainBlock   *types.Block
-	blocksNotInMainChain []*types.Block
+	chainTimestamps []time.Time
 }
 
 var (
-	// ErrInvalidMainChain would be reported if the invalid result from
-	// main chain selection algorithm is detected.
-	ErrInvalidMainChain = errors.New("invalid main chain")
+	// ErrTimestampNotIncrease would be reported if the timestamp is not strickly
+	// increasing on the same chain.
+	ErrTimestampNotIncrease = errors.New("timestamp is not increasing")
 )
 
 // newConsensusTimestamp create timestamper object.
@@ -41,68 +41,24 @@ func newConsensusTimestamp() *consensusTimestamp {
 }
 
 // ProcessBlocks is the entry function.
-func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (
-	blocksWithTimestamp []*types.Block, mainChain []*types.Block, err error) {
-	if len(blocks) == 0 {
-		// TODO (jimmy-dexon): Remove this panic before release.
-		panic("Unexpected empty block list.")
-	}
-	outputFirstBlock := true
-	blocks = append(ct.blocksNotInMainChain, blocks...)
-	if ct.lastMainChainBlock != nil {
-		// TODO (jimmy-dexon): The performance here can be optimized.
-		blocks = append([]*types.Block{ct.lastMainChainBlock}, blocks...)
-		outputFirstBlock = false
-	}
-	mainChain, nonMainChain := ct.selectMainChain(blocks)
-	ct.blocksNotInMainChain = nonMainChain
-	ct.lastMainChainBlock = mainChain[len(mainChain)-1]
-	blocksWithTimestamp = blocks[:len(blocks)-len(nonMainChain)]
-	leftMainChainIdx := 0
-	rightMainChainIdx := 0
-	idxMainChain := 0
-	for idx, block := range blocksWithTimestamp {
-		if idxMainChain >= len(mainChain) {
-			err = ErrInvalidMainChain
-			return
-		} else if block.Hash == mainChain[idxMainChain].Hash {
-			rightMainChainIdx = idx
-			blocksWithTimestamp[idx].Notary.Timestamp, err =
-				getMedianTime(block)
+func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (err error) {
+	for _, block := range blocks {
+		if !block.IsGenesis() {
+			block.Notary.Timestamp, err = getMedianTime(ct.chainTimestamps)
 			if err != nil {
 				return
 			}
-			// Process Non-MainChain blocks.
-			if rightMainChainIdx > leftMainChainIdx {
-				for idx, timestamp := range interpoTime(
-					blocksWithTimestamp[leftMainChainIdx].Notary.Timestamp,
-					blocksWithTimestamp[rightMainChainIdx].Notary.Timestamp,
-					rightMainChainIdx-leftMainChainIdx-1) {
-					blocksWithTimestamp[leftMainChainIdx+idx+1].Notary.Timestamp =
-						timestamp
-				}
-			}
-			leftMainChainIdx = idx
-			idxMainChain++
 		}
-	}
-	if !outputFirstBlock {
-		blocksWithTimestamp = blocksWithTimestamp[1:]
-	}
-	return
-}
 
-func (ct *consensusTimestamp) selectMainChain(blocks []*types.Block) (
-	mainChain []*types.Block, nonMainChain []*types.Block) {
-	for _, block := range blocks {
-		if len(mainChain) != 0 {
-			if _, exists := block.Acks[mainChain[len(mainChain)-1].Hash]; !exists {
-				nonMainChain = append(nonMainChain, block)
-				continue
-			}
+		for uint32(len(ct.chainTimestamps)) <= block.Position.ChainID {
+			ct.chainTimestamps = append(ct.chainTimestamps, time.Time{})
 		}
-		nonMainChain = []*types.Block{}
-		mainChain = append(mainChain, block)
+
+		if !block.Timestamp.After(ct.chainTimestamps[block.Position.ChainID]) {
+			return ErrTimestampNotIncrease
+		}
+
+		ct.chainTimestamps[block.Position.ChainID] = block.Timestamp
 	}
 	return
 }

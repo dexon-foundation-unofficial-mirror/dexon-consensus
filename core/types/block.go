@@ -52,24 +52,19 @@ func NewBlock() (b *Block) {
 			delete(b.Acks, k)
 		}
 	}
-	if b.Timestamps != nil {
-		for k := range b.Timestamps {
-			delete(b.Timestamps, k)
-		}
-	}
 	return
 }
 
 // Block represents a single event broadcasted on the network.
 type Block struct {
-	ProposerID ValidatorID               `json:"proposer_id"`
-	ParentHash common.Hash               `json:"parent_hash"`
-	Hash       common.Hash               `json:"hash"`
-	Position   Position                  `json:"position"`
-	Timestamps map[ValidatorID]time.Time `json:"timestamps"`
-	Acks       map[common.Hash]struct{}  `json:"acks"`
-	Payloads   [][]byte                  `json:"payloads"`
-	Signature  crypto.Signature          `json:"signature"`
+	ProposerID ValidatorID              `json:"proposer_id"`
+	ParentHash common.Hash              `json:"parent_hash"`
+	Hash       common.Hash              `json:"hash"`
+	Position   Position                 `json:"position"`
+	Timestamp  time.Time                `json:"timestamps"`
+	Acks       map[common.Hash]struct{} `json:"acks"`
+	Payloads   [][]byte                 `json:"payloads"`
+	Signature  crypto.Signature         `json:"signature"`
 
 	CRSSignature crypto.Signature `json:"crs_signature"`
 
@@ -94,13 +89,7 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.CRSSignature = b.CRSSignature.Clone()
 	bcopy.Notary.Timestamp = b.Notary.Timestamp
 	bcopy.Notary.Height = b.Notary.Height
-	if bcopy.Timestamps == nil {
-		bcopy.Timestamps = make(
-			map[ValidatorID]time.Time, len(b.Timestamps))
-	}
-	for k, v := range b.Timestamps {
-		bcopy.Timestamps[k] = v
-	}
+	bcopy.Timestamp = b.Timestamp
 	if bcopy.Acks == nil {
 		bcopy.Acks = make(map[common.Hash]struct{}, len(b.Acks))
 	}

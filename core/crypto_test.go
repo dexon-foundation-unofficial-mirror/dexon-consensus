@@ -36,12 +36,11 @@ var myVID = types.ValidatorID{Hash: common.NewRandomHash()}
 
 func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 	acks := make(map[common.Hash]struct{})
-	timestamps := make(map[types.ValidatorID]time.Time)
-	timestamps[myVID] = time.Now().UTC()
+	now := time.Now().UTC()
 	if prevBlock == nil {
 		return &types.Block{
-			Acks:       acks,
-			Timestamps: timestamps,
+			Acks:      acks,
+			Timestamp: now,
 			Notary: types.Notary{
 				Timestamp: time.Now(),
 				Height:    0,
@@ -55,7 +54,7 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 	return &types.Block{
 		ParentHash: prevBlock.Hash,
 		Acks:       acks,
-		Timestamps: timestamps,
+		Timestamp:  now,
 		Position: types.Position{
 			Height: prevBlock.Position.Height + 1,
 		},

@@ -62,22 +62,10 @@ func hashBlock(block *types.Block) (common.Hash, error) {
 		binaryAcks[idx] = acks[idx][:]
 	}
 	hashAcks := crypto.Keccak256Hash(binaryAcks...)
-	// Handle Block.Timestamps.
-	// TODO(jimmy-dexon): Store and get the sorted validatorIDs.
-	validators := make(types.ValidatorIDs, 0, len(block.Timestamps))
-	for vID := range block.Timestamps {
-		validators = append(validators, vID)
+	binaryTimestamp, err := block.Timestamp.MarshalBinary()
+	if err != nil {
+		return common.Hash{}, err
 	}
-	sort.Sort(validators)
-	binaryTimestamps := make([][]byte, len(block.Timestamps))
-	for idx, vID := range validators {
-		var err error
-		binaryTimestamps[idx], err = block.Timestamps[vID].MarshalBinary()
-		if err != nil {
-			return common.Hash{}, err
-		}
-	}
-	hashTimestamps := crypto.Keccak256Hash(binaryTimestamps...)
 	payloadHash := crypto.Keccak256Hash(block.Payloads...)
 
 	hash := crypto.Keccak256Hash(
@@ -85,7 +73,7 @@ func hashBlock(block *types.Block) (common.Hash, error) {
 		block.ParentHash[:],
 		hashPosition[:],
 		hashAcks[:],
-		hashTimestamps[:],
+		binaryTimestamp[:],
 		payloadHash[:])
 	return hash, nil
 }
