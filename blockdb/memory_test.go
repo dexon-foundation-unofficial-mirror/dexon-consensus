@@ -44,7 +44,7 @@ func (s *MemBackedBlockDBTestSuite) SetupSuite() {
 		Position: types.Position{
 			Height: 0,
 		},
-		Acks: make(map[common.Hash]struct{}),
+		Acks: common.NewSortedHashes(common.Hashes{}),
 	}
 	s.b01 = &types.Block{
 		ProposerID: s.v0,
@@ -53,9 +53,7 @@ func (s *MemBackedBlockDBTestSuite) SetupSuite() {
 		Position: types.Position{
 			Height: 1,
 		},
-		Acks: map[common.Hash]struct{}{
-			s.b00.Hash: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{s.b00.Hash}),
 	}
 	s.b02 = &types.Block{
 		ProposerID: s.v0,
@@ -64,9 +62,7 @@ func (s *MemBackedBlockDBTestSuite) SetupSuite() {
 		Position: types.Position{
 			Height: 2,
 		},
-		Acks: map[common.Hash]struct{}{
-			s.b01.Hash: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{s.b01.Hash}),
 	}
 }
 
@@ -118,14 +114,14 @@ func (s *MemBackedBlockDBTestSuite) TestIteration() {
 	// Check if we can iterate all 3 blocks.
 	iter, err := db.GetAll()
 	s.Require().Nil(err)
-	touched := map[common.Hash]struct{}{}
+	touched := common.Hashes{}
 	for {
 		b, err := iter.Next()
 		if err == ErrIterationFinished {
 			break
 		}
 		s.Require().Nil(err)
-		touched[b.Hash] = struct{}{}
+		touched = append(touched, b.Hash)
 	}
 	s.Len(touched, 3)
 	s.Contains(touched, s.b00.Hash)

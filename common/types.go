@@ -20,6 +20,7 @@ package common
 import (
 	"bytes"
 	"encoding/hex"
+	"sort"
 	"time"
 )
 
@@ -59,6 +60,17 @@ type Hashes []Hash
 func (hs Hashes) Len() int           { return len(hs) }
 func (hs Hashes) Less(i, j int) bool { return bytes.Compare(hs[i][:], hs[j][:]) < 0 }
 func (hs Hashes) Swap(i, j int)      { hs[i], hs[j] = hs[j], hs[i] }
+
+// SortedHashes is a slice of hashes sorted in ascending order.
+type SortedHashes Hashes
+
+// NewSortedHashes converts a slice of hashes to a sorted one. It's a
+// firewall to prevent us from assigning unsorted hashes to a variable
+// declared as SortedHashes directly.
+func NewSortedHashes(hs Hashes) SortedHashes {
+	sort.Sort(hs)
+	return SortedHashes(hs)
+}
 
 // ByTime implements sort.Interface for time.Time.
 type ByTime []time.Time

@@ -19,7 +19,6 @@ package core
 
 import (
 	"encoding/binary"
-	"sort"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -52,14 +51,9 @@ func verifyNotarySignature(pubkey crypto.PublicKey,
 func hashBlock(block *types.Block) (common.Hash, error) {
 	hashPosition := hashPosition(block.Position)
 	// Handling Block.Acks.
-	acks := make(common.Hashes, 0, len(block.Acks))
-	for ack := range block.Acks {
-		acks = append(acks, ack)
-	}
-	sort.Sort(acks)
 	binaryAcks := make([][]byte, len(block.Acks))
-	for idx := range acks {
-		binaryAcks[idx] = acks[idx][:]
+	for idx, ack := range block.Acks {
+		binaryAcks[idx] = ack[:]
 	}
 	hashAcks := crypto.Keccak256Hash(binaryAcks...)
 	binaryTimestamp, err := block.Timestamp.MarshalBinary()

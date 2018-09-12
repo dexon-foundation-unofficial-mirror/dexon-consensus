@@ -613,7 +613,7 @@ func (to *totalOrdering) buildBlockRelation(b *types.Block) {
 			break
 		}
 		curBlock, toCheck = toCheck[len(toCheck)-1], toCheck[:len(toCheck)-1]
-		for ack = range curBlock.Acks {
+		for _, ack = range curBlock.Acks {
 			if acked, exists = to.acked[ack]; !exists {
 				acked = to.objCache.requestAckedVector()
 				to.acked[ack] = acked
@@ -728,7 +728,7 @@ func (to *totalOrdering) prepareCandidate(candidate *types.Block) {
 // isAckOnlyPrecedings is a helper function to check if a block
 // only contain acks to delivered blocks.
 func (to *totalOrdering) isAckOnlyPrecedings(b *types.Block) bool {
-	for ack := range b.Acks {
+	for _, ack := range b.Acks {
 		if _, pending := to.pendings[ack]; pending {
 			return false
 		}

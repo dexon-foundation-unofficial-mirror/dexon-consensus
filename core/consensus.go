@@ -541,7 +541,6 @@ func (con *Consensus) PrepareGenesisBlock(b *types.Block,
 	}
 	b.Position.Height = 0
 	b.ParentHash = common.Hash{}
-	b.Acks = make(map[common.Hash]struct{})
 	b.Timestamp = proposeTime
 	b.Hash, err = hashBlock(b)
 	if err != nil {

@@ -55,7 +55,7 @@ func (s *ReliableBroadcastTest) prepareGenesisBlock(
 		Position: types.Position{
 			Height: 0,
 		},
-		Acks:      make(map[common.Hash]struct{}),
+		Acks:      common.NewSortedHashes(common.Hashes{}),
 		Timestamp: time.Now().UTC(),
 	}
 	for i, vID := range validatorIDs {
@@ -109,9 +109,7 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 			ChainID: 0,
 			Height:  1,
 		},
-		Acks: map[common.Hash]struct{}{
-			h: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	var err error
 	b.Hash, err = hashBlock(b)
@@ -129,10 +127,10 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 			Height:  2,
 		},
 		Timestamp: time.Now().UTC(),
-		Acks: map[common.Hash]struct{}{
-			h: struct{}{},
-			rb.lattice[1].blocks[0].Hash: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{
+			h,
+			rb.lattice[1].blocks[0].Hash,
+		}),
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
@@ -150,9 +148,7 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 			ChainID: 0,
 			Height:  3,
 		},
-		Acks: map[common.Hash]struct{}{
-			h: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
@@ -170,9 +166,7 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 			ChainID: 3,
 			Height:  1,
 		},
-		Acks: map[common.Hash]struct{}{
-			h: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
@@ -208,7 +202,7 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 			ChainID: 0,
 			Height:  10,
 		},
-		Acks: make(map[common.Hash]struct{}),
+		Acks: common.NewSortedHashes(common.Hashes{}),
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
@@ -224,9 +218,8 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 			ChainID: 1,
 			Height:  1,
 		},
-		Acks: map[common.Hash]struct{}{
-			rb.lattice[2].blocks[0].Hash: struct{}{},
-		},
+		Acks: common.NewSortedHashes(
+			common.Hashes{rb.lattice[2].blocks[0].Hash}),
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
@@ -243,9 +236,7 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 			ChainID: 1,
 			Height:  2,
 		},
-		Acks: map[common.Hash]struct{}{
-			h: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
@@ -261,9 +252,7 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 		Position: types.Position{
 			Height: 1,
 		},
-		Acks: map[common.Hash]struct{}{
-			h: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
@@ -280,9 +269,7 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 			ChainID: 100,
 			Height:  1,
 		},
-		Acks: map[common.Hash]struct{}{
-			h: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
@@ -299,9 +286,7 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 			ChainID: 0,
 			Height:  1,
 		},
-		Acks: map[common.Hash]struct{}{
-			h: struct{}{},
-		},
+		Acks:      common.NewSortedHashes(common.Hashes{h}),
 		Timestamp: time.Now().UTC(),
 	}
 	b.Hash, err = hashBlock(b)
@@ -319,10 +304,10 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 			ChainID: 0,
 			Height:  4,
 		},
-		Acks: map[common.Hash]struct{}{
-			h: struct{}{},
-			rb.lattice[1].blocks[0].Hash: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{
+			h,
+			rb.lattice[1].blocks[0].Hash,
+		}),
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
@@ -339,10 +324,10 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 			ChainID: 1,
 			Height:  1,
 		},
-		Acks: map[common.Hash]struct{}{
-			h: struct{}{},
-			common.NewRandomHash(): struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{
+			h,
+			common.NewRandomHash(),
+		}),
 		Timestamp: time.Now().UTC(),
 	}
 	b.Hash, err = hashBlock(b)
@@ -358,24 +343,22 @@ func (s *ReliableBroadcastTest) TestAreAllAcksInLattice() {
 
 	// Empty ack should get true, although won't pass sanity check.
 	b = &types.Block{
-		Acks: map[common.Hash]struct{}{},
+		Acks: common.NewSortedHashes(common.Hashes{}),
 	}
 	s.Require().True(rb.areAllAcksInLattice(b))
 
 	// Acks blocks in lattice
 	b = &types.Block{
-		Acks: map[common.Hash]struct{}{
-			rb.lattice[0].blocks[0].Hash: struct{}{},
-			rb.lattice[0].blocks[1].Hash: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{
+			rb.lattice[0].blocks[0].Hash,
+			rb.lattice[0].blocks[1].Hash,
+		}),
 	}
 	s.Require().True(rb.areAllAcksInLattice(b))
 
 	// Acks random block hash.
 	b = &types.Block{
-		Acks: map[common.Hash]struct{}{
-			common.NewRandomHash(): struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{common.NewRandomHash()}),
 	}
 	s.Require().False(rb.areAllAcksInLattice(b))
 }
@@ -403,10 +386,10 @@ func (s *ReliableBroadcastTest) TestStrongAck() {
 			Height:  1,
 		},
 		Timestamp: time.Now().UTC(),
-		Acks: map[common.Hash]struct{}{
-			rb.lattice[0].blocks[2].Hash: struct{}{},
-			rb.lattice[1].blocks[0].Hash: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{
+			rb.lattice[0].blocks[2].Hash,
+			rb.lattice[1].blocks[0].Hash,
+		}),
 	}
 	var err error
 	b.Hash, err = hashBlock(b)
@@ -429,10 +412,10 @@ func (s *ReliableBroadcastTest) TestStrongAck() {
 			Height:  1,
 		},
 		Timestamp: time.Now().UTC(),
-		Acks: map[common.Hash]struct{}{
-			rb.lattice[0].blocks[2].Hash: struct{}{},
-			rb.lattice[2].blocks[0].Hash: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{
+			rb.lattice[0].blocks[2].Hash,
+			rb.lattice[2].blocks[0].Hash,
+		}),
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
@@ -459,11 +442,11 @@ func (s *ReliableBroadcastTest) TestExtractBlocks() {
 			Height:  1,
 		},
 		Timestamp: time.Now().UTC(),
-		Acks: map[common.Hash]struct{}{
-			rb.lattice[0].blocks[2].Hash: struct{}{},
-			rb.lattice[1].blocks[0].Hash: struct{}{},
-			rb.lattice[3].blocks[0].Hash: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{
+			rb.lattice[0].blocks[2].Hash,
+			rb.lattice[1].blocks[0].Hash,
+			rb.lattice[3].blocks[0].Hash,
+		}),
 	}
 	var err error
 	b.Hash, err = hashBlock(b)
@@ -480,11 +463,11 @@ func (s *ReliableBroadcastTest) TestExtractBlocks() {
 			Height:  1,
 		},
 		Timestamp: time.Now().UTC(),
-		Acks: map[common.Hash]struct{}{
-			rb.lattice[0].blocks[2].Hash: struct{}{},
-			rb.lattice[2].blocks[0].Hash: struct{}{},
-			rb.lattice[3].blocks[0].Hash: struct{}{},
-		},
+		Acks: common.NewSortedHashes(common.Hashes{
+			rb.lattice[0].blocks[2].Hash,
+			rb.lattice[2].blocks[0].Hash,
+			rb.lattice[3].blocks[0].Hash,
+		}),
 	}
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
@@ -530,10 +513,10 @@ func (s *ReliableBroadcastTest) TestRandomIntensiveAcking() {
 		height := heights[vid]
 		heights[vid]++
 		parentHash := rb.lattice[id].blocks[height-1].Hash
-		acks := map[common.Hash]struct{}{}
+		acks := common.Hashes{}
 		for id2 := range vids {
 			if b, exist := rb.lattice[id2].blocks[rb.lattice[id].nextAck[id2]]; exist {
-				acks[b.Hash] = struct{}{}
+				acks = append(acks, b.Hash)
 			}
 		}
 		b := &types.Block{
@@ -544,7 +527,7 @@ func (s *ReliableBroadcastTest) TestRandomIntensiveAcking() {
 				Height:  height,
 			},
 			Timestamp: time.Now().UTC(),
-			Acks:      acks,
+			Acks:      common.NewSortedHashes(acks),
 		}
 		var err error
 		b.Hash, err = hashBlock(b)

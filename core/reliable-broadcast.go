@@ -120,7 +120,7 @@ func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 
 	// Check non-genesis blocks if it acks its parent.
 	if b.Position.Height > 0 {
-		if _, exist := b.Acks[b.ParentHash]; !exist {
+		if !b.IsAcking(b.ParentHash) {
 			return ErrNotAckParent
 		}
 		bParentStat, exists := rb.blockInfos[b.ParentHash]
@@ -130,7 +130,7 @@ func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 	}
 
 	// Check if it acks older blocks.
-	for hash := range b.Acks {
+	for _, hash := range b.Acks {
 		if bAckStat, exist := rb.blockInfos[hash]; exist {
 			bAck := bAckStat.block
 			if bAck.Position.Height <
@@ -155,7 +155,7 @@ func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 
 // areAllAcksReceived checks if all ack blocks of a block are all in lattice.
 func (rb *reliableBroadcast) areAllAcksInLattice(b *types.Block) bool {
-	for h := range b.Acks {
+	for _, h := range b.Acks {
 		bAckStat, exist := rb.blockInfos[h]
 		if !exist {
 			return false
@@ -221,7 +221,7 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 			chainID := b.Position.ChainID
 			rb.lattice[chainID].blocks[b.Position.Height] = b
 			delete(rb.receivedBlocks, b.Hash)
-			for h := range b.Acks {
+			for _, h := range b.Acks {
 				bAckStat := rb.blockInfos[h]
 				// Update nextAck only when bAckStat.block.Position.Height + 1
 				// is greater. A block might ack blocks proposed by same validator with
@@ -324,7 +324,7 @@ func (rb *reliableBroadcast) extractBlocks() []*types.Block {
 			// Check if all acks are in ordering or above status. If a block of an ack
 			// does not exist means that it deleted but its status is definitely Acked
 			// or ordering.
-			for ackHash := range b.Acks {
+			for _, ackHash := range b.Acks {
 				bAckStat, exist := rb.blockInfos[ackHash]
 				if !exist {
 					continue
@@ -359,7 +359,7 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 	// Reset fields to make sure we got these information from parent block.
 	block.Position.Height = 0
 	block.ParentHash = common.Hash{}
-	acks := make(map[common.Hash]struct{})
+	acks := common.Hashes{}
 	for chainID := range rb.lattice {
 		// find height of the latest block for that validator.
 		var (
@@ -378,7 +378,7 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 		if curBlock == nil {
 			continue
 		}
-		acks[curBlock.Hash] = struct{}{}
+		acks = append(acks, curBlock.Hash)
 		if uint32(chainID) == block.Position.ChainID {
 			block.ParentHash = curBlock.Hash
 			if block.Timestamp.Before(curBlock.Timestamp) {
@@ -390,7 +390,7 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 			}
 		}
 	}
-	block.Acks = acks
+	block.Acks = common.NewSortedHashes(acks)
 	return
 }
 

@@ -32,7 +32,7 @@ import (
 func isAllAckingBlockRevealed(
 	b *types.Block, revealed map[common.Hash]struct{}) bool {
 
-	for ack := range b.Acks {
+	for _, ack := range b.Acks {
 		if _, exists := revealed[ack]; !exists {
 			return false
 		}

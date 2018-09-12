@@ -35,11 +35,11 @@ type CryptoTestSuite struct {
 var myVID = types.ValidatorID{Hash: common.NewRandomHash()}
 
 func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
-	acks := make(map[common.Hash]struct{})
+	acks := common.Hashes{}
 	now := time.Now().UTC()
 	if prevBlock == nil {
 		return &types.Block{
-			Acks:      acks,
+			Acks:      common.NewSortedHashes(acks),
 			Timestamp: now,
 			Notary: types.Notary{
 				Timestamp: time.Now(),
@@ -50,10 +50,10 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 	parentHash, err := hashNotary(prevBlock)
 	s.Require().Nil(err)
 	s.Require().NotEqual(prevBlock.Hash, common.Hash{})
-	acks[parentHash] = struct{}{}
+	acks = append(acks, parentHash)
 	return &types.Block{
 		ParentHash: prevBlock.Hash,
-		Acks:       acks,
+		Acks:       common.NewSortedHashes(acks),
 		Timestamp:  now,
 		Position: types.Position{
 			Height: prevBlock.Position.Height + 1,
@@ -170,7 +170,7 @@ func (s *CryptoTestSuite) TestBlockSignature() {
 	}
 	// Modify Block.Acks and verify signature again.
 	for _, block := range blocks {
-		block.Acks[common.NewRandomHash()] = struct{}{}
+		block.Acks = append(block.Acks, common.NewRandomHash())
 		s.False(verifyBlockSignature(
 			pub, block, block.Signature))
 	}

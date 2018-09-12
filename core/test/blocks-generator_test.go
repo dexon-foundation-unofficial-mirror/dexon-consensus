@@ -80,7 +80,7 @@ func (s *BlocksGeneratorTestCase) TestGenerate() {
 		// Check normal blocks.
 		for index, block := range blocks[1:] {
 			parentAcked := false
-			for ack := range block.Acks {
+			for _, ack := range block.Acks {
 				if ack == block.ParentHash {
 					parentAcked = true
 				}

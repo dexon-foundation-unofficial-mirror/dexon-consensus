@@ -22,6 +22,7 @@ package types
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -47,24 +48,20 @@ func RecycleBlock(b *Block) {
 // NewBlock initiate a block.
 func NewBlock() (b *Block) {
 	b = blockPool.Get().(*Block)
-	if b.Acks != nil {
-		for k := range b.Acks {
-			delete(b.Acks, k)
-		}
-	}
+	b.Acks = b.Acks[:0]
 	return
 }
 
 // Block represents a single event broadcasted on the network.
 type Block struct {
-	ProposerID ValidatorID              `json:"proposer_id"`
-	ParentHash common.Hash              `json:"parent_hash"`
-	Hash       common.Hash              `json:"hash"`
-	Position   Position                 `json:"position"`
-	Timestamp  time.Time                `json:"timestamps"`
-	Acks       map[common.Hash]struct{} `json:"acks"`
-	Payload    []byte                   `json:"payload"`
-	Signature  crypto.Signature         `json:"signature"`
+	ProposerID ValidatorID         `json:"proposer_id"`
+	ParentHash common.Hash         `json:"parent_hash"`
+	Hash       common.Hash         `json:"hash"`
+	Position   Position            `json:"position"`
+	Timestamp  time.Time           `json:"timestamps"`
+	Acks       common.SortedHashes `json:"acks"`
+	Payload    []byte              `json:"payload"`
+	Signature  crypto.Signature    `json:"signature"`
 
 	CRSSignature crypto.Signature `json:"crs_signature"`
 
@@ -90,12 +87,8 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.Notary.Timestamp = b.Notary.Timestamp
 	bcopy.Notary.Height = b.Notary.Height
 	bcopy.Timestamp = b.Timestamp
-	if bcopy.Acks == nil {
-		bcopy.Acks = make(map[common.Hash]struct{}, len(b.Acks))
-	}
-	for k, v := range b.Acks {
-		bcopy.Acks[k] = v
-	}
+	bcopy.Acks = make(common.SortedHashes, len(b.Acks))
+	copy(bcopy.Acks, b.Acks)
 	bcopy.Payload = make([]byte, len(b.Payload))
 	copy(bcopy.Payload, b.Payload)
 	return
@@ -104,6 +97,14 @@ func (b *Block) Clone() (bcopy *Block) {
 // IsGenesis checks if the block is a genesisBlock
 func (b *Block) IsGenesis() bool {
 	return b.Position.Height == 0 && b.ParentHash == common.Hash{}
+}
+
+// IsAcking checks if a block acking another by it's hash.
+func (b *Block) IsAcking(hash common.Hash) bool {
+	idx := sort.Search(len(b.Acks), func(i int) bool {
+		return bytes.Compare(b.Acks[i][:], hash[:]) >= 0
+	})
+	return !(idx == len(b.Acks) || b.Acks[idx] != hash)
 }
 
 // ByHash is the helper type for sorting slice of blocks by hash.

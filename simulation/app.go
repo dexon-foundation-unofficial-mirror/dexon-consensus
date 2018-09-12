@@ -126,7 +126,7 @@ func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 			confirmLatency = append(confirmLatency,
 				now.Sub(block.Timestamp))
 		}
-		for hash := range block.Acks {
+		for _, hash := range block.Acks {
 			for _, blockHash := range a.getAckedBlocks(hash) {
 				payload = append(payload, timestampMessage{
 					BlockHash: blockHash,

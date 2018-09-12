@@ -116,9 +116,9 @@ func (vs *validatorSetStatus) findIncompleteValidators(
 // prepareAcksForNewBlock collects acks for one block.
 func (vs *validatorSetStatus) prepareAcksForNewBlock(
 	proposerID types.ValidatorID, ackingCount int) (
-	acks map[common.Hash]struct{}, err error) {
+	acks common.Hashes, err error) {
 
-	acks = make(map[common.Hash]struct{})
+	acks = common.Hashes{}
 	if len(vs.status[proposerID].blocks) == 0 {
 		// The 'Acks' filed of genesis blocks would always be empty.
 		return
@@ -143,7 +143,7 @@ func (vs *validatorSetStatus) prepareAcksForNewBlock(
 			}
 			continue
 		}
-		acks[ack] = struct{}{}
+		acks = append(acks, ack)
 	}
 	return
 }
@@ -151,7 +151,7 @@ func (vs *validatorSetStatus) prepareAcksForNewBlock(
 // proposeBlock propose new block and update validator status.
 func (vs *validatorSetStatus) proposeBlock(
 	proposerID types.ValidatorID,
-	acks map[common.Hash]struct{}) (*types.Block, error) {
+	acks common.Hashes) (*types.Block, error) {
 
 	status := vs.status[proposerID]
 	parentHash := common.Hash{}
@@ -168,7 +168,7 @@ func (vs *validatorSetStatus) proposeBlock(
 			Height:  uint64(len(status.blocks)),
 			ChainID: chainID,
 		},
-		Acks:      acks,
+		Acks:      common.NewSortedHashes(acks),
 		Timestamp: vs.timestamps[chainID],
 	}
 	for i, vID := range vs.validatorIDs {
@@ -283,7 +283,7 @@ func (gen *BlocksGenerator) Generate(
 		// Propose a new block.
 		var (
 			proposerID = gen.validatorPicker(notYet)
-			acks       map[common.Hash]struct{}
+			acks       common.Hashes
 		)
 		acks, err = status.prepareAcksForNewBlock(
 			proposerID, ackingCountGenerator())
