@@ -157,7 +157,7 @@ func NewConsensus(
 	to := newTotalOrdering(
 		uint64(gov.GetTotalOrderingK()),
 		uint64(float32(len(validatorSet)-1)*gov.GetPhiRatio()+1),
-		validators)
+		gov.GetChainNumber())
 
 	con := &Consensus{
 		ID:       types.NewValidatorID(prv.PublicKey()),

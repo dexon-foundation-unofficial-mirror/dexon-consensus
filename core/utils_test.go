@@ -10,16 +10,16 @@ type UtilsTestSuite struct {
 	suite.Suite
 }
 
-func (s *UtilsTestSuite) TestRemoveFromSortedIntSlice() {
+func (s *UtilsTestSuite) TestRemoveFromSortedUint32Slice() {
 	// Remove something exists.
-	xs := []int{1, 2, 3, 4, 5}
+	xs := []uint32{1, 2, 3, 4, 5}
 	s.Equal(
-		removeFromSortedIntSlice(xs, 3),
-		[]int{1, 2, 4, 5})
+		removeFromSortedUint32Slice(xs, 3),
+		[]uint32{1, 2, 4, 5})
 	// Remove something not exists.
-	s.Equal(removeFromSortedIntSlice(xs, 6), xs)
+	s.Equal(removeFromSortedUint32Slice(xs, 6), xs)
 	// Remove from empty slice, should not panic.
-	s.Equal([]int{}, removeFromSortedIntSlice([]int{}, 1))
+	s.Equal([]uint32{}, removeFromSortedUint32Slice([]uint32{}, 1))
 }
 
 func TestUtils(t *testing.T) {

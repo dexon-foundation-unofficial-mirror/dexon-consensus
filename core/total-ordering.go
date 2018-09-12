@@ -35,11 +35,11 @@ var (
 	// ErrNotValidDAG would be reported when block subbmitted to totalOrdering
 	// didn't form a DAG.
 	ErrNotValidDAG = fmt.Errorf("not a valid dag")
-	// ErrValidatorNotRecognized means the validator is unknown to this module.
-	ErrValidatorNotRecognized = fmt.Errorf("validator not recognized")
+	// ErrChainIDNotRecognized means the chain is unknown to this module.
+	ErrChainIDNotRecognized = fmt.Errorf("chain ID not recognized")
 )
 
-// totalOrderinWinRecord caches which validators this candidate
+// totalOrderinWinRecord caches which chains this candidate
 // wins another one based on their height vector.
 type totalOrderingWinRecord struct {
 	wins  []int8
@@ -53,23 +53,24 @@ func (rec *totalOrderingWinRecord) reset() {
 	}
 }
 
-func newTotalOrderingWinRecord(validatorCount int) (
+func newTotalOrderingWinRecord(chainNum uint32) (
 	rec *totalOrderingWinRecord) {
 
 	rec = &totalOrderingWinRecord{}
 	rec.reset()
-	rec.wins = make([]int8, validatorCount)
+	rec.wins = make([]int8, chainNum)
 	return
 }
 
 // grade implements the 'grade' potential function described in white paper.
 func (rec *totalOrderingWinRecord) grade(
-	validatorCount, phi uint64,
+	chainNum uint32,
+	phi uint64,
 	globalAnsLength uint64) int {
 
 	if uint64(rec.count) >= phi {
 		return 1
-	} else if uint64(rec.count) < phi-validatorCount+globalAnsLength {
+	} else if uint64(rec.count) < phi-uint64(chainNum)+globalAnsLength {
 		return 0
 	} else {
 		return -1
@@ -77,8 +78,8 @@ func (rec *totalOrderingWinRecord) grade(
 }
 
 // totalOrderingHeightRecord records two things:
-//  - the minimum heiht of block from that validator acking this block.
-//  - the count of blocks from that validator acking this block.
+//  - the minimum heiht of block from that chain acking this block.
+//  - the count of blocks from that chain acking this block.
 type totalOrderingHeightRecord struct{ minHeight, count uint64 }
 
 // totalOrderingObjectCache caches objects for reuse.
@@ -94,19 +95,19 @@ type totalOrderingObjectCache struct {
 	winRecordContainers [][]*totalOrderingWinRecord
 	ackedVectors        []map[common.Hash]struct{}
 	winRecordPool       sync.Pool
-	validatorCount      int
+	chainNum            uint32
 }
 
 // newTotalOrderingObjectCache constructs an totalOrderingObjectCache
 // instance.
-func newTotalOrderingObjectCache(validatorCount int) *totalOrderingObjectCache {
+func newTotalOrderingObjectCache(chainNum uint32) *totalOrderingObjectCache {
 	return &totalOrderingObjectCache{
 		winRecordPool: sync.Pool{
 			New: func() interface{} {
-				return newTotalOrderingWinRecord(validatorCount)
+				return newTotalOrderingWinRecord(chainNum)
 			},
 		},
-		validatorCount: validatorCount,
+		chainNum: chainNum,
 	}
 }
 
@@ -116,7 +117,7 @@ func (cache *totalOrderingObjectCache) requestAckedStatus() (
 	acked []*totalOrderingHeightRecord) {
 
 	if len(cache.ackedStatus) == 0 {
-		acked = make([]*totalOrderingHeightRecord, cache.validatorCount)
+		acked = make([]*totalOrderingHeightRecord, cache.chainNum)
 		for idx := range acked {
 			acked[idx] = &totalOrderingHeightRecord{count: 0}
 		}
@@ -164,7 +165,7 @@ func (cache *totalOrderingObjectCache) requestHeightVector() (
 	hv []uint64) {
 
 	if len(cache.heightVectors) == 0 {
-		hv = make([]uint64, cache.validatorCount)
+		hv = make([]uint64, cache.chainNum)
 	} else {
 		hv, cache.heightVectors =
 			cache.heightVectors[len(cache.heightVectors)-1],
@@ -189,7 +190,7 @@ func (cache *totalOrderingObjectCache) requestWinRecordContainer() (
 	con []*totalOrderingWinRecord) {
 
 	if len(cache.winRecordContainers) == 0 {
-		con = make([]*totalOrderingWinRecord, cache.validatorCount)
+		con = make([]*totalOrderingWinRecord, cache.chainNum)
 	} else {
 		con, cache.winRecordContainers =
 			cache.winRecordContainers[len(cache.winRecordContainers)-1],
@@ -238,7 +239,7 @@ func (cache *totalOrderingObjectCache) recycleAckedVector(
 // totalOrderingCandidateInfo describes proceeding status for one candidate,
 // including:
 //  - acked status as height records, which could keep 'how many blocks from
-//    one validator acking this candidate.
+//    one chain acking this candidate.
 //  - cached height vector, which valid height based on K-level used for
 //    comparison in 'grade' function.
 //  - cached result of grade function to other candidates.
@@ -272,8 +273,8 @@ func newTotalOrderingCandidateInfo(
 
 // clean clear information related to another candidate, which should be called
 // when that candidate is selected as deliver set.
-func (v *totalOrderingCandidateInfo) clean(otherCandidateIndex int) {
-	v.winRecords[otherCandidateIndex] = nil
+func (v *totalOrderingCandidateInfo) clean(otherCandidateChainID uint32) {
+	v.winRecords[otherCandidateChainID] = nil
 }
 
 // recycle objects for later usage, this eases the loading of
@@ -295,10 +296,8 @@ func (v *totalOrderingCandidateInfo) recycle(
 
 // addBlock would update totalOrderingCandidateInfo, it's caller's duty
 // to make sure the input block acutally acking the target block.
-func (v *totalOrderingCandidateInfo) addBlock(
-	b *types.Block, proposerIndex int) (err error) {
-
-	rec := v.ackedStatus[proposerIndex]
+func (v *totalOrderingCandidateInfo) addBlock(b *types.Block) (err error) {
+	rec := v.ackedStatus[b.Position.ChainID]
 	if rec.count == 0 {
 		rec.minHeight = b.Position.Height
 		rec.count = 1
@@ -319,7 +318,7 @@ func (v *totalOrderingCandidateInfo) addBlock(
 //
 // would be taken into consideration, ex.
 //
-//  For some validator X:
+//  For some chain X:
 //   - the global minimum acking height = 1,
 //   - k = 1
 //  then only block height >= 2 would be added to acking node set.
@@ -353,7 +352,7 @@ func (v *totalOrderingCandidateInfo) getAckingNodeSetLength(
 func (v *totalOrderingCandidateInfo) updateAckingHeightVector(
 	global *totalOrderingCandidateInfo,
 	k uint64,
-	dirtyValidatorIndexes []int,
+	dirtyChainIDs []int,
 	objCache *totalOrderingObjectCache) {
 
 	var (
@@ -362,8 +361,8 @@ func (v *totalOrderingCandidateInfo) updateAckingHeightVector(
 	)
 
 	// The reason not to merge the two loops is the iteration over map
-	// is expensive when validator count is large, iterating over dirty
-	// validators is cheaper.
+	// is expensive when chain count is large, iterating over dirty
+	// chains is cheaper.
 	// TODO(mission): merge the code in this if/else if the performance won't be
 	//                downgraded when adding a function for the shared part.
 	if v.cachedHeightVector == nil {
@@ -389,7 +388,7 @@ func (v *totalOrderingCandidateInfo) updateAckingHeightVector(
 		}
 	} else {
 		// Return the cached one, only update dirty fields.
-		for _, idx = range dirtyValidatorIndexes {
+		for _, idx = range dirtyChainIDs {
 			gRec = global.ackedStatus[idx]
 			if gRec.count == 0 || gRec.count <= k {
 				v.cachedHeightVector[idx] = infinity
@@ -410,9 +409,9 @@ func (v *totalOrderingCandidateInfo) updateAckingHeightVector(
 
 // updateWinRecord setup win records between two candidates.
 func (v *totalOrderingCandidateInfo) updateWinRecord(
-	otherCandidateIndex int,
+	otherChainID uint32,
 	other *totalOrderingCandidateInfo,
-	dirtyValidatorIndexes []int,
+	dirtyChainIDs []int,
 	objCache *totalOrderingObjectCache) {
 
 	var (
@@ -421,14 +420,14 @@ func (v *totalOrderingCandidateInfo) updateWinRecord(
 	)
 
 	// The reason not to merge the two loops is the iteration over map
-	// is expensive when validator count is large, iterating over dirty
-	// validators is cheaper.
+	// is expensive when chain count is large, iterating over dirty
+	// chains is cheaper.
 	// TODO(mission): merge the code in this if/else if add a function won't
 	//                affect the performance.
-	win := v.winRecords[otherCandidateIndex]
+	win := v.winRecords[otherChainID]
 	if win == nil {
 		win = objCache.requestWinRecord()
-		v.winRecords[otherCandidateIndex] = win
+		v.winRecords[otherChainID] = win
 		for idx, height = range v.cachedHeightVector {
 			if height == infinity {
 				continue
@@ -439,7 +438,7 @@ func (v *totalOrderingCandidateInfo) updateWinRecord(
 			}
 		}
 	} else {
-		for _, idx = range dirtyValidatorIndexes {
+		for _, idx = range dirtyChainIDs {
 			if v.cachedHeightVector[idx] == infinity {
 				if win.wins[idx] == 1 {
 					win.wins[idx] = 0
@@ -476,31 +475,29 @@ type totalOrderingGlobalVector struct {
 }
 
 func newTotalOrderingGlobalVector(
-	validatorCount int) *totalOrderingGlobalVector {
+	chainNum uint32) *totalOrderingGlobalVector {
 
 	return &totalOrderingGlobalVector{
-		blocks: make([][]*types.Block, validatorCount),
+		blocks: make([][]*types.Block, chainNum),
 	}
 }
 
-func (global *totalOrderingGlobalVector) addBlock(
-	b *types.Block, proposerIndex int) (err error) {
-
-	blocksFromProposer := global.blocks[proposerIndex]
-	if len(blocksFromProposer) > 0 {
-		lastBlock := blocksFromProposer[len(blocksFromProposer)-1]
+func (global *totalOrderingGlobalVector) addBlock(b *types.Block) (err error) {
+	blocksFromChain := global.blocks[b.Position.ChainID]
+	if len(blocksFromChain) > 0 {
+		lastBlock := blocksFromChain[len(blocksFromChain)-1]
 		if b.Position.Height-lastBlock.Position.Height != 1 {
 			err = ErrNotValidDAG
 			return
 		}
 	}
-	global.blocks[proposerIndex] = append(blocksFromProposer, b)
+	global.blocks[b.Position.ChainID] = append(blocksFromChain, b)
 	return
 }
 
 // updateCandidateInfo udpate cached candidate info.
 func (global *totalOrderingGlobalVector) updateCandidateInfo(
-	dirtyValidatorIndexes []int, objCache *totalOrderingObjectCache) {
+	dirtyChainIDs []int, objCache *totalOrderingObjectCache) {
 
 	var (
 		idx    int
@@ -522,7 +519,7 @@ func (global *totalOrderingGlobalVector) updateCandidateInfo(
 		global.cachedCandidateInfo = info
 	} else {
 		info = global.cachedCandidateInfo
-		for _, idx = range dirtyValidatorIndexes {
+		for _, idx = range dirtyChainIDs {
 			blocks = global.blocks[idx]
 			if len(blocks) == 0 {
 				info.ackedStatus[idx].count = 0
@@ -551,8 +548,8 @@ type totalOrdering struct {
 	// should be.
 	phi uint64
 
-	// validatorCount is the count of validator set.
-	validatorCount uint64
+	// chainNum is the count of chains.
+	chainNum uint32
 
 	// globalVector group all pending blocks by proposers and
 	// sort them by block height. This structure is helpful when:
@@ -569,49 +566,34 @@ type totalOrdering struct {
 	// keeping a record in acked[A.Hash][B.Hash]
 	acked map[common.Hash]map[common.Hash]struct{}
 
-	// dirtyValidatorIndexes records which validatorID that should be updated
+	// dirtyChainIDs records which chainID that should be updated
 	// for all cached status (win record, acking status).
-	dirtyValidatorIndexes []int
+	dirtyChainIDs []int
 
 	// objCache caches allocated objects, like map.
 	objCache *totalOrderingObjectCache
 
-	// validatorIndexMapping maps validatorID to an unique integer, which
-	// could be used as slice index.
-	validatorIndexMapping map[types.ValidatorID]int
+	// candidateChainMapping keeps a mapping from candidate's hash to
+	// their chain IDs.
+	candidateChainMapping map[common.Hash]uint32
 
-	// candidateIndexMapping maps block hashes of candidates to an unique
-	// integer, which could be used as slice index.
-	candidateIndexMapping map[common.Hash]int
-
-	// allocatedCandidateSlotIndexes records all used slot indexes in
-	// candidates slice.
-	allocatedCandidateSlotIndexes []int
+	// candidateChainIDs records chain ID of all candidates.
+	candidateChainIDs []uint32
 }
 
-func newTotalOrdering(
-	k, phi uint64, validators types.ValidatorIDs) *totalOrdering {
-
-	// Setup validatorID to index mapping.
-	validatorIndexMapping := make(map[types.ValidatorID]int)
-	for _, vID := range validators {
-		validatorIndexMapping[vID] = len(validatorIndexMapping)
-	}
-	validatorCount := len(validators)
+func newTotalOrdering(k, phi uint64, chainNum uint32) *totalOrdering {
 	return &totalOrdering{
 		pendings:              make(map[common.Hash]*types.Block),
 		k:                     k,
 		phi:                   phi,
-		validatorCount:        uint64(validatorCount),
-		globalVector:          newTotalOrderingGlobalVector(validatorCount),
-		dirtyValidatorIndexes: make([]int, 0, validatorCount),
+		chainNum:              chainNum,
+		globalVector:          newTotalOrderingGlobalVector(chainNum),
+		dirtyChainIDs:         make([]int, 0, chainNum),
 		acked:                 make(map[common.Hash]map[common.Hash]struct{}),
-		objCache:              newTotalOrderingObjectCache(validatorCount),
-		validatorIndexMapping: validatorIndexMapping,
-		candidateIndexMapping: make(map[common.Hash]int),
-		candidates: make(
-			[]*totalOrderingCandidateInfo, validatorCount),
-		allocatedCandidateSlotIndexes: make([]int, 0, validatorCount),
+		objCache:              newTotalOrderingObjectCache(chainNum),
+		candidateChainMapping: make(map[common.Hash]uint32),
+		candidates:            make([]*totalOrderingCandidateInfo, chainNum),
+		candidateChainIDs:     make([]uint32, 0, chainNum),
 	}
 }
 
@@ -653,45 +635,44 @@ func (to *totalOrdering) buildBlockRelation(b *types.Block) {
 
 // clean would remove a block from working set. This behaviour
 // would prevent our memory usage growing infinity.
-func (to *totalOrdering) clean(h common.Hash) {
+func (to *totalOrdering) clean(b *types.Block) {
+	var (
+		h       = b.Hash
+		chainID = b.Position.ChainID
+	)
 	to.objCache.recycleAckedVector(to.acked[h])
 	delete(to.acked, h)
 	delete(to.pendings, h)
-	slotIndex := to.candidateIndexMapping[h]
-	to.candidates[slotIndex].recycle(to.objCache)
-	to.candidates[slotIndex] = nil
-	delete(to.candidateIndexMapping, h)
-	// Remove this candidate from allocated slot indexes.
-	to.allocatedCandidateSlotIndexes = removeFromSortedIntSlice(
-		to.allocatedCandidateSlotIndexes, slotIndex)
+	to.candidates[chainID].recycle(to.objCache)
+	to.candidates[chainID] = nil
+	delete(to.candidateChainMapping, h)
+	// Remove this candidate from candidate IDs.
+	to.candidateChainIDs =
+		removeFromSortedUint32Slice(to.candidateChainIDs, chainID)
 	// Clear records of this candidate from other candidates.
-	for _, idx := range to.allocatedCandidateSlotIndexes {
-		to.candidates[idx].clean(slotIndex)
+	for _, idx := range to.candidateChainIDs {
+		to.candidates[idx].clean(chainID)
 	}
 }
 
 // updateVectors is a helper function to update all cached vectors.
-func (to *totalOrdering) updateVectors(
-	b *types.Block, proposerIndex int) (err error) {
+func (to *totalOrdering) updateVectors(b *types.Block) (err error) {
 	var (
-		candidateHash  common.Hash
-		candidateIndex int
-		acked          bool
+		candidateHash common.Hash
+		chainID       uint32
+		acked         bool
 	)
 	// Update global height vector
-	err = to.globalVector.addBlock(b, proposerIndex)
-	if err != nil {
+	if err = to.globalVector.addBlock(b); err != nil {
 		return
 	}
 
 	// Update acking status of candidates.
-	for candidateHash, candidateIndex = range to.candidateIndexMapping {
+	for candidateHash, chainID = range to.candidateChainMapping {
 		if _, acked = to.acked[candidateHash][b.Hash]; !acked {
 			continue
 		}
-		if err = to.candidates[candidateIndex].addBlock(
-			b, proposerIndex); err != nil {
-
+		if err = to.candidates[chainID].addBlock(b); err != nil {
 			return
 		}
 	}
@@ -700,24 +681,24 @@ func (to *totalOrdering) updateVectors(
 
 // prepareCandidate is a helper function to
 // build totalOrderingCandidateInfo for new candidate.
-func (to *totalOrdering) prepareCandidate(
-	candidate *types.Block, proposerIndex int) {
-
+func (to *totalOrdering) prepareCandidate(candidate *types.Block) {
 	var (
 		info = newTotalOrderingCandidateInfo(
 			candidate.Hash, to.objCache)
+		chainID = candidate.Position.ChainID
 	)
 
-	to.candidates[proposerIndex] = info
-	to.candidateIndexMapping[candidate.Hash] = proposerIndex
+	to.candidates[chainID] = info
+	to.candidateChainMapping[candidate.Hash] = chainID
 	// Add index to slot to allocated list, make sure the modified list sorted.
-	to.allocatedCandidateSlotIndexes = append(
-		to.allocatedCandidateSlotIndexes, proposerIndex)
-	sort.Ints(to.allocatedCandidateSlotIndexes)
+	to.candidateChainIDs = append(to.candidateChainIDs, chainID)
+	sort.Slice(to.candidateChainIDs, func(i, j int) bool {
+		return to.candidateChainIDs[i] < to.candidateChainIDs[j]
+	})
 
-	info.ackedStatus[proposerIndex] = &totalOrderingHeightRecord{
+	info.ackedStatus[chainID] = &totalOrderingHeightRecord{
 		minHeight: candidate.Position.Height,
-		count:     uint64(len(to.globalVector.blocks[proposerIndex])),
+		count:     uint64(len(to.globalVector.blocks[chainID])),
 	}
 	ackedsForCandidate, exists := to.acked[candidate.Hash]
 	if !exists {
@@ -726,7 +707,7 @@ func (to *totalOrdering) prepareCandidate(
 	}
 	var rec *totalOrderingHeightRecord
 	for idx, blocks := range to.globalVector.blocks {
-		if idx == proposerIndex {
+		if idx == int(chainID) {
 			continue
 		}
 		for i, b := range blocks {
@@ -734,7 +715,7 @@ func (to *totalOrdering) prepareCandidate(
 				continue
 			}
 			// If this block acks this candidate, all newer blocks
-			// from the same validator also 'indirect' acks it.
+			// from the same chain also 'indirect' acks it.
 			rec = info.ackedStatus[idx]
 			rec.minHeight = b.Position.Height
 			rec.count = uint64(len(blocks) - i)
@@ -761,20 +742,19 @@ func (to *totalOrdering) output(precedings map[common.Hash]struct{}) (ret []*typ
 	for p := range precedings {
 		// Remove the first element from corresponding blockVector.
 		b := to.pendings[p]
+		chainID := b.Position.ChainID
 		// TODO(mission): This way to use slice makes it reallocate frequently.
-		blockProposerIndex := to.validatorIndexMapping[b.ProposerID]
-		to.globalVector.blocks[blockProposerIndex] =
-			to.globalVector.blocks[blockProposerIndex][1:]
+		to.globalVector.blocks[int(chainID)] =
+			to.globalVector.blocks[int(chainID)][1:]
 		ret = append(ret, b)
 
 		// Remove block relations.
-		to.clean(p)
-		to.dirtyValidatorIndexes = append(
-			to.dirtyValidatorIndexes, blockProposerIndex)
+		to.clean(b)
+		to.dirtyChainIDs = append(to.dirtyChainIDs, int(chainID))
 	}
 	sort.Sort(types.ByHash(ret))
 
-	// Find new candidates from tip of globalVector of each validator.
+	// Find new candidates from tip of globalVector of each chain.
 	// The complexity here is O(N^2logN).
 	// TODO(mission): only those tips that acking some blocks in
 	//                the devliered set should be checked. This
@@ -785,16 +765,14 @@ func (to *totalOrdering) output(precedings map[common.Hash]struct{}) (ret []*typ
 		}
 		tip := blocks[0]
 		if _, alreadyCandidate :=
-			to.candidateIndexMapping[tip.Hash]; alreadyCandidate {
+			to.candidateChainMapping[tip.Hash]; alreadyCandidate {
 			continue
 		}
 		if !to.isAckOnlyPrecedings(tip) {
 			continue
 		}
 		// Build totalOrderingCandidateInfo for new candidate.
-		to.prepareCandidate(
-			tip,
-			to.validatorIndexMapping[tip.ProposerID])
+		to.prepareCandidate(tip)
 	}
 	return ret
 }
@@ -806,16 +784,16 @@ func (to *totalOrdering) generateDeliverSet() (
 	delivered map[common.Hash]struct{}, early bool) {
 
 	var (
-		candidateIndex, otherCandidateIndex int
-		info, otherInfo                     *totalOrderingCandidateInfo
-		precedings                          = make(map[int]struct{})
+		chainID, otherChainID uint32
+		info, otherInfo       *totalOrderingCandidateInfo
+		precedings            = make(map[uint32]struct{})
 	)
 
-	to.globalVector.updateCandidateInfo(to.dirtyValidatorIndexes, to.objCache)
+	to.globalVector.updateCandidateInfo(to.dirtyChainIDs, to.objCache)
 	globalInfo := to.globalVector.cachedCandidateInfo
-	for _, candidateIndex = range to.allocatedCandidateSlotIndexes {
-		to.candidates[candidateIndex].updateAckingHeightVector(
-			globalInfo, to.k, to.dirtyValidatorIndexes, to.objCache)
+	for _, chainID = range to.candidateChainIDs {
+		to.candidates[chainID].updateAckingHeightVector(
+			globalInfo, to.k, to.dirtyChainIDs, to.objCache)
 	}
 
 	// Update winning records for each candidate.
@@ -823,44 +801,44 @@ func (to *totalOrdering) generateDeliverSet() (
 	//                request one routine for each candidate, the context
 	//                switch rate would be high.
 	var wg sync.WaitGroup
-	wg.Add(len(to.allocatedCandidateSlotIndexes))
-	for _, candidateIndex := range to.allocatedCandidateSlotIndexes {
-		info = to.candidates[candidateIndex]
-		go func(can int, canInfo *totalOrderingCandidateInfo) {
-			for _, otherCandidateIndex := range to.allocatedCandidateSlotIndexes {
-				if can == otherCandidateIndex {
+	wg.Add(len(to.candidateChainIDs))
+	for _, chainID := range to.candidateChainIDs {
+		info = to.candidates[chainID]
+		go func(can uint32, canInfo *totalOrderingCandidateInfo) {
+			for _, otherChainID := range to.candidateChainIDs {
+				if can == otherChainID {
 					continue
 				}
 				canInfo.updateWinRecord(
-					otherCandidateIndex,
-					to.candidates[otherCandidateIndex],
-					to.dirtyValidatorIndexes,
+					otherChainID,
+					to.candidates[otherChainID],
+					to.dirtyChainIDs,
 					to.objCache)
 			}
 			wg.Done()
-		}(candidateIndex, info)
+		}(chainID, info)
 	}
 	wg.Wait()
 
-	// Reset dirty validators.
-	to.dirtyValidatorIndexes = to.dirtyValidatorIndexes[:0]
+	// Reset dirty chains.
+	to.dirtyChainIDs = to.dirtyChainIDs[:0]
 
 	globalAnsLength := globalInfo.getAckingNodeSetLength(globalInfo, to.k)
 CheckNextCandidateLoop:
-	for _, candidateIndex = range to.allocatedCandidateSlotIndexes {
-		info = to.candidates[candidateIndex]
-		for _, otherCandidateIndex = range to.allocatedCandidateSlotIndexes {
-			if candidateIndex == otherCandidateIndex {
+	for _, chainID = range to.candidateChainIDs {
+		info = to.candidates[chainID]
+		for _, otherChainID = range to.candidateChainIDs {
+			if chainID == otherChainID {
 				continue
 			}
-			otherInfo = to.candidates[otherCandidateIndex]
-			if otherInfo.winRecords[candidateIndex].grade(
-				to.validatorCount, to.phi, globalAnsLength) != 0 {
+			otherInfo = to.candidates[otherChainID]
+			if otherInfo.winRecords[chainID].grade(
+				to.chainNum, to.phi, globalAnsLength) != 0 {
 
 				continue CheckNextCandidateLoop
 			}
 		}
-		precedings[candidateIndex] = struct{}{}
+		precedings[chainID] = struct{}{}
 	}
 	if len(precedings) == 0 {
 		return
@@ -870,16 +848,16 @@ CheckNextCandidateLoop:
 	internal := func() bool {
 		var (
 			isPreceding, beaten bool
-			p                   int
+			p                   uint32
 		)
-		for _, candidateIndex = range to.allocatedCandidateSlotIndexes {
-			if _, isPreceding = precedings[candidateIndex]; isPreceding {
+		for _, chainID = range to.candidateChainIDs {
+			if _, isPreceding = precedings[chainID]; isPreceding {
 				continue
 			}
 			beaten = false
 			for p = range precedings {
-				if beaten = to.candidates[p].winRecords[candidateIndex].grade(
-					to.validatorCount, to.phi, globalAnsLength) == 1; beaten {
+				if beaten = to.candidates[p].winRecords[chainID].grade(
+					to.chainNum, to.phi, globalAnsLength) == 1; beaten {
 					break
 				}
 			}
@@ -896,7 +874,7 @@ CheckNextCandidateLoop:
 	checkAHV := func() bool {
 		var (
 			height, count uint64
-			p             int
+			p             uint32
 		)
 		for p = range precedings {
 			count = 0
@@ -917,20 +895,20 @@ CheckNextCandidateLoop:
 	// It would make sure all preceding blocks are strong enough
 	// to be delivered.
 	checkANS := func() bool {
-		var validatorAnsLength uint64
+		var chainAnsLength uint64
 		for p := range precedings {
-			validatorAnsLength = to.candidates[p].getAckingNodeSetLength(
+			chainAnsLength = to.candidates[p].getAckingNodeSetLength(
 				globalInfo, to.k)
-			if uint64(validatorAnsLength) < to.validatorCount-to.phi {
+			if uint64(chainAnsLength) < uint64(to.chainNum)-to.phi {
 				return false
 			}
 		}
 		return true
 	}
 
-	// If all validators propose enough blocks, we should force
+	// If all chains propose enough blocks, we should force
 	// to deliver since the whole picture of the DAG is revealed.
-	if globalAnsLength != to.validatorCount {
+	if globalAnsLength != uint64(to.chainNum) {
 		// Check internal stability first.
 		if !internal() {
 			return
@@ -958,23 +936,21 @@ func (to *totalOrdering) processBlock(b *types.Block) (
 	//       That means, all its acking blocks are during/after
 	//       total ordering stage.
 
-	blockProposerIndex, exists := to.validatorIndexMapping[b.ProposerID]
-	if !exists {
-		err = ErrValidatorNotRecognized
+	if b.Position.ChainID >= to.chainNum {
+		err = ErrChainIDNotRecognized
 		return
 	}
 
 	to.pendings[b.Hash] = b
 	to.buildBlockRelation(b)
-	if err = to.updateVectors(b, blockProposerIndex); err != nil {
+	if err = to.updateVectors(b); err != nil {
 		return
 	}
 	if to.isAckOnlyPrecedings(b) {
-		to.prepareCandidate(b, blockProposerIndex)
+		to.prepareCandidate(b)
 	}
 	// Mark the proposer of incoming block as dirty.
-	to.dirtyValidatorIndexes = append(
-		to.dirtyValidatorIndexes, blockProposerIndex)
+	to.dirtyChainIDs = append(to.dirtyChainIDs, int(b.Position.ChainID))
 	hashes, early := to.generateDeliverSet()
 
 	// output precedings

@@ -34,14 +34,17 @@ type TotalOrderingTestSuite struct {
 }
 
 func (s *TotalOrderingTestSuite) genGenesisBlock(
-	vID types.ValidatorID, acks map[common.Hash]struct{}) *types.Block {
+	vIDs types.ValidatorIDs,
+	chainID uint32,
+	acks map[common.Hash]struct{}) *types.Block {
 
 	return &types.Block{
-		ProposerID: vID,
+		ProposerID: vIDs[chainID],
 		ParentHash: common.Hash{},
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 0,
+			Height:  0,
+			ChainID: chainID,
 		},
 		Acks: acks,
 	}
@@ -76,13 +79,14 @@ func (s *TotalOrderingTestSuite) TestBlockRelation() {
 	//  A <- B <- C
 	validators := test.GenerateRandomValidatorIDs(5)
 	vID := validators[0]
-	blockA := s.genGenesisBlock(vID, map[common.Hash]struct{}{})
+	blockA := s.genGenesisBlock(validators, 0, map[common.Hash]struct{}{})
 	blockB := &types.Block{
 		ProposerID: vID,
 		ParentHash: blockA.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 1,
+			Height:  1,
+			ChainID: 0,
 		},
 		Acks: map[common.Hash]struct{}{
 			blockA.Hash: struct{}{},
@@ -93,14 +97,15 @@ func (s *TotalOrderingTestSuite) TestBlockRelation() {
 		ParentHash: blockB.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 2,
+			Height:  2,
+			ChainID: 0,
 		},
 		Acks: map[common.Hash]struct{}{
 			blockB.Hash: struct{}{},
 		},
 	}
 
-	to := newTotalOrdering(1, 3, validators)
+	to := newTotalOrdering(1, 3, uint32(len(validators)))
 	s.checkNotDeliver(to, blockA)
 	s.checkNotDeliver(to, blockB)
 	s.checkNotDeliver(to, blockC)
@@ -244,7 +249,7 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 
 	// create blocks with cycles in acking relation.
 	cycledHash := common.NewRandomHash()
-	b00 := s.genGenesisBlock(validators[0], map[common.Hash]struct{}{
+	b00 := s.genGenesisBlock(validators, 0, map[common.Hash]struct{}{
 		cycledHash: struct{}{},
 	})
 	b01 := &types.Block{
@@ -252,7 +257,8 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 		ParentHash: b00.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 1,
+			Height:  1,
+			ChainID: 0,
 		},
 		Acks: map[common.Hash]struct{}{
 			b00.Hash: struct{}{},
@@ -263,7 +269,8 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 		ParentHash: b01.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 2,
+			Height:  2,
+			ChainID: 0,
 		},
 		Acks: map[common.Hash]struct{}{
 			b01.Hash: struct{}{},
@@ -274,7 +281,8 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 		ParentHash: b02.Hash,
 		Hash:       cycledHash,
 		Position: types.Position{
-			Height: 3,
+			Height:  3,
+			ChainID: 0,
 		},
 		Acks: map[common.Hash]struct{}{
 			b02.Hash: struct{}{},
@@ -282,11 +290,11 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 	}
 
 	// Create a block acks self.
-	b10 := s.genGenesisBlock(validators[1], map[common.Hash]struct{}{})
+	b10 := s.genGenesisBlock(validators, 1, map[common.Hash]struct{}{})
 	b10.Acks[b10.Hash] = struct{}{}
 
 	// Make sure we won't hang when cycle exists.
-	to := newTotalOrdering(1, 3, validators)
+	to := newTotalOrdering(1, 3, uint32(len(validators)))
 	s.checkNotDeliver(to, b00)
 	s.checkNotDeliver(to, b01)
 	s.checkNotDeliver(to, b02)
@@ -299,13 +307,17 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 
 func (s *TotalOrderingTestSuite) TestNotValidDAGDetection() {
 	validators := test.GenerateRandomValidatorIDs(5)
-	to := newTotalOrdering(1, 3, validators)
+	to := newTotalOrdering(1, 3, uint32(len(validators)))
 
-	b00 := s.genGenesisBlock(validators[0], map[common.Hash]struct{}{})
+	b00 := s.genGenesisBlock(validators, 0, map[common.Hash]struct{}{})
 	b01 := &types.Block{
 		ProposerID: validators[0],
 		ParentHash: b00.Hash,
-		Hash:       common.NewRandomHash(),
+		Position: types.Position{
+			Height:  1,
+			ChainID: 0,
+		},
+		Hash: common.NewRandomHash(),
 	}
 
 	// When submit to block with lower height to totalOrdering,
@@ -327,21 +339,15 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 	//  Even when B is not received, A should
 	//  be able to be delivered.
 	validators := test.GenerateRandomValidatorIDs(5)
-	to := newTotalOrdering(2, 3, validators)
-	// Get indexes of validatorID used in total ordering module.
-	var validatorIndexes []int
-	for _, vID := range validators {
-		validatorIndexes = append(
-			validatorIndexes, to.validatorIndexMapping[vID])
-	}
-
+	to := newTotalOrdering(2, 3, uint32(len(validators)))
 	genNextBlock := func(b *types.Block) *types.Block {
 		return &types.Block{
 			ProposerID: b.ProposerID,
 			ParentHash: b.Hash,
 			Hash:       common.NewRandomHash(),
 			Position: types.Position{
-				Height: b.Position.Height + 1,
+				Height:  b.Position.Height + 1,
+				ChainID: b.Position.ChainID,
 			},
 			Acks: map[common.Hash]struct{}{
 				b.Hash: struct{}{},
@@ -349,23 +355,23 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 		}
 	}
 
-	b00 := s.genGenesisBlock(validators[0], map[common.Hash]struct{}{})
+	b00 := s.genGenesisBlock(validators, 0, map[common.Hash]struct{}{})
 	b01 := genNextBlock(b00)
 	b02 := genNextBlock(b01)
 
-	b10 := s.genGenesisBlock(validators[1], map[common.Hash]struct{}{
+	b10 := s.genGenesisBlock(validators, 1, map[common.Hash]struct{}{
 		b00.Hash: struct{}{},
 	})
 	b11 := genNextBlock(b10)
 	b12 := genNextBlock(b11)
 
-	b20 := s.genGenesisBlock(validators[2], map[common.Hash]struct{}{
+	b20 := s.genGenesisBlock(validators, 2, map[common.Hash]struct{}{
 		b00.Hash: struct{}{},
 	})
 	b21 := genNextBlock(b20)
 	b22 := genNextBlock(b21)
 
-	b30 := s.genGenesisBlock(validators[3], map[common.Hash]struct{}{
+	b30 := s.genGenesisBlock(validators, 3, map[common.Hash]struct{}{
 		b00.Hash: struct{}{},
 	})
 	b31 := genNextBlock(b30)
@@ -377,11 +383,11 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 	s.checkNotDeliver(to, b01)
 	s.checkNotDeliver(to, b02)
 
-	candidate := to.candidates[to.candidateIndexMapping[b00.Hash]]
+	candidate := to.candidates[0]
 	s.Require().NotNil(candidate)
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].minHeight,
+	s.Equal(candidate.ackedStatus[0].minHeight,
 		b00.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].count, uint64(3))
+	s.Equal(candidate.ackedStatus[0].count, uint64(3))
 
 	s.checkNotDeliver(to, b10)
 	s.checkNotDeliver(to, b11)
@@ -393,22 +399,18 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 	s.checkNotDeliver(to, b31)
 
 	// Check the internal state before delivering.
-	s.Len(to.candidateIndexMapping, 1) // b00 is the only candidate.
+	s.Len(to.candidateChainMapping, 1) // b00 is the only candidate.
 
-	candidate = to.candidates[to.candidateIndexMapping[b00.Hash]]
+	candidate = to.candidates[0]
 	s.Require().NotNil(candidate)
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].minHeight,
-		b00.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].count, uint64(3))
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].minHeight,
-		b10.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].count, uint64(3))
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].minHeight,
-		b20.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].count, uint64(3))
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].minHeight,
-		b30.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].count, uint64(2))
+	s.Equal(candidate.ackedStatus[0].minHeight, b00.Position.Height)
+	s.Equal(candidate.ackedStatus[0].count, uint64(3))
+	s.Equal(candidate.ackedStatus[1].minHeight, b10.Position.Height)
+	s.Equal(candidate.ackedStatus[1].count, uint64(3))
+	s.Equal(candidate.ackedStatus[2].minHeight, b20.Position.Height)
+	s.Equal(candidate.ackedStatus[2].count, uint64(3))
+	s.Equal(candidate.ackedStatus[3].minHeight, b30.Position.Height)
+	s.Equal(candidate.ackedStatus[3].count, uint64(2))
 
 	blocks, early, err := to.processBlock(b32)
 	s.Require().Len(blocks, 1)
@@ -417,35 +419,31 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 	s.checkHashSequence(blocks, common.Hashes{b00.Hash})
 
 	// Check the internal state after delivered.
-	s.Len(to.candidateIndexMapping, 4) // b01, b10, b20, b30 are candidates.
+	s.Len(to.candidateChainMapping, 4) // b01, b10, b20, b30 are candidates.
 
 	// Check b01.
-	candidate = to.candidates[to.candidateIndexMapping[b01.Hash]]
+	candidate = to.candidates[0]
 	s.Require().NotNil(candidate)
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].minHeight,
-		b01.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].count, uint64(2))
+	s.Equal(candidate.ackedStatus[0].minHeight, b01.Position.Height)
+	s.Equal(candidate.ackedStatus[0].count, uint64(2))
 
 	// Check b10.
-	candidate = to.candidates[to.candidateIndexMapping[b10.Hash]]
+	candidate = to.candidates[1]
 	s.Require().NotNil(candidate)
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].minHeight,
-		b10.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].count, uint64(3))
+	s.Equal(candidate.ackedStatus[1].minHeight, b10.Position.Height)
+	s.Equal(candidate.ackedStatus[1].count, uint64(3))
 
 	// Check b20.
-	candidate = to.candidates[to.candidateIndexMapping[b20.Hash]]
+	candidate = to.candidates[2]
 	s.Require().NotNil(candidate)
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].minHeight,
-		b20.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].count, uint64(3))
+	s.Equal(candidate.ackedStatus[2].minHeight, b20.Position.Height)
+	s.Equal(candidate.ackedStatus[2].count, uint64(3))
 
 	// Check b30.
-	candidate = to.candidates[to.candidateIndexMapping[b30.Hash]]
+	candidate = to.candidates[3]
 	s.Require().NotNil(candidate)
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].minHeight,
-		b30.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].count, uint64(3))
+	s.Equal(candidate.ackedStatus[3].minHeight, b30.Position.Height)
+	s.Equal(candidate.ackedStatus[3].count, uint64(3))
 
 	// Make sure b00 doesn't exist in current working set:
 	s.checkNotInWorkingSet(to, b00)
@@ -454,27 +452,22 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	// It's a handcrafted test case.
 	validators := test.GenerateRandomValidatorIDs(5)
-	to := newTotalOrdering(2, 3, validators)
-	// Get indexes of validatorID used in total ordering module.
-	var validatorIndexes []int
-	for _, vID := range validators {
-		validatorIndexes = append(
-			validatorIndexes, to.validatorIndexMapping[vID])
-	}
-
-	b00 := s.genGenesisBlock(validators[0], map[common.Hash]struct{}{})
-	b10 := s.genGenesisBlock(validators[1], map[common.Hash]struct{}{})
+	to := newTotalOrdering(2, 3, uint32(len(validators)))
+	// Setup blocks.
+	b00 := s.genGenesisBlock(validators, 0, map[common.Hash]struct{}{})
+	b10 := s.genGenesisBlock(validators, 1, map[common.Hash]struct{}{})
 	b20 := s.genGenesisBlock(
-		validators[2], map[common.Hash]struct{}{b10.Hash: struct{}{}})
+		validators, 2, map[common.Hash]struct{}{b10.Hash: struct{}{}})
 	b30 := s.genGenesisBlock(
-		validators[3], map[common.Hash]struct{}{b20.Hash: struct{}{}})
-	b40 := s.genGenesisBlock(validators[4], map[common.Hash]struct{}{})
+		validators, 3, map[common.Hash]struct{}{b20.Hash: struct{}{}})
+	b40 := s.genGenesisBlock(validators, 4, map[common.Hash]struct{}{})
 	b11 := &types.Block{
 		ProposerID: validators[1],
 		ParentHash: b10.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 1,
+			Height:  1,
+			ChainID: 1,
 		},
 		Acks: map[common.Hash]struct{}{
 			b10.Hash: struct{}{},
@@ -486,7 +479,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		ParentHash: b00.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 1,
+			Height:  1,
+			ChainID: 0,
 		},
 		Acks: map[common.Hash]struct{}{
 			b00.Hash: struct{}{},
@@ -498,7 +492,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		ParentHash: b20.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 1,
+			Height:  1,
+			ChainID: 2,
 		},
 		Acks: map[common.Hash]struct{}{
 			b20.Hash: struct{}{},
@@ -510,7 +505,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		ParentHash: b30.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 1,
+			Height:  1,
+			ChainID: 3,
 		},
 		Acks: map[common.Hash]struct{}{
 			b30.Hash: struct{}{},
@@ -522,7 +518,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		ParentHash: b01.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 2,
+			Height:  2,
+			ChainID: 0,
 		},
 		Acks: map[common.Hash]struct{}{
 			b01.Hash: struct{}{},
@@ -534,7 +531,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		ParentHash: b11.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 2,
+			Height:  2,
+			ChainID: 1,
 		},
 		Acks: map[common.Hash]struct{}{
 			b11.Hash: struct{}{},
@@ -546,7 +544,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		ParentHash: b31.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 2,
+			Height:  2,
+			ChainID: 3,
 		},
 		Acks: map[common.Hash]struct{}{
 			b31.Hash: struct{}{},
@@ -557,7 +556,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		ParentHash: b21.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 2,
+			Height:  2,
+			ChainID: 2,
 		},
 		Acks: map[common.Hash]struct{}{
 			b21.Hash: struct{}{},
@@ -569,7 +569,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		ParentHash: b22.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 3,
+			Height:  3,
+			ChainID: 2,
 		},
 		Acks: map[common.Hash]struct{}{
 			b22.Hash: struct{}{},
@@ -580,7 +581,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		ParentHash: b02.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 3,
+			Height:  3,
+			ChainID: 0,
 		},
 		Acks: map[common.Hash]struct{}{
 			b02.Hash: struct{}{},
@@ -592,7 +594,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		ParentHash: b12.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 3,
+			Height:  3,
+			ChainID: 1,
 		},
 		Acks: map[common.Hash]struct{}{
 			b12.Hash: struct{}{},
@@ -604,7 +607,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		ParentHash: b13.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 4,
+			Height:  4,
+			ChainID: 1,
 		},
 		Acks: map[common.Hash]struct{}{
 			b13.Hash: struct{}{},
@@ -615,7 +619,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		ParentHash: b40.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 1,
+			Height:  1,
+			ChainID: 4,
 		},
 		Acks: map[common.Hash]struct{}{
 			b40.Hash: struct{}{},
@@ -626,7 +631,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		ParentHash: b41.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 2,
+			Height:  2,
+			ChainID: 4,
 		},
 		Acks: map[common.Hash]struct{}{
 			b41.Hash: struct{}{},
@@ -671,41 +677,33 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	s.Contains(acked, b32.Hash)
 
 	// Make sure there are 2 candidates.
-	s.Require().Len(to.candidateIndexMapping, 2)
+	s.Require().Len(to.candidateChainMapping, 2)
 
 	// Check b00's height vector.
-	candidate := to.candidates[to.candidateIndexMapping[b00.Hash]]
+	candidate := to.candidates[0]
 	s.Require().NotNil(candidate)
-	s.NotContains(candidate.ackedStatus, validatorIndexes[4])
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].minHeight,
-		b00.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].count, uint64(2))
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].minHeight,
-		b11.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].count, uint64(2))
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].minHeight,
-		b21.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].count, uint64(2))
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].minHeight,
-		b31.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].count, uint64(2))
+	s.Equal(candidate.ackedStatus[0].minHeight, b00.Position.Height)
+	s.Equal(candidate.ackedStatus[0].count, uint64(2))
+	s.Equal(candidate.ackedStatus[1].minHeight, b11.Position.Height)
+	s.Equal(candidate.ackedStatus[1].count, uint64(2))
+	s.Equal(candidate.ackedStatus[2].minHeight, b21.Position.Height)
+	s.Equal(candidate.ackedStatus[2].count, uint64(2))
+	s.Equal(candidate.ackedStatus[3].minHeight, b31.Position.Height)
+	s.Equal(candidate.ackedStatus[3].count, uint64(2))
+	s.Equal(candidate.ackedStatus[4].count, uint64(0))
 
 	// Check b10's height vector.
-	candidate = to.candidates[to.candidateIndexMapping[b10.Hash]]
+	candidate = to.candidates[1]
 	s.Require().NotNil(candidate)
-	s.NotContains(candidate.ackedStatus, validatorIndexes[4])
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].minHeight,
-		b01.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].count, uint64(1))
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].minHeight,
-		b10.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].count, uint64(3))
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].minHeight,
-		b20.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].count, uint64(3))
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].minHeight,
-		b30.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].count, uint64(3))
+	s.Equal(candidate.ackedStatus[0].minHeight, b01.Position.Height)
+	s.Equal(candidate.ackedStatus[0].count, uint64(1))
+	s.Equal(candidate.ackedStatus[1].minHeight, b10.Position.Height)
+	s.Equal(candidate.ackedStatus[1].count, uint64(3))
+	s.Equal(candidate.ackedStatus[2].minHeight, b20.Position.Height)
+	s.Equal(candidate.ackedStatus[2].count, uint64(3))
+	s.Equal(candidate.ackedStatus[3].minHeight, b30.Position.Height)
+	s.Equal(candidate.ackedStatus[3].count, uint64(3))
+	s.Equal(candidate.ackedStatus[4].count, uint64(0))
 
 	// Check the first deliver.
 	blocks, early, err := to.processBlock(b02)
@@ -718,41 +716,33 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	s.checkNotInWorkingSet(to, b10)
 
 	// Check if candidates of next round are picked correctly.
-	s.Len(to.candidateIndexMapping, 2)
+	s.Len(to.candidateChainMapping, 2)
 
 	// Check b01's height vector.
-	candidate = to.candidates[to.candidateIndexMapping[b11.Hash]]
+	candidate = to.candidates[1]
 	s.Require().NotNil(candidate)
-	s.NotContains(candidate.ackedStatus, validators[4])
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].minHeight,
-		b01.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].count, uint64(2))
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].minHeight,
-		b11.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].count, uint64(2))
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].minHeight,
-		b21.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].count, uint64(2))
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].minHeight,
-		b11.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].count, uint64(2))
+	s.Equal(candidate.ackedStatus[0].minHeight, b01.Position.Height)
+	s.Equal(candidate.ackedStatus[0].count, uint64(2))
+	s.Equal(candidate.ackedStatus[1].minHeight, b11.Position.Height)
+	s.Equal(candidate.ackedStatus[1].count, uint64(2))
+	s.Equal(candidate.ackedStatus[2].minHeight, b21.Position.Height)
+	s.Equal(candidate.ackedStatus[2].count, uint64(2))
+	s.Equal(candidate.ackedStatus[3].minHeight, b11.Position.Height)
+	s.Equal(candidate.ackedStatus[3].count, uint64(2))
+	s.Equal(candidate.ackedStatus[4].count, uint64(0))
 
 	// Check b20's height vector.
-	candidate = to.candidates[to.candidateIndexMapping[b20.Hash]]
+	candidate = to.candidates[2]
 	s.Require().NotNil(candidate)
-	s.NotContains(candidate.ackedStatus, validators[4])
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].minHeight,
-		b02.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].count, uint64(1))
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].minHeight,
-		b12.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].count, uint64(1))
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].minHeight,
-		b20.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].count, uint64(3))
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].minHeight,
-		b30.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].count, uint64(3))
+	s.Equal(candidate.ackedStatus[0].minHeight, b02.Position.Height)
+	s.Equal(candidate.ackedStatus[0].count, uint64(1))
+	s.Equal(candidate.ackedStatus[1].minHeight, b12.Position.Height)
+	s.Equal(candidate.ackedStatus[1].count, uint64(1))
+	s.Equal(candidate.ackedStatus[2].minHeight, b20.Position.Height)
+	s.Equal(candidate.ackedStatus[2].count, uint64(3))
+	s.Equal(candidate.ackedStatus[3].minHeight, b30.Position.Height)
+	s.Equal(candidate.ackedStatus[3].count, uint64(3))
+	s.Equal(candidate.ackedStatus[4].count, uint64(0))
 
 	s.checkNotDeliver(to, b13)
 
@@ -773,50 +763,41 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	s.checkNotDeliver(to, b14)
 
 	// Make sure b01, b30, b40 are candidate in next round.
-	s.Len(to.candidateIndexMapping, 3)
-	candidate = to.candidates[to.candidateIndexMapping[b01.Hash]]
+	s.Len(to.candidateChainMapping, 3)
+	candidate = to.candidates[0]
 	s.Require().NotNil(candidate)
-	s.NotContains(candidate.ackedStatus, validatorIndexes[4])
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].minHeight,
-		b01.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].count, uint64(3))
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].minHeight,
-		b12.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].count, uint64(3))
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].minHeight,
-		b21.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].count, uint64(2))
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].minHeight,
-		b31.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].count, uint64(2))
+	s.Equal(candidate.ackedStatus[0].minHeight, b01.Position.Height)
+	s.Equal(candidate.ackedStatus[0].count, uint64(3))
+	s.Equal(candidate.ackedStatus[1].minHeight, b12.Position.Height)
+	s.Equal(candidate.ackedStatus[1].count, uint64(3))
+	s.Equal(candidate.ackedStatus[2].minHeight, b21.Position.Height)
+	s.Equal(candidate.ackedStatus[2].count, uint64(2))
+	s.Equal(candidate.ackedStatus[3].minHeight, b31.Position.Height)
+	s.Equal(candidate.ackedStatus[3].count, uint64(2))
+	s.Equal(candidate.ackedStatus[4].count, uint64(0))
 
-	candidate = to.candidates[to.candidateIndexMapping[b30.Hash]]
+	candidate = to.candidates[3]
 	s.Require().NotNil(candidate)
-	s.NotContains(candidate.ackedStatus, validatorIndexes[4])
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].minHeight,
-		b03.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[0]].count, uint64(1))
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].minHeight,
-		b13.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[1]].count, uint64(2))
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].minHeight,
-		b22.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[2]].count, uint64(1))
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].minHeight,
-		b30.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[3]].count, uint64(3))
+	s.Equal(candidate.ackedStatus[0].minHeight, b03.Position.Height)
+	s.Equal(candidate.ackedStatus[0].count, uint64(1))
+	s.Equal(candidate.ackedStatus[1].minHeight, b13.Position.Height)
+	s.Equal(candidate.ackedStatus[1].count, uint64(2))
+	s.Equal(candidate.ackedStatus[2].minHeight, b22.Position.Height)
+	s.Equal(candidate.ackedStatus[2].count, uint64(1))
+	s.Equal(candidate.ackedStatus[3].minHeight, b30.Position.Height)
+	s.Equal(candidate.ackedStatus[3].count, uint64(3))
+	s.Equal(candidate.ackedStatus[4].count, uint64(0))
 
-	candidate = to.candidates[to.candidateIndexMapping[b40.Hash]]
+	candidate = to.candidates[4]
 	s.Require().NotNil(candidate)
-	s.NotContains(candidate.ackedStatus, validatorIndexes[0])
-	s.NotContains(candidate.ackedStatus, validatorIndexes[1])
-	s.NotContains(candidate.ackedStatus, validatorIndexes[2])
-	s.NotContains(candidate.ackedStatus, validatorIndexes[3])
-	s.Equal(candidate.ackedStatus[validatorIndexes[4]].minHeight,
-		b40.Position.Height)
-	s.Equal(candidate.ackedStatus[validatorIndexes[4]].count, uint64(3))
+	s.Equal(candidate.ackedStatus[0].count, uint64(0))
+	s.Equal(candidate.ackedStatus[1].count, uint64(0))
+	s.Equal(candidate.ackedStatus[2].count, uint64(0))
+	s.Equal(candidate.ackedStatus[3].count, uint64(0))
+	s.Equal(candidate.ackedStatus[4].minHeight, b40.Position.Height)
+	s.Equal(candidate.ackedStatus[4].count, uint64(3))
 
-	// Make 'Acking Node Set' contains blocks from all validators,
+	// Make 'Acking Node Set' contains blocks from all chains,
 	// this should trigger not-early deliver.
 	blocks, early, err = to.processBlock(b23)
 	s.False(early)
@@ -828,8 +809,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	s.checkNotInWorkingSet(to, b30)
 
 	// Make sure b21, b40 are candidates of next round.
-	s.Contains(to.candidateIndexMapping, b21.Hash)
-	s.Contains(to.candidateIndexMapping, b40.Hash)
+	s.Contains(to.candidateChainMapping, b21.Hash)
+	s.Contains(to.candidateChainMapping, b40.Hash)
 }
 
 func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
@@ -844,21 +825,15 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 	//  v   v   v    v
 	//  o   o   o <- o        Height: 0
 	var (
-		req              = s.Require()
-		validatorIndexes []int
+		req        = s.Require()
+		validators = test.GenerateRandomValidatorIDs(5)
+		to         = newTotalOrdering(0, 3, uint32(len(validators)))
 	)
-	validators := test.GenerateRandomValidatorIDs(5)
-	to := newTotalOrdering(0, 3, validators)
-	// Get indexes of validatorID used in total ordering module.
-	for _, vID := range validators {
-		validatorIndexes = append(
-			validatorIndexes, to.validatorIndexMapping[vID])
-	}
-
-	b00 := s.genGenesisBlock(validators[0], map[common.Hash]struct{}{})
-	b10 := s.genGenesisBlock(validators[1], map[common.Hash]struct{}{})
-	b20 := s.genGenesisBlock(validators[2], map[common.Hash]struct{}{})
-	b30 := s.genGenesisBlock(validators[3], map[common.Hash]struct{}{
+	// Setup blocks.
+	b00 := s.genGenesisBlock(validators, 0, map[common.Hash]struct{}{})
+	b10 := s.genGenesisBlock(validators, 1, map[common.Hash]struct{}{})
+	b20 := s.genGenesisBlock(validators, 2, map[common.Hash]struct{}{})
+	b30 := s.genGenesisBlock(validators, 3, map[common.Hash]struct{}{
 		b20.Hash: struct{}{},
 	})
 	b01 := &types.Block{
@@ -866,7 +841,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 		ParentHash: b00.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 1,
+			Height:  1,
+			ChainID: 0,
 		},
 		Acks: map[common.Hash]struct{}{
 			b00.Hash: struct{}{},
@@ -878,7 +854,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 		ParentHash: b10.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 1,
+			Height:  1,
+			ChainID: 1,
 		},
 		Acks: map[common.Hash]struct{}{
 			b10.Hash: struct{}{},
@@ -890,7 +867,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 		ParentHash: b20.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 1,
+			Height:  1,
+			ChainID: 2,
 		},
 		Acks: map[common.Hash]struct{}{
 			b20.Hash: struct{}{},
@@ -901,14 +879,15 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 		ParentHash: b30.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
-			Height: 1,
+			Height:  1,
+			ChainID: 3,
 		},
 		Acks: map[common.Hash]struct{}{
 			b21.Hash: struct{}{},
 			b30.Hash: struct{}{},
 		},
 	}
-	b40 := s.genGenesisBlock(validators[4], map[common.Hash]struct{}{
+	b40 := s.genGenesisBlock(validators, 4, map[common.Hash]struct{}{
 		b31.Hash: struct{}{},
 	})
 
@@ -922,32 +901,26 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 	s.checkNotDeliver(to, b31)
 
 	// Check candidate status before delivering.
-	candidate := to.candidates[to.candidateIndexMapping[b00.Hash]]
+	candidate := to.candidates[0]
 	req.NotNil(candidate)
-	req.Equal(candidate.ackedStatus[validatorIndexes[0]].minHeight,
-		b00.Position.Height)
-	req.Equal(candidate.ackedStatus[validatorIndexes[0]].count, uint64(2))
+	req.Equal(candidate.ackedStatus[0].minHeight, b00.Position.Height)
+	req.Equal(candidate.ackedStatus[0].count, uint64(2))
 
-	candidate = to.candidates[to.candidateIndexMapping[b10.Hash]]
+	candidate = to.candidates[1]
 	req.NotNil(candidate)
-	req.Equal(candidate.ackedStatus[validatorIndexes[0]].minHeight,
-		b01.Position.Height)
-	req.Equal(candidate.ackedStatus[validatorIndexes[0]].count, uint64(1))
-	req.Equal(candidate.ackedStatus[validatorIndexes[1]].minHeight,
-		b10.Position.Height)
-	req.Equal(candidate.ackedStatus[validatorIndexes[1]].count, uint64(2))
+	req.Equal(candidate.ackedStatus[0].minHeight, b01.Position.Height)
+	req.Equal(candidate.ackedStatus[0].count, uint64(1))
+	req.Equal(candidate.ackedStatus[1].minHeight, b10.Position.Height)
+	req.Equal(candidate.ackedStatus[1].count, uint64(2))
 
-	candidate = to.candidates[to.candidateIndexMapping[b20.Hash]]
+	candidate = to.candidates[2]
 	req.NotNil(candidate)
-	req.Equal(candidate.ackedStatus[validatorIndexes[1]].minHeight,
-		b11.Position.Height)
-	req.Equal(candidate.ackedStatus[validatorIndexes[1]].count, uint64(1))
-	req.Equal(candidate.ackedStatus[validatorIndexes[2]].minHeight,
-		b20.Position.Height)
-	req.Equal(candidate.ackedStatus[validatorIndexes[2]].count, uint64(2))
-	req.Equal(candidate.ackedStatus[validatorIndexes[3]].minHeight,
-		b30.Position.Height)
-	req.Equal(candidate.ackedStatus[validatorIndexes[3]].count, uint64(2))
+	req.Equal(candidate.ackedStatus[1].minHeight, b11.Position.Height)
+	req.Equal(candidate.ackedStatus[1].count, uint64(1))
+	req.Equal(candidate.ackedStatus[2].minHeight, b20.Position.Height)
+	req.Equal(candidate.ackedStatus[2].count, uint64(2))
+	req.Equal(candidate.ackedStatus[3].minHeight, b30.Position.Height)
+	req.Equal(candidate.ackedStatus[3].count, uint64(2))
 
 	// This new block should trigger non-early deliver.
 	blocks, early, err := to.processBlock(b40)
@@ -959,9 +932,9 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 	s.checkNotInWorkingSet(to, b20)
 
 	// Make sure b10, b30 are candidates for next round.
-	req.Contains(to.candidateIndexMapping, b00.Hash)
-	req.Contains(to.candidateIndexMapping, b10.Hash)
-	req.Contains(to.candidateIndexMapping, b30.Hash)
+	req.Contains(to.candidateChainMapping, b00.Hash)
+	req.Contains(to.candidateChainMapping, b10.Hash)
+	req.Contains(to.candidateChainMapping, b30.Hash)
 }
 
 func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
@@ -1054,25 +1027,25 @@ func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 	for _, gen := range ackingCountGenerators {
 		// Test for K=0.
 		constructor := func(validators types.ValidatorIDs) *totalOrdering {
-			return newTotalOrdering(0, phi, validators)
+			return newTotalOrdering(0, phi, uint32(len(validators)))
 		}
 		s.baseTestRandomlyGeneratedBlocks(
 			constructor, validatorCount, blockCount, gen, repeat)
 		// Test for K=1,
 		constructor = func(validators types.ValidatorIDs) *totalOrdering {
-			return newTotalOrdering(1, phi, validators)
+			return newTotalOrdering(1, phi, uint32(len(validators)))
 		}
 		s.baseTestRandomlyGeneratedBlocks(
 			constructor, validatorCount, blockCount, gen, repeat)
 		// Test for K=2,
 		constructor = func(validators types.ValidatorIDs) *totalOrdering {
-			return newTotalOrdering(2, phi, validators)
+			return newTotalOrdering(2, phi, uint32(len(validators)))
 		}
 		s.baseTestRandomlyGeneratedBlocks(
 			constructor, validatorCount, blockCount, gen, repeat)
 		// Test for K=3,
 		constructor = func(validators types.ValidatorIDs) *totalOrdering {
-			return newTotalOrdering(3, phi, validators)
+			return newTotalOrdering(3, phi, uint32(len(validators)))
 		}
 		s.baseTestRandomlyGeneratedBlocks(
 			constructor, validatorCount, blockCount, gen, repeat)

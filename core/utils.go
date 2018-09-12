@@ -92,7 +92,7 @@ func getMedianTime(timestamps []time.Time) (t time.Time, err error) {
 	return
 }
 
-func removeFromSortedIntSlice(xs []int, x int) []int {
+func removeFromSortedUint32Slice(xs []uint32, x uint32) []uint32 {
 	indexToRemove := sort.Search(len(xs), func(idx int) bool {
 		return xs[idx] >= x
 	})
