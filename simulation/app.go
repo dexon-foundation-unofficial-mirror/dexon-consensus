@@ -94,9 +94,9 @@ func (a *simApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
 	return
 }
 
-// PreparePayloads implements core.Application.
-func (a *simApp) PreparePayloads(position types.Position) [][]byte {
-	return [][]byte{}
+// PreparePayload implements core.Application.
+func (a *simApp) PreparePayload(position types.Position) []byte {
+	return []byte{}
 }
 
 // StronglyAcked is called when a block is strongly acked by DEXON

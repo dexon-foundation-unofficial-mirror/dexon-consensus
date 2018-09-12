@@ -120,10 +120,10 @@ func (app *nonBlockingApplication) wait() {
 	app.running.Wait()
 }
 
-// PreparePayloads cannot be non-blocking.
-func (app *nonBlockingApplication) PreparePayloads(
-	position types.Position) [][]byte {
-	return app.app.PreparePayloads(position)
+// PreparePayload cannot be non-blocking.
+func (app *nonBlockingApplication) PreparePayload(
+	position types.Position) []byte {
+	return app.app.PreparePayload(position)
 }
 
 // VerifyPayloads cannot be non-blocking.

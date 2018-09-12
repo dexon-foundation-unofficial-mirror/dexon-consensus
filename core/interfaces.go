@@ -30,7 +30,7 @@ import (
 // consensus core.
 type Application interface {
 	// PreparePayload is called when consensus core is preparing a block.
-	PreparePayloads(position types.Position) [][]byte
+	PreparePayload(position types.Position) []byte
 
 	// VerifyPayloads verifies if the payloads are valid.
 	VerifyPayloads(payloads [][]byte) bool

@@ -102,9 +102,9 @@ func NewApp() *App {
 	}
 }
 
-// PreparePayloads implements Application interface.
-func (app *App) PreparePayloads(position types.Position) [][]byte {
-	return [][]byte{}
+// PreparePayload implements Application interface.
+func (app *App) PreparePayload(position types.Position) []byte {
+	return []byte{}
 }
 
 // VerifyPayloads implements Application.

@@ -63,7 +63,7 @@ type Block struct {
 	Position   Position                 `json:"position"`
 	Timestamp  time.Time                `json:"timestamps"`
 	Acks       map[common.Hash]struct{} `json:"acks"`
-	Payloads   [][]byte                 `json:"payloads"`
+	Payload    []byte                   `json:"payload"`
 	Signature  crypto.Signature         `json:"signature"`
 
 	CRSSignature crypto.Signature `json:"crs_signature"`
@@ -96,11 +96,8 @@ func (b *Block) Clone() (bcopy *Block) {
 	for k, v := range b.Acks {
 		bcopy.Acks[k] = v
 	}
-	bcopy.Payloads = make([][]byte, len(b.Payloads))
-	for k, v := range b.Payloads {
-		bcopy.Payloads[k] = make([]byte, len(v))
-		copy(bcopy.Payloads[k], v)
-	}
+	bcopy.Payload = make([]byte, len(b.Payload))
+	copy(bcopy.Payload, b.Payload)
 	return
 }
 

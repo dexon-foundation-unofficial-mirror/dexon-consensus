@@ -47,8 +47,8 @@ func newSlowApp(sleep time.Duration) *slowApp {
 	}
 }
 
-func (app *slowApp) PreparePayloads(_ types.Position) [][]byte {
-	return [][]byte{}
+func (app *slowApp) PreparePayload(_ types.Position) []byte {
+	return []byte{}
 }
 
 func (app *slowApp) VerifyPayloads(_ [][]byte) bool {

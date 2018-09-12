@@ -517,7 +517,7 @@ func (con *Consensus) PrepareBlock(b *types.Block,
 
 	con.rbModule.prepareBlock(b)
 	b.Timestamp = proposeTime
-	b.Payloads = con.app.PreparePayloads(b.Position)
+	b.Payload = con.app.PreparePayload(b.Position)
 	b.Hash, err = hashBlock(b)
 	if err != nil {
 		return
@@ -535,7 +535,7 @@ func (con *Consensus) PrepareGenesisBlock(b *types.Block,
 	if err = con.checkPrepareBlock(b, proposeTime); err != nil {
 		return
 	}
-	if len(b.Payloads) != 0 {
+	if len(b.Payload) != 0 {
 		err = ErrGenesisBlockNotEmpty
 		return
 	}
