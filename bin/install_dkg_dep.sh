@@ -19,3 +19,6 @@ if [ ! -d .dep/dkg ]; then
 fi
 cp -r .dep/dkg/* \
   vendor/github.com/herumi
+mkdir lib > /dev/null
+cd lib
+ln -s ../vendor/github.com/herumi/bls/lib/* .
