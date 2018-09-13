@@ -33,7 +33,7 @@ type Application interface {
 	PreparePayload(position types.Position) []byte
 
 	// VerifyPayloads verifies if the payloads are valid.
-	VerifyPayloads(payloads [][]byte) bool
+	VerifyPayloads(payloads []byte) bool
 
 	// BlockConfirmed is called when a block is confirmed and added to lattice.
 	BlockConfirmed(block *types.Block)

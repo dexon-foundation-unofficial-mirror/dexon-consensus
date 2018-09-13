@@ -108,7 +108,7 @@ func (app *App) PreparePayload(position types.Position) []byte {
 }
 
 // VerifyPayloads implements Application.
-func (app *App) VerifyPayloads(payloads [][]byte) bool {
+func (app *App) VerifyPayloads(payloads []byte) bool {
 	return true
 }
 

@@ -64,7 +64,7 @@ func (a *simApp) BlockConfirmed(block *types.Block) {
 }
 
 // VerifyPayloads implements core.Application.
-func (a *simApp) VerifyPayloads(payloads [][]byte) bool {
+func (a *simApp) VerifyPayloads(payloads []byte) bool {
 	return true
 }
 

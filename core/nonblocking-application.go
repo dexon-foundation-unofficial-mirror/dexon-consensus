@@ -127,7 +127,7 @@ func (app *nonBlockingApplication) PreparePayload(
 }
 
 // VerifyPayloads cannot be non-blocking.
-func (app *nonBlockingApplication) VerifyPayloads(payloads [][]byte) bool {
+func (app *nonBlockingApplication) VerifyPayloads(payloads []byte) bool {
 	return app.app.VerifyPayloads(payloads)
 }
 

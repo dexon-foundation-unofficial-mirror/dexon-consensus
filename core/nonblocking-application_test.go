@@ -51,7 +51,7 @@ func (app *slowApp) PreparePayload(_ types.Position) []byte {
 	return []byte{}
 }
 
-func (app *slowApp) VerifyPayloads(_ [][]byte) bool {
+func (app *slowApp) VerifyPayloads(_ []byte) bool {
 	return true
 }
 
