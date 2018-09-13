@@ -72,12 +72,12 @@ type consensusReceiver struct {
 
 func (recv *consensusReceiver) ProposeVote(vote *types.Vote) {
 	if err := recv.consensus.prepareVote(recv.chainID, vote); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 	go func() {
 		if err := recv.consensus.ProcessVote(vote); err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			return
 		}
 		recv.consensus.network.BroadcastVote(vote)
@@ -87,12 +87,12 @@ func (recv *consensusReceiver) ProposeVote(vote *types.Vote) {
 func (recv *consensusReceiver) ProposeBlock(hash common.Hash) {
 	block, exist := recv.consensus.baModules[recv.chainID].findCandidateBlock(hash)
 	if !exist {
-		fmt.Println(ErrUnknownBlockProposed)
-		fmt.Println(hash)
+		log.Println(ErrUnknownBlockProposed)
+		log.Println(hash)
 		return
 	}
 	if err := recv.consensus.PreProcessBlock(block); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 	recv.consensus.network.BroadcastBlock(block)
@@ -101,11 +101,11 @@ func (recv *consensusReceiver) ProposeBlock(hash common.Hash) {
 func (recv *consensusReceiver) ConfirmBlock(hash common.Hash) {
 	block, exist := recv.consensus.baModules[recv.chainID].findCandidateBlock(hash)
 	if !exist {
-		fmt.Println(ErrUnknownBlockConfirmed, hash)
+		log.Println(ErrUnknownBlockConfirmed, hash)
 		return
 	}
 	if err := recv.consensus.ProcessBlock(block); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 	recv.restart <- struct{}{}
@@ -294,10 +294,10 @@ func (con *Consensus) RunLegacy() {
 		},
 	}
 	if err := con.PrepareGenesisBlock(genesisBlock, time.Now().UTC()); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 	if err := con.ProcessBlock(genesisBlock); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 	con.network.BroadcastBlock(genesisBlock)
 
@@ -315,10 +315,10 @@ ProposingBlockLoop:
 			},
 		}
 		if err := con.PrepareBlock(block, time.Now().UTC()); err != nil {
-			fmt.Println(err)
+			log.Println(err)
 		}
 		if err := con.ProcessBlock(block); err != nil {
-			fmt.Println(err)
+			log.Println(err)
 		}
 		con.network.BroadcastBlock(block)
 	}
@@ -344,15 +344,15 @@ func (con *Consensus) processMsg(
 		switch val := msg.(type) {
 		case *types.Block:
 			if err := blockProcesser(val); err != nil {
-				fmt.Println(err)
+				log.Println(err)
 			}
 		case *types.NotaryAck:
 			if err := con.ProcessNotaryAck(val); err != nil {
-				fmt.Println(err)
+				log.Println(err)
 			}
 		case *types.Vote:
 			if err := con.ProcessVote(val); err != nil {
-				fmt.Println(err)
+				log.Println(err)
 			}
 		}
 	}
@@ -367,11 +367,11 @@ func (con *Consensus) proposeBlock(chainID uint32) *types.Block {
 		},
 	}
 	if err := con.PrepareBlock(block, time.Now().UTC()); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return nil
 	}
 	if err := con.baModules[chainID].prepareBlock(block, con.prvKey); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return nil
 	}
 	return block

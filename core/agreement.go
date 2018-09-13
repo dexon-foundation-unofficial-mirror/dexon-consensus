@@ -32,7 +32,6 @@ import (
 var (
 	ErrNotValidator           = fmt.Errorf("not a validaotr")
 	ErrIncorrectVoteSignature = fmt.Errorf("incorrect vote signature")
-	ErrForkVote               = fmt.Errorf("fork vote")
 )
 
 // ErrFork for fork error in agreement.
@@ -43,6 +42,17 @@ type ErrFork struct {
 
 func (e *ErrFork) Error() string {
 	return fmt.Sprintf("fork is found for %s, old %s, new %s",
+		e.vID.String(), e.old, e.new)
+}
+
+// ErrForkVote for fork vote error in agreement.
+type ErrForkVote struct {
+	vID      types.ValidatorID
+	old, new *types.Vote
+}
+
+func (e *ErrForkVote) Error() string {
+	return fmt.Sprintf("fork vote is found for %s, old %s, new %s",
 		e.vID.String(), e.old, e.new)
 }
 
@@ -148,6 +158,7 @@ func (a *agreement) restart(validators types.ValidatorIDs, aID types.Position) {
 		a.data.blocks = make(map[types.ValidatorID]*types.Block)
 		a.data.requiredVote = len(validators)/3*2 + 1
 		a.data.leader.restart()
+		a.data.defaultBlock = common.Hash{}
 		a.hasOutput = false
 		a.state = newPrepareState(a.data)
 		a.validators = make(map[types.ValidatorID]struct{})
@@ -210,6 +221,9 @@ func (a *agreement) agreementID() types.Position {
 
 // nextState is called at the spcifi clock time.
 func (a *agreement) nextState() (err error) {
+	if err = a.state.receiveVote(); err != nil {
+		return
+	}
 	a.state, err = a.state.nextState()
 	return
 }
@@ -230,14 +244,17 @@ func (a *agreement) sanityCheck(vote *types.Vote) error {
 	if !ok {
 		return ErrIncorrectVoteSignature
 	}
+	return nil
+}
 
+func (a *agreement) checkForkVote(vote *types.Vote) error {
 	if err := func() error {
 		a.data.votesLock.RLock()
 		defer a.data.votesLock.RUnlock()
 		if votes, exist := a.data.votes[vote.Period]; exist {
 			if oldVote, exist := votes[vote.Type][vote.ProposerID]; exist {
 				if vote.BlockHash != oldVote.BlockHash {
-					return ErrForkVote
+					return &ErrForkVote{vote.ProposerID, oldVote, vote}
 				}
 			}
 		}
@@ -272,6 +289,10 @@ func (a *agreement) processVote(vote *types.Vote) error {
 		})
 		return nil
 	}
+	if err := a.checkForkVote(vote); err != nil {
+		return err
+	}
+
 	if func() bool {
 		a.data.votesLock.Lock()
 		defer a.data.votesLock.Unlock()
@@ -303,17 +324,17 @@ func (a *agreement) prepareBlock(
 func (a *agreement) processBlock(block *types.Block) error {
 	a.data.blocksLock.Lock()
 	defer a.data.blocksLock.Unlock()
-	if b, exist := a.data.blocks[block.ProposerID]; exist {
-		if b.Hash != block.Hash {
-			return &ErrFork{block.ProposerID, b.Hash, block.Hash}
-		}
-		return nil
-	}
 	if block.Position != a.agreementID() {
 		a.pendingBlock = append(a.pendingBlock, pendingBlock{
 			block:        block,
 			receivedTime: time.Now().UTC(),
 		})
+		return nil
+	}
+	if b, exist := a.data.blocks[block.ProposerID]; exist {
+		if b.Hash != block.Hash {
+			return &ErrFork{block.ProposerID, b.Hash, block.Hash}
+		}
 		return nil
 	}
 	if err := a.data.leader.processBlock(block); err != nil {

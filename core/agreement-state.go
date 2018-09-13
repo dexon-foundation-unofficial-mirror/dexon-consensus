@@ -69,19 +69,14 @@ func (s *prepareState) nextState() (agreementState, error) {
 	hash := common.Hash{}
 	if s.a.period == 1 {
 		hash = s.a.blockProposer().Hash
+		s.a.recv.ProposeBlock(hash)
 	} else {
 		var proposed bool
-		hash, proposed = s.a.countVote(s.a.period-1, types.VotePass)
+		_, proposed = s.a.countVote(s.a.period-1, types.VotePass)
 		if !proposed {
 			return nil, ErrNoEnoughVoteInPrepareState
 		}
-		if hash == nullBlockHash {
-			hash = s.a.blocks[s.a.ID].Hash
-		} else {
-			delete(s.a.blocks, s.a.ID)
-		}
 	}
-	s.a.recv.ProposeBlock(hash)
 	return newAckState(s.a), nil
 }
 func (s *prepareState) receiveVote() error { return nil }
@@ -259,30 +254,9 @@ func (s *pass2State) receiveVote() error {
 	if s.voted {
 		return nil
 	}
-	ackHash, ok := s.a.countVote(s.a.period, types.VoteAck)
-	if ok && ackHash != nullBlockHash {
-		s.a.recv.ProposeVote(&types.Vote{
-			Type:      types.VotePass,
-			BlockHash: ackHash,
-			Period:    s.a.period,
-		})
-		s.voted = true
-	} else if s.a.period > 1 {
-		if _, exist :=
-			s.a.votes[s.a.period][types.VoteConfirm][s.a.ID]; !exist {
-			hash, ok := s.a.countVote(s.a.period-1, types.VotePass)
-			if ok && hash == nullBlockHash {
-				s.a.recv.ProposeVote(&types.Vote{
-					Type:      types.VotePass,
-					BlockHash: hash,
-					Period:    s.a.period,
-				})
-				s.voted = true
-			}
-		}
-	}
 	hash, ok := s.a.countVote(s.a.period, types.VotePass)
 	if ok {
+		s.voted = true
 		s.enoughPassVote <- hash
 	}
 	return nil

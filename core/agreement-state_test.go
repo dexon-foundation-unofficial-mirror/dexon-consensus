@@ -151,9 +151,6 @@ func (s *AgreementStateTestSuite) TestPrepareState() {
 
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	s.Require().True(len(s.blockChan) > 0)
-	hash := <-s.blockChan
-	s.Equal(proposedBlock, hash)
 	s.Equal(stateAck, newState.state())
 
 	// For period >= 2, if the pass-vote for block v not equal to {}
@@ -172,9 +169,6 @@ func (s *AgreementStateTestSuite) TestPrepareState() {
 
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	s.Require().True(len(s.blockChan) > 0)
-	hash = <-s.blockChan
-	s.Equal(block.Hash, hash)
 	s.Equal(stateAck, newState.state())
 }
 
@@ -382,10 +376,6 @@ func (s *AgreementStateTestSuite) TestPass2State() {
 		s.Require().Nil(a.processVote(vote))
 	}
 	s.Require().Nil(state.receiveVote())
-	s.Require().True(len(s.voteChan) > 0)
-	vote := <-s.voteChan
-	s.Equal(types.VotePass, vote.Type)
-	s.Equal(block.Hash, vote.BlockHash)
 	// Only propose one vote.
 	s.Require().Nil(state.receiveVote())
 	s.Require().True(len(s.voteChan) == 0)
@@ -400,14 +390,9 @@ func (s *AgreementStateTestSuite) TestPass2State() {
 		vote := s.prepareVote(vID, types.VotePass, common.Hash{}, 1)
 		s.Require().Nil(a.processVote(vote))
 	}
-	vote = s.prepareVote(s.ID, types.VoteAck, common.Hash{}, 2)
+	vote := s.prepareVote(s.ID, types.VoteAck, common.Hash{}, 2)
 	s.Require().Nil(a.processVote(vote))
 	s.Require().Nil(state.receiveVote())
-	s.Require().True(len(s.voteChan) > 0)
-	vote = <-s.voteChan
-	s.Equal(types.VotePass, vote.Type)
-	s.Equal(common.Hash{}, vote.BlockHash)
-
 	// Test terminate.
 	ok := make(chan struct{})
 	go func() {
