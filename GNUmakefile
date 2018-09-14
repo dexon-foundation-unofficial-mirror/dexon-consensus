@@ -76,6 +76,14 @@ test:
 		fi; \
 	done
 
+bench:
+	@for pkg in `go list ./... | grep -v 'vendor'`; do \
+		if ! env LD_LIBRARY_PATH=`pwd`/lib DYLD_LIBRARY_PATH=`pwd`/lib go test -bench=. -run=^$$ $$pkg; then \
+			echo 'Some test failed, abort'; \
+			exit 1; \
+		fi; \
+	done
+
 check-format:
 	@if gofmt -l `go list -f '{{.Dir}}' ./...` | grep -q go; then \
 		echo 'Error: source code not formatted'; \

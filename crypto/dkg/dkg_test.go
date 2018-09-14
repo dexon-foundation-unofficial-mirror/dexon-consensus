@@ -21,6 +21,7 @@ import (
 	"encoding/binary"
 	"math/rand"
 	"sort"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -262,4 +263,169 @@ func (s *DKGTestSuite) TestDKGProtocol() {
 
 func TestDKG(t *testing.T) {
 	suite.Run(t, new(DKGTestSuite))
+}
+
+func BenchmarkDKGProtocol(b *testing.B) {
+	t := 33
+	n := 100
+	s := new(DKGTestSuite)
+
+	self := member{}
+	members := make([]*member, n-1)
+	ids := make(IDs, n)
+
+	b.Run("DKG", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			b.StopTimer()
+			self.id = s.genID(1)[0]
+			self.receivedPubShares = make(map[ID]*PublicKeyShares, n)
+			for idx, id := range s.genID(n - 1) {
+				ids[idx] = id
+			}
+			for idx := range members {
+				members[idx] = &member{
+					id:                ids[idx],
+					receivedPubShares: make(map[ID]*PublicKeyShares),
+					receivedPrvShares: NewEmptyPrivateKeyShares(),
+				}
+			}
+			ids[n-1] = self.id
+			prvShares := make(map[ID]*PrivateKey, n)
+			for idx := range members {
+				members[idx].prvShares, members[idx].pubShares = NewPrivateKeyShares(
+					t, ids)
+				prvShare, ok := members[idx].prvShares.Share(self.id)
+				if !ok {
+					b.FailNow()
+				}
+				prvShares[members[idx].id] = prvShare
+			}
+
+			b.StartTimer()
+			self.prvShares, self.pubShares = NewPrivateKeyShares(t, ids)
+			self.receivedPrvShares = NewEmptyPrivateKeyShares()
+			for _, member := range members {
+				self.receivedPubShares[member.id] = member.pubShares
+			}
+			self.receivedPubShares[self.id] = self.pubShares
+			prvShare, ok := self.prvShares.Share(self.id)
+			if !ok {
+				b.FailNow()
+			}
+			prvShares[self.id] = prvShare
+			for id, prvShare := range prvShares {
+				ok, err := self.receivedPubShares[id].VerifyPrvShare(self.id, prvShare)
+				if err != nil {
+					b.Fatalf("%v", err)
+				}
+				if !ok {
+					b.FailNow()
+				}
+				if err := self.receivedPrvShares.AddShare(id, prvShare); err != nil {
+					b.Fatalf("%v", err)
+				}
+			}
+			if _, err := self.receivedPrvShares.RecoverPrivateKey(ids); err != nil {
+				b.Fatalf("%v", err)
+			}
+		}
+	})
+
+	hash := crypto.Keccak256Hash([]byte("🏖"))
+	b.Run("Share-Sign", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			b.StopTimer()
+			prvKey, err := self.receivedPrvShares.RecoverPrivateKey(ids)
+			if err != nil {
+				b.Fatalf("%v", err)
+			}
+			b.StartTimer()
+			if _, err := prvKey.Sign(hash); err != nil {
+				b.Fatalf("%v", err)
+			}
+		}
+	})
+
+	sendKey := func(sender *member, receiver *member, b *testing.B) {
+		receiver.receivedPubShares[sender.id] = sender.pubShares
+		prvShare, ok := sender.prvShares.Share(receiver.id)
+		if !ok {
+			b.FailNow()
+		}
+		ok, err := receiver.receivedPubShares[sender.id].VerifyPrvShare(
+			receiver.id, prvShare)
+		if err != nil {
+			b.Fatalf("%v", err)
+		}
+		if !ok {
+			b.FailNow()
+		}
+		if err := receiver.receivedPrvShares.AddShare(sender.id, prvShare); err != nil {
+			b.Fatalf("%v", err)
+		}
+	}
+
+	members = append(members, &self)
+
+	for _, sender := range members {
+		wg := sync.WaitGroup{}
+		for _, receiver := range members {
+			if sender == receiver {
+				continue
+			}
+			wg.Add(1)
+			go func(receiver *member) {
+				sendKey(sender, receiver, b)
+				wg.Done()
+			}(receiver)
+		}
+		wg.Wait()
+	}
+	wg := sync.WaitGroup{}
+	for _, m := range members {
+		wg.Add(1)
+		go func(member *member) {
+			sendKey(member, member, b)
+			wg.Done()
+		}(m)
+	}
+	wg.Wait()
+
+	sign := func(member *member) PartialSignature {
+		prvKey, err := member.receivedPrvShares.RecoverPrivateKey(ids)
+		if err != nil {
+			b.Fatalf("%v", err)
+		}
+		sig, err := prvKey.Sign(hash)
+		if err != nil {
+			b.Fatalf("%v", err)
+		}
+		return PartialSignature(sig)
+	}
+
+	b.Run("Combine-Sign", func(b *testing.B) {
+		b.StopTimer()
+		sigs := make([]PartialSignature, n)
+		for idx, member := range members {
+			sigs[idx] = sign(member)
+		}
+		b.StartTimer()
+		for i := 0; i < b.N; i++ {
+			if _, err := RecoverSignature(sigs, ids); err != nil {
+				b.Fatalf("%v", err)
+			}
+		}
+	})
+
+	b.Run("Recover-GroupPK", func(b *testing.B) {
+		b.StopTimer()
+		pubShares := make([]*PublicKeyShares, 0, len(members))
+		for _, member := range members {
+			pubShares = append(pubShares, member.pubShares)
+		}
+		b.StartTimer()
+		for i := 0; i < b.N; i++ {
+			RecoverGroupPublicKey(pubShares)
+		}
+	})
 }
