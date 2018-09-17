@@ -20,7 +20,7 @@ package test
 import (
 	"sync"
 
-	"github.com/dexon-foundation/dexon-consensus-core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 

@@ -85,8 +85,13 @@ func (g *simGovernance) GetBlockProposingInterval() int {
 	return 0
 }
 
-// GetChainNumber returns number of chain.
-func (g *simGovernance) GetChainNumber() uint32 {
+// GetNumShards returns number of shards.
+func (g *simGovernance) GetNumShards() uint32 {
+	return 1
+}
+
+// GetNumChains returns number of chains.
+func (g *simGovernance) GetNumChains() uint32 {
 	return g.chainNum
 }
 

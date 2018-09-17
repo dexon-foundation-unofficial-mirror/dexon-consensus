@@ -85,8 +85,13 @@ func (g *Governance) GetPhiRatio() float32 {
 	return 0.667
 }
 
-// GetChainNumber returns the number of chains.
-func (g *Governance) GetChainNumber() uint32 {
+// GetNumShards returns the number of shards.
+func (g *Governance) GetNumShards() uint32 {
+	return 1
+}
+
+// GetNumChains returns the number of chains.
+func (g *Governance) GetNumChains() uint32 {
 	return uint32(len(g.Validators))
 }
 

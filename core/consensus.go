@@ -25,8 +25,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dexon-foundation/dexon-consensus-core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
@@ -145,7 +145,7 @@ func NewConsensus(
 
 	// Setup acking by information returned from Governace.
 	rb := newReliableBroadcast()
-	rb.setChainNum(gov.GetChainNumber())
+	rb.setChainNum(gov.GetNumChains())
 	for vID := range validatorSet {
 		rb.addValidator(vID)
 	}
@@ -160,7 +160,7 @@ func NewConsensus(
 	to := newTotalOrdering(
 		uint64(gov.GetTotalOrderingK()),
 		uint64(float32(len(validatorSet)-1)*gov.GetPhiRatio()+1),
-		gov.GetChainNumber())
+		gov.GetNumChains())
 
 	con := &Consensus{
 		ID:        types.NewValidatorID(prv.PublicKey()),
@@ -179,9 +179,9 @@ func NewConsensus(
 		ctxCancel: ctxCancel,
 	}
 
-	con.baModules = make([]*agreement, con.gov.GetChainNumber())
-	con.receivers = make([]*consensusReceiver, con.gov.GetChainNumber())
-	for i := uint32(0); i < con.gov.GetChainNumber(); i++ {
+	con.baModules = make([]*agreement, con.gov.GetNumChains())
+	con.receivers = make([]*consensusReceiver, con.gov.GetNumChains())
+	for i := uint32(0); i < con.gov.GetNumChains(); i++ {
 		chainID := i
 		con.receivers[chainID] = &consensusReceiver{
 			consensus: con,
@@ -208,8 +208,8 @@ func NewConsensus(
 
 // Run starts running DEXON Consensus.
 func (con *Consensus) Run() {
-	ticks := make([]chan struct{}, 0, con.gov.GetChainNumber())
-	for i := uint32(0); i < con.gov.GetChainNumber(); i++ {
+	ticks := make([]chan struct{}, 0, con.gov.GetNumChains())
+	for i := uint32(0); i < con.gov.GetNumChains(); i++ {
 		tick := make(chan struct{})
 		ticks = append(ticks, tick)
 		go con.runBA(i, tick)
