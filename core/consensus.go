@@ -128,7 +128,8 @@ type Consensus struct {
 	prvKey    crypto.PrivateKey
 	sigToPub  SigToPubFn
 	lock      sync.RWMutex
-	stopChan  chan struct{}
+	ctx       context.Context
+	ctxCancel context.CancelFunc
 }
 
 // NewConsensus construct an Consensus instance.
@@ -148,6 +149,8 @@ func NewConsensus(
 	for vID := range validatorSet {
 		rb.addValidator(vID)
 	}
+	// Setup context.
+	ctx, ctxCancel := context.WithCancel(context.Background())
 
 	// Setup sequencer by information returned from Governace.
 	var validators types.ValidatorIDs
@@ -160,19 +163,20 @@ func NewConsensus(
 		gov.GetChainNumber())
 
 	con := &Consensus{
-		ID:       types.NewValidatorID(prv.PublicKey()),
-		rbModule: rb,
-		toModule: to,
-		ctModule: newConsensusTimestamp(),
-		ccModule: newCompactionChain(db, sigToPub),
-		app:      newNonBlockingApplication(app),
-		gov:      gov,
-		db:       db,
-		network:  network,
-		tick:     tick,
-		prvKey:   prv,
-		sigToPub: sigToPub,
-		stopChan: make(chan struct{}),
+		ID:        types.NewValidatorID(prv.PublicKey()),
+		rbModule:  rb,
+		toModule:  to,
+		ctModule:  newConsensusTimestamp(),
+		ccModule:  newCompactionChain(db, sigToPub),
+		app:       newNonBlockingApplication(app),
+		gov:       gov,
+		db:        db,
+		network:   network,
+		tick:      tick,
+		prvKey:    prv,
+		sigToPub:  sigToPub,
+		ctx:       ctx,
+		ctxCancel: ctxCancel,
 	}
 
 	con.baModules = make([]*agreement, con.gov.GetChainNumber())
@@ -204,17 +208,12 @@ func NewConsensus(
 
 // Run starts running DEXON Consensus.
 func (con *Consensus) Run() {
-	ctx, cancel := context.WithCancel(context.Background())
 	ticks := make([]chan struct{}, 0, con.gov.GetChainNumber())
 	for i := uint32(0); i < con.gov.GetChainNumber(); i++ {
 		tick := make(chan struct{})
 		ticks = append(ticks, tick)
-		go con.runBA(ctx, i, tick)
+		go con.runBA(i, tick)
 	}
-	go func() {
-		<-con.stopChan
-		cancel()
-	}()
 	go con.processMsg(con.network.ReceiveChan(), con.PreProcessBlock)
 	// Reset ticker.
 	<-con.tick.C
@@ -227,8 +226,7 @@ func (con *Consensus) Run() {
 	}
 }
 
-func (con *Consensus) runBA(
-	ctx context.Context, chainID uint32, tick <-chan struct{}) {
+func (con *Consensus) runBA(chainID uint32, tick <-chan struct{}) {
 	// TODO(jimmy-dexon): move this function inside agreement.
 	validatorSet := con.gov.GetValidatorSet()
 	validators := make(types.ValidatorIDs, 0, len(validatorSet))
@@ -243,7 +241,7 @@ func (con *Consensus) runBA(
 BALoop:
 	for {
 		select {
-		case <-ctx.Done():
+		case <-con.ctx.Done():
 			break BALoop
 		default:
 		}
@@ -305,7 +303,7 @@ ProposingBlockLoop:
 	for {
 		select {
 		case <-con.tick.C:
-		case <-con.stopChan:
+		case <-con.ctx.Done():
 			break ProposingBlockLoop
 		}
 		block := &types.Block{
@@ -326,8 +324,7 @@ ProposingBlockLoop:
 
 // Stop the Consensus core.
 func (con *Consensus) Stop() {
-	con.stopChan <- struct{}{}
-	con.stopChan <- struct{}{}
+	con.ctxCancel()
 }
 
 func (con *Consensus) processMsg(
@@ -337,7 +334,7 @@ func (con *Consensus) processMsg(
 		var msg interface{}
 		select {
 		case msg = <-msgChan:
-		case <-con.stopChan:
+		case <-con.ctx.Done():
 			return
 		}
 

@@ -36,16 +36,14 @@ type validator struct {
 	gov *simGovernance
 	db  blockdb.BlockDatabase
 
-	config     config.Validator
-	netModule  *network
-	isFinished chan struct{}
+	config    config.Validator
+	netModule *network
 
-	ID              types.ValidatorID
-	chainID         uint64
-	prvKey          crypto.PrivateKey
-	sigToPub        core.SigToPubFn
-	consensus       *core.Consensus
-	compactionChain *core.BlockChain
+	ID        types.ValidatorID
+	chainID   uint64
+	prvKey    crypto.PrivateKey
+	sigToPub  core.SigToPubFn
+	consensus *core.Consensus
 }
 
 // newValidator returns a new empty validator.
@@ -63,15 +61,14 @@ func newValidator(
 	}
 	gov := newSimGovernance(config.Validator.Num, config.Validator.Consensus)
 	return &validator{
-		ID:         id,
-		prvKey:     prvKey,
-		sigToPub:   sigToPub,
-		config:     config.Validator,
-		app:        newSimApp(id, netModule),
-		gov:        gov,
-		db:         db,
-		netModule:  netModule,
-		isFinished: make(chan struct{}),
+		ID:        id,
+		prvKey:    prvKey,
+		sigToPub:  sigToPub,
+		config:    config.Validator,
+		app:       newSimApp(id, netModule),
+		gov:       gov,
+		db:        db,
+		netModule: netModule,
 	}
 }
 
