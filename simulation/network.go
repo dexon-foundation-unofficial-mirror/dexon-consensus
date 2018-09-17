@@ -138,6 +138,14 @@ func (n *network) BroadcastNotaryAck(notaryAck *types.NotaryAck) {
 	}
 }
 
+// SendDKGPrivateShare implements core.Network interface.
+func (n *network) SendDKGPrivateShare(
+	recv types.ValidatorID, prvShare *types.DKGPrivateShare) {
+	if err := n.trans.Send(recv, prvShare); err != nil {
+		panic(err)
+	}
+}
+
 // ReceiveChan implements core.Network interface.
 func (n *network) ReceiveChan() <-chan interface{} {
 	return n.toConsensus

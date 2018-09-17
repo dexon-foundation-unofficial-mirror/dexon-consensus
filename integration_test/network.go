@@ -36,6 +36,11 @@ func (n *Network) BroadcastBlock(block *types.Block) {
 func (n *Network) BroadcastNotaryAck(notaryAck *types.NotaryAck) {
 }
 
+// SendDKGPrivateShare sends PrivateShare to a DKG participant.
+func (n *Network) SendDKGPrivateShare(
+	recv types.ValidatorID, prvShare *types.DKGPrivateShare) {
+}
+
 // ReceiveChan returns a channel to receive messages from DEXON network.
 func (n *Network) ReceiveChan() <-chan interface{} {
 	return make(chan interface{})

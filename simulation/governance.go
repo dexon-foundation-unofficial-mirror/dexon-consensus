@@ -36,6 +36,8 @@ type simGovernance struct {
 	phiRatio              float32
 	chainNum              uint32
 	crs                   string
+	dkgComplaint          map[uint64][]*types.DKGComplaint
+	dkgMasterPublicKey    map[uint64][]*types.DKGMasterPublicKey
 }
 
 // newSimGovernance returns a new simGovernance instance.
@@ -44,10 +46,12 @@ func newSimGovernance(
 	return &simGovernance{
 		validatorSet:          make(map[types.ValidatorID]decimal.Decimal),
 		expectedNumValidators: numValidators,
-		k:        consensusConfig.K,
-		phiRatio: consensusConfig.PhiRatio,
-		chainNum: consensusConfig.ChainNum,
-		crs:      consensusConfig.GenesisCRS,
+		k:                  consensusConfig.K,
+		phiRatio:           consensusConfig.PhiRatio,
+		chainNum:           consensusConfig.ChainNum,
+		crs:                consensusConfig.GenesisCRS,
+		dkgComplaint:       make(map[uint64][]*types.DKGComplaint),
+		dkgMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
 	}
 }
 
@@ -110,4 +114,36 @@ func (g *simGovernance) addValidator(vID types.ValidatorID) {
 		panic(fmt.Errorf("attempt to add validator when ready"))
 	}
 	g.validatorSet[vID] = decimal.NewFromFloat(0)
+}
+
+// AddDKGComplaint adds a DKGComplaint.
+func (g *simGovernance) AddDKGComplaint(complaint *types.DKGComplaint) {
+	g.dkgComplaint[complaint.Round] = append(
+		g.dkgComplaint[complaint.Round], complaint)
+}
+
+// DKGComplaints returns the DKGComplaints of round.
+func (g *simGovernance) DKGComplaints(round uint64) []*types.DKGComplaint {
+	complaints, exist := g.dkgComplaint[round]
+	if !exist {
+		return []*types.DKGComplaint{}
+	}
+	return complaints
+}
+
+// AddDKGMasterPublicKey adds a DKGMasterPublicKey.
+func (g *simGovernance) AddDKGMasterPublicKey(
+	masterPublicKey *types.DKGMasterPublicKey) {
+	g.dkgMasterPublicKey[masterPublicKey.Round] = append(
+		g.dkgMasterPublicKey[masterPublicKey.Round], masterPublicKey)
+}
+
+// DKGMasterPublicKeys returns the DKGMasterPublicKeys of round.
+func (g *simGovernance) DKGMasterPublicKeys(
+	round uint64) []*types.DKGMasterPublicKey {
+	masterPublicKeys, exist := g.dkgMasterPublicKey[round]
+	if !exist {
+		return []*types.DKGMasterPublicKey{}
+	}
+	return masterPublicKeys
 }

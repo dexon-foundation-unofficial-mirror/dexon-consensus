@@ -64,6 +64,9 @@ type Network interface {
 	// BroadcastNotaryAck broadcasts notaryAck to all nodes in DEXON network.
 	BroadcastNotaryAck(notaryAck *types.NotaryAck)
 
+	// SendDKGPrivateShare sends PrivateShare to a DKG participant.
+	SendDKGPrivateShare(recv types.ValidatorID, prvShare *types.DKGPrivateShare)
+
 	// ReceiveChan returns a channel to receive messages from DEXON network.
 	ReceiveChan() <-chan interface{}
 }
@@ -92,4 +95,16 @@ type Governance interface {
 
 	// Get configuration change events after an epoch.
 	GetConfigurationChangeEvent(epoch int) []types.ConfigurationChangeEvent
+
+	// AddDKGComplaint adds a DKGComplaint.
+	AddDKGComplaint(complaint *types.DKGComplaint)
+
+	// GetDKGComplaints gets all the DKGComplaints of round.
+	DKGComplaints(round uint64) []*types.DKGComplaint
+
+	// AddDKGMasterPublicKey adds a DKGMasterPublicKey.
+	AddDKGMasterPublicKey(masterPublicKey *types.DKGMasterPublicKey)
+
+	// DKGMasterPublicKeys gets all the DKGMasterPublicKey of round.
+	DKGMasterPublicKeys(round uint64) []*types.DKGMasterPublicKey
 }

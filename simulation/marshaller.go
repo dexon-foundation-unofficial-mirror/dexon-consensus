@@ -69,6 +69,24 @@ func (m *jsonMarshaller) Unmarshal(
 			break
 		}
 		msg = vote
+	case "dkg-private-share":
+		privateShare := &types.DKGPrivateShare{}
+		if err = json.Unmarshal(payload, privateShare); err != nil {
+			break
+		}
+		msg = privateShare
+	case "dkg-master-public-key":
+		masterPublicKey := &types.DKGMasterPublicKey{}
+		if err = json.Unmarshal(payload, masterPublicKey); err != nil {
+			break
+		}
+		msg = masterPublicKey
+	case "dkg-complaint":
+		complaint := &types.DKGComplaint{}
+		if err = json.Unmarshal(payload, complaint); err != nil {
+			break
+		}
+		msg = complaint
 	default:
 		err = fmt.Errorf("unrecognized message type: %v", msgType)
 	}
@@ -95,6 +113,12 @@ func (m *jsonMarshaller) Marshal(msg interface{}) (
 		msgType = "notary-ack"
 	case *types.Vote:
 		msgType = "vote"
+	case *types.DKGPrivateShare:
+		msgType = "dkg-private-share"
+	case *types.DKGMasterPublicKey:
+		msgType = "dkg-master-public-key"
+	case *types.DKGComplaint:
+		msgType = "dkg-complaint"
 	default:
 		err = fmt.Errorf("unknwon message type: %v", msg)
 	}

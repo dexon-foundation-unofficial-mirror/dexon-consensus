@@ -37,6 +37,8 @@ type Governance struct {
 	BlockProposingInterval int
 	Validators             map[types.ValidatorID]decimal.Decimal
 	PrivateKeys            map[types.ValidatorID]crypto.PrivateKey
+	DKGComplaint           map[uint64][]*types.DKGComplaint
+	DKGMasterPublicKey     map[uint64][]*types.DKGMasterPublicKey
 }
 
 // NewGovernance constructs a Governance instance.
@@ -46,6 +48,8 @@ func NewGovernance(validatorCount, proposingInterval int) (
 		BlockProposingInterval: proposingInterval,
 		Validators:             make(map[types.ValidatorID]decimal.Decimal),
 		PrivateKeys:            make(map[types.ValidatorID]crypto.PrivateKey),
+		DKGComplaint:           make(map[uint64][]*types.DKGComplaint),
+		DKGMasterPublicKey:     make(map[uint64][]*types.DKGMasterPublicKey),
 	}
 	for i := 0; i < validatorCount; i++ {
 		prv, err := eth.NewPrivateKey()
@@ -109,4 +113,35 @@ func (g *Governance) GetPrivateKey(
 		return
 	}
 	return
+}
+
+// AddDKGComplaint add a DKGComplaint.
+func (g *Governance) AddDKGComplaint(complaint *types.DKGComplaint) {
+	g.DKGComplaint[complaint.Round] = append(g.DKGComplaint[complaint.Round], complaint)
+}
+
+// DKGComplaints returns the DKGComplaints of round.
+func (g *Governance) DKGComplaints(round uint64) []*types.DKGComplaint {
+	complaints, exist := g.DKGComplaint[round]
+	if !exist {
+		return []*types.DKGComplaint{}
+	}
+	return complaints
+}
+
+// AddDKGMasterPublicKey adds a DKGMasterPublicKey.
+func (g *Governance) AddDKGMasterPublicKey(
+	masterPublicKey *types.DKGMasterPublicKey) {
+	g.DKGMasterPublicKey[masterPublicKey.Round] = append(
+		g.DKGMasterPublicKey[masterPublicKey.Round], masterPublicKey)
+}
+
+// DKGMasterPublicKeys returns the DKGMasterPublicKeys of round.
+func (g *Governance) DKGMasterPublicKeys(
+	round uint64) []*types.DKGMasterPublicKey {
+	masterPublicKeys, exist := g.DKGMasterPublicKey[round]
+	if !exist {
+		return []*types.DKGMasterPublicKey{}
+	}
+	return masterPublicKeys
 }
