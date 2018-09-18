@@ -20,8 +20,6 @@ package core
 import (
 	"time"
 
-	"github.com/shopspring/decimal"
-
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
@@ -75,29 +73,13 @@ type Network interface {
 // Note that there are a lot more methods in the governance contract, that this
 // interface only define those that are required to run the consensus algorithm.
 type Governance interface {
-	// Get the current validator set and it's corresponding stake.
-	GetValidatorSet() map[types.ValidatorID]decimal.Decimal
+	// GetConfiguration returns the configuration at a given block height.
+	GetConfiguration(blockHeight uint64) *types.Config
 
-	// Get K.
-	GetTotalOrderingK() int
+	// Get the current validator set.
+	GetNotarySet() map[types.ValidatorID]struct{}
 
-	// Get PhiRatio.
-	GetPhiRatio() float32
-
-	// Get Number of shards.
-	GetNumShards() uint32
-
-	// Get Number of chains.
-	GetNumChains() uint32
-
-	// Get Genesis CRS.
-	GetGenesisCRS() string
-
-	// Get configuration change events after an epoch.
-	GetConfigurationChangeEvent(epoch int) []types.ConfigurationChangeEvent
-
-	// Get lambda for BA.
-	GetLambda() time.Duration
+	//// DKG-related methods.
 
 	// AddDKGComplaint adds a DKGComplaint.
 	AddDKGComplaint(complaint *types.DKGComplaint)

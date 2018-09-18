@@ -24,14 +24,13 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
-	"github.com/shopspring/decimal"
 )
 
 // simGovernance is a simulated governance contract implementing the
 // core.Governance interface.
 type simGovernance struct {
 	lock                  sync.RWMutex
-	validatorSet          map[types.ValidatorID]decimal.Decimal
+	notarySet             map[types.ValidatorID]struct{}
 	expectedNumValidators int
 	k                     int
 	phiRatio              float32
@@ -46,7 +45,7 @@ type simGovernance struct {
 func newSimGovernance(
 	numValidators int, consensusConfig config.Consensus) *simGovernance {
 	return &simGovernance{
-		validatorSet:          make(map[types.ValidatorID]decimal.Decimal),
+		notarySet:             make(map[types.ValidatorID]struct{}),
 		expectedNumValidators: numValidators,
 		k:                  consensusConfig.K,
 		phiRatio:           consensusConfig.PhiRatio,
@@ -58,61 +57,30 @@ func newSimGovernance(
 	}
 }
 
-// GetValidatorSet returns the validator set.
-func (g *simGovernance) GetValidatorSet() (
-	ret map[types.ValidatorID]decimal.Decimal) {
+// GetNotarySet returns the current notary set.
+func (g *simGovernance) GetNotarySet() map[types.ValidatorID]struct{} {
 
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
-	// Return the cloned validatorSet.
-	ret = make(map[types.ValidatorID]decimal.Decimal)
-	for k, v := range g.validatorSet {
-		ret[k] = v
+	// Return the cloned notarySet.
+	ret := make(map[types.ValidatorID]struct{})
+	for k := range g.notarySet {
+		ret[k] = struct{}{}
 	}
-	return
+	return ret
 }
 
-// GetTotalOrderingK returns K.
-func (g *simGovernance) GetTotalOrderingK() int {
-	return g.k
-}
-
-// GetTotalOrderingK returns PhiRatio.
-func (g *simGovernance) GetPhiRatio() float32 {
-	return g.phiRatio
-}
-
-// GetBlockProposingInterval returns block proposing interval.
-func (g *simGovernance) GetBlockProposingInterval() int {
-	return 0
-}
-
-// GetNumShards returns number of shards.
-func (g *simGovernance) GetNumShards() uint32 {
-	return 1
-}
-
-// GetNumChains returns number of chains.
-func (g *simGovernance) GetNumChains() uint32 {
-	return g.chainNum
-}
-
-// GetConfigurationChangeEvent returns configuration change event since last
-// epoch.
-func (g *simGovernance) GetConfigurationChangeEvent(
-	epoch int) []types.ConfigurationChangeEvent {
-	return nil
-}
-
-// GetGenesisCRS returns CRS.
-func (g *simGovernance) GetGenesisCRS() string {
-	return g.crs
-}
-
-// GetLambda return lambda for BA.
-func (g *simGovernance) GetLambda() time.Duration {
-	return g.lambda
+// GetConfiguration returns the configuration at a given block height.
+func (g *simGovernance) GetConfiguration(blockHeight uint64) *types.Config {
+	return &types.Config{
+		NumShards:  1,
+		NumChains:  g.chainNum,
+		GenesisCRS: g.crs,
+		Lambda:     g.lambda,
+		K:          g.k,
+		PhiRatio:   g.phiRatio,
+	}
 }
 
 // addValidator add a new validator into the simulated governance contract.
@@ -120,13 +88,13 @@ func (g *simGovernance) addValidator(vID types.ValidatorID) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	if _, exists := g.validatorSet[vID]; exists {
+	if _, exists := g.notarySet[vID]; exists {
 		return
 	}
-	if len(g.validatorSet) == g.expectedNumValidators {
+	if len(g.notarySet) == g.expectedNumValidators {
 		panic(fmt.Errorf("attempt to add validator when ready"))
 	}
-	g.validatorSet[vID] = decimal.NewFromFloat(0)
+	g.notarySet[vID] = struct{}{}
 }
 
 // AddDKGComplaint adds a DKGComplaint.

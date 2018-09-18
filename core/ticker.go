@@ -52,7 +52,7 @@ func newTicker(gov Governance) (t Ticker) {
 		t = gen.NewTicker()
 	}
 	if t == nil {
-		t = newDefaultTicker(gov.GetLambda())
+		t = newDefaultTicker(gov.GetConfiguration(0).Lambda)
 	}
 	return
 }

@@ -24,7 +24,6 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
-	"github.com/shopspring/decimal"
 )
 
 var (
@@ -35,9 +34,9 @@ var (
 
 // Governance is an implementation of Goverance for testing purpose.
 type Governance struct {
-	Lambda             time.Duration
-	Validators         map[types.ValidatorID]decimal.Decimal
-	PrivateKeys        map[types.ValidatorID]crypto.PrivateKey
+	lambda             time.Duration
+	notarySet          map[types.ValidatorID]struct{}
+	privateKeys        map[types.ValidatorID]crypto.PrivateKey
 	DKGComplaint       map[uint64][]*types.DKGComplaint
 	DKGMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
 }
@@ -46,9 +45,9 @@ type Governance struct {
 func NewGovernance(validatorCount int, lambda time.Duration) (
 	g *Governance, err error) {
 	g = &Governance{
-		Lambda:             lambda,
-		Validators:         make(map[types.ValidatorID]decimal.Decimal),
-		PrivateKeys:        make(map[types.ValidatorID]crypto.PrivateKey),
+		lambda:             lambda,
+		notarySet:          make(map[types.ValidatorID]struct{}),
+		privateKeys:        make(map[types.ValidatorID]crypto.PrivateKey),
 		DKGComplaint:       make(map[uint64][]*types.DKGComplaint),
 		DKGMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
 	}
@@ -58,53 +57,28 @@ func NewGovernance(validatorCount int, lambda time.Duration) (
 			return nil, err
 		}
 		vID := types.NewValidatorID(prv.PublicKey())
-		g.Validators[vID] = decimal.NewFromFloat(0)
-		g.PrivateKeys[vID] = prv
+		g.notarySet[vID] = struct{}{}
+		g.privateKeys[vID] = prv
 	}
 	return
 }
 
-// GetValidatorSet implements Governance interface to return current
-// validator set.
-func (g *Governance) GetValidatorSet() map[types.ValidatorID]decimal.Decimal {
-	return g.Validators
+// GetNotarySet implements Governance interface to return current
+// notary set.
+func (g *Governance) GetNotarySet() map[types.ValidatorID]struct{} {
+	return g.notarySet
 }
 
-// GetTotalOrderingK returns K.
-func (g *Governance) GetTotalOrderingK() int {
-	return 0
-}
-
-// GetPhiRatio returns phi ratio.
-func (g *Governance) GetPhiRatio() float32 {
-	return 0.667
-}
-
-// GetNumShards returns the number of shards.
-func (g *Governance) GetNumShards() uint32 {
-	return 1
-}
-
-// GetNumChains returns the number of chains.
-func (g *Governance) GetNumChains() uint32 {
-	return uint32(len(g.Validators))
-}
-
-// GetConfigurationChangeEvent Get configuration change events after a certain
-// epoch.
-func (g *Governance) GetConfigurationChangeEvent(
-	epoch int) []types.ConfigurationChangeEvent {
-	return nil
-}
-
-// GetGenesisCRS returns the CRS string.
-func (g *Governance) GetGenesisCRS() string {
-	return "🆕 DEXON"
-}
-
-// GetLambda returns lambda for BA.
-func (g *Governance) GetLambda() time.Duration {
-	return g.Lambda
+// GetConfiguration returns the configuration at a given block height.
+func (g *Governance) GetConfiguration(blockHeight uint64) *types.Config {
+	return &types.Config{
+		NumShards:  1,
+		NumChains:  uint32(len(g.notarySet)),
+		GenesisCRS: "__ DEXON",
+		Lambda:     g.lambda,
+		K:          0,
+		PhiRatio:   0.667,
+	}
 }
 
 // GetPrivateKey return the private key for that validator, this function
@@ -112,7 +86,7 @@ func (g *Governance) GetLambda() time.Duration {
 func (g *Governance) GetPrivateKey(
 	vID types.ValidatorID) (key crypto.PrivateKey, err error) {
 
-	key, exists := g.PrivateKeys[vID]
+	key, exists := g.privateKeys[vID]
 	if !exists {
 		err = ErrPrivateKeyNotExists
 		return

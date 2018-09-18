@@ -116,6 +116,7 @@ type Consensus struct {
 	ID        types.ValidatorID
 	app       Application
 	gov       Governance
+	config    *types.Config
 	baModules []*agreement
 	receivers []*consensusReceiver
 	rbModule  *reliableBroadcast
@@ -140,11 +141,13 @@ func NewConsensus(
 	network Network,
 	prv crypto.PrivateKey,
 	sigToPub SigToPubFn) *Consensus {
-	validatorSet := gov.GetValidatorSet()
+
+	config := gov.GetConfiguration(0)
+	validatorSet := gov.GetNotarySet()
 
 	// Setup acking by information returned from Governace.
 	rb := newReliableBroadcast()
-	rb.setChainNum(gov.GetNumChains())
+	rb.setChainNum(config.NumChains)
 	for vID := range validatorSet {
 		rb.addValidator(vID)
 	}
@@ -157,9 +160,9 @@ func NewConsensus(
 		validators = append(validators, vID)
 	}
 	to := newTotalOrdering(
-		uint64(gov.GetTotalOrderingK()),
-		uint64(float32(len(validatorSet)-1)*gov.GetPhiRatio()+1),
-		gov.GetNumChains())
+		uint64(config.K),
+		uint64(float32(len(validatorSet)-1)*config.PhiRatio+1),
+		config.NumChains)
 
 	con := &Consensus{
 		ID:        types.NewValidatorID(prv.PublicKey()),
@@ -169,6 +172,7 @@ func NewConsensus(
 		ccModule:  newCompactionChain(db, sigToPub),
 		app:       newNonBlockingApplication(app),
 		gov:       gov,
+		config:    config,
 		db:        db,
 		network:   network,
 		tickerObj: newTicker(gov),
@@ -178,9 +182,9 @@ func NewConsensus(
 		ctxCancel: ctxCancel,
 	}
 
-	con.baModules = make([]*agreement, con.gov.GetNumChains())
-	con.receivers = make([]*consensusReceiver, con.gov.GetNumChains())
-	for i := uint32(0); i < con.gov.GetNumChains(); i++ {
+	con.baModules = make([]*agreement, con.config.NumChains)
+	con.receivers = make([]*consensusReceiver, con.config.NumChains)
+	for i := uint32(0); i < con.config.NumChains; i++ {
 		chainID := i
 		con.receivers[chainID] = &consensusReceiver{
 			consensus: con,
@@ -196,7 +200,7 @@ func NewConsensus(
 			con.ID,
 			con.receivers[chainID],
 			validators,
-			newGenesisLeaderSelector(con.gov.GetGenesisCRS(), con.sigToPub),
+			newGenesisLeaderSelector(con.config.GenesisCRS, con.sigToPub),
 			con.sigToPub,
 			blockProposer,
 		)
@@ -206,8 +210,8 @@ func NewConsensus(
 
 // Run starts running DEXON Consensus.
 func (con *Consensus) Run() {
-	ticks := make([]chan struct{}, 0, con.gov.GetNumChains())
-	for i := uint32(0); i < con.gov.GetNumChains(); i++ {
+	ticks := make([]chan struct{}, 0, con.config.NumChains)
+	for i := uint32(0); i < con.config.NumChains; i++ {
 		tick := make(chan struct{})
 		ticks = append(ticks, tick)
 		go con.runBA(i, tick)
@@ -226,7 +230,7 @@ func (con *Consensus) Run() {
 
 func (con *Consensus) runBA(chainID uint32, tick <-chan struct{}) {
 	// TODO(jimmy-dexon): move this function inside agreement.
-	validatorSet := con.gov.GetValidatorSet()
+	validatorSet := con.gov.GetNotarySet()
 	validators := make(types.ValidatorIDs, 0, len(validatorSet))
 	for vID := range validatorSet {
 		validators = append(validators, vID)
@@ -270,8 +274,8 @@ func (con *Consensus) RunLegacy() {
 	go con.processMsg(con.network.ReceiveChan(), con.ProcessBlock)
 
 	chainID := uint32(0)
-	hashes := make(common.Hashes, 0, len(con.gov.GetValidatorSet()))
-	for vID := range con.gov.GetValidatorSet() {
+	hashes := make(common.Hashes, 0, len(con.gov.GetNotarySet()))
+	for vID := range con.gov.GetNotarySet() {
 		hashes = append(hashes, vID.Hash)
 	}
 	sort.Sort(hashes)
@@ -551,7 +555,7 @@ func (con *Consensus) PrepareGenesisBlock(b *types.Block,
 // ProcessNotaryAck is the entry point to submit one notary ack.
 func (con *Consensus) ProcessNotaryAck(notaryAck *types.NotaryAck) (err error) {
 	notaryAck = notaryAck.Clone()
-	if _, exists := con.gov.GetValidatorSet()[notaryAck.ProposerID]; !exists {
+	if _, exists := con.gov.GetNotarySet()[notaryAck.ProposerID]; !exists {
 		err = ErrProposerNotValidator
 		return
 	}

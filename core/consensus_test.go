@@ -81,8 +81,8 @@ func (s *ConsensusTestSuite) prepareConsensus(
 	app := test.NewApp()
 	db, err := blockdb.NewMemBackedBlockDB()
 	s.Require().Nil(err)
-	prv, exist := gov.PrivateKeys[vID]
-	s.Require().True(exist)
+	prv, exist := gov.GetPrivateKey(vID)
+	s.Require().Nil(exist)
 	con := NewConsensus(app, gov, db, &network{}, prv, eth.SigToPub)
 	return &con.app, con
 }
@@ -107,7 +107,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	)
 	s.Require().Nil(err)
 
-	for vID := range gov.GetValidatorSet() {
+	for vID := range gov.GetNotarySet() {
 		validators = append(validators, vID)
 	}
 
@@ -329,7 +329,7 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 		validators []types.ValidatorID
 	)
 	s.Require().Nil(err)
-	for vID := range gov.GetValidatorSet() {
+	for vID := range gov.GetNotarySet() {
 		validators = append(validators, vID)
 	}
 	// Setup core.Consensus and test.App.
@@ -384,7 +384,7 @@ func (s *ConsensusTestSuite) TestPrepareGenesisBlock() {
 		validators []types.ValidatorID
 	)
 	s.Require().Nil(err)
-	for vID := range gov.GetValidatorSet() {
+	for vID := range gov.GetNotarySet() {
 		validators = append(validators, vID)
 	}
 	_, con := s.prepareConsensus(gov, validators[0])

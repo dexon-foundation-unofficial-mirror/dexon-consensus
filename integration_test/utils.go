@@ -31,7 +31,7 @@ func PrepareValidators(
 	if err != nil {
 		return
 	}
-	for vID := range gov.GetValidatorSet() {
+	for vID := range gov.GetNotarySet() {
 		apps[vID] = test.NewApp()
 
 		if db, err = blockdb.NewMemBackedBlockDB(); err != nil {
@@ -39,7 +39,7 @@ func PrepareValidators(
 		}
 		dbs[vID] = db
 	}
-	for vID := range gov.GetValidatorSet() {
+	for vID := range gov.GetNotarySet() {
 		if key, err = gov.GetPrivateKey(vID); err != nil {
 			return
 		}

@@ -83,7 +83,7 @@ func NewValidator(
 	proposingLatency test.LatencyModel) *Validator {
 
 	hashes := make(common.Hashes, 0)
-	for vID := range gov.GetValidatorSet() {
+	for vID := range gov.GetNotarySet() {
 		hashes = append(hashes, vID.Hash)
 	}
 	sort.Sort(hashes)
@@ -137,7 +137,7 @@ func (v *Validator) handleProposeBlock(when time.Time, piggyback interface{}) (
 		return
 	}
 	// Create 'block received' event for each other validators.
-	for vID := range v.gov.GetValidatorSet() {
+	for vID := range v.gov.GetNotarySet() {
 		if vID == v.ID {
 			continue
 		}
