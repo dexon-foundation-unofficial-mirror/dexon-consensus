@@ -19,6 +19,7 @@ package test
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
@@ -34,22 +35,22 @@ var (
 
 // Governance is an implementation of Goverance for testing purpose.
 type Governance struct {
-	BlockProposingInterval int
-	Validators             map[types.ValidatorID]decimal.Decimal
-	PrivateKeys            map[types.ValidatorID]crypto.PrivateKey
-	DKGComplaint           map[uint64][]*types.DKGComplaint
-	DKGMasterPublicKey     map[uint64][]*types.DKGMasterPublicKey
+	Lambda             time.Duration
+	Validators         map[types.ValidatorID]decimal.Decimal
+	PrivateKeys        map[types.ValidatorID]crypto.PrivateKey
+	DKGComplaint       map[uint64][]*types.DKGComplaint
+	DKGMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
 }
 
 // NewGovernance constructs a Governance instance.
-func NewGovernance(validatorCount, proposingInterval int) (
+func NewGovernance(validatorCount int, lambda time.Duration) (
 	g *Governance, err error) {
 	g = &Governance{
-		BlockProposingInterval: proposingInterval,
-		Validators:             make(map[types.ValidatorID]decimal.Decimal),
-		PrivateKeys:            make(map[types.ValidatorID]crypto.PrivateKey),
-		DKGComplaint:           make(map[uint64][]*types.DKGComplaint),
-		DKGMasterPublicKey:     make(map[uint64][]*types.DKGMasterPublicKey),
+		Lambda:             lambda,
+		Validators:         make(map[types.ValidatorID]decimal.Decimal),
+		PrivateKeys:        make(map[types.ValidatorID]crypto.PrivateKey),
+		DKGComplaint:       make(map[uint64][]*types.DKGComplaint),
+		DKGMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
 	}
 	for i := 0; i < validatorCount; i++ {
 		prv, err := eth.NewPrivateKey()
@@ -67,12 +68,6 @@ func NewGovernance(validatorCount, proposingInterval int) (
 // validator set.
 func (g *Governance) GetValidatorSet() map[types.ValidatorID]decimal.Decimal {
 	return g.Validators
-}
-
-// GetBlockProposingInterval implements Governance interface to return maximum
-// allowed block proposing interval in millisecond.
-func (g *Governance) GetBlockProposingInterval() int {
-	return g.BlockProposingInterval
 }
 
 // GetTotalOrderingK returns K.
@@ -107,8 +102,13 @@ func (g *Governance) GetGenesisCRS() string {
 	return "🆕 DEXON"
 }
 
+// GetLambda returns lambda for BA.
+func (g *Governance) GetLambda() time.Duration {
+	return g.Lambda
+}
+
 // GetPrivateKey return the private key for that validator, this function
-// is a test utility and not a general core.Governance interface.
+// is a test utility and not a general Governance interface.
 func (g *Governance) GetPrivateKey(
 	vID types.ValidatorID) (key crypto.PrivateKey, err error) {
 

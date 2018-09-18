@@ -20,7 +20,6 @@ package simulation
 import (
 	"fmt"
 	"sort"
-	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core"
@@ -99,22 +98,11 @@ func (v *validator) run(serverEndpoint interface{}, legacy bool) {
 			break
 		}
 	}
+	v.consensus = core.NewConsensus(
+		v.app, v.gov, v.db, v.netModule, v.prvKey, v.sigToPub)
 	if legacy {
-		v.consensus = core.NewConsensus(
-			v.app, v.gov, v.db, v.netModule,
-			time.NewTicker(
-				time.Duration(
-					v.config.Legacy.ProposeIntervalMean)*time.Millisecond),
-			v.prvKey, v.sigToPub)
-
 		go v.consensus.RunLegacy()
 	} else {
-		v.consensus = core.NewConsensus(
-			v.app, v.gov, v.db, v.netModule,
-			time.NewTicker(
-				time.Duration(v.config.Lambda)*time.Millisecond),
-			v.prvKey, v.sigToPub)
-
 		go v.consensus.Run()
 	}
 

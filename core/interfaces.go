@@ -84,9 +84,6 @@ type Governance interface {
 	// Get PhiRatio.
 	GetPhiRatio() float32
 
-	// Get block proposing interval (in milliseconds).
-	GetBlockProposingInterval() int
-
 	// Get Number of shards.
 	GetNumShards() uint32
 
@@ -99,6 +96,9 @@ type Governance interface {
 	// Get configuration change events after an epoch.
 	GetConfigurationChangeEvent(epoch int) []types.ConfigurationChangeEvent
 
+	// Get lambda for BA.
+	GetLambda() time.Duration
+
 	// AddDKGComplaint adds a DKGComplaint.
 	AddDKGComplaint(complaint *types.DKGComplaint)
 
@@ -110,4 +110,12 @@ type Governance interface {
 
 	// DKGMasterPublicKeys gets all the DKGMasterPublicKey of round.
 	DKGMasterPublicKeys(round uint64) []*types.DKGMasterPublicKey
+}
+
+// Ticker define the capability to tick by interval.
+type Ticker interface {
+	// Tick would return a channel, which would be triggered until next tick.
+	Tick() <-chan time.Time
+	// Stop the ticker.
+	Stop()
 }

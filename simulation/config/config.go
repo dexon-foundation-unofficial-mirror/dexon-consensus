@@ -40,6 +40,7 @@ type Consensus struct {
 	K          int
 	ChainNum   uint32
 	GenesisCRS string `toml:"genesis_crs"`
+	Lambda     int
 }
 
 // Legacy config.
@@ -53,7 +54,6 @@ type Validator struct {
 	Consensus Consensus
 	Legacy    Legacy
 	Num       int
-	Lambda    int
 	MaxBlock  uint64
 }
 
@@ -96,13 +96,13 @@ func GenerateDefault(path string) error {
 				K:          1,
 				ChainNum:   7,
 				GenesisCRS: "In DEXON we trust.",
+				Lambda:     250,
 			},
 			Legacy: Legacy{
 				ProposeIntervalMean:  500,
 				ProposeIntervalSigma: 50,
 			},
 			Num:      7,
-			Lambda:   250,
 			MaxBlock: math.MaxUint64,
 		},
 		Networking: Networking{

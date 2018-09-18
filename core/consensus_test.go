@@ -83,8 +83,7 @@ func (s *ConsensusTestSuite) prepareConsensus(
 	s.Require().Nil(err)
 	prv, exist := gov.PrivateKeys[vID]
 	s.Require().True(exist)
-	con := NewConsensus(app, gov, db,
-		&network{}, time.NewTicker(1), prv, eth.SigToPub)
+	con := NewConsensus(app, gov, db, &network{}, prv, eth.SigToPub)
 	return &con.app, con
 }
 
@@ -102,7 +101,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	// This test case only works for Total Ordering with K=0.
 	var (
 		minInterval = 50 * time.Millisecond
-		gov, err    = test.NewGovernance(4, 1000)
+		gov, err    = test.NewGovernance(4, time.Second)
 		req         = s.Require()
 		validators  []types.ValidatorID
 	)
@@ -325,7 +324,7 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 	//  - Make sure Consensus.PrepareBlock would only attempt to
 	//    ack the prepared block.
 	var (
-		gov, err   = test.NewGovernance(4, 1000)
+		gov, err   = test.NewGovernance(4, time.Second)
 		req        = s.Require()
 		validators []types.ValidatorID
 	)
@@ -381,7 +380,7 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 
 func (s *ConsensusTestSuite) TestPrepareGenesisBlock() {
 	var (
-		gov, err   = test.NewGovernance(4, 1000)
+		gov, err   = test.NewGovernance(4, time.Second)
 		validators []types.ValidatorID
 	)
 	s.Require().Nil(err)

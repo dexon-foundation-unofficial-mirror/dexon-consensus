@@ -20,6 +20,7 @@ package simulation
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
@@ -38,6 +39,7 @@ type simGovernance struct {
 	crs                   string
 	dkgComplaint          map[uint64][]*types.DKGComplaint
 	dkgMasterPublicKey    map[uint64][]*types.DKGMasterPublicKey
+	lambda                time.Duration
 }
 
 // newSimGovernance returns a new simGovernance instance.
@@ -52,6 +54,7 @@ func newSimGovernance(
 		crs:                consensusConfig.GenesisCRS,
 		dkgComplaint:       make(map[uint64][]*types.DKGComplaint),
 		dkgMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
+		lambda:             time.Duration(consensusConfig.Lambda) * time.Millisecond,
 	}
 }
 
@@ -105,6 +108,11 @@ func (g *simGovernance) GetConfigurationChangeEvent(
 // GetGenesisCRS returns CRS.
 func (g *simGovernance) GetGenesisCRS() string {
 	return g.crs
+}
+
+// GetLambda return lambda for BA.
+func (g *simGovernance) GetLambda() time.Duration {
+	return g.lambda
 }
 
 // addValidator add a new validator into the simulated governance contract.

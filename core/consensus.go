@@ -124,7 +124,7 @@ type Consensus struct {
 	ccModule  *compactionChain
 	db        blockdb.BlockDatabase
 	network   Network
-	tick      *time.Ticker
+	tickerObj Ticker
 	prvKey    crypto.PrivateKey
 	sigToPub  SigToPubFn
 	lock      sync.RWMutex
@@ -138,7 +138,6 @@ func NewConsensus(
 	gov Governance,
 	db blockdb.BlockDatabase,
 	network Network,
-	tick *time.Ticker,
 	prv crypto.PrivateKey,
 	sigToPub SigToPubFn) *Consensus {
 	validatorSet := gov.GetValidatorSet()
@@ -172,7 +171,7 @@ func NewConsensus(
 		gov:       gov,
 		db:        db,
 		network:   network,
-		tick:      tick,
+		tickerObj: newTicker(gov),
 		prvKey:    prv,
 		sigToPub:  sigToPub,
 		ctx:       ctx,
@@ -202,7 +201,6 @@ func NewConsensus(
 			blockProposer,
 		)
 	}
-
 	return con
 }
 
@@ -216,10 +214,10 @@ func (con *Consensus) Run() {
 	}
 	go con.processMsg(con.network.ReceiveChan(), con.PreProcessBlock)
 	// Reset ticker.
-	<-con.tick.C
-	<-con.tick.C
+	<-con.tickerObj.Tick()
+	<-con.tickerObj.Tick()
 	for {
-		<-con.tick.C
+		<-con.tickerObj.Tick()
 		for _, tick := range ticks {
 			go func(tick chan struct{}) { tick <- struct{}{} }(tick)
 		}
@@ -302,7 +300,7 @@ func (con *Consensus) RunLegacy() {
 ProposingBlockLoop:
 	for {
 		select {
-		case <-con.tick.C:
+		case <-con.tickerObj.Tick():
 		case <-con.ctx.Done():
 			break ProposingBlockLoop
 		}

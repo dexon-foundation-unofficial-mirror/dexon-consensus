@@ -102,8 +102,7 @@ func NewValidator(
 		networkLatency:   networkLatency,
 		proposingLatency: proposingLatency,
 		cons: core.NewConsensus(
-			app, gov,
-			db, &Network{}, time.NewTicker(1), privateKey, eth.SigToPub),
+			app, gov, db, &Network{}, privateKey, eth.SigToPub),
 	}
 }
 

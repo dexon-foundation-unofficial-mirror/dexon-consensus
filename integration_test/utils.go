@@ -1,6 +1,8 @@
 package integration
 
 import (
+	"time"
+
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -25,7 +27,7 @@ func PrepareValidators(
 	dbs = make(map[types.ValidatorID]blockdb.BlockDatabase)
 	validators = make(map[types.ValidatorID]*Validator)
 
-	gov, err := test.NewGovernance(validatorCount, 700)
+	gov, err := test.NewGovernance(validatorCount, 700*time.Millisecond)
 	if err != nil {
 		return
 	}
