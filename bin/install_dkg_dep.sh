@@ -13,6 +13,11 @@ if [ ! -d .dep/dkg ]; then
   git clone --depth 1 git://github.com/herumi/bls.git &
   git clone --depth 1 git://github.com/herumi/mcl.git &
   wait
+  if [ "$(uname -o)" = "Darwin" ] && [ "$(brew --prefix)" != "/usr/local" ]; then
+    cd mcl
+    git am ../../../bin/patches/0001-common.mk-remove-hard-coded-CFLAGS-and-LDFLAGS.patch
+    cd ..
+  fi
   cd bls
   make test_go -j
   cd ../../../
