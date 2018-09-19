@@ -67,6 +67,7 @@ type dkgProtocol struct {
 	mpkMap             map[types.ValidatorID]*dkg.PublicKeyShares
 	masterPrivateShare *dkg.PrivateKeyShares
 	prvShares          *dkg.PrivateKeyShares
+	prvSharesReceived  map[types.ValidatorID]struct{}
 }
 
 type dkgShareSecret struct {
@@ -119,6 +120,7 @@ func newDKGProtocol(
 		mpkMap:             make(map[types.ValidatorID]*dkg.PublicKeyShares),
 		masterPrivateShare: prvShare,
 		prvShares:          dkg.NewEmptyPrivateKeyShares(),
+		prvSharesReceived:  make(map[types.ValidatorID]struct{}),
 	}
 }
 
@@ -126,6 +128,7 @@ func (d *dkgProtocol) processMasterPublicKeys(
 	mpks []*types.DKGMasterPublicKey) error {
 	d.idMap = make(map[types.ValidatorID]dkg.ID, len(mpks))
 	d.mpkMap = make(map[types.ValidatorID]*dkg.PublicKeyShares, len(mpks))
+	d.prvSharesReceived = make(map[types.ValidatorID]struct{}, len(mpks))
 	ids := make(dkg.IDs, len(mpks))
 	for i := range mpks {
 		vID := mpks[i].ProposerID
@@ -146,6 +149,22 @@ func (d *dkgProtocol) processMasterPublicKeys(
 		})
 	}
 	return nil
+}
+
+func (d *dkgProtocol) proposeNackComplaints() {
+	for vID := range d.mpkMap {
+		if _, exist := d.prvSharesReceived[vID]; exist {
+			continue
+		}
+		d.recv.ProposeDKGComplaint(&types.DKGComplaint{
+			ProposerID: d.ID,
+			Round:      d.round,
+			PrivateShare: types.DKGPrivateShare{
+				ProposerID: vID,
+				Round:      d.round,
+			},
+		})
+	}
 }
 
 func (d *dkgProtocol) sanityCheck(prvShare *types.DKGPrivateShare) error {
@@ -180,6 +199,7 @@ func (d *dkgProtocol) processPrivateShare(
 	if err != nil {
 		return err
 	}
+	d.prvSharesReceived[prvShare.ProposerID] = struct{}{}
 	if !ok {
 		complaint := &types.DKGComplaint{
 			ProposerID:   d.ID,

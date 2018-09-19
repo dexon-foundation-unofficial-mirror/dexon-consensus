@@ -60,7 +60,7 @@ func (r *testDKGReceiver) ProposeDKGComplaint(complaint *types.DKGComplaint) {
 	var err error
 	complaint.Signature, err = r.prvKey.Sign(hashDKGComplaint(complaint))
 	r.s.Require().NoError(err)
-	r.complaints[complaint.ProposerID] = complaint
+	r.complaints[complaint.PrivateShare.ProposerID] = complaint
 }
 
 func (r *testDKGReceiver) ProposeDKGMasterPublicKey(
@@ -95,16 +95,8 @@ func (s *DKGTSIGProtocolTestSuite) setupDKGParticipants(n int) {
 	}
 }
 
-// TestDKGTSIGProtocol will test the entire DKG+TISG protocol including
-// exchanging private shares, recovering share secret, creating partial sign and
-// recovering threshold signature.
-// All participants are good people in this test.
-func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
-	k := 3
-	n := 10
-	round := uint64(1)
-	gov, err := test.NewGovernance(5, 100)
-	s.Require().NoError(err)
+func (s *DKGTSIGProtocolTestSuite) newProtocols(k, n int, round uint64) (
+	map[types.ValidatorID]*testDKGReceiver, map[types.ValidatorID]*dkgProtocol) {
 	s.setupDKGParticipants(n)
 
 	receivers := make(map[types.ValidatorID]*testDKGReceiver, n)
@@ -120,6 +112,21 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 		)
 		s.Require().NotNil(receivers[vID].mpk)
 	}
+	return receivers, protocols
+}
+
+// TestDKGTSIGProtocol will test the entire DKG+TISG protocol including
+// exchanging private shares, recovering share secret, creating partial sign and
+// recovering threshold signature.
+// All participants are good people in this test.
+func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
+	k := 3
+	n := 10
+	round := uint64(1)
+	gov, err := test.NewGovernance(5, 100)
+	s.Require().NoError(err)
+
+	receivers, protocols := s.newProtocols(k, n, round)
 
 	for _, receiver := range receivers {
 		gov.AddDKGMasterPublicKey(receiver.mpk)
@@ -135,6 +142,10 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 		for vID, prvShare := range receiver.prvShare {
 			s.Require().NoError(protocols[vID].processPrivateShare(prvShare))
 		}
+	}
+
+	for _, protocol := range protocols {
+		protocol.proposeNackComplaints()
 	}
 
 	for _, recv := range receivers {
@@ -184,6 +195,47 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 	sig, err := tsig.signature()
 	s.Require().NoError(err)
 	s.True(gpk.verifySignature(msgHash, sig))
+}
+
+func (s *DKGTSIGProtocolTestSuite) TestNackComplaint() {
+	k := 3
+	n := 10
+	round := uint64(1)
+	gov, err := test.NewGovernance(5, 100)
+	s.Require().NoError(err)
+
+	receivers, protocols := s.newProtocols(k, n, round)
+
+	byzantineID := s.vIDs[0]
+
+	for _, receiver := range receivers {
+		gov.AddDKGMasterPublicKey(receiver.mpk)
+	}
+
+	for _, protocol := range protocols {
+		s.Require().NoError(
+			protocol.processMasterPublicKeys(gov.DKGMasterPublicKeys(round)))
+	}
+
+	for senderID, receiver := range receivers {
+		s.Require().Len(receiver.prvShare, n)
+		if senderID == byzantineID {
+			continue
+		}
+		for vID, prvShare := range receiver.prvShare {
+			s.Require().NoError(protocols[vID].processPrivateShare(prvShare))
+		}
+	}
+
+	for _, protocol := range protocols {
+		protocol.proposeNackComplaints()
+	}
+
+	for _, recv := range receivers {
+		complaint, exist := recv.complaints[byzantineID]
+		s.Require().True(exist)
+		s.True(verifyDKGComplaintSignature(complaint, eth.SigToPub))
+	}
 }
 
 func TestDKGTSIGProtocol(t *testing.T) {
