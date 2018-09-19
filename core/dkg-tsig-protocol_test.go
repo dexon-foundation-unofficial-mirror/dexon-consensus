@@ -22,6 +22,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
@@ -236,6 +237,199 @@ func (s *DKGTSIGProtocolTestSuite) TestNackComplaint() {
 		s.Require().True(exist)
 		s.True(verifyDKGComplaintSignature(complaint, eth.SigToPub))
 	}
+}
+
+// TestComplaint tests if the received private share is not valid, a complaint
+// should be proposed.
+func (s *DKGTSIGProtocolTestSuite) TestComplaint() {
+	k := 3
+	n := 10
+	round := uint64(1)
+	gov, err := test.NewGovernance(5, 100)
+	s.Require().NoError(err)
+
+	receivers, protocols := s.newProtocols(k, n, round)
+
+	byzantineID := s.vIDs[0]
+	targetID := s.vIDs[1]
+	receiver := receivers[targetID]
+	protocol := protocols[targetID]
+
+	for _, receiver := range receivers {
+		gov.AddDKGMasterPublicKey(receiver.mpk)
+	}
+
+	for _, protocol := range protocols {
+		s.Require().NoError(
+			protocol.processMasterPublicKeys(gov.DKGMasterPublicKeys(round)))
+	}
+
+	// These messages are not valid.
+	err = protocol.processPrivateShare(&types.DKGPrivateShare{
+		ProposerID: types.ValidatorID{Hash: common.NewRandomHash()},
+		Round:      round,
+	})
+	s.Error(ErrNotDKGParticipant, err)
+	err = protocol.processPrivateShare(&types.DKGPrivateShare{
+		ProposerID: byzantineID,
+		Round:      round,
+	})
+	s.Error(ErrIncorrectPrivateShareSignature, err)
+
+	// Byzantine node is sending incorrect private share.
+	err = protocol.processPrivateShare(receivers[byzantineID].prvShare[byzantineID])
+	s.NoError(err)
+	s.Require().Len(receiver.complaints, 1)
+	complaint, exist := receiver.complaints[byzantineID]
+	s.True(exist)
+	s.Equal(byzantineID, complaint.PrivateShare.ProposerID)
+}
+
+// TestQualifyIDs tests if there is a id with t+1 complaints, it should not be
+// in the qualifyIDs.
+func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
+	k := 3
+	n := 10
+	round := uint64(1)
+	gov, err := test.NewGovernance(5, 100)
+	s.Require().NoError(err)
+
+	receivers, _ := s.newProtocols(k, n, round)
+
+	byzantineID := s.vIDs[0]
+
+	for _, receiver := range receivers {
+		gov.AddDKGMasterPublicKey(receiver.mpk)
+	}
+
+	complaints := make([]*types.DKGComplaint, k+1)
+	for i := range complaints {
+		vID := s.vIDs[i]
+		complaints[i] = &types.DKGComplaint{
+			ProposerID: vID,
+			Round:      round,
+			PrivateShare: types.DKGPrivateShare{
+				ProposerID: byzantineID,
+				Round:      round,
+			},
+		}
+	}
+
+	gpk, err := newDKGGroupPublicKey(round,
+		gov.DKGMasterPublicKeys(round), complaints,
+		k, eth.SigToPub,
+	)
+	s.Require().NoError(err)
+	s.Require().Len(gpk.qualifyIDs, n-1)
+	for _, id := range gpk.qualifyIDs {
+		s.NotEqual(id, byzantineID)
+	}
+
+	gpk2, err := newDKGGroupPublicKey(round,
+		gov.DKGMasterPublicKeys(round), complaints[:k],
+		k, eth.SigToPub,
+	)
+	s.Require().NoError(err)
+	s.Require().Len(gpk2.qualifyIDs, n)
+}
+
+// TestPartialSignature tests if tsigProtocol can handle incorrect partial
+// signature and report error.
+func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
+	k := 3
+	n := 10
+	round := uint64(1)
+	gov, err := test.NewGovernance(5, 100)
+	s.Require().NoError(err)
+
+	receivers, protocols := s.newProtocols(k, n, round)
+
+	byzantineID := s.vIDs[0]
+
+	for _, receiver := range receivers {
+		gov.AddDKGMasterPublicKey(receiver.mpk)
+	}
+
+	for _, protocol := range protocols {
+		s.Require().NoError(
+			protocol.processMasterPublicKeys(gov.DKGMasterPublicKeys(round)))
+	}
+
+	for senderID, receiver := range receivers {
+		s.Require().Len(receiver.prvShare, n)
+		if senderID == byzantineID {
+			continue
+		}
+		for vID, prvShare := range receiver.prvShare {
+			s.Require().NoError(protocols[vID].processPrivateShare(prvShare))
+		}
+	}
+
+	for _, protocol := range protocols {
+		protocol.proposeNackComplaints()
+	}
+
+	for _, recv := range receivers {
+		s.Require().Len(recv.complaints, 1)
+		complaint, exist := recv.complaints[byzantineID]
+		s.Require().True(exist)
+		gov.AddDKGComplaint(complaint)
+	}
+
+	// DKG is fininished.
+	gpk, err := newDKGGroupPublicKey(round,
+		gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round),
+		k, eth.SigToPub,
+	)
+	s.Require().NoError(err)
+	s.Require().Len(gpk.qualifyIDs, n-1)
+	qualifyIDs := make(map[dkg.ID]struct{}, len(gpk.qualifyIDs))
+	for _, id := range gpk.qualifyIDs {
+		qualifyIDs[id] = struct{}{}
+	}
+
+	shareSecrets := make(
+		map[types.ValidatorID]*dkgShareSecret, len(qualifyIDs))
+
+	for vID, protocol := range protocols {
+		_, exist := qualifyIDs[s.dkgIDs[vID]]
+		if vID == byzantineID {
+			exist = !exist
+		}
+		s.Require().True(exist)
+		var err error
+		shareSecrets[vID], err = protocol.recoverShareSecret(gpk.qualifyIDs)
+		s.Require().NoError(err)
+	}
+
+	tsig := newTSigProtocol(gpk)
+	msgHash := crypto.Keccak256Hash([]byte("🏖🍹"))
+	byzantineID2 := s.vIDs[1]
+	for vID, shareSecret := range shareSecrets {
+		psig := &types.DKGPartialSignature{
+			ProposerID:       vID,
+			Round:            round,
+			PartialSignature: shareSecret.sign(msgHash),
+		}
+		if vID == byzantineID2 {
+			psig.PartialSignature[0]++
+		}
+		var err error
+		psig.Signature, err = s.prvKeys[vID].Sign(hashDKGPartialSignature(psig))
+		s.Require().NoError(err)
+		err = tsig.processPartialSignature(msgHash, psig)
+		if vID == byzantineID {
+			s.Require().Error(ErrNotQualifyDKGParticipant, err)
+		} else if vID == byzantineID2 {
+			s.Require().Error(ErrIncorrectPartialSignature, err)
+		} else {
+			s.Require().NoError(err)
+		}
+	}
+
+	sig, err := tsig.signature()
+	s.Require().NoError(err)
+	s.True(gpk.verifySignature(msgHash, sig))
 }
 
 func TestDKGTSIGProtocol(t *testing.T) {

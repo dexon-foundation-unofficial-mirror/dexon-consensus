@@ -277,6 +277,19 @@ func (s *DKGTestSuite) TestDKGProtocol() {
 	s.True(groupPK.VerifySignature(hash, recoverSig2))
 }
 
+func (s *DKGTestSuite) TestSignature() {
+	prvKey := NewPrivateKey()
+	pubKey := prvKey.PublicKey()
+	hash := crypto.Keccak256Hash([]byte("🛫"))
+	sig, err := prvKey.Sign(hash)
+	s.Require().NoError(err)
+	s.True(pubKey.VerifySignature(hash, sig))
+	sig[0]++
+	s.False(pubKey.VerifySignature(hash, sig))
+	sig = crypto.Signature{}
+	s.False(pubKey.VerifySignature(hash, sig))
+}
+
 func TestDKG(t *testing.T) {
 	suite.Run(t, new(DKGTestSuite))
 }

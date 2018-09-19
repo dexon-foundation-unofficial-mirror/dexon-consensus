@@ -304,6 +304,9 @@ func (prv *PrivateKey) Bytes() []byte {
 // VerifySignature checks that the given public key created signature over hash.
 func (pub PublicKey) VerifySignature(
 	hash common.Hash, signature crypto.Signature) bool {
+	if len(signature) == 0 {
+		return false
+	}
 	var sig bls.Sign
 	if err := sig.Deserialize(signature[:]); err != nil {
 		fmt.Println(err)
