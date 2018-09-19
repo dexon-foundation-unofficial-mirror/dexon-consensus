@@ -15,7 +15,7 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-// TODO(jimmy-dexon): remove comments of NotaryAck before open source.
+// TODO(jimmy-dexon): remove comments of WitnessAck before open source.
 
 package types
 
@@ -26,27 +26,27 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
-// NotaryAck represents the acking to the compaction chain.
-type NotaryAck struct {
-	ProposerID      ValidatorID `json:"proposer_id"`
-	NotaryBlockHash common.Hash `json:"notary_block_hash"`
-	Hash            common.Hash `json:"hash"`
-	// NotarySignature is the signature of the hash value of BlockNotary.
+// WitnessAck represents the acking to the compaction chain.
+type WitnessAck struct {
+	ProposerID       ValidatorID `json:"proposer_id"`
+	WitnessBlockHash common.Hash `json:"witness_block_hash"`
+	Hash             common.Hash `json:"hash"`
+	// WitnessSignature is the signature of the hash value of BlockWitness.
 	Signature crypto.Signature `json:"signature"`
 }
 
-// Clone returns a deep copy of a NotaryAck.
-func (a *NotaryAck) Clone() *NotaryAck {
-	return &NotaryAck{
-		ProposerID:      a.ProposerID,
-		NotaryBlockHash: a.NotaryBlockHash,
-		Hash:            a.Hash,
-		Signature:       a.Signature,
+// Clone returns a deep copy of a WitnessAck.
+func (a *WitnessAck) Clone() *WitnessAck {
+	return &WitnessAck{
+		ProposerID:       a.ProposerID,
+		WitnessBlockHash: a.WitnessBlockHash,
+		Hash:             a.Hash,
+		Signature:        a.Signature,
 	}
 }
 
-// Notary represents the consensus information on the compaction chain.
-type Notary struct {
+// Witness represents the consensus information on the compaction chain.
+type Witness struct {
 	ParentHash common.Hash `json:"parent_hash"`
 	Timestamp  time.Time   `json:"timestamp"`
 	Height     uint64      `json:"height"`

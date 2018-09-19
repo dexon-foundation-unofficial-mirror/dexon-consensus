@@ -44,7 +44,7 @@ func newConsensusTimestamp() *consensusTimestamp {
 func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (err error) {
 	for _, block := range blocks {
 		if !block.IsGenesis() {
-			block.Notary.Timestamp, err = getMedianTime(ct.chainTimestamps)
+			block.Witness.Timestamp, err = getMedianTime(ct.chainTimestamps)
 			if err != nil {
 				return
 			}

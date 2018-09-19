@@ -50,10 +50,10 @@ var (
 	// and delivered are different.
 	ErrMismatchTotalOrderingAndDelivered = fmt.Errorf(
 		"mismatch total ordering and delivered sequence")
-	// ErrNotaryAckUnknownBlock means the notary ack is acking on the unknown
+	// ErrWitnessAckUnknownBlock means the witness ack is acking on the unknown
 	// block.
-	ErrNotaryAckUnknownBlock = fmt.Errorf(
-		"notary ack on unknown block")
+	ErrWitnessAckUnknownBlock = fmt.Errorf(
+		"witness ack on unknown block")
 )
 
 // AppAckedRecord caches information when this application received
@@ -87,8 +87,8 @@ type App struct {
 	Delivered          map[common.Hash]*AppDeliveredRecord
 	DeliverSequence    common.Hashes
 	deliveredLock      sync.RWMutex
-	NotaryAckSequence  []*types.NotaryAck
-	notaryAckLock      sync.RWMutex
+	WitnessAckSequence []*types.WitnessAck
+	witnessAckLock     sync.RWMutex
 }
 
 // NewApp constructs a TestApp instance.
@@ -155,12 +155,12 @@ func (app *App) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 	app.DeliverSequence = append(app.DeliverSequence, blockHash)
 }
 
-// NotaryAckDeliver implements Application interface.
-func (app *App) NotaryAckDeliver(notaryAck *types.NotaryAck) {
-	app.notaryAckLock.Lock()
-	defer app.notaryAckLock.Unlock()
+// WitnessAckDeliver implements Application interface.
+func (app *App) WitnessAckDeliver(witnessAck *types.WitnessAck) {
+	app.witnessAckLock.Lock()
+	defer app.witnessAckLock.Unlock()
 
-	app.NotaryAckSequence = append(app.NotaryAckSequence, notaryAck)
+	app.WitnessAckSequence = append(app.WitnessAckSequence, witnessAck)
 }
 
 // Compare performs these checks against another App instance
@@ -249,12 +249,12 @@ Loop:
 		return ErrMismatchTotalOrderingAndDelivered
 	}
 
-	// Make sure that notaryAck is acking the correct block.
-	app.notaryAckLock.RLock()
-	defer app.notaryAckLock.RUnlock()
-	for _, notaryAck := range app.NotaryAckSequence {
-		if _, exists := app.Delivered[notaryAck.NotaryBlockHash]; !exists {
-			return ErrNotaryAckUnknownBlock
+	// Make sure that witnessAck is acking the correct block.
+	app.witnessAckLock.RLock()
+	defer app.witnessAckLock.RUnlock()
+	for _, witnessAck := range app.WitnessAckSequence {
+		if _, exists := app.Delivered[witnessAck.WitnessBlockHash]; !exists {
+			return ErrWitnessAckUnknownBlock
 		}
 	}
 	return nil

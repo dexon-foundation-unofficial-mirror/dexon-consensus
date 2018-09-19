@@ -57,8 +57,8 @@ func (m *jsonMarshaller) Unmarshal(
 			break
 		}
 		msg = block
-	case "notary-ack":
-		nAck := &types.NotaryAck{}
+	case "witness-ack":
+		nAck := &types.WitnessAck{}
 		if err = json.Unmarshal(payload, nAck); err != nil {
 			break
 		}
@@ -109,8 +109,8 @@ func (m *jsonMarshaller) Marshal(msg interface{}) (
 		msgType = "info-status"
 	case *types.Block:
 		msgType = "block"
-	case *types.NotaryAck:
-		msgType = "notary-ack"
+	case *types.WitnessAck:
+		msgType = "witness-ack"
 	case *types.Vote:
 		msgType = "vote"
 	case *types.DKGPrivateShare:

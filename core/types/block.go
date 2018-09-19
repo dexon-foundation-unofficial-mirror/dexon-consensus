@@ -15,7 +15,7 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-// TODO(jimmy-dexon): remove comments of NotaryAck before open source.
+// TODO(jimmy-dexon): remove comments of WitnessAck before open source.
 
 package types
 
@@ -65,7 +65,7 @@ type Block struct {
 
 	CRSSignature crypto.Signature `json:"crs_signature"`
 
-	Notary Notary `json:"notary"`
+	Witness Witness `json:"witness"`
 }
 
 func (b *Block) String() string {
@@ -84,8 +84,8 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.Position.Height = b.Position.Height
 	bcopy.Signature = b.Signature.Clone()
 	bcopy.CRSSignature = b.CRSSignature.Clone()
-	bcopy.Notary.Timestamp = b.Notary.Timestamp
-	bcopy.Notary.Height = b.Notary.Height
+	bcopy.Witness.Timestamp = b.Witness.Timestamp
+	bcopy.Witness.Height = b.Witness.Height
 	bcopy.Timestamp = b.Timestamp
 	bcopy.Acks = make(common.SortedHashes, len(b.Acks))
 	copy(bcopy.Acks, b.Acks)

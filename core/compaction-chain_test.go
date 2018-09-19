@@ -50,7 +50,7 @@ func (s *CompactionChainTestSuite) generateBlocks(
 	for idx := range blocks {
 		blocks[idx] = &types.Block{
 			Hash: common.NewRandomHash(),
-			Notary: types.Notary{
+			Witness: types.Witness{
 				Timestamp: now,
 			},
 		}
@@ -70,7 +70,7 @@ func (s *CompactionChainTestSuite) TestProcessBlock() {
 	for idx := range blocks {
 		blocks[idx] = &types.Block{
 			Hash: common.NewRandomHash(),
-			Notary: types.Notary{
+			Witness: types.Witness{
 				Timestamp: now,
 			},
 		}
@@ -82,35 +82,35 @@ func (s *CompactionChainTestSuite) TestProcessBlock() {
 		err := cc.processBlock(block)
 		s.Require().Nil(err)
 		if prevBlock != nil {
-			s.Equal(block.Notary.Height, prevBlock.Notary.Height+1)
-			prevHash, err := hashNotary(prevBlock)
+			s.Equal(block.Witness.Height, prevBlock.Witness.Height+1)
+			prevHash, err := hashWitness(prevBlock)
 			s.Require().Nil(err)
-			s.Equal(prevHash, block.Notary.ParentHash)
+			s.Equal(prevHash, block.Witness.ParentHash)
 		}
 		prevBlock = block
 	}
 }
 
-func (s *CompactionChainTestSuite) TestPrepareNotaryAck() {
+func (s *CompactionChainTestSuite) TestPrepareWitnessAck() {
 	cc := s.newCompactionChain()
 	blocks := s.generateBlocks(10, cc)
 	prv, err := eth.NewPrivateKey()
 	s.Require().Nil(err)
 	for _, block := range blocks {
-		notaryAck, err := cc.prepareNotaryAck(prv)
+		witnessAck, err := cc.prepareWitnessAck(prv)
 		s.Require().Nil(err)
 		if cc.prevBlock != nil {
-			s.True(verifyNotarySignature(
+			s.True(verifyWitnessSignature(
 				prv.PublicKey(),
 				cc.prevBlock,
-				notaryAck.Signature))
-			s.Equal(notaryAck.NotaryBlockHash, cc.prevBlock.Hash)
+				witnessAck.Signature))
+			s.Equal(witnessAck.WitnessBlockHash, cc.prevBlock.Hash)
 		}
 		cc.prevBlock = block
 	}
 }
 
-func (s *CompactionChainTestSuite) TestProcessNotaryAck() {
+func (s *CompactionChainTestSuite) TestProcessWitnessAck() {
 	cc := s.newCompactionChain()
 	blocks := s.generateBlocks(10, cc)
 	prv1, err := eth.NewPrivateKey()
@@ -119,51 +119,51 @@ func (s *CompactionChainTestSuite) TestProcessNotaryAck() {
 	s.Require().Nil(err)
 	vID1 := types.NewValidatorID(prv1.PublicKey())
 	vID2 := types.NewValidatorID(prv2.PublicKey())
-	notaryAcks1 := []*types.NotaryAck{}
-	notaryAcks2 := []*types.NotaryAck{}
+	witnessAcks1 := []*types.WitnessAck{}
+	witnessAcks2 := []*types.WitnessAck{}
 	for _, block := range blocks {
 		cc.prevBlock = block
-		notaryAck1, err := cc.prepareNotaryAck(prv1)
+		witnessAck1, err := cc.prepareWitnessAck(prv1)
 		s.Require().Nil(err)
-		notaryAck2, err := cc.prepareNotaryAck(prv2)
+		witnessAck2, err := cc.prepareWitnessAck(prv2)
 		s.Require().Nil(err)
-		notaryAcks1 = append(notaryAcks1, notaryAck1)
-		notaryAcks2 = append(notaryAcks2, notaryAck2)
+		witnessAcks1 = append(witnessAcks1, witnessAck1)
+		witnessAcks2 = append(witnessAcks2, witnessAck2)
 	}
 	// The acked block is not yet in db.
-	err = cc.processNotaryAck(notaryAcks1[0])
+	err = cc.processWitnessAck(witnessAcks1[0])
 	s.Nil(err)
-	s.Equal(0, len(cc.notaryAcks()))
-	err = cc.processNotaryAck(notaryAcks2[1])
+	s.Equal(0, len(cc.witnessAcks()))
+	err = cc.processWitnessAck(witnessAcks2[1])
 	s.Nil(err)
-	s.Equal(0, len(cc.notaryAcks()))
-	// Insert to block to db and trigger processPendingNotaryAck.
+	s.Equal(0, len(cc.witnessAcks()))
+	// Insert to block to db and trigger processPendingWitnessAck.
 	s.Require().Nil(s.db.Put(*blocks[0]))
 	s.Require().Nil(s.db.Put(*blocks[1]))
-	err = cc.processNotaryAck(notaryAcks1[2])
+	err = cc.processWitnessAck(witnessAcks1[2])
 	s.Nil(err)
-	s.Equal(2, len(cc.notaryAcks()))
+	s.Equal(2, len(cc.witnessAcks()))
 
-	// Test the notaryAcks should be the last notaryAck.
+	// Test the witnessAcks should be the last witnessAck.
 	s.Require().Nil(s.db.Put(*blocks[2]))
 	s.Require().Nil(s.db.Put(*blocks[3]))
-	s.Nil(cc.processNotaryAck(notaryAcks1[3]))
+	s.Nil(cc.processWitnessAck(witnessAcks1[3]))
 
-	acks := cc.notaryAcks()
-	s.Equal(blocks[3].Hash, acks[vID1].NotaryBlockHash)
-	s.Equal(blocks[1].Hash, acks[vID2].NotaryBlockHash)
+	acks := cc.witnessAcks()
+	s.Equal(blocks[3].Hash, acks[vID1].WitnessBlockHash)
+	s.Equal(blocks[1].Hash, acks[vID2].WitnessBlockHash)
 
-	// Test that notaryAck on less Notary.Height should be ignored.
+	// Test that witnessAck on less Witness.Height should be ignored.
 	s.Require().Nil(s.db.Put(*blocks[4]))
 	s.Require().Nil(s.db.Put(*blocks[5]))
-	s.Nil(cc.processNotaryAck(notaryAcks1[5]))
-	s.Nil(cc.processNotaryAck(notaryAcks2[5]))
-	s.Nil(cc.processNotaryAck(notaryAcks1[4]))
-	s.Nil(cc.processNotaryAck(notaryAcks2[4]))
+	s.Nil(cc.processWitnessAck(witnessAcks1[5]))
+	s.Nil(cc.processWitnessAck(witnessAcks2[5]))
+	s.Nil(cc.processWitnessAck(witnessAcks1[4]))
+	s.Nil(cc.processWitnessAck(witnessAcks2[4]))
 
-	acks = cc.notaryAcks()
-	s.Equal(blocks[5].Hash, acks[vID1].NotaryBlockHash)
-	s.Equal(blocks[5].Hash, acks[vID2].NotaryBlockHash)
+	acks = cc.witnessAcks()
+	s.Equal(blocks[5].Hash, acks[vID1].WitnessBlockHash)
+	s.Equal(blocks[5].Hash, acks[vID2].WitnessBlockHash)
 }
 
 func TestCompactionChain(t *testing.T) {

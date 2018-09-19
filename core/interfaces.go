@@ -46,8 +46,8 @@ type Application interface {
 	// DeliverBlock is called when a block is add to the compaction chain.
 	DeliverBlock(blockHash common.Hash, timestamp time.Time)
 
-	// NotaryAckDeliver is called when a notary ack is created.
-	NotaryAckDeliver(notaryAck *types.NotaryAck)
+	// WitnessAckDeliver is called when a witness ack is created.
+	WitnessAckDeliver(witnessAck *types.WitnessAck)
 }
 
 // Network describs the network interface that interacts with DEXON consensus
@@ -59,8 +59,8 @@ type Network interface {
 	// BroadcastBlock broadcasts block to all nodes in DEXON network.
 	BroadcastBlock(block *types.Block)
 
-	// BroadcastNotaryAck broadcasts notaryAck to all nodes in DEXON network.
-	BroadcastNotaryAck(notaryAck *types.NotaryAck)
+	// BroadcastWitnessAck broadcasts witnessAck to all nodes in DEXON network.
+	BroadcastWitnessAck(witnessAck *types.WitnessAck)
 
 	// SendDKGPrivateShare sends PrivateShare to a DKG participant.
 	SendDKGPrivateShare(recv types.ValidatorID, prvShare *types.DKGPrivateShare)

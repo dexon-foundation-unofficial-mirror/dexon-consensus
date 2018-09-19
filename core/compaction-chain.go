@@ -32,28 +32,28 @@ import (
 
 // Errors for compaction chain.
 var (
-	ErrNoNotaryToAck = fmt.Errorf(
-		"no notary to ack")
-	ErrIncorrectNotaryHash = fmt.Errorf(
-		"hash of notary ack is incorrect")
-	ErrIncorrectNotarySignature = fmt.Errorf(
-		"signature of notary ack is incorrect")
+	ErrNoWitnessToAck = fmt.Errorf(
+		"no witness to ack")
+	ErrIncorrectWitnessHash = fmt.Errorf(
+		"hash of witness ack is incorrect")
+	ErrIncorrectWitnessSignature = fmt.Errorf(
+		"signature of witness ack is incorrect")
 )
 
 type pendingAck struct {
 	receivedTime time.Time
-	notaryAck    *types.NotaryAck
+	witnessAck   *types.WitnessAck
 }
 
 type compactionChain struct {
-	db               blockdb.Reader
-	pendingAckLock   sync.RWMutex
-	pendingAck       map[common.Hash]*pendingAck
-	prevBlockLock    sync.RWMutex
-	prevBlock        *types.Block
-	notaryAcksLock   sync.RWMutex
-	latestNotaryAcks map[types.ValidatorID]*types.NotaryAck
-	sigToPub         SigToPubFn
+	db                blockdb.Reader
+	pendingAckLock    sync.RWMutex
+	pendingAck        map[common.Hash]*pendingAck
+	prevBlockLock     sync.RWMutex
+	prevBlock         *types.Block
+	witnessAcksLock   sync.RWMutex
+	latestWitnessAcks map[types.ValidatorID]*types.WitnessAck
+	sigToPub          SigToPubFn
 }
 
 func newCompactionChain(
@@ -61,45 +61,45 @@ func newCompactionChain(
 	sigToPub SigToPubFn,
 ) *compactionChain {
 	return &compactionChain{
-		db:               db,
-		pendingAck:       make(map[common.Hash]*pendingAck),
-		latestNotaryAcks: make(map[types.ValidatorID]*types.NotaryAck),
-		sigToPub:         sigToPub,
+		db:                db,
+		pendingAck:        make(map[common.Hash]*pendingAck),
+		latestWitnessAcks: make(map[types.ValidatorID]*types.WitnessAck),
+		sigToPub:          sigToPub,
 	}
 }
 
 func (cc *compactionChain) sanityCheck(
-	notaryAck *types.NotaryAck, notaryBlock *types.Block) error {
-	if notaryBlock != nil {
-		hash, err := hashNotary(notaryBlock)
+	witnessAck *types.WitnessAck, witnessBlock *types.Block) error {
+	if witnessBlock != nil {
+		hash, err := hashWitness(witnessBlock)
 		if err != nil {
 			return err
 		}
-		if hash != notaryAck.Hash {
-			return ErrIncorrectNotaryHash
+		if hash != witnessAck.Hash {
+			return ErrIncorrectWitnessHash
 		}
 	}
-	pubKey, err := cc.sigToPub(notaryAck.Hash, notaryAck.Signature)
+	pubKey, err := cc.sigToPub(witnessAck.Hash, witnessAck.Signature)
 	if err != nil {
 		return err
 	}
-	if notaryAck.ProposerID != types.NewValidatorID(pubKey) {
-		return ErrIncorrectNotarySignature
+	if witnessAck.ProposerID != types.NewValidatorID(pubKey) {
+		return ErrIncorrectWitnessSignature
 	}
 	return nil
 }
 
-// TODO(jimmy-dexon): processBlock and prepareNotaryAck can be extraced to
+// TODO(jimmy-dexon): processBlock and prepareWitnessAck can be extraced to
 // another struct.
 func (cc *compactionChain) processBlock(block *types.Block) error {
 	prevBlock := cc.lastBlock()
 	if prevBlock != nil {
-		hash, err := hashNotary(prevBlock)
+		hash, err := hashWitness(prevBlock)
 		if err != nil {
 			return err
 		}
-		block.Notary.Height = prevBlock.Notary.Height + 1
-		block.Notary.ParentHash = hash
+		block.Witness.Height = prevBlock.Witness.Height + 1
+		block.Witness.ParentHash = hash
 	}
 	cc.prevBlockLock.Lock()
 	defer cc.prevBlockLock.Unlock()
@@ -107,14 +107,14 @@ func (cc *compactionChain) processBlock(block *types.Block) error {
 	return nil
 }
 
-func (cc *compactionChain) prepareNotaryAck(prvKey crypto.PrivateKey) (
-	notaryAck *types.NotaryAck, err error) {
+func (cc *compactionChain) prepareWitnessAck(prvKey crypto.PrivateKey) (
+	witnessAck *types.WitnessAck, err error) {
 	lastBlock := cc.lastBlock()
 	if lastBlock == nil {
-		err = ErrNoNotaryToAck
+		err = ErrNoWitnessToAck
 		return
 	}
-	hash, err := hashNotary(lastBlock)
+	hash, err := hashWitness(lastBlock)
 	if err != nil {
 		return
 	}
@@ -122,75 +122,75 @@ func (cc *compactionChain) prepareNotaryAck(prvKey crypto.PrivateKey) (
 	if err != nil {
 		return
 	}
-	notaryAck = &types.NotaryAck{
-		ProposerID:      types.NewValidatorID(prvKey.PublicKey()),
-		NotaryBlockHash: lastBlock.Hash,
-		Signature:       sig,
-		Hash:            hash,
+	witnessAck = &types.WitnessAck{
+		ProposerID:       types.NewValidatorID(prvKey.PublicKey()),
+		WitnessBlockHash: lastBlock.Hash,
+		Signature:        sig,
+		Hash:             hash,
 	}
 	return
 }
 
-func (cc *compactionChain) processNotaryAck(notaryAck *types.NotaryAck) (
+func (cc *compactionChain) processWitnessAck(witnessAck *types.WitnessAck) (
 	err error) {
-	// Before getting the Block from notaryAck.NotaryBlockHash, we can still
+	// Before getting the Block from witnessAck.WitnessBlockHash, we can still
 	// do some sanityCheck to prevent invalid ack appending to pendingAck.
-	if err = cc.sanityCheck(notaryAck, nil); err != nil {
+	if err = cc.sanityCheck(witnessAck, nil); err != nil {
 		return
 	}
 	pendingFinished := make(chan struct{})
 	go func() {
-		cc.processPendingNotaryAcks()
+		cc.processPendingWitnessAcks()
 		pendingFinished <- struct{}{}
 	}()
 	defer func() {
 		<-pendingFinished
 	}()
-	notaryBlock, err := cc.db.Get(notaryAck.NotaryBlockHash)
+	witnessBlock, err := cc.db.Get(witnessAck.WitnessBlockHash)
 	if err != nil {
 		if err == blockdb.ErrBlockDoesNotExist {
 			cc.pendingAckLock.Lock()
 			defer cc.pendingAckLock.Unlock()
-			cc.pendingAck[notaryAck.Hash] = &pendingAck{
+			cc.pendingAck[witnessAck.Hash] = &pendingAck{
 				receivedTime: time.Now().UTC(),
-				notaryAck:    notaryAck,
+				witnessAck:   witnessAck,
 			}
 			err = nil
 		}
 		return
 	}
-	return cc.processOneNotaryAck(notaryAck, &notaryBlock)
+	return cc.processOneWitnessAck(witnessAck, &witnessBlock)
 }
 
-func (cc *compactionChain) processOneNotaryAck(
-	notaryAck *types.NotaryAck, notaryBlock *types.Block) (
+func (cc *compactionChain) processOneWitnessAck(
+	witnessAck *types.WitnessAck, witnessBlock *types.Block) (
 	err error) {
-	if err = cc.sanityCheck(notaryAck, notaryBlock); err != nil {
+	if err = cc.sanityCheck(witnessAck, witnessBlock); err != nil {
 		return
 	}
-	lastNotaryAck, exist := func() (ack *types.NotaryAck, exist bool) {
-		cc.notaryAcksLock.RLock()
-		defer cc.notaryAcksLock.RUnlock()
-		ack, exist = cc.latestNotaryAcks[notaryAck.ProposerID]
+	lastWitnessAck, exist := func() (ack *types.WitnessAck, exist bool) {
+		cc.witnessAcksLock.RLock()
+		defer cc.witnessAcksLock.RUnlock()
+		ack, exist = cc.latestWitnessAcks[witnessAck.ProposerID]
 		return
 	}()
 	if exist {
-		lastNotaryBlock, err2 := cc.db.Get(lastNotaryAck.NotaryBlockHash)
+		lastWitnessBlock, err2 := cc.db.Get(lastWitnessAck.WitnessBlockHash)
 		err = err2
 		if err != nil {
 			return
 		}
-		if lastNotaryBlock.Notary.Height > notaryBlock.Notary.Height {
+		if lastWitnessBlock.Witness.Height > witnessBlock.Witness.Height {
 			return
 		}
 	}
-	cc.notaryAcksLock.Lock()
-	defer cc.notaryAcksLock.Unlock()
-	cc.latestNotaryAcks[notaryAck.ProposerID] = notaryAck
+	cc.witnessAcksLock.Lock()
+	defer cc.witnessAcksLock.Unlock()
+	cc.latestWitnessAcks[witnessAck.ProposerID] = witnessAck
 	return
 }
 
-func (cc *compactionChain) processPendingNotaryAcks() {
+func (cc *compactionChain) processPendingWitnessAcks() {
 	pendingAck := func() map[common.Hash]*pendingAck {
 		pendingAck := make(map[common.Hash]*pendingAck)
 		cc.pendingAckLock.RLock()
@@ -209,7 +209,7 @@ func (cc *compactionChain) processPendingNotaryAcks() {
 		}
 	}
 	for hash, ack := range pendingAck {
-		notaryBlock, err := cc.db.Get(ack.notaryAck.NotaryBlockHash)
+		witnessBlock, err := cc.db.Get(ack.witnessAck.WitnessBlockHash)
 		if err != nil {
 			if err == blockdb.ErrBlockDoesNotExist {
 				continue
@@ -219,7 +219,7 @@ func (cc *compactionChain) processPendingNotaryAcks() {
 			delete(pendingAck, hash)
 		}
 		delete(pendingAck, hash)
-		cc.processOneNotaryAck(ack.notaryAck, &notaryBlock)
+		cc.processOneWitnessAck(ack.witnessAck, &witnessBlock)
 	}
 
 	cc.pendingAckLock.Lock()
@@ -230,11 +230,11 @@ func (cc *compactionChain) processPendingNotaryAcks() {
 	cc.pendingAck = pendingAck
 }
 
-func (cc *compactionChain) notaryAcks() map[types.ValidatorID]*types.NotaryAck {
-	cc.notaryAcksLock.RLock()
-	defer cc.notaryAcksLock.RUnlock()
-	acks := make(map[types.ValidatorID]*types.NotaryAck)
-	for k, v := range cc.latestNotaryAcks {
+func (cc *compactionChain) witnessAcks() map[types.ValidatorID]*types.WitnessAck {
+	cc.witnessAcksLock.RLock()
+	defer cc.witnessAcksLock.RUnlock()
+	acks := make(map[types.ValidatorID]*types.WitnessAck)
+	for k, v := range cc.latestWitnessAcks {
 		acks[k] = v.Clone()
 	}
 	return acks

@@ -195,6 +195,6 @@ func (a *simApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 	a.netModule.report(msg)
 }
 
-// NotaryAckDeliver is called when a notary ack is created.
-func (a *simApp) NotaryAckDeliver(notaryAck *types.NotaryAck) {
+// WitnessAckDeliver is called when a witness ack is created.
+func (a *simApp) WitnessAckDeliver(witnessAck *types.WitnessAck) {
 }

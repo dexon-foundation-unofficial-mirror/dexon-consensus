@@ -33,7 +33,7 @@ type slowApp struct {
 	stronglyAcked        map[common.Hash]struct{}
 	totalOrderingDeliver map[common.Hash]struct{}
 	deliverBlock         map[common.Hash]struct{}
-	notaryAck            map[common.Hash]struct{}
+	witnessAck           map[common.Hash]struct{}
 }
 
 func newSlowApp(sleep time.Duration) *slowApp {
@@ -43,7 +43,7 @@ func newSlowApp(sleep time.Duration) *slowApp {
 		stronglyAcked:        make(map[common.Hash]struct{}),
 		totalOrderingDeliver: make(map[common.Hash]struct{}),
 		deliverBlock:         make(map[common.Hash]struct{}),
-		notaryAck:            make(map[common.Hash]struct{}),
+		witnessAck:           make(map[common.Hash]struct{}),
 	}
 }
 
@@ -77,9 +77,9 @@ func (app *slowApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 	app.deliverBlock[blockHash] = struct{}{}
 }
 
-func (app *slowApp) NotaryAckDeliver(notaryAck *types.NotaryAck) {
+func (app *slowApp) WitnessAckDeliver(witnessAck *types.WitnessAck) {
 	time.Sleep(app.sleep)
-	app.notaryAck[notaryAck.Hash] = struct{}{}
+	app.witnessAck[witnessAck.Hash] = struct{}{}
 }
 
 type NonBlockingAppTestSuite struct {
@@ -102,7 +102,7 @@ func (s *NonBlockingAppTestSuite) TestNonBlockingApplication() {
 		nbapp.BlockConfirmed(&types.Block{Hash: hash})
 		nbapp.StronglyAcked(hash)
 		nbapp.DeliverBlock(hash, time.Now().UTC())
-		nbapp.NotaryAckDeliver(&types.NotaryAck{Hash: hash})
+		nbapp.WitnessAckDeliver(&types.WitnessAck{Hash: hash})
 	}
 	nbapp.TotalOrderingDeliver(hashes, true)
 
@@ -115,7 +115,7 @@ func (s *NonBlockingAppTestSuite) TestNonBlockingApplication() {
 		s.Contains(app.stronglyAcked, hash)
 		s.Contains(app.totalOrderingDeliver, hash)
 		s.Contains(app.deliverBlock, hash)
-		s.Contains(app.notaryAck, hash)
+		s.Contains(app.witnessAck, hash)
 	}
 }
 

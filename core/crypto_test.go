@@ -42,13 +42,13 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 		return &types.Block{
 			Acks:      common.NewSortedHashes(acks),
 			Timestamp: now,
-			Notary: types.Notary{
+			Witness: types.Witness{
 				Timestamp: time.Now(),
 				Height:    0,
 			},
 		}
 	}
-	parentHash, err := hashNotary(prevBlock)
+	parentHash, err := hashWitness(prevBlock)
 	s.Require().Nil(err)
 	s.Require().NotEqual(prevBlock.Hash, common.Hash{})
 	acks = append(acks, parentHash)
@@ -59,10 +59,10 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 		Position: types.Position{
 			Height: prevBlock.Position.Height + 1,
 		},
-		Notary: types.Notary{
+		Witness: types.Witness{
 			ParentHash: parentHash,
 			Timestamp:  time.Now(),
-			Height:     prevBlock.Notary.Height + 1,
+			Height:     prevBlock.Witness.Height + 1,
 		},
 	}
 }
@@ -77,61 +77,61 @@ func (s *CryptoTestSuite) newBlock(prevBlock *types.Block) *types.Block {
 
 func (s *CryptoTestSuite) generateCompactionChain(
 	length int, prv crypto.PrivateKey) (
-	[]*types.Block, []types.NotaryAck) {
+	[]*types.Block, []types.WitnessAck) {
 	blocks := make([]*types.Block, length)
-	notaryAcks := make([]types.NotaryAck, length)
+	witnessAcks := make([]types.WitnessAck, length)
 	var prevBlock *types.Block
 	for idx := range blocks {
 		block := s.newBlock(prevBlock)
 		prevBlock = block
 		blocks[idx] = block
 		var err error
-		notaryAcks[idx].Hash, err = hashNotary(blocks[idx])
+		witnessAcks[idx].Hash, err = hashWitness(blocks[idx])
 		s.Require().Nil(err)
-		notaryAcks[idx].NotaryBlockHash = blocks[idx].Hash
-		notaryAcks[idx].Signature, err = prv.Sign(notaryAcks[idx].Hash)
+		witnessAcks[idx].WitnessBlockHash = blocks[idx].Hash
+		witnessAcks[idx].Signature, err = prv.Sign(witnessAcks[idx].Hash)
 		s.Require().Nil(err)
 		if idx > 0 {
-			block.Notary.ParentHash = notaryAcks[idx-1].Hash
+			block.Witness.ParentHash = witnessAcks[idx-1].Hash
 		}
 	}
-	return blocks, notaryAcks
+	return blocks, witnessAcks
 }
 
-func (s *CryptoTestSuite) TestNotaryAckSignature() {
+func (s *CryptoTestSuite) TestWitnessAckSignature() {
 	prv, err := eth.NewPrivateKey()
 	pub := prv.PublicKey()
 	s.Require().Nil(err)
-	blocks, notaryAcks := s.generateCompactionChain(10, prv)
+	blocks, witnessAcks := s.generateCompactionChain(10, prv)
 	blockMap := make(map[common.Hash]*types.Block)
 	for _, block := range blocks {
 		blockMap[block.Hash] = block
 	}
 	parentBlock := blocks[0]
-	for _, notaryAck := range notaryAcks {
-		notaryBlock, exist := blockMap[notaryAck.NotaryBlockHash]
+	for _, witnessAck := range witnessAcks {
+		witnessBlock, exist := blockMap[witnessAck.WitnessBlockHash]
 		s.Require().True(exist)
-		if notaryBlock.Notary.Height == 0 {
+		if witnessBlock.Witness.Height == 0 {
 			continue
 		}
-		s.True(parentBlock.Notary.Height == notaryBlock.Notary.Height-1)
-		hash, err := hashNotary(parentBlock)
+		s.True(parentBlock.Witness.Height == witnessBlock.Witness.Height-1)
+		hash, err := hashWitness(parentBlock)
 		s.Require().Nil(err)
-		s.Equal(hash, notaryBlock.Notary.ParentHash)
-		s.True(verifyNotarySignature(
-			pub, notaryBlock, notaryAck.Signature))
-		parentBlock = notaryBlock
+		s.Equal(hash, witnessBlock.Witness.ParentHash)
+		s.True(verifyWitnessSignature(
+			pub, witnessBlock, witnessAck.Signature))
+		parentBlock = witnessBlock
 
 	}
-	// Modify Block.Notary.Timestamp and verify signature again.
-	for _, notaryAck := range notaryAcks {
-		block, exist := blockMap[notaryAck.NotaryBlockHash]
+	// Modify Block.Witness.Timestamp and verify signature again.
+	for _, witnessAck := range witnessAcks {
+		block, exist := blockMap[witnessAck.WitnessBlockHash]
 		s.Require().True(exist)
-		block.Notary.Timestamp = time.Time{}
-		ackingBlock, exist := blockMap[notaryAck.NotaryBlockHash]
+		block.Witness.Timestamp = time.Time{}
+		ackingBlock, exist := blockMap[witnessAck.WitnessBlockHash]
 		s.Require().True(exist)
-		s.False(verifyNotarySignature(
-			pub, ackingBlock, notaryAck.Signature))
+		s.False(verifyWitnessSignature(
+			pub, ackingBlock, witnessAck.Signature))
 	}
 }
 

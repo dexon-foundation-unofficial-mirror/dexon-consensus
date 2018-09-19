@@ -345,8 +345,8 @@ func (con *Consensus) processMsg(
 			if err := blockProcesser(val); err != nil {
 				log.Println(err)
 			}
-		case *types.NotaryAck:
-			if err := con.ProcessNotaryAck(val); err != nil {
+		case *types.WitnessAck:
+			if err := con.ProcessWitnessAck(val); err != nil {
 				log.Println(err)
 			}
 		case *types.Vote:
@@ -476,22 +476,22 @@ func (con *Consensus) ProcessBlock(block *types.Block) (err error) {
 			if err = con.db.Update(*b); err != nil {
 				return
 			}
-			con.app.DeliverBlock(b.Hash, b.Notary.Timestamp)
+			con.app.DeliverBlock(b.Hash, b.Witness.Timestamp)
 			// TODO(mission): Find a way to safely recycle the block.
 			//                We should deliver block directly to
 			//                nonBlockingApplication and let them recycle the
 			//                block.
 		}
-		var notaryAck *types.NotaryAck
-		notaryAck, err = con.ccModule.prepareNotaryAck(con.prvKey)
+		var witnessAck *types.WitnessAck
+		witnessAck, err = con.ccModule.prepareWitnessAck(con.prvKey)
 		if err != nil {
 			return
 		}
-		err = con.ProcessNotaryAck(notaryAck)
+		err = con.ProcessWitnessAck(witnessAck)
 		if err != nil {
 			return
 		}
-		con.app.NotaryAckDeliver(notaryAck)
+		con.app.WitnessAckDeliver(witnessAck)
 	}
 	return
 }
@@ -552,18 +552,18 @@ func (con *Consensus) PrepareGenesisBlock(b *types.Block,
 	return
 }
 
-// ProcessNotaryAck is the entry point to submit one notary ack.
-func (con *Consensus) ProcessNotaryAck(notaryAck *types.NotaryAck) (err error) {
-	notaryAck = notaryAck.Clone()
-	if _, exists := con.gov.GetNotarySet()[notaryAck.ProposerID]; !exists {
+// ProcessWitnessAck is the entry point to submit one witness ack.
+func (con *Consensus) ProcessWitnessAck(witnessAck *types.WitnessAck) (err error) {
+	witnessAck = witnessAck.Clone()
+	if _, exists := con.gov.GetNotarySet()[witnessAck.ProposerID]; !exists {
 		err = ErrProposerNotValidator
 		return
 	}
-	err = con.ccModule.processNotaryAck(notaryAck)
+	err = con.ccModule.processWitnessAck(witnessAck)
 	return
 }
 
-// NotaryAcks returns the latest NotaryAck received from all other validators.
-func (con *Consensus) NotaryAcks() map[types.ValidatorID]*types.NotaryAck {
-	return con.ccModule.notaryAcks()
+// WitnessAcks returns the latest WitnessAck received from all other validators.
+func (con *Consensus) WitnessAcks() map[types.ValidatorID]*types.WitnessAck {
+	return con.ccModule.witnessAcks()
 }

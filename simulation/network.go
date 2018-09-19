@@ -131,9 +131,9 @@ func (n *network) BroadcastBlock(block *types.Block) {
 	}
 }
 
-// BroadcastNotaryAck implements core.Network interface.
-func (n *network) BroadcastNotaryAck(notaryAck *types.NotaryAck) {
-	if err := n.trans.Broadcast(notaryAck); err != nil {
+// BroadcastWitnessAck implements core.Network interface.
+func (n *network) BroadcastWitnessAck(witnessAck *types.WitnessAck) {
+	if err := n.trans.Broadcast(witnessAck); err != nil {
 		panic(err)
 	}
 }
@@ -188,7 +188,7 @@ func (n *network) run() {
 	// to consensus or validator, that's the question.
 	disp := func(e *test.TransportEnvelope) {
 		switch e.Msg.(type) {
-		case *types.Block, *types.Vote, *types.NotaryAck,
+		case *types.Block, *types.Vote, *types.WitnessAck,
 			*types.DKGPrivateShare, *types.DKGPartialSignature:
 			n.toConsensus <- e.Msg
 		default:

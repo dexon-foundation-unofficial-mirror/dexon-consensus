@@ -153,14 +153,14 @@ func (s *AppTestSuite) TestVerify() {
 	app4.StronglyAcked(hash)
 	app4.TotalOrderingDeliver(common.Hashes{hash}, false)
 	s.deliverBlockWithTimeFromSequenceLength(app4, hash)
-	// Notary ack on unknown block.
+	// Witness ack on unknown block.
 	app5 := NewApp()
 	s.setupAppByTotalOrderDeliver(app5, s.to1)
-	app5.NotaryAckDeliver(&types.NotaryAck{
-		Hash:            common.NewRandomHash(),
-		NotaryBlockHash: common.NewRandomHash(),
+	app5.WitnessAckDeliver(&types.WitnessAck{
+		Hash:             common.NewRandomHash(),
+		WitnessBlockHash: common.NewRandomHash(),
 	})
-	req.Equal(ErrNotaryAckUnknownBlock, app5.Verify())
+	req.Equal(ErrWitnessAckUnknownBlock, app5.Verify())
 }
 
 func TestApp(t *testing.T) {
