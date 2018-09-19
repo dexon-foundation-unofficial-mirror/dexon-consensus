@@ -143,3 +143,102 @@ func hashPosition(position types.Position) common.Hash {
 		binaryHeight,
 	)
 }
+
+func hashDKGPrivateShare(prvShare *types.DKGPrivateShare) common.Hash {
+	binaryRound := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryRound, prvShare.Round)
+
+	return crypto.Keccak256Hash(
+		prvShare.ProposerID.Hash[:],
+		binaryRound,
+		prvShare.PrivateShare.Bytes(),
+	)
+}
+
+func verifyDKGPrivateShareSignature(
+	prvShare *types.DKGPrivateShare, sigToPub SigToPubFn) (bool, error) {
+	hash := hashDKGPrivateShare(prvShare)
+	pubKey, err := sigToPub(hash, prvShare.Signature)
+	if err != nil {
+		return false, err
+	}
+	if prvShare.ProposerID != types.NewValidatorID(pubKey) {
+		return false, nil
+	}
+	return true, nil
+}
+
+func hashDKGMasterPublicKey(mpk *types.DKGMasterPublicKey) common.Hash {
+	binaryRound := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryRound, mpk.Round)
+
+	return crypto.Keccak256Hash(
+		mpk.ProposerID.Hash[:],
+		mpk.DKGID.GetLittleEndian(),
+		mpk.PublicKeyShares.MasterKeyBytes(),
+		binaryRound,
+	)
+}
+
+func verifyDKGMasterPublicKeySignature(
+	mpk *types.DKGMasterPublicKey, sigToPub SigToPubFn) (bool, error) {
+	hash := hashDKGMasterPublicKey(mpk)
+	pubKey, err := sigToPub(hash, mpk.Signature)
+	if err != nil {
+		return false, err
+	}
+	if mpk.ProposerID != types.NewValidatorID(pubKey) {
+		return false, nil
+	}
+	return true, nil
+}
+
+func hashDKGComplaint(complaint *types.DKGComplaint) common.Hash {
+	binaryRound := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryRound, complaint.Round)
+
+	hashPrvShare := hashDKGPrivateShare(&complaint.PrivateShare)
+
+	return crypto.Keccak256Hash(
+		complaint.ProposerID.Hash[:],
+		binaryRound,
+		hashPrvShare[:],
+	)
+}
+
+func verifyDKGComplaintSignature(
+	complaint *types.DKGComplaint, sigToPub SigToPubFn) (bool, error) {
+	hash := hashDKGComplaint(complaint)
+	pubKey, err := sigToPub(hash, complaint.Signature)
+	if err != nil {
+		return false, err
+	}
+	if complaint.ProposerID != types.NewValidatorID(pubKey) {
+		return false, nil
+	}
+	return true, nil
+}
+
+func hashDKGPartialSignature(psig *types.DKGPartialSignature) common.Hash {
+	binaryRound := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryRound, psig.Round)
+
+	return crypto.Keccak256Hash(
+		psig.ProposerID.Hash[:],
+		binaryRound,
+		psig.PartialSignature[:],
+	)
+}
+
+func verifyDKGPartialSignatureSignature(
+	psig *types.DKGPartialSignature, sigToPub SigToPubFn) (bool, error) {
+	hash := hashDKGPartialSignature(psig)
+	pubKey, err := sigToPub(hash, psig.Signature)
+	if err != nil {
+		return false, err
+	}
+	if psig.ProposerID != types.NewValidatorID(pubKey) {
+		return false, nil
+	}
+	return true, nil
+}

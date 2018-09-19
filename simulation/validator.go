@@ -58,7 +58,7 @@ func newValidator(
 	if err != nil {
 		panic(err)
 	}
-	gov := newSimGovernance(config.Validator.Num, config.Validator.Consensus)
+	gov := newSimGovernance(id, config.Validator.Num, config.Validator.Consensus)
 	return &validator{
 		ID:        id,
 		prvKey:    prvKey,
@@ -85,6 +85,7 @@ func (v *validator) run(serverEndpoint interface{}, legacy bool) {
 	msgChannel := v.netModule.receiveChanForValidator()
 	peers := v.netModule.peers()
 	go v.netModule.run()
+	v.gov.setNetwork(v.netModule)
 	// Run consensus.
 	hashes := make(common.Hashes, 0, len(peers))
 	for vID := range peers {
@@ -115,6 +116,10 @@ MainLoop:
 			if val == statusShutdown {
 				break MainLoop
 			}
+		case *types.DKGComplaint:
+			v.gov.AddDKGComplaint(val)
+		case *types.DKGMasterPublicKey:
+			v.gov.AddDKGMasterPublicKey(val)
 		default:
 			panic(fmt.Errorf("unexpected message from server: %v", val))
 		}

@@ -53,6 +53,7 @@ func (s *DKGTestSuite) genID(k int) IDs {
 }
 
 func (s *DKGTestSuite) sendKey(senders []member, receivers []member) {
+	receiveFrom := make(map[ID][]member)
 	for _, sender := range senders {
 		for _, receiver := range receivers {
 			// Here's the demonstration of DKG protocol. `pubShares` is broadcasted
@@ -71,7 +72,19 @@ func (s *DKGTestSuite) sendKey(senders []member, receivers []member) {
 				VerifyPubShare(receiver.id, pubShare)
 			s.Require().NoError(err)
 			s.Require().True(valid)
-			err = receiver.receivedPrvShares.AddShare(sender.id, prvShare)
+			receiveFrom[receiver.id] = append(receiveFrom[receiver.id], sender)
+		}
+	}
+	// The received order do not need to be the same.
+	for _, receiver := range receivers {
+		rand.Shuffle(len(senders), func(i, j int) {
+			receiveFrom[receiver.id][i], receiveFrom[receiver.id][j] =
+				receiveFrom[receiver.id][j], receiveFrom[receiver.id][i]
+		})
+		for _, sender := range receiveFrom[receiver.id] {
+			prvShare, ok := sender.prvShares.Share(receiver.id)
+			s.Require().True(ok)
+			err := receiver.receivedPrvShares.AddShare(sender.id, prvShare)
 			s.Require().NoError(err)
 		}
 	}
@@ -119,7 +132,8 @@ func (s *DKGTestSuite) TestVerifyKeyShares() {
 		})
 	}
 
-	prvShares, pubShares := NewPrivateKeyShares(2, ids)
+	prvShares, pubShares := NewPrivateKeyShares(2)
+	prvShares.SetParticipants(ids)
 
 	_, ok := prvShares.Share(invalidID)
 	s.False(ok)
@@ -150,7 +164,8 @@ func (s *DKGTestSuite) TestVerifyKeyShares() {
 
 	// Test of faulty signature.
 	for idx := range members {
-		members[idx].prvShares, members[idx].pubShares = NewPrivateKeyShares(2, ids)
+		members[idx].prvShares, members[idx].pubShares = NewPrivateKeyShares(2)
+		members[idx].prvShares.SetParticipants(ids)
 		members[idx].receivedPrvShares = NewEmptyPrivateKeyShares()
 	}
 	s.sendKey(members, members)
@@ -190,7 +205,8 @@ func (s *DKGTestSuite) TestDKGProtocol() {
 	}
 
 	for idx := range members {
-		members[idx].prvShares, members[idx].pubShares = NewPrivateKeyShares(k, ids)
+		members[idx].prvShares, members[idx].pubShares = NewPrivateKeyShares(k)
+		members[idx].prvShares.SetParticipants(ids)
 		members[idx].receivedPrvShares = NewEmptyPrivateKeyShares()
 	}
 	// Randomly select non-disqualified members.
@@ -292,8 +308,8 @@ func BenchmarkDKGProtocol(b *testing.B) {
 			ids[n-1] = self.id
 			prvShares := make(map[ID]*PrivateKey, n)
 			for idx := range members {
-				members[idx].prvShares, members[idx].pubShares = NewPrivateKeyShares(
-					t, ids)
+				members[idx].prvShares, members[idx].pubShares = NewPrivateKeyShares(t)
+				members[idx].prvShares.SetParticipants(ids)
 				prvShare, ok := members[idx].prvShares.Share(self.id)
 				if !ok {
 					b.FailNow()
@@ -302,7 +318,8 @@ func BenchmarkDKGProtocol(b *testing.B) {
 			}
 
 			b.StartTimer()
-			self.prvShares, self.pubShares = NewPrivateKeyShares(t, ids)
+			self.prvShares, self.pubShares = NewPrivateKeyShares(t)
+			self.prvShares.SetParticipants(ids)
 			self.receivedPrvShares = NewEmptyPrivateKeyShares()
 			for _, member := range members {
 				self.receivedPubShares[member.id] = member.pubShares

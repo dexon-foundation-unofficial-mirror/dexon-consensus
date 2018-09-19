@@ -24,6 +24,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto/dkg"
 	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
 	"github.com/stretchr/testify/suite"
 )
@@ -208,6 +209,58 @@ func (s *CryptoTestSuite) TestCRSSignature() {
 	s.True(verifyCRSSignature(block, crs, eth.SigToPub))
 	block.Position.Height++
 	s.False(verifyCRSSignature(block, crs, eth.SigToPub))
+}
+
+func (s *CryptoTestSuite) TestDKGSignature() {
+	prv, err := eth.NewPrivateKey()
+	s.Require().Nil(err)
+	vID := types.NewValidatorID(prv.PublicKey())
+	prvShare := &types.DKGPrivateShare{
+		ProposerID:   vID,
+		Round:        5,
+		PrivateShare: *dkg.NewPrivateKey(),
+	}
+	prvShare.Signature, err = prv.Sign(hashDKGPrivateShare(prvShare))
+	s.Require().Nil(err)
+	s.True(verifyDKGPrivateShareSignature(prvShare, eth.SigToPub))
+	prvShare.Round++
+	s.False(verifyDKGPrivateShareSignature(prvShare, eth.SigToPub))
+
+	id := dkg.NewID([]byte{13})
+	_, pkShare := dkg.NewPrivateKeyShares(1)
+	mpk := &types.DKGMasterPublicKey{
+		ProposerID:      vID,
+		Round:           5,
+		DKGID:           id,
+		PublicKeyShares: *pkShare,
+	}
+	mpk.Signature, err = prv.Sign(hashDKGMasterPublicKey(mpk))
+	s.Require().Nil(err)
+	s.True(verifyDKGMasterPublicKeySignature(mpk, eth.SigToPub))
+	mpk.Round++
+	s.False(verifyDKGMasterPublicKeySignature(mpk, eth.SigToPub))
+
+	complaint := &types.DKGComplaint{
+		ProposerID:   vID,
+		Round:        5,
+		PrivateShare: *prvShare,
+	}
+	complaint.Signature, err = prv.Sign(hashDKGComplaint(complaint))
+	s.Require().Nil(err)
+	s.True(verifyDKGComplaintSignature(complaint, eth.SigToPub))
+	complaint.Round++
+	s.False(verifyDKGComplaintSignature(complaint, eth.SigToPub))
+
+	sig := &types.DKGPartialSignature{
+		ProposerID:       vID,
+		Round:            5,
+		PartialSignature: dkg.PartialSignature{},
+	}
+	sig.Signature, err = prv.Sign(hashDKGPartialSignature(sig))
+	s.Require().Nil(err)
+	s.True(verifyDKGPartialSignatureSignature(sig, eth.SigToPub))
+	sig.Round++
+	s.False(verifyDKGPartialSignatureSignature(sig, eth.SigToPub))
 }
 
 func TestCrypto(t *testing.T) {

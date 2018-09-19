@@ -138,6 +138,13 @@ func (n *network) BroadcastNotaryAck(notaryAck *types.NotaryAck) {
 	}
 }
 
+// broadcast message to all other validators in the network.
+func (n *network) broadcast(message interface{}) {
+	if err := n.trans.Broadcast(message); err != nil {
+		panic(err)
+	}
+}
+
 // SendDKGPrivateShare implements core.Network interface.
 func (n *network) SendDKGPrivateShare(
 	recv types.ValidatorID, prvShare *types.DKGPrivateShare) {
@@ -181,7 +188,8 @@ func (n *network) run() {
 	// to consensus or validator, that's the question.
 	disp := func(e *test.TransportEnvelope) {
 		switch e.Msg.(type) {
-		case *types.Block, *types.Vote, *types.NotaryAck:
+		case *types.Block, *types.Vote, *types.NotaryAck,
+			*types.DKGPrivateShare, *types.DKGPartialSignature:
 			n.toConsensus <- e.Msg
 		default:
 			n.toValidator <- e.Msg

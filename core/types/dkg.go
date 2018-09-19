@@ -24,17 +24,18 @@ import (
 
 // DKGPrivateShare describe a secret share in DKG protocol.
 type DKGPrivateShare struct {
-	ProposerID      ValidatorID      `json:"proposer_id"`
-	Round           uint64           `json:"round"`
-	PrivateKeyShare dkg.PrivateKey   `json:"private_key_share"`
-	Signature       crypto.Signature `json:"signature"`
+	ProposerID   ValidatorID      `json:"proposer_id"`
+	Round        uint64           `json:"round"`
+	PrivateShare dkg.PrivateKey   `json:"private_share"`
+	Signature    crypto.Signature `json:"signature"`
 }
 
 // DKGMasterPublicKey decrtibe a master public key in DKG protocol.
 type DKGMasterPublicKey struct {
 	ProposerID      ValidatorID         `json:"proposer_id"`
 	Round           uint64              `json:"round"`
-	PublicKeyShares dkg.PublicKeyShares `json:"private_key_share"`
+	DKGID           dkg.ID              `json:"dkg_id"`
+	PublicKeyShares dkg.PublicKeyShares `json:"public_key_shares"`
 	Signature       crypto.Signature    `json:"signature"`
 }
 
@@ -44,4 +45,12 @@ type DKGComplaint struct {
 	Round        uint64           `json:"round"`
 	PrivateShare DKGPrivateShare  `json:"private_share"`
 	Signature    crypto.Signature `json:"signature"`
+}
+
+// DKGPartialSignature describe a partial signature in DKG protocol.
+type DKGPartialSignature struct {
+	ProposerID       ValidatorID          `json:"proposerID"`
+	Round            uint64               `json:"round"`
+	PartialSignature dkg.PartialSignature `json:"partial_signature"`
+	Signature        crypto.Signature     `json:"signature"`
 }

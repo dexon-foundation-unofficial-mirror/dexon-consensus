@@ -29,6 +29,7 @@ import (
 // simGovernance is a simulated governance contract implementing the
 // core.Governance interface.
 type simGovernance struct {
+	id                    types.ValidatorID
 	lock                  sync.RWMutex
 	notarySet             map[types.ValidatorID]struct{}
 	expectedNumValidators int
@@ -39,12 +40,15 @@ type simGovernance struct {
 	dkgComplaint          map[uint64][]*types.DKGComplaint
 	dkgMasterPublicKey    map[uint64][]*types.DKGMasterPublicKey
 	lambda                time.Duration
+	network               *network
 }
 
 // newSimGovernance returns a new simGovernance instance.
 func newSimGovernance(
+	id types.ValidatorID,
 	numValidators int, consensusConfig config.Consensus) *simGovernance {
 	return &simGovernance{
+		id:                    id,
 		notarySet:             make(map[types.ValidatorID]struct{}),
 		expectedNumValidators: numValidators,
 		k:                  consensusConfig.K,
@@ -57,9 +61,12 @@ func newSimGovernance(
 	}
 }
 
+func (g *simGovernance) setNetwork(network *network) {
+	g.network = network
+}
+
 // GetNotarySet returns the current notary set.
 func (g *simGovernance) GetNotarySet() map[types.ValidatorID]struct{} {
-
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
@@ -99,8 +106,12 @@ func (g *simGovernance) addValidator(vID types.ValidatorID) {
 
 // AddDKGComplaint adds a DKGComplaint.
 func (g *simGovernance) AddDKGComplaint(complaint *types.DKGComplaint) {
+	// TODO(jimmy-dexon): check if the input is valid.
 	g.dkgComplaint[complaint.Round] = append(
 		g.dkgComplaint[complaint.Round], complaint)
+	if complaint.ProposerID == g.id {
+		g.network.broadcast(complaint)
+	}
 }
 
 // DKGComplaints returns the DKGComplaints of round.
@@ -115,8 +126,12 @@ func (g *simGovernance) DKGComplaints(round uint64) []*types.DKGComplaint {
 // AddDKGMasterPublicKey adds a DKGMasterPublicKey.
 func (g *simGovernance) AddDKGMasterPublicKey(
 	masterPublicKey *types.DKGMasterPublicKey) {
+	// TODO(jimmy-dexon): check if the input is valid.
 	g.dkgMasterPublicKey[masterPublicKey.Round] = append(
 		g.dkgMasterPublicKey[masterPublicKey.Round], masterPublicKey)
+	if masterPublicKey.ProposerID == g.id {
+		g.network.broadcast(masterPublicKey)
+	}
 }
 
 // DKGMasterPublicKeys returns the DKGMasterPublicKeys of round.

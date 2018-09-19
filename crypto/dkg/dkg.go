@@ -37,8 +37,13 @@ var (
 	ErrShareNotFound = fmt.Errorf("share not found")
 )
 
+var publicKeyLength int
+
 func init() {
 	bls.Init(curve)
+
+	pubKey := &bls.PublicKey{}
+	publicKeyLength = len(pubKey.Serialize())
 }
 
 // PrivateKey represents a private key structure implments
@@ -63,8 +68,9 @@ type PublicKey struct {
 
 // PrivateKeyShares represents a private key shares for DKG protocol.
 type PrivateKeyShares struct {
-	shares     []PrivateKey
-	shareIndex map[ID]int
+	shares           []PrivateKey
+	shareIndex       map[ID]int
+	masterPrivateKey []bls.SecretKey
 }
 
 // PublicKeyShares represents a public key shares for DKG protocol.
@@ -91,21 +97,15 @@ func NewPrivateKey() *PrivateKey {
 	}
 }
 
-// NewPrivateKeyShares creates a private key shares for k-of-n TSIG.
-func NewPrivateKeyShares(k int, IDs IDs) (*PrivateKeyShares, *PublicKeyShares) {
+// NewPrivateKeyShares creates a DKG private key shares of threshold t.
+func NewPrivateKeyShares(t int) (*PrivateKeyShares, *PublicKeyShares) {
 	var prv bls.SecretKey
 	prv.SetByCSPRNG()
-	msk := prv.GetMasterSecretKey(k)
+	msk := prv.GetMasterSecretKey(t)
 	mpk := bls.GetMasterPublicKey(msk)
-	shares := make([]PrivateKey, len(IDs))
-	shareMap := make(map[ID]int)
-	for idx, ID := range IDs {
-		shares[idx].privateKey.Set(msk, &ID)
-		shareMap[ID] = idx
-	}
 	return &PrivateKeyShares{
-			shares:     shares,
-			shareIndex: shareMap,
+			masterPrivateKey: msk,
+			shareIndex:       make(map[ID]int),
 		}, &PublicKeyShares{
 			shareIndex:      make(map[ID]int),
 			masterPublicKey: mpk,
@@ -116,6 +116,16 @@ func NewPrivateKeyShares(k int, IDs IDs) (*PrivateKeyShares, *PublicKeyShares) {
 func NewEmptyPrivateKeyShares() *PrivateKeyShares {
 	return &PrivateKeyShares{
 		shareIndex: make(map[ID]int),
+	}
+}
+
+// SetParticipants sets the DKG participants.
+func (prvs *PrivateKeyShares) SetParticipants(IDs IDs) {
+	prvs.shares = make([]PrivateKey, len(IDs))
+	prvs.shareIndex = make(map[ID]int, len(IDs))
+	for idx, ID := range IDs {
+		prvs.shares[idx].privateKey.Set(prvs.masterPrivateKey, &ID)
+		prvs.shareIndex[ID] = idx
 	}
 }
 
@@ -258,6 +268,15 @@ func (pubs *PublicKeyShares) RecoverPublicKey(qualifyIDs IDs) (
 	return &pub, nil
 }
 
+// MasterKeyBytes returns []byte representation of master public key.
+func (pubs *PublicKeyShares) MasterKeyBytes() []byte {
+	bytes := make([]byte, 0, len(pubs.masterPublicKey)*publicKeyLength)
+	for _, pk := range pubs.masterPublicKey {
+		bytes = append(bytes, pk.Serialize()...)
+	}
+	return bytes
+}
+
 // newPublicKey creates a new PublicKey structure.
 func newPublicKey(prvKey *bls.SecretKey) *PublicKey {
 	return &PublicKey{
@@ -277,6 +296,11 @@ func (prv *PrivateKey) Sign(hash common.Hash) (crypto.Signature, error) {
 	return crypto.Signature(sign.Serialize()), nil
 }
 
+// Bytes returns []byte representation of private key.
+func (prv *PrivateKey) Bytes() []byte {
+	return prv.privateKey.GetLittleEndian()
+}
+
 // VerifySignature checks that the given public key created signature over hash.
 func (pub PublicKey) VerifySignature(
 	hash common.Hash, signature crypto.Signature) bool {
@@ -289,7 +313,7 @@ func (pub PublicKey) VerifySignature(
 	return sig.Verify(&pub.publicKey, msg)
 }
 
-// Bytes returns the []byte representation of public key.
+// Bytes returns []byte representation of public key.
 func (pub PublicKey) Bytes() []byte {
 	var bytes []byte
 	pub.publicKey.Deserialize(bytes)
