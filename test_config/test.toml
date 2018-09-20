@@ -1,18 +1,26 @@
 title = "DEXON Consensus Simulation Config"
 
 [node]
-num = 21
-propose_interval_mean = 5e+02
-propose_interval_sigma = 5e+0
-max_block = 20
+num = 7
+max_block = 18446744073709551615
 
 [node.consensus]
-phi_ratio = 6.66670024394989e-01
+phi_ratio = 6.666666865348816e-01
 k = 1
+chain_num = 7
+genesis_crs = "In DEXON we trust."
+lambda = 250
+
+[node.legacy]
+propose_interval_mean = 5e+02
+propose_interval_sigma = 5e+01
 
 [networking]
 type = "tcp-local"
-peer_server = "peer.server"
+peer_server = "127.0.0.1"
 mean = 1e+02
 sigma = 1e+01
 loss_rate_value = 0e+00
+
+[scheduler]
+worker_num = 2

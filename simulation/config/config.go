@@ -107,7 +107,7 @@ func GenerateDefault(path string) error {
 		},
 		Networking: Networking{
 			Type:          NetworkTypeTCPLocal,
-			PeerServer:    "peer.server",
+			PeerServer:    "127.0.0.1",
 			Mean:          100,
 			Sigma:         10,
 			LossRateValue: 0,
