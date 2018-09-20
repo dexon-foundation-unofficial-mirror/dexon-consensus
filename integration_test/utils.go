@@ -9,13 +9,13 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
-// PrepareValidators setups validators for testing.
-func PrepareValidators(
-	validatorCount int,
+// PrepareNodes setups nodes for testing.
+func PrepareNodes(
+	nodeCount int,
 	networkLatency, proposingLatency test.LatencyModel) (
-	apps map[types.ValidatorID]*test.App,
-	dbs map[types.ValidatorID]blockdb.BlockDatabase,
-	validators map[types.ValidatorID]*Validator,
+	apps map[types.NodeID]*test.App,
+	dbs map[types.NodeID]blockdb.BlockDatabase,
+	nodes map[types.NodeID]*Node,
 	err error) {
 
 	var (
@@ -23,32 +23,32 @@ func PrepareValidators(
 		key crypto.PrivateKey
 	)
 
-	apps = make(map[types.ValidatorID]*test.App)
-	dbs = make(map[types.ValidatorID]blockdb.BlockDatabase)
-	validators = make(map[types.ValidatorID]*Validator)
+	apps = make(map[types.NodeID]*test.App)
+	dbs = make(map[types.NodeID]blockdb.BlockDatabase)
+	nodes = make(map[types.NodeID]*Node)
 
-	gov, err := test.NewGovernance(validatorCount, 700*time.Millisecond)
+	gov, err := test.NewGovernance(nodeCount, 700*time.Millisecond)
 	if err != nil {
 		return
 	}
-	for vID := range gov.GetNotarySet() {
-		apps[vID] = test.NewApp()
+	for nID := range gov.GetNotarySet() {
+		apps[nID] = test.NewApp()
 
 		if db, err = blockdb.NewMemBackedBlockDB(); err != nil {
 			return
 		}
-		dbs[vID] = db
+		dbs[nID] = db
 	}
-	for vID := range gov.GetNotarySet() {
-		if key, err = gov.GetPrivateKey(vID); err != nil {
+	for nID := range gov.GetNotarySet() {
+		if key, err = gov.GetPrivateKey(nID); err != nil {
 			return
 		}
-		validators[vID] = NewValidator(
-			apps[vID],
+		nodes[nID] = NewNode(
+			apps[nID],
 			gov,
-			dbs[vID],
+			dbs[nID],
 			key,
-			vID,
+			nID,
 			networkLatency,
 			proposingLatency)
 	}
@@ -56,7 +56,7 @@ func PrepareValidators(
 }
 
 // VerifyApps is a helper to check delivery between test.Apps
-func VerifyApps(apps map[types.ValidatorID]*test.App) (err error) {
+func VerifyApps(apps map[types.NodeID]*test.App) (err error) {
 	for vFrom, fromApp := range apps {
 		if err = fromApp.Verify(); err != nil {
 			return

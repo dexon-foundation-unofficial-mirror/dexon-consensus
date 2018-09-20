@@ -28,10 +28,10 @@ import (
 // by using golang channel.
 type FakeTransport struct {
 	peerType      TransportPeerType
-	vID           types.ValidatorID
+	nID           types.NodeID
 	recvChannel   chan *TransportEnvelope
 	serverChannel chan<- *TransportEnvelope
-	peers         map[types.ValidatorID]chan<- *TransportEnvelope
+	peers         map[types.NodeID]chan<- *TransportEnvelope
 	latency       LatencyModel
 }
 
@@ -45,19 +45,19 @@ func NewFakeTransportServer() TransportServer {
 
 // NewFakeTransportClient constructs FakeTransport instance for peer.
 func NewFakeTransportClient(
-	vID types.ValidatorID, latency LatencyModel) TransportClient {
+	nID types.NodeID, latency LatencyModel) TransportClient {
 
 	return &FakeTransport{
 		peerType:    TransportPeer,
 		recvChannel: make(chan *TransportEnvelope, 1000),
-		vID:         vID,
+		nID:         nID,
 		latency:     latency,
 	}
 }
 
 // Send implements Transport.Send method.
 func (t *FakeTransport) Send(
-	endpoint types.ValidatorID, msg interface{}) (err error) {
+	endpoint types.NodeID, msg interface{}) (err error) {
 
 	ch, exists := t.peers[endpoint]
 	if !exists {
@@ -70,7 +70,7 @@ func (t *FakeTransport) Send(
 		}
 		ch <- &TransportEnvelope{
 			PeerType: t.peerType,
-			From:     t.vID,
+			From:     t.nID,
 			Msg:      msg,
 		}
 	}(ch)
@@ -82,7 +82,7 @@ func (t *FakeTransport) Report(msg interface{}) (err error) {
 	go func() {
 		t.serverChannel <- &TransportEnvelope{
 			PeerType: TransportPeer,
-			From:     t.vID,
+			From:     t.nID,
 			Msg:      msg,
 		}
 	}()
@@ -92,7 +92,7 @@ func (t *FakeTransport) Report(msg interface{}) (err error) {
 // Broadcast implements Transport.Broadcast method.
 func (t *FakeTransport) Broadcast(msg interface{}) (err error) {
 	for k := range t.peers {
-		if k == t.vID {
+		if k == t.nID {
 			continue
 		}
 		t.Send(k, msg)
@@ -107,10 +107,10 @@ func (t *FakeTransport) Close() (err error) {
 }
 
 // Peers implements Transport.Peers method.
-func (t *FakeTransport) Peers() (peers map[types.ValidatorID]struct{}) {
-	peers = make(map[types.ValidatorID]struct{})
-	for vID := range t.peers {
-		peers[vID] = struct{}{}
+func (t *FakeTransport) Peers() (peers map[types.NodeID]struct{}) {
+	peers = make(map[types.NodeID]struct{})
+	for nID := range t.peers {
+		peers[nID] = struct{}{}
 	}
 	return
 }
@@ -135,7 +135,7 @@ func (t *FakeTransport) Join(
 			continue
 		}
 		if t.peers, ok =
-			envelope.Msg.(map[types.ValidatorID]chan<- *TransportEnvelope); !ok {
+			envelope.Msg.(map[types.NodeID]chan<- *TransportEnvelope); !ok {
 
 			envelopes = append(envelopes, envelope)
 			continue
@@ -155,7 +155,7 @@ func (t *FakeTransport) Host() (chan *TransportEnvelope, error) {
 
 // WaitForPeers implements TransportServer.WaitForPeers method.
 func (t *FakeTransport) WaitForPeers(numPeers int) (err error) {
-	t.peers = make(map[types.ValidatorID]chan<- *TransportEnvelope)
+	t.peers = make(map[types.NodeID]chan<- *TransportEnvelope)
 	for {
 		envelope := <-t.recvChannel
 		// Panic here if some peer send other stuffs before

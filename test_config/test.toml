@@ -1,12 +1,12 @@
 title = "DEXON Consensus Simulation Config"
 
-[validator]
+[node]
 num = 21
 propose_interval_mean = 5e+02
 propose_interval_sigma = 5e+0
 max_block = 20
 
-[validator.consensus]
+[node.consensus]
 phi_ratio = 6.66670024394989e-01
 k = 1
 

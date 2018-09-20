@@ -33,21 +33,21 @@ type BlocksGeneratorTestCase struct {
 
 func (s *BlocksGeneratorTestCase) TestGenerate() {
 	// This test case is to make sure the generated blocks are legimate.
-	validatorCount := 19
+	nodeCount := 19
 	blockCount := 50
 	gen := NewBlocksGenerator(nil, stableRandomHash)
 	db, err := blockdb.NewMemBackedBlockDB()
 	s.Require().Nil(err)
 
-	validators, err := gen.Generate(
-		validatorCount, blockCount, nil, db)
+	nodes, err := gen.Generate(
+		nodeCount, blockCount, nil, db)
 	s.Require().Nil(err)
-	s.Require().Len(validators, validatorCount)
+	s.Require().Len(nodes, nodeCount)
 
 	// Load all blocks in that database for further checking.
 	iter, err := db.GetAll()
 	s.Require().Nil(err)
-	blocksByValidator := make(map[types.ValidatorID][]*types.Block)
+	blocksByNode := make(map[types.NodeID][]*types.Block)
 	blocksByHash := make(map[common.Hash]*types.Block)
 	for {
 		block, err := iter.Next()
@@ -56,9 +56,9 @@ func (s *BlocksGeneratorTestCase) TestGenerate() {
 		}
 		s.Nil(err)
 
-		blocksByValidator[block.ProposerID] =
-			append(blocksByValidator[block.ProposerID], &block)
-		sort.Sort(types.ByHeight(blocksByValidator[block.ProposerID]))
+		blocksByNode[block.ProposerID] =
+			append(blocksByNode[block.ProposerID], &block)
+		sort.Sort(types.ByHeight(blocksByNode[block.ProposerID]))
 		blocksByHash[block.Hash] = &block
 	}
 
@@ -67,8 +67,8 @@ func (s *BlocksGeneratorTestCase) TestGenerate() {
 	//                        compared to its parent block.
 	//  - Parent Ack: always ack its parent block.
 	//  - No Acks in genesis bloc
-	for _, blocks := range blocksByValidator {
-		lastAckingHeights := map[types.ValidatorID]uint64{}
+	for _, blocks := range blocksByNode {
+		lastAckingHeights := map[types.NodeID]uint64{}
 		s.Require().NotEmpty(blocks)
 
 		// Check genesis block.
@@ -106,19 +106,19 @@ func (s *BlocksGeneratorTestCase) TestGenerate() {
 
 func (s *BlocksGeneratorTestCase) TestGenerateWithMaxAckCount() {
 	var (
-		validatorCount = 13
-		blockCount     = 50
-		gen            = NewBlocksGenerator(nil, stableRandomHash)
-		req            = s.Require()
+		nodeCount  = 13
+		blockCount = 50
+		gen        = NewBlocksGenerator(nil, stableRandomHash)
+		req        = s.Require()
 	)
 
 	// Generate with 0 acks.
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.Nil(err)
-	validators, err := gen.Generate(
-		validatorCount, blockCount, MaxAckingCountGenerator(0), db)
+	nodes, err := gen.Generate(
+		nodeCount, blockCount, MaxAckingCountGenerator(0), db)
 	req.Nil(err)
-	req.Len(validators, validatorCount)
+	req.Len(nodes, nodeCount)
 	// Load blocks to check their acking count.
 	iter, err := db.GetAll()
 	req.Nil(err)
@@ -137,11 +137,11 @@ func (s *BlocksGeneratorTestCase) TestGenerateWithMaxAckCount() {
 	// Generate with acks as many as possible.
 	db, err = blockdb.NewMemBackedBlockDB()
 	req.Nil(err)
-	validators, err = gen.Generate(
-		validatorCount, blockCount, MaxAckingCountGenerator(
-			validatorCount), db)
+	nodes, err = gen.Generate(
+		nodeCount, blockCount, MaxAckingCountGenerator(
+			nodeCount), db)
 	req.Nil(err)
-	req.Len(validators, validatorCount)
+	req.Len(nodes, nodeCount)
 	// Load blocks to verify the average acking count.
 	totalAckingCount := 0
 	totalBlockCount := 0
@@ -160,7 +160,7 @@ func (s *BlocksGeneratorTestCase) TestGenerateWithMaxAckCount() {
 		totalBlockCount++
 	}
 	req.NotZero(totalBlockCount)
-	req.True((totalAckingCount / totalBlockCount) >= (validatorCount / 2))
+	req.True((totalAckingCount / totalBlockCount) >= (nodeCount / 2))
 }
 
 func TestBlocksGenerator(t *testing.T) {

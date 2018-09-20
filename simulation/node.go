@@ -29,41 +29,41 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
 
-// validator represents a validator in DexCon.
-type validator struct {
+// node represents a node in DexCon.
+type node struct {
 	app *simApp
 	gov *simGovernance
 	db  blockdb.BlockDatabase
 
-	config    config.Validator
+	config    config.Node
 	netModule *network
 
-	ID        types.ValidatorID
+	ID        types.NodeID
 	chainID   uint64
 	prvKey    crypto.PrivateKey
 	sigToPub  core.SigToPubFn
 	consensus *core.Consensus
 }
 
-// newValidator returns a new empty validator.
-func newValidator(
+// newNode returns a new empty node.
+func newNode(
 	prvKey crypto.PrivateKey,
 	sigToPub core.SigToPubFn,
-	config config.Config) *validator {
+	config config.Config) *node {
 
-	id := types.NewValidatorID(prvKey.PublicKey())
+	id := types.NewNodeID(prvKey.PublicKey())
 	netModule := newNetwork(id, config.Networking)
 	db, err := blockdb.NewMemBackedBlockDB(
 		id.String() + ".blockdb")
 	if err != nil {
 		panic(err)
 	}
-	gov := newSimGovernance(id, config.Validator.Num, config.Validator.Consensus)
-	return &validator{
+	gov := newSimGovernance(id, config.Node.Num, config.Node.Consensus)
+	return &node{
 		ID:        id,
 		prvKey:    prvKey,
 		sigToPub:  sigToPub,
-		config:    config.Validator,
+		config:    config.Node,
 		app:       newSimApp(id, netModule),
 		gov:       gov,
 		db:        db,
@@ -71,40 +71,40 @@ func newValidator(
 	}
 }
 
-// GetID returns the ID of validator.
-func (v *validator) GetID() types.ValidatorID {
-	return v.ID
+// GetID returns the ID of node.
+func (n *node) GetID() types.NodeID {
+	return n.ID
 }
 
-// run starts the validator.
-func (v *validator) run(serverEndpoint interface{}, legacy bool) {
+// run starts the node.
+func (n *node) run(serverEndpoint interface{}, legacy bool) {
 	// Run network.
-	if err := v.netModule.setup(serverEndpoint); err != nil {
+	if err := n.netModule.setup(serverEndpoint); err != nil {
 		panic(err)
 	}
-	msgChannel := v.netModule.receiveChanForValidator()
-	peers := v.netModule.peers()
-	go v.netModule.run()
-	v.gov.setNetwork(v.netModule)
+	msgChannel := n.netModule.receiveChanForNode()
+	peers := n.netModule.peers()
+	go n.netModule.run()
+	n.gov.setNetwork(n.netModule)
 	// Run consensus.
 	hashes := make(common.Hashes, 0, len(peers))
-	for vID := range peers {
-		v.gov.addValidator(vID)
-		hashes = append(hashes, vID.Hash)
+	for nID := range peers {
+		n.gov.addNode(nID)
+		hashes = append(hashes, nID.Hash)
 	}
 	sort.Sort(hashes)
 	for i, hash := range hashes {
-		if hash == v.ID.Hash {
-			v.chainID = uint64(i)
+		if hash == n.ID.Hash {
+			n.chainID = uint64(i)
 			break
 		}
 	}
-	v.consensus = core.NewConsensus(
-		v.app, v.gov, v.db, v.netModule, v.prvKey, v.sigToPub)
+	n.consensus = core.NewConsensus(
+		n.app, n.gov, n.db, n.netModule, n.prvKey, n.sigToPub)
 	if legacy {
-		go v.consensus.RunLegacy()
+		go n.consensus.RunLegacy()
 	} else {
-		go v.consensus.Run()
+		go n.consensus.Run()
 	}
 
 	// Blocks forever.
@@ -117,19 +117,19 @@ MainLoop:
 				break MainLoop
 			}
 		case *types.DKGComplaint:
-			v.gov.AddDKGComplaint(val)
+			n.gov.AddDKGComplaint(val)
 		case *types.DKGMasterPublicKey:
-			v.gov.AddDKGMasterPublicKey(val)
+			n.gov.AddDKGMasterPublicKey(val)
 		default:
 			panic(fmt.Errorf("unexpected message from server: %v", val))
 		}
 	}
 	// Cleanup.
-	v.consensus.Stop()
-	if err := v.db.Close(); err != nil {
+	n.consensus.Stop()
+	if err := n.db.Close(); err != nil {
 		fmt.Println(err)
 	}
-	v.netModule.report(&message{
+	n.netModule.report(&message{
 		Type: shutdownAck,
 	})
 	// TODO(mission): once we have a way to know if consensus is stopped, stop

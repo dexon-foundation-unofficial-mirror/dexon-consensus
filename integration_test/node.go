@@ -45,8 +45,8 @@ type consensusEventPayload struct {
 
 // NewProposeBlockEvent constructs an test.Event that would trigger
 // block proposing.
-func NewProposeBlockEvent(vID types.ValidatorID, when time.Time) *test.Event {
-	return test.NewEvent(vID, when, &consensusEventPayload{
+func NewProposeBlockEvent(nID types.NodeID, when time.Time) *test.Event {
+	return test.NewEvent(nID, when, &consensusEventPayload{
 		Type: evtProposeBlock,
 	})
 }
@@ -54,17 +54,17 @@ func NewProposeBlockEvent(vID types.ValidatorID, when time.Time) *test.Event {
 // NewReceiveBlockEvent constructs an test.Event that would trigger
 // block received.
 func NewReceiveBlockEvent(
-	vID types.ValidatorID, when time.Time, block *types.Block) *test.Event {
+	nID types.NodeID, when time.Time, block *types.Block) *test.Event {
 
-	return test.NewEvent(vID, when, &consensusEventPayload{
+	return test.NewEvent(nID, when, &consensusEventPayload{
 		Type:      evtReceiveBlock,
 		PiggyBack: block,
 	})
 }
 
-// Validator is designed to work with test.Scheduler.
-type Validator struct {
-	ID               types.ValidatorID
+// Node is designed to work with test.Scheduler.
+type Node struct {
+	ID               types.NodeID
 	chainID          uint32
 	cons             *core.Consensus
 	gov              core.Governance
@@ -72,31 +72,31 @@ type Validator struct {
 	proposingLatency test.LatencyModel
 }
 
-// NewValidator constructs an instance of Validator.
-func NewValidator(
+// NewNode constructs an instance of Node.
+func NewNode(
 	app core.Application,
 	gov core.Governance,
 	db blockdb.BlockDatabase,
 	privateKey crypto.PrivateKey,
-	vID types.ValidatorID,
+	nID types.NodeID,
 	networkLatency test.LatencyModel,
-	proposingLatency test.LatencyModel) *Validator {
+	proposingLatency test.LatencyModel) *Node {
 
 	hashes := make(common.Hashes, 0)
-	for vID := range gov.GetNotarySet() {
-		hashes = append(hashes, vID.Hash)
+	for nID := range gov.GetNotarySet() {
+		hashes = append(hashes, nID.Hash)
 	}
 	sort.Sort(hashes)
 	chainID := uint32(0)
 	for i, hash := range hashes {
-		if hash == vID.Hash {
+		if hash == nID.Hash {
 			chainID = uint32(i)
 			break
 		}
 	}
 
-	return &Validator{
-		ID:               vID,
+	return &Node{
+		ID:               nID,
 		chainID:          chainID,
 		gov:              gov,
 		networkLatency:   networkLatency,
@@ -107,53 +107,53 @@ func NewValidator(
 }
 
 // Handle implements test.EventHandler interface.
-func (v *Validator) Handle(e *test.Event) (events []*test.Event) {
+func (n *Node) Handle(e *test.Event) (events []*test.Event) {
 	payload := e.Payload.(*consensusEventPayload)
 	switch payload.Type {
 	case evtProposeBlock:
-		events, e.ExecError = v.handleProposeBlock(e.Time, payload.PiggyBack)
+		events, e.ExecError = n.handleProposeBlock(e.Time, payload.PiggyBack)
 	case evtReceiveBlock:
-		events, e.ExecError = v.handleReceiveBlock(payload.PiggyBack)
+		events, e.ExecError = n.handleReceiveBlock(payload.PiggyBack)
 	default:
 		panic(fmt.Errorf("unknown consensus event type: %v", payload.Type))
 	}
 	return
 }
 
-func (v *Validator) handleProposeBlock(when time.Time, piggyback interface{}) (
+func (n *Node) handleProposeBlock(when time.Time, piggyback interface{}) (
 	events []*test.Event, err error) {
 
 	b := &types.Block{
-		ProposerID: v.ID,
+		ProposerID: n.ID,
 		Position: types.Position{
-			ChainID: v.chainID,
+			ChainID: n.chainID,
 		},
 	}
 	defer types.RecycleBlock(b)
-	if err = v.cons.PrepareBlock(b, when); err != nil {
+	if err = n.cons.PrepareBlock(b, when); err != nil {
 		return
 	}
-	if err = v.cons.ProcessBlock(b); err != nil {
+	if err = n.cons.ProcessBlock(b); err != nil {
 		return
 	}
-	// Create 'block received' event for each other validators.
-	for vID := range v.gov.GetNotarySet() {
-		if vID == v.ID {
+	// Create 'block received' event for each other nodes.
+	for nID := range n.gov.GetNotarySet() {
+		if nID == n.ID {
 			continue
 		}
 		events = append(events, NewReceiveBlockEvent(
-			vID, when.Add(v.networkLatency.Delay()), b.Clone()))
+			nID, when.Add(n.networkLatency.Delay()), b.Clone()))
 	}
-	// Create next 'block proposing' event for this validators.
+	// Create next 'block proposing' event for this nodes.
 	events = append(events, NewProposeBlockEvent(
-		v.ID, when.Add(v.proposingLatency.Delay())))
+		n.ID, when.Add(n.proposingLatency.Delay())))
 	return
 }
 
-func (v *Validator) handleReceiveBlock(piggyback interface{}) (
+func (n *Node) handleReceiveBlock(piggyback interface{}) (
 	events []*test.Event, err error) {
 
-	err = v.cons.ProcessBlock(piggyback.(*types.Block))
+	err = n.cons.ProcessBlock(piggyback.(*types.Block))
 	if err != nil {
 		panic(err)
 	}

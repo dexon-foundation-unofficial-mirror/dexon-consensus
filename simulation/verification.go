@@ -44,20 +44,20 @@ type totalOrderStatus struct {
 // TotalOrderResult is the object maintaining peer's result of
 // Total Ordering Algorithm.
 type TotalOrderResult struct {
-	validatorID      types.ValidatorID
+	nodeID           types.NodeID
 	hashList         common.Hashes
 	curID            int
 	pendingBlockList PendingBlockList
 	status           totalOrderStatus
 }
 
-// PeerTotalOrder stores the TotalOrderResult of each validator.
-type PeerTotalOrder = map[types.ValidatorID]*TotalOrderResult
+// PeerTotalOrder stores the TotalOrderResult of each node.
+type PeerTotalOrder = map[types.NodeID]*TotalOrderResult
 
 // NewTotalOrderResult returns pointer to a a new TotalOrderResult instance.
-func NewTotalOrderResult(vID types.ValidatorID) *TotalOrderResult {
+func NewTotalOrderResult(nID types.NodeID) *TotalOrderResult {
 	totalOrder := &TotalOrderResult{
-		validatorID: vID,
+		nodeID: nID,
 		status: totalOrderStatus{
 			blockSeen: make(map[common.Hash]time.Time),
 		},
@@ -172,15 +172,15 @@ func (totalOrder *TotalOrderResult) CalculateAverageTimestampLatency() (
 }
 
 // VerifyTotalOrder verifies if the result of Total Ordering Algorithm
-// returned by all validators are the same. However, the length of result
-// of each validators may not be the same, so only the common part is verified.
-func VerifyTotalOrder(id types.ValidatorID,
+// returned by all nodes are the same. However, the length of result
+// of each nodes may not be the same, so only the common part is verified.
+func VerifyTotalOrder(id types.NodeID,
 	totalOrder PeerTotalOrder) (
 	unverifiedMap PeerTotalOrder, correct bool, length int) {
 
 	hasError := false
 
-	// Get the common length from all validators.
+	// Get the common length from all nodes.
 	length = math.MaxInt32
 	for _, peerTotalOrder := range totalOrder {
 		if len(peerTotalOrder.hashList) < length {
@@ -218,8 +218,8 @@ func VerifyTotalOrder(id types.ValidatorID,
 
 // LogStatus prints all the status to log.
 func LogStatus(peerTotalOrder PeerTotalOrder) {
-	for vID, totalOrder := range peerTotalOrder {
-		log.Printf("[Validator %s]\n", vID)
+	for nID, totalOrder := range peerTotalOrder {
+		log.Printf("[Node %s]\n", nID)
 		log.Printf("    BPS: %.6f\n",
 			totalOrder.CalculateBlocksPerSecond())
 		log.Printf("    Confirm Latency: %.2fms\n",

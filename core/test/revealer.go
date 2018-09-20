@@ -63,12 +63,12 @@ func loadAllBlocks(iter blockdb.BlockIterator) (
 // all blocks from blockdb, and randomly pick one block to reveal if
 // it still forms a valid DAG in revealed blocks.
 type RandomDAGRevealer struct {
-	// blocksByValidator group all blocks by validators and sorting
+	// blocksByNode group all blocks by nodes and sorting
 	// them by height.
-	blocksByValidator map[types.ValidatorID][]*types.Block
-	// tipIndexes store the height of next block from one validator
+	blocksByNode map[types.NodeID][]*types.Block
+	// tipIndexes store the height of next block from one node
 	// to check if is candidate.
-	tipIndexes map[types.ValidatorID]int
+	tipIndexes map[types.NodeID]int
 	// candidate are blocks that forms valid DAG with
 	// current revealed blocks.
 	candidates []*types.Block
@@ -86,19 +86,19 @@ func NewRandomDAGRevealer(
 		return
 	}
 
-	// Rearrange blocks by validators and height.
-	blocksByValidator := make(map[types.ValidatorID][]*types.Block)
+	// Rearrange blocks by nodes and height.
+	blocksByNode := make(map[types.NodeID][]*types.Block)
 	for _, block := range blocks {
-		blocksByValidator[block.ProposerID] =
-			append(blocksByValidator[block.ProposerID], block)
+		blocksByNode[block.ProposerID] =
+			append(blocksByNode[block.ProposerID], block)
 	}
 	// Make sure blocks are sorted by block heights, from lower to higher.
-	for vID := range blocksByValidator {
-		sort.Sort(types.ByHeight(blocksByValidator[vID]))
+	for nID := range blocksByNode {
+		sort.Sort(types.ByHeight(blocksByNode[nID]))
 	}
 	r = &RandomDAGRevealer{
-		blocksByValidator: blocksByValidator,
-		randGen:           rand.New(rand.NewSource(time.Now().UnixNano())),
+		blocksByNode: blocksByNode,
+		randGen:      rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	// Make sure this revealer is ready to use.
 	r.Reset()
@@ -107,8 +107,8 @@ func NewRandomDAGRevealer(
 
 // pickCandidates is a helper function to pick candidates from current tips.
 func (r *RandomDAGRevealer) pickCandidates() {
-	for vID, tip := range r.tipIndexes {
-		blocks, exists := r.blocksByValidator[vID]
+	for nID, tip := range r.tipIndexes {
+		blocks, exists := r.blocksByNode[nID]
 		if !exists {
 			continue
 		}
@@ -117,7 +117,7 @@ func (r *RandomDAGRevealer) pickCandidates() {
 		}
 		block := blocks[tip]
 		if isAllAckingBlockRevealed(block, r.revealed) {
-			r.tipIndexes[vID]++
+			r.tipIndexes[nID]++
 			r.candidates = append(r.candidates, block)
 		}
 	}
@@ -145,9 +145,9 @@ func (r *RandomDAGRevealer) Next() (types.Block, error) {
 
 // Reset implement Revealer.Reset method, which would reset the revealing.
 func (r *RandomDAGRevealer) Reset() {
-	r.tipIndexes = make(map[types.ValidatorID]int)
-	for vID := range r.blocksByValidator {
-		r.tipIndexes[vID] = 0
+	r.tipIndexes = make(map[types.NodeID]int)
+	for nID := range r.blocksByNode {
+		r.tipIndexes[nID] = 0
 	}
 	r.revealed = make(map[common.Hash]struct{})
 	r.candidates = []*types.Block{}

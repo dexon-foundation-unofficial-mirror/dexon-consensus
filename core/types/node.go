@@ -24,33 +24,33 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
-// ValidatorID is the ID type for validators.
-type ValidatorID struct {
+// NodeID is the ID type for nodes.
+type NodeID struct {
 	common.Hash
 }
 
-// NewValidatorID returns a ValidatorID with Hash set to the hash value of
+// NewNodeID returns a NodeID with Hash set to the hash value of
 // public key.
-func NewValidatorID(pubKey crypto.PublicKey) ValidatorID {
-	return ValidatorID{Hash: crypto.Keccak256Hash(pubKey.Bytes())}
+func NewNodeID(pubKey crypto.PublicKey) NodeID {
+	return NodeID{Hash: crypto.Keccak256Hash(pubKey.Bytes())}
 }
 
-// Equal checks if the hash representation is the same ValidatorID.
-func (v ValidatorID) Equal(hash common.Hash) bool {
+// Equal checks if the hash representation is the same NodeID.
+func (v NodeID) Equal(hash common.Hash) bool {
 	return v.Hash == hash
 }
 
-// ValidatorIDs implements sort.Interface for ValidatorID.
-type ValidatorIDs []ValidatorID
+// NodeIDs implements sort.Interface for NodeID.
+type NodeIDs []NodeID
 
-func (v ValidatorIDs) Len() int {
+func (v NodeIDs) Len() int {
 	return len(v)
 }
 
-func (v ValidatorIDs) Less(i int, j int) bool {
+func (v NodeIDs) Less(i int, j int) bool {
 	return bytes.Compare([]byte(v[i].Hash[:]), []byte(v[j].Hash[:])) == -1
 }
 
-func (v ValidatorIDs) Swap(i int, j int) {
+func (v NodeIDs) Swap(i int, j int) {
 	v[i], v[j] = v[j], v[i]
 }

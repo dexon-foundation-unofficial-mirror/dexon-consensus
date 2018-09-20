@@ -91,7 +91,7 @@ func (s *ConsensusTimestampTest) extractTimestamps(
 // should have the same result as processing the whole chain at once.
 func (s *ConsensusTimestampTest) TestTimestampPartition() {
 	blockNums := []int{50, 100, 30}
-	validatorNum := 19
+	chainNum := 19
 	sigma := 100 * time.Millisecond
 	totalTimestamps := make([]time.Time, 0)
 	ct := newConsensusTimestamp()
@@ -100,7 +100,7 @@ func (s *ConsensusTimestampTest) TestTimestampPartition() {
 		totalBlockNum += blockNum
 	}
 	totalChain := s.generateBlocksWithTimestamp(
-		totalBlockNum, validatorNum, time.Second, sigma)
+		totalBlockNum, chainNum, time.Second, sigma)
 	for _, blockNum := range blockNums {
 		var chain []*types.Block
 		chain, totalChain = totalChain[:blockNum], totalChain[blockNum:]
@@ -118,10 +118,10 @@ func (s *ConsensusTimestampTest) TestTimestampPartition() {
 }
 
 func (s *ConsensusTimestampTest) TestTimestampIncrease() {
-	validatorNum := 19
+	chainNum := 19
 	sigma := 100 * time.Millisecond
 	ct := newConsensusTimestamp()
-	chain := s.generateBlocksWithTimestamp(1000, validatorNum, time.Second, sigma)
+	chain := s.generateBlocksWithTimestamp(1000, chainNum, time.Second, sigma)
 	err := ct.processBlocks(chain)
 	s.Require().NoError(err)
 	timestamps := s.extractTimestamps(chain)

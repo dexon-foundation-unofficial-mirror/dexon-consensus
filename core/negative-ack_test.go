@@ -46,93 +46,93 @@ func (s *NegativeAckTest) SetupTest() {
 }
 
 func (s *NegativeAckTest) checkLastVotes(
-	vids []types.ValidatorID,
-	vs map[types.ValidatorID]map[types.ValidatorID]struct{},
+	nids []types.NodeID,
+	vs map[types.NodeID]map[types.NodeID]struct{},
 	a [][]bool,
 ) {
 
-	for i := 0; i < len(vids); i++ {
-		for j := 0; j < len(vids); j++ {
-			_, exist := vs[vids[i]][vids[j]]
+	for i := 0; i < len(nids); i++ {
+		for j := 0; j < len(nids); j++ {
+			_, exist := vs[nids[i]][nids[j]]
 			s.Require().Equal(a[i][j], exist)
 		}
 	}
 }
 
 func (s *NegativeAckTest) checkTimeDiff(
-	vids []types.ValidatorID,
-	ts map[types.ValidatorID]map[types.ValidatorID]time.Time,
+	nids []types.NodeID,
+	ts map[types.NodeID]map[types.NodeID]time.Time,
 	a [][]int,
 ) {
 
-	for i := 0; i < len(vids); i++ {
-		for j := 0; j < len(vids); j++ {
+	for i := 0; i < len(nids); i++ {
+		for j := 0; j < len(nids); j++ {
 			s.Require().Equal(
 				time.Duration(a[i][j])*timeDelay,
-				ts[vids[i]][vids[j]].Sub(baseTime),
+				ts[nids[i]][nids[j]].Sub(baseTime),
 			)
 		}
 	}
 }
 
-func genTimestamp(vids []types.ValidatorID, a []int) map[types.ValidatorID]time.Time {
-	ts := map[types.ValidatorID]time.Time{}
-	for i := 0; i < len(vids); i++ {
-		ts[vids[i]] = baseTime.Add(time.Duration(a[i]) * timeDelay)
+func genTimestamp(nids []types.NodeID, a []int) map[types.NodeID]time.Time {
+	ts := map[types.NodeID]time.Time{}
+	for i := 0; i < len(nids); i++ {
+		ts[nids[i]] = baseTime.Add(time.Duration(a[i]) * timeDelay)
 	}
 	return ts
 }
 
-func genTestNegativeAck(num int) (*negativeAck, []types.ValidatorID) {
-	vids := test.GenerateRandomValidatorIDs(num)
-	n := newNegativeAck(vids[0])
+func genTestNegativeAck(num int) (*negativeAck, []types.NodeID) {
+	nids := test.GenerateRandomNodeIDs(num)
+	n := newNegativeAck(nids[0])
 	for i := 1; i < num; i++ {
-		n.addValidator(vids[i])
+		n.addNode(nids[i])
 	}
-	return n, vids
+	return n, nids
 }
 
 func (s *NegativeAckTest) TestProcessTimestamps() {
-	n, vids := genTestNegativeAck(4)
+	n, nids := genTestNegativeAck(4)
 	n.setTimeDelay(timeDelay)
 	n.setTimeExpire(timeExpire)
 
-	n.processTimestamps(vids[0], genTimestamp(vids, []int{1, 1, 1, 0}))
-	s.checkTimeDiff(vids, n.timeDiffs[vids[0]], [][]int{
+	n.processTimestamps(nids[0], genTimestamp(nids, []int{1, 1, 1, 0}))
+	s.checkTimeDiff(nids, n.timeDiffs[nids[0]], [][]int{
 		{1, 1, 1, 0},
 		{1, 1, 1, 0},
 		{1, 1, 1, 0},
 		{1, 1, 1, 0},
 	})
-	s.checkLastVotes(vids, n.lastVotes, [][]bool{
+	s.checkLastVotes(nids, n.lastVotes, [][]bool{
 		{false, false, false, false},
 		{false, false, false, false},
 		{false, false, false, false},
 		{false, false, false, false},
 	})
 
-	n.processTimestamps(vids[0], genTimestamp(vids, []int{3, 1, 2, 1}))
-	s.checkTimeDiff(vids, n.timeDiffs[vids[0]], [][]int{
+	n.processTimestamps(nids[0], genTimestamp(nids, []int{3, 1, 2, 1}))
+	s.checkTimeDiff(nids, n.timeDiffs[nids[0]], [][]int{
 		{3, 1, 2, 1},
 		{1, 1, 1, 0},
 		{3, 1, 2, 1},
 		{3, 1, 2, 1},
 	})
-	s.checkLastVotes(vids, n.lastVotes, [][]bool{
+	s.checkLastVotes(nids, n.lastVotes, [][]bool{
 		{false, false, false, false},
 		{true, false, false, false},
 		{false, false, false, false},
 		{false, false, false, false},
 	})
 
-	n.processTimestamps(vids[0], genTimestamp(vids, []int{5, 1, 2, 2}))
-	s.checkTimeDiff(vids, n.timeDiffs[vids[0]], [][]int{
+	n.processTimestamps(nids[0], genTimestamp(nids, []int{5, 1, 2, 2}))
+	s.checkTimeDiff(nids, n.timeDiffs[nids[0]], [][]int{
 		{5, 1, 2, 2},
 		{1, 1, 1, 0},
 		{3, 1, 2, 1},
 		{5, 1, 2, 2},
 	})
-	s.checkLastVotes(vids, n.lastVotes, [][]bool{
+	s.checkLastVotes(nids, n.lastVotes, [][]bool{
 		{false, false, false, false},
 		{true, false, false, false},
 		{false, false, false, false},
@@ -142,83 +142,83 @@ func (s *NegativeAckTest) TestProcessTimestamps() {
 
 func (s *NegativeAckTest) TestRestrictBySelf() {
 	var exist bool
-	n, vids := genTestNegativeAck(4)
+	n, nids := genTestNegativeAck(4)
 	n.setTimeDelay(timeDelay)
 	n.setTimeExpire(timeExpire)
 
-	n.processTimestamps(vids[0], genTimestamp(vids, []int{1, 1, 1, 0}))
-	_, exist = n.getRestrictedValidators()[vids[1]]
+	n.processTimestamps(nids[0], genTimestamp(nids, []int{1, 1, 1, 0}))
+	_, exist = n.getRestrictedNodes()[nids[1]]
 	s.Require().False(exist)
 
-	n.processTimestamps(vids[0], genTimestamp(vids, []int{3, 1, 2, 1}))
-	_, exist = n.getRestrictedValidators()[vids[1]]
+	n.processTimestamps(nids[0], genTimestamp(nids, []int{3, 1, 2, 1}))
+	_, exist = n.getRestrictedNodes()[nids[1]]
 	s.Require().True(exist)
 }
 
 func (s *NegativeAckTest) TestRestrictByVoting() {
-	var nackeds []types.ValidatorID
+	var nackeds []types.NodeID
 	var exist bool
 
-	n, vids := genTestNegativeAck(4)
+	n, nids := genTestNegativeAck(4)
 	n.setTimeDelay(timeDelay)
 	n.setTimeExpire(timeExpire)
 
-	n.processTimestamps(vids[0], genTimestamp(vids, []int{1, 1, 1, 1}))
-	n.processTimestamps(vids[0], genTimestamp(vids, []int{2, 2, 2, 2}))
+	n.processTimestamps(nids[0], genTimestamp(nids, []int{1, 1, 1, 1}))
+	n.processTimestamps(nids[0], genTimestamp(nids, []int{2, 2, 2, 2}))
 
-	n.processTimestamps(vids[1], genTimestamp(vids, []int{1, 1, 1, 1}))
-	n.processTimestamps(vids[2], genTimestamp(vids, []int{1, 1, 1, 1}))
-	n.processTimestamps(vids[3], genTimestamp(vids, []int{1, 1, 1, 1}))
+	n.processTimestamps(nids[1], genTimestamp(nids, []int{1, 1, 1, 1}))
+	n.processTimestamps(nids[2], genTimestamp(nids, []int{1, 1, 1, 1}))
+	n.processTimestamps(nids[3], genTimestamp(nids, []int{1, 1, 1, 1}))
 
-	nackeds = n.processTimestamps(vids[1], genTimestamp(vids, []int{1, 3, 3, 3}))
-	_, exist = n.getRestrictedValidators()[vids[0]]
+	nackeds = n.processTimestamps(nids[1], genTimestamp(nids, []int{1, 3, 3, 3}))
+	_, exist = n.getRestrictedNodes()[nids[0]]
 	s.Require().False(exist)
 	s.Require().Equal(0, len(nackeds))
 
-	nackeds = n.processTimestamps(vids[2], genTimestamp(vids, []int{1, 3, 3, 3}))
-	_, exist = n.getRestrictedValidators()[vids[0]]
+	nackeds = n.processTimestamps(nids[2], genTimestamp(nids, []int{1, 3, 3, 3}))
+	_, exist = n.getRestrictedNodes()[nids[0]]
 	s.Require().True(exist)
 	s.Require().Equal(0, len(nackeds))
 
-	nackeds = n.processTimestamps(vids[3], genTimestamp(vids, []int{1, 3, 3, 3}))
-	_, exist = n.getRestrictedValidators()[vids[0]]
+	nackeds = n.processTimestamps(nids[3], genTimestamp(nids, []int{1, 3, 3, 3}))
+	_, exist = n.getRestrictedNodes()[nids[0]]
 	s.Require().False(exist)
 	s.Require().Equal(1, len(nackeds))
-	s.Require().Equal(vids[0], nackeds[0])
+	s.Require().Equal(nids[0], nackeds[0])
 }
 
 func (s *NegativeAckTest) TestExpire() {
 	var exist bool
 
-	n, vids := genTestNegativeAck(4)
+	n, nids := genTestNegativeAck(4)
 	n.setTimeDelay(timeDelay)
 	n.setTimeExpire(timeExpire)
 
-	n.processTimestamps(vids[0], genTimestamp(vids, []int{1, 1, 1, 1}))
-	n.processTimestamps(vids[1], genTimestamp(vids, []int{1, 1, 1, 1}))
-	n.processTimestamps(vids[2], genTimestamp(vids, []int{1, 1, 1, 1}))
-	n.processTimestamps(vids[3], genTimestamp(vids, []int{1, 1, 1, 1}))
+	n.processTimestamps(nids[0], genTimestamp(nids, []int{1, 1, 1, 1}))
+	n.processTimestamps(nids[1], genTimestamp(nids, []int{1, 1, 1, 1}))
+	n.processTimestamps(nids[2], genTimestamp(nids, []int{1, 1, 1, 1}))
+	n.processTimestamps(nids[3], genTimestamp(nids, []int{1, 1, 1, 1}))
 
-	n.processTimestamps(vids[1], genTimestamp(vids, []int{1, 3, 3, 3}))
-	n.processTimestamps(vids[2], genTimestamp(vids, []int{1, 3, 3, 3}))
-	_, exist = n.getRestrictedValidators()[vids[0]]
+	n.processTimestamps(nids[1], genTimestamp(nids, []int{1, 3, 3, 3}))
+	n.processTimestamps(nids[2], genTimestamp(nids, []int{1, 3, 3, 3}))
+	_, exist = n.getRestrictedNodes()[nids[0]]
 	s.Require().True(exist)
 
 	time.Sleep(2 * timeExpire)
 
-	n.processTimestamps(vids[0], genTimestamp(vids, []int{2, 2, 2, 2}))
+	n.processTimestamps(nids[0], genTimestamp(nids, []int{2, 2, 2, 2}))
 
-	_, exist = n.getRestrictedValidators()[vids[0]]
+	_, exist = n.getRestrictedNodes()[nids[0]]
 	s.Require().False(exist)
 }
 
-func (s *NegativeAckTest) TestAddDeleteValidator() {
-	n, vids := genTestNegativeAck(10)
+func (s *NegativeAckTest) TestAddDeleteNode() {
+	n, nids := genTestNegativeAck(10)
 	s.Require().Equal(10, len(n.timeDiffs))
-	s.Require().Equal(10, len(n.timeDiffs[vids[0]]))
+	s.Require().Equal(10, len(n.timeDiffs[nids[0]]))
 
-	for _, vid := range vids {
-		n.deleteValidator(vid)
+	for _, nid := range nids {
+		n.deleteNode(nid)
 	}
 	s.Require().Equal(0, len(n.timeDiffs))
 }

@@ -35,9 +35,9 @@ type RevealerTestSuite struct {
 
 func (s *RevealerTestSuite) SetupSuite() {
 	var (
-		err            error
-		validatorCount = 19
-		blockCount     = 50
+		err        error
+		nodeCount  = 19
+		blockCount = 50
 	)
 	// Setup block database.
 	s.db, err = blockdb.NewMemBackedBlockDB()
@@ -45,10 +45,10 @@ func (s *RevealerTestSuite) SetupSuite() {
 
 	// Randomly generate blocks.
 	gen := NewBlocksGenerator(nil, stableRandomHash)
-	validators, err := gen.Generate(
-		validatorCount, blockCount, nil, s.db)
+	nodes, err := gen.Generate(
+		nodeCount, blockCount, nil, s.db)
 	s.Require().Nil(err)
-	s.Require().Len(validators, validatorCount)
+	s.Require().Len(nodes, nodeCount)
 
 	// Cache the count of total generated block.
 	iter, err := s.db.GetAll()

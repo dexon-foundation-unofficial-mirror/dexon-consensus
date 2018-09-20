@@ -38,8 +38,8 @@ const (
 
 // reliableBroadcast is a module for reliable broadcast.
 type reliableBroadcast struct {
-	// lattice stores validator's blocks and other info.
-	lattice []*rbcValidatorStatus
+	// lattice stores node's blocks and other info.
+	lattice []*rbcNodeStatus
 
 	// blockInfos stores block infos.
 	blockInfos map[common.Hash]*rbcBlockInfo
@@ -48,12 +48,12 @@ type reliableBroadcast struct {
 	// in lattice.
 	receivedBlocks map[common.Hash]*types.Block
 
-	// validators stores validator set.
-	validators map[types.ValidatorID]struct{}
+	// nodes stores node set.
+	nodes map[types.NodeID]struct{}
 }
 
-type rbcValidatorStatus struct {
-	// blocks stores blocks proposed by specified validator in map which key is
+type rbcNodeStatus struct {
+	// blocks stores blocks proposed by specified node in map which key is
 	// the height of the block.
 	blocks map[uint64]*types.Block
 
@@ -94,7 +94,7 @@ func newReliableBroadcast() *reliableBroadcast {
 	return &reliableBroadcast{
 		blockInfos:     make(map[common.Hash]*rbcBlockInfo),
 		receivedBlocks: make(map[common.Hash]*types.Block),
-		validators:     make(map[types.ValidatorID]struct{}),
+		nodes:          make(map[types.NodeID]struct{}),
 	}
 }
 
@@ -104,8 +104,8 @@ func (rb *reliableBroadcast) sanityCheck(b *types.Block) error {
 		return ErrInvalidChainID
 	}
 
-	// Check if its proposer is in validator set.
-	if _, exist := rb.validators[b.ProposerID]; !exist {
+	// Check if its proposer is in node set.
+	if _, exist := rb.nodes[b.ProposerID]; !exist {
 		return ErrInvalidProposerID
 	}
 
@@ -224,7 +224,7 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 			for _, h := range b.Acks {
 				bAckStat := rb.blockInfos[h]
 				// Update nextAck only when bAckStat.block.Position.Height + 1
-				// is greater. A block might ack blocks proposed by same validator with
+				// is greater. A block might ack blocks proposed by same node with
 				// different height.
 				if rb.lattice[chainID].nextAck[bAckStat.block.Position.ChainID] <
 					bAckStat.block.Position.Height+1 {
@@ -241,7 +241,7 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 					}
 					bAckStat.ackedChain[chainID] = struct{}{}
 					// A block is strongly acked if it is acked by more than
-					// 2 * (maximum number of byzatine validators) unique validators.
+					// 2 * (maximum number of byzatine nodes) unique nodes.
 					if len(bAckStat.ackedChain) > 2*((len(rb.lattice)-1)/3) {
 						blocksToAcked[bAckStat.block.Hash] = bAckStat.block
 					}
@@ -272,8 +272,8 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 
 	// Delete old blocks in "lattice" and "blocks" for release memory space.
 	// First, find the height that blocks below it can be deleted. This height
-	// is defined by finding minimum of validator's nextOutput and last acking
-	// heights from other validators, i.e. rb.lattice[v_other].nextAck[this_vid].
+	// is defined by finding minimum of node's nextOutput and last acking
+	// heights from other nodes, i.e. rb.lattice[v_other].nextAck[this_vid].
 	// This works because blocks of height below this minimum are not going to be
 	// acked anymore, the ackings of these blocks are illegal.
 	for vid := range rb.lattice {
@@ -351,7 +351,7 @@ func (rb *reliableBroadcast) extractBlocks() []*types.Block {
 
 // prepareBlock helps to setup fields of block based on its ProposerID,
 // including:
-//  - Set 'Acks' and 'Timestamps' for the highest block of each validator not
+//  - Set 'Acks' and 'Timestamps' for the highest block of each node not
 //    acked by this proposer before.
 //  - Set 'ParentHash' and 'Height' from parent block, if we can't find a
 //    parent, these fields would be setup like a genesis block.
@@ -361,7 +361,7 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 	block.ParentHash = common.Hash{}
 	acks := common.Hashes{}
 	for chainID := range rb.lattice {
-		// find height of the latest block for that validator.
+		// find height of the latest block for that node.
 		var (
 			curBlock   *types.Block
 			nextHeight = rb.lattice[block.Position.ChainID].nextAck[chainID]
@@ -394,21 +394,21 @@ func (rb *reliableBroadcast) prepareBlock(block *types.Block) {
 	return
 }
 
-// addValidator adds validator in the validator set.
-func (rb *reliableBroadcast) addValidator(h types.ValidatorID) {
-	rb.validators[h] = struct{}{}
+// addNode adds node in the node set.
+func (rb *reliableBroadcast) addNode(h types.NodeID) {
+	rb.nodes[h] = struct{}{}
 }
 
-// deleteValidator deletes validator in validator set.
-func (rb *reliableBroadcast) deleteValidator(h types.ValidatorID) {
-	delete(rb.validators, h)
+// deleteNode deletes node in node set.
+func (rb *reliableBroadcast) deleteNode(h types.NodeID) {
+	delete(rb.nodes, h)
 }
 
 // setChainNum set the number of chains.
 func (rb *reliableBroadcast) setChainNum(num uint32) {
-	rb.lattice = make([]*rbcValidatorStatus, num)
+	rb.lattice = make([]*rbcNodeStatus, num)
 	for i := range rb.lattice {
-		rb.lattice[i] = &rbcValidatorStatus{
+		rb.lattice[i] = &rbcNodeStatus{
 			blocks:     make(map[uint64]*types.Block),
 			nextAck:    make([]uint64, num),
 			nextOutput: 0,

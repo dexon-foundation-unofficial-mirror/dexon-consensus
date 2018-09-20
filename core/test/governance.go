@@ -28,44 +28,44 @@ import (
 
 var (
 	// ErrPrivateKeyNotExists means caller request private key for an
-	// unknown validator ID.
+	// unknown node ID.
 	ErrPrivateKeyNotExists = fmt.Errorf("private key not exists")
 )
 
 // Governance is an implementation of Goverance for testing purpose.
 type Governance struct {
 	lambda             time.Duration
-	notarySet          map[types.ValidatorID]struct{}
-	privateKeys        map[types.ValidatorID]crypto.PrivateKey
+	notarySet          map[types.NodeID]struct{}
+	privateKeys        map[types.NodeID]crypto.PrivateKey
 	DKGComplaint       map[uint64][]*types.DKGComplaint
 	DKGMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
 }
 
 // NewGovernance constructs a Governance instance.
-func NewGovernance(validatorCount int, lambda time.Duration) (
+func NewGovernance(nodeCount int, lambda time.Duration) (
 	g *Governance, err error) {
 	g = &Governance{
 		lambda:             lambda,
-		notarySet:          make(map[types.ValidatorID]struct{}),
-		privateKeys:        make(map[types.ValidatorID]crypto.PrivateKey),
+		notarySet:          make(map[types.NodeID]struct{}),
+		privateKeys:        make(map[types.NodeID]crypto.PrivateKey),
 		DKGComplaint:       make(map[uint64][]*types.DKGComplaint),
 		DKGMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
 	}
-	for i := 0; i < validatorCount; i++ {
+	for i := 0; i < nodeCount; i++ {
 		prv, err := eth.NewPrivateKey()
 		if err != nil {
 			return nil, err
 		}
-		vID := types.NewValidatorID(prv.PublicKey())
-		g.notarySet[vID] = struct{}{}
-		g.privateKeys[vID] = prv
+		nID := types.NewNodeID(prv.PublicKey())
+		g.notarySet[nID] = struct{}{}
+		g.privateKeys[nID] = prv
 	}
 	return
 }
 
 // GetNotarySet implements Governance interface to return current
 // notary set.
-func (g *Governance) GetNotarySet() map[types.ValidatorID]struct{} {
+func (g *Governance) GetNotarySet() map[types.NodeID]struct{} {
 	return g.notarySet
 }
 
@@ -81,12 +81,12 @@ func (g *Governance) GetConfiguration(blockHeight uint64) *types.Config {
 	}
 }
 
-// GetPrivateKey return the private key for that validator, this function
+// GetPrivateKey return the private key for that node, this function
 // is a test utility and not a general Governance interface.
 func (g *Governance) GetPrivateKey(
-	vID types.ValidatorID) (key crypto.PrivateKey, err error) {
+	nID types.NodeID) (key crypto.PrivateKey, err error) {
 
-	key, exists := g.privateKeys[vID]
+	key, exists := g.privateKeys[nID]
 	if !exists {
 		err = ErrPrivateKeyNotExists
 		return

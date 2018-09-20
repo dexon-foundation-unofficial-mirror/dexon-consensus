@@ -47,8 +47,8 @@ func (e *ErrMissingBlockInfo) Error() string {
 
 // Errors for consensus core.
 var (
-	ErrProposerNotValidator = fmt.Errorf(
-		"proposer is not a validator")
+	ErrProposerNotInNotarySet = fmt.Errorf(
+		"proposer is not in notary set")
 	ErrIncorrectHash = fmt.Errorf(
 		"hash of block is incorrect")
 	ErrIncorrectSignature = fmt.Errorf(
@@ -113,7 +113,7 @@ func (recv *consensusReceiver) ConfirmBlock(hash common.Hash) {
 
 // Consensus implements DEXON Consensus algorithm.
 type Consensus struct {
-	ID        types.ValidatorID
+	ID        types.NodeID
 	app       Application
 	gov       Governance
 	config    *types.Config
@@ -143,29 +143,29 @@ func NewConsensus(
 	sigToPub SigToPubFn) *Consensus {
 
 	config := gov.GetConfiguration(0)
-	validatorSet := gov.GetNotarySet()
+	notarySet := gov.GetNotarySet()
 
 	// Setup acking by information returned from Governace.
 	rb := newReliableBroadcast()
 	rb.setChainNum(config.NumChains)
-	for vID := range validatorSet {
-		rb.addValidator(vID)
+	for nID := range notarySet {
+		rb.addNode(nID)
 	}
 	// Setup context.
 	ctx, ctxCancel := context.WithCancel(context.Background())
 
 	// Setup sequencer by information returned from Governace.
-	var validators types.ValidatorIDs
-	for vID := range validatorSet {
-		validators = append(validators, vID)
+	var nodes types.NodeIDs
+	for nID := range notarySet {
+		nodes = append(nodes, nID)
 	}
 	to := newTotalOrdering(
 		uint64(config.K),
-		uint64(float32(len(validatorSet)-1)*config.PhiRatio+1),
+		uint64(float32(len(notarySet)-1)*config.PhiRatio+1),
 		config.NumChains)
 
 	con := &Consensus{
-		ID:        types.NewValidatorID(prv.PublicKey()),
+		ID:        types.NewNodeID(prv.PublicKey()),
 		rbModule:  rb,
 		toModule:  to,
 		ctModule:  newConsensusTimestamp(),
@@ -199,7 +199,7 @@ func NewConsensus(
 		con.baModules[chainID] = newAgreement(
 			con.ID,
 			con.receivers[chainID],
-			validators,
+			nodes,
 			newGenesisLeaderSelector(con.config.GenesisCRS, con.sigToPub),
 			con.sigToPub,
 			blockProposer,
@@ -230,10 +230,10 @@ func (con *Consensus) Run() {
 
 func (con *Consensus) runBA(chainID uint32, tick <-chan struct{}) {
 	// TODO(jimmy-dexon): move this function inside agreement.
-	validatorSet := con.gov.GetNotarySet()
-	validators := make(types.ValidatorIDs, 0, len(validatorSet))
-	for vID := range validatorSet {
-		validators = append(validators, vID)
+	notarySet := con.gov.GetNotarySet()
+	nodes := make(types.NodeIDs, 0, len(notarySet))
+	for nID := range notarySet {
+		nodes = append(nodes, nID)
 	}
 	agreement := con.baModules[chainID]
 	recv := con.receivers[chainID]
@@ -252,13 +252,13 @@ BALoop:
 		}
 		select {
 		case <-recv.restart:
-			// TODO(jimmy-dexon): handling change of validator set.
+			// TODO(jimmy-dexon): handling change of notary set.
 			aID := types.Position{
 				ShardID: 0,
 				ChainID: chainID,
 				Height:  con.rbModule.nextHeight(chainID),
 			}
-			agreement.restart(validators, aID)
+			agreement.restart(nodes, aID)
 		default:
 		}
 		err := agreement.nextState()
@@ -275,8 +275,8 @@ func (con *Consensus) RunLegacy() {
 
 	chainID := uint32(0)
 	hashes := make(common.Hashes, 0, len(con.gov.GetNotarySet()))
-	for vID := range con.gov.GetNotarySet() {
-		hashes = append(hashes, vID.Hash)
+	for nID := range con.gov.GetNotarySet() {
+		hashes = append(hashes, nID.Hash)
 	}
 	sort.Sort(hashes)
 	for i, hash := range hashes {
@@ -498,7 +498,7 @@ func (con *Consensus) ProcessBlock(block *types.Block) (err error) {
 
 func (con *Consensus) checkPrepareBlock(
 	b *types.Block, proposeTime time.Time) (err error) {
-	if (b.ProposerID == types.ValidatorID{}) {
+	if (b.ProposerID == types.NodeID{}) {
 		err = &ErrMissingBlockInfo{MissingField: "ProposerID"}
 		return
 	}
@@ -556,14 +556,14 @@ func (con *Consensus) PrepareGenesisBlock(b *types.Block,
 func (con *Consensus) ProcessWitnessAck(witnessAck *types.WitnessAck) (err error) {
 	witnessAck = witnessAck.Clone()
 	if _, exists := con.gov.GetNotarySet()[witnessAck.ProposerID]; !exists {
-		err = ErrProposerNotValidator
+		err = ErrProposerNotInNotarySet
 		return
 	}
 	err = con.ccModule.processWitnessAck(witnessAck)
 	return
 }
 
-// WitnessAcks returns the latest WitnessAck received from all other validators.
-func (con *Consensus) WitnessAcks() map[types.ValidatorID]*types.WitnessAck {
+// WitnessAcks returns the latest WitnessAck received from all other nodes.
+func (con *Consensus) WitnessAcks() map[types.NodeID]*types.WitnessAck {
 	return con.ccModule.witnessAcks()
 }

@@ -54,20 +54,20 @@ type dkgComplaintReceiver interface {
 	ProposeDKGMasterPublicKey(mpk *types.DKGMasterPublicKey)
 
 	// ProposeDKGPrivateShare propose a DKGPrivateShare.
-	ProposeDKGPrivateShare(to types.ValidatorID, prv *types.DKGPrivateShare)
+	ProposeDKGPrivateShare(to types.NodeID, prv *types.DKGPrivateShare)
 }
 
 type dkgProtocol struct {
-	ID                 types.ValidatorID
+	ID                 types.NodeID
 	recv               dkgComplaintReceiver
 	round              uint64
 	threshold          int
 	sigToPub           SigToPubFn
-	idMap              map[types.ValidatorID]dkg.ID
-	mpkMap             map[types.ValidatorID]*dkg.PublicKeyShares
+	idMap              map[types.NodeID]dkg.ID
+	mpkMap             map[types.NodeID]*dkg.PublicKeyShares
 	masterPrivateShare *dkg.PrivateKeyShares
 	prvShares          *dkg.PrivateKeyShares
-	prvSharesReceived  map[types.ValidatorID]struct{}
+	prvSharesReceived  map[types.NodeID]struct{}
 }
 
 type dkgShareSecret struct {
@@ -77,8 +77,8 @@ type dkgShareSecret struct {
 type dkgGroupPublicKey struct {
 	round          uint64
 	qualifyIDs     dkg.IDs
-	idMap          map[types.ValidatorID]dkg.ID
-	publicKeys     map[types.ValidatorID]*dkg.PublicKey
+	idMap          map[types.NodeID]dkg.ID
+	publicKeys     map[types.NodeID]*dkg.PublicKey
 	groupPublicKey *dkg.PublicKey
 	threshold      int
 	sigToPub       SigToPubFn
@@ -90,12 +90,12 @@ type tsigProtocol struct {
 	threshold      int
 }
 
-func newDKGID(ID types.ValidatorID) dkg.ID {
+func newDKGID(ID types.NodeID) dkg.ID {
 	return dkg.NewID(ID.Hash[:])
 }
 
 func newDKGProtocol(
-	ID types.ValidatorID,
+	ID types.NodeID,
 	recv dkgComplaintReceiver,
 	round uint64,
 	threshold int,
@@ -116,24 +116,24 @@ func newDKGProtocol(
 		round:              round,
 		threshold:          threshold,
 		sigToPub:           sigToPub,
-		idMap:              make(map[types.ValidatorID]dkg.ID),
-		mpkMap:             make(map[types.ValidatorID]*dkg.PublicKeyShares),
+		idMap:              make(map[types.NodeID]dkg.ID),
+		mpkMap:             make(map[types.NodeID]*dkg.PublicKeyShares),
 		masterPrivateShare: prvShare,
 		prvShares:          dkg.NewEmptyPrivateKeyShares(),
-		prvSharesReceived:  make(map[types.ValidatorID]struct{}),
+		prvSharesReceived:  make(map[types.NodeID]struct{}),
 	}
 }
 
 func (d *dkgProtocol) processMasterPublicKeys(
 	mpks []*types.DKGMasterPublicKey) error {
-	d.idMap = make(map[types.ValidatorID]dkg.ID, len(mpks))
-	d.mpkMap = make(map[types.ValidatorID]*dkg.PublicKeyShares, len(mpks))
-	d.prvSharesReceived = make(map[types.ValidatorID]struct{}, len(mpks))
+	d.idMap = make(map[types.NodeID]dkg.ID, len(mpks))
+	d.mpkMap = make(map[types.NodeID]*dkg.PublicKeyShares, len(mpks))
+	d.prvSharesReceived = make(map[types.NodeID]struct{}, len(mpks))
 	ids := make(dkg.IDs, len(mpks))
 	for i := range mpks {
-		vID := mpks[i].ProposerID
-		d.idMap[vID] = mpks[i].DKGID
-		d.mpkMap[vID] = &mpks[i].PublicKeyShares
+		nID := mpks[i].ProposerID
+		d.idMap[nID] = mpks[i].DKGID
+		d.mpkMap[nID] = &mpks[i].PublicKeyShares
 		ids[i] = mpks[i].DKGID
 	}
 	d.masterPrivateShare.SetParticipants(ids)
@@ -152,15 +152,15 @@ func (d *dkgProtocol) processMasterPublicKeys(
 }
 
 func (d *dkgProtocol) proposeNackComplaints() {
-	for vID := range d.mpkMap {
-		if _, exist := d.prvSharesReceived[vID]; exist {
+	for nID := range d.mpkMap {
+		if _, exist := d.prvSharesReceived[nID]; exist {
 			continue
 		}
 		d.recv.ProposeDKGComplaint(&types.DKGComplaint{
 			ProposerID: d.ID,
 			Round:      d.round,
 			PrivateShare: types.DKGPrivateShare{
-				ProposerID: vID,
+				ProposerID: nID,
 				Round:      d.round,
 			},
 		})
@@ -187,7 +187,7 @@ func (d *dkgProtocol) processPrivateShare(
 		return nil
 	}
 	self, exist := d.idMap[d.ID]
-	// This validator is not a DKG participant, ignore the private share.
+	// This node is not a DKG participant, ignore the private share.
 	if !exist {
 		return nil
 	}
@@ -242,19 +242,19 @@ func newDKGGroupPublicKey(
 	threshold int, sigToPub SigToPubFn) (
 	*dkgGroupPublicKey, error) {
 	// Calculate qualify members.
-	complaintsByID := map[types.ValidatorID]int{}
+	complaintsByID := map[types.NodeID]int{}
 	for _, complaint := range complaints {
 		complaintsByID[complaint.PrivateShare.ProposerID]++
 	}
-	disqualifyIDs := map[types.ValidatorID]struct{}{}
-	for vID, num := range complaintsByID {
+	disqualifyIDs := map[types.NodeID]struct{}{}
+	for nID, num := range complaintsByID {
 		if num > threshold {
-			disqualifyIDs[vID] = struct{}{}
+			disqualifyIDs[nID] = struct{}{}
 		}
 	}
 	qualifyIDs := make(dkg.IDs, 0, len(mpks)-len(disqualifyIDs))
 	mpkMap := make(map[dkg.ID]*types.DKGMasterPublicKey, cap(qualifyIDs))
-	idMap := make(map[types.ValidatorID]dkg.ID)
+	idMap := make(map[types.NodeID]dkg.ID)
 	for _, mpk := range mpks {
 		if _, exist := disqualifyIDs[mpk.ProposerID]; exist {
 			continue
@@ -264,7 +264,7 @@ func newDKGGroupPublicKey(
 		qualifyIDs = append(qualifyIDs, mpk.DKGID)
 	}
 	// Recover qualify members' public key.
-	pubKeys := make(map[types.ValidatorID]*dkg.PublicKey, len(qualifyIDs))
+	pubKeys := make(map[types.NodeID]*dkg.PublicKey, len(qualifyIDs))
 	for _, recvID := range qualifyIDs {
 		pubShares := dkg.NewEmptyPublicKeyShares()
 		for _, id := range qualifyIDs {

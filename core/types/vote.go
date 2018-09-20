@@ -38,7 +38,7 @@ const (
 
 // Vote is the vote structure defined in Crypto Shuffle Algorithm.
 type Vote struct {
-	ProposerID ValidatorID      `json:"proposer_id"`
+	ProposerID NodeID           `json:"proposer_id"`
 	Type       VoteType         `json:"type"`
 	BlockHash  common.Hash      `json:"block_hash"`
 	Period     uint64           `json:"period"`

@@ -30,38 +30,38 @@ import (
 
 // Errors for agreement module.
 var (
-	ErrNotValidator           = fmt.Errorf("not a validaotr")
+	ErrNotInNotarySet         = fmt.Errorf("not in notary set")
 	ErrIncorrectVoteSignature = fmt.Errorf("incorrect vote signature")
 )
 
 // ErrFork for fork error in agreement.
 type ErrFork struct {
-	vID      types.ValidatorID
+	nID      types.NodeID
 	old, new common.Hash
 }
 
 func (e *ErrFork) Error() string {
 	return fmt.Sprintf("fork is found for %s, old %s, new %s",
-		e.vID.String(), e.old, e.new)
+		e.nID.String(), e.old, e.new)
 }
 
 // ErrForkVote for fork vote error in agreement.
 type ErrForkVote struct {
-	vID      types.ValidatorID
+	nID      types.NodeID
 	old, new *types.Vote
 }
 
 func (e *ErrForkVote) Error() string {
 	return fmt.Sprintf("fork vote is found for %s, old %s, new %s",
-		e.vID.String(), e.old, e.new)
+		e.nID.String(), e.old, e.new)
 }
 
 type blockProposerFn func() *types.Block
 
-func newVoteListMap() []map[types.ValidatorID]*types.Vote {
-	listMap := make([]map[types.ValidatorID]*types.Vote, types.MaxVoteType)
+func newVoteListMap() []map[types.NodeID]*types.Vote {
+	listMap := make([]map[types.NodeID]*types.Vote, types.MaxVoteType)
 	for idx := range listMap {
-		listMap[idx] = make(map[types.ValidatorID]*types.Vote)
+		listMap[idx] = make(map[types.NodeID]*types.Vote)
 	}
 	return listMap
 }
@@ -87,14 +87,14 @@ type pendingVote struct {
 type agreementData struct {
 	recv agreementReceiver
 
-	ID            types.ValidatorID
+	ID            types.NodeID
 	leader        *leaderSelector
 	defaultBlock  common.Hash
 	period        uint64
 	requiredVote  int
-	votes         map[uint64][]map[types.ValidatorID]*types.Vote
+	votes         map[uint64][]map[types.NodeID]*types.Vote
 	votesLock     sync.RWMutex
-	blocks        map[types.ValidatorID]*types.Block
+	blocks        map[types.NodeID]*types.Block
 	blocksLock    sync.Mutex
 	blockProposer blockProposerFn
 }
@@ -104,7 +104,7 @@ type agreement struct {
 	state          agreementState
 	data           *agreementData
 	aID            *atomic.Value
-	validators     map[types.ValidatorID]struct{}
+	notarySet      map[types.NodeID]struct{}
 	sigToPub       SigToPubFn
 	hasOutput      bool
 	lock           sync.RWMutex
@@ -115,9 +115,9 @@ type agreement struct {
 
 // newAgreement creates a agreement instance.
 func newAgreement(
-	ID types.ValidatorID,
+	ID types.NodeID,
 	recv agreementReceiver,
-	validators types.ValidatorIDs,
+	notarySet types.NodeIDs,
 	leader *leaderSelector,
 	sigToPub SigToPubFn,
 	blockProposer blockProposerFn) *agreement {
@@ -132,7 +132,7 @@ func newAgreement(
 		sigToPub:       sigToPub,
 		candidateBlock: make(map[common.Hash]*types.Block),
 	}
-	agreement.restart(validators, types.Position{})
+	agreement.restart(notarySet, types.Position{})
 	return agreement
 }
 
@@ -144,7 +144,7 @@ func (a *agreement) terminate() {
 }
 
 // restart the agreement
-func (a *agreement) restart(validators types.ValidatorIDs, aID types.Position) {
+func (a *agreement) restart(notarySet types.NodeIDs, aID types.Position) {
 	func() {
 		a.lock.Lock()
 		defer a.lock.Unlock()
@@ -152,18 +152,18 @@ func (a *agreement) restart(validators types.ValidatorIDs, aID types.Position) {
 		defer a.data.votesLock.Unlock()
 		a.data.blocksLock.Lock()
 		defer a.data.blocksLock.Unlock()
-		a.data.votes = make(map[uint64][]map[types.ValidatorID]*types.Vote)
+		a.data.votes = make(map[uint64][]map[types.NodeID]*types.Vote)
 		a.data.votes[1] = newVoteListMap()
 		a.data.period = 1
-		a.data.blocks = make(map[types.ValidatorID]*types.Block)
-		a.data.requiredVote = len(validators)/3*2 + 1
+		a.data.blocks = make(map[types.NodeID]*types.Block)
+		a.data.requiredVote = len(notarySet)/3*2 + 1
 		a.data.leader.restart()
 		a.data.defaultBlock = common.Hash{}
 		a.hasOutput = false
 		a.state = newPrepareState(a.data)
-		a.validators = make(map[types.ValidatorID]struct{})
-		for _, v := range validators {
-			a.validators[v] = struct{}{}
+		a.notarySet = make(map[types.NodeID]struct{})
+		for _, v := range notarySet {
+			a.notarySet[v] = struct{}{}
 		}
 		a.candidateBlock = make(map[common.Hash]*types.Block)
 		a.aID.Store(aID)
@@ -232,10 +232,10 @@ func (a *agreement) sanityCheck(vote *types.Vote) error {
 	if exist := func() bool {
 		a.lock.RLock()
 		defer a.lock.RUnlock()
-		_, exist := a.validators[vote.ProposerID]
+		_, exist := a.notarySet[vote.ProposerID]
 		return exist
 	}(); !exist {
-		return ErrNotValidator
+		return ErrNotInNotarySet
 	}
 	ok, err := verifyVoteSignature(vote, a.sigToPub)
 	if err != nil {

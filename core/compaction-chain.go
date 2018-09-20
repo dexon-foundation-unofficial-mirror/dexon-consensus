@@ -52,7 +52,7 @@ type compactionChain struct {
 	prevBlockLock     sync.RWMutex
 	prevBlock         *types.Block
 	witnessAcksLock   sync.RWMutex
-	latestWitnessAcks map[types.ValidatorID]*types.WitnessAck
+	latestWitnessAcks map[types.NodeID]*types.WitnessAck
 	sigToPub          SigToPubFn
 }
 
@@ -63,7 +63,7 @@ func newCompactionChain(
 	return &compactionChain{
 		db:                db,
 		pendingAck:        make(map[common.Hash]*pendingAck),
-		latestWitnessAcks: make(map[types.ValidatorID]*types.WitnessAck),
+		latestWitnessAcks: make(map[types.NodeID]*types.WitnessAck),
 		sigToPub:          sigToPub,
 	}
 }
@@ -83,7 +83,7 @@ func (cc *compactionChain) sanityCheck(
 	if err != nil {
 		return err
 	}
-	if witnessAck.ProposerID != types.NewValidatorID(pubKey) {
+	if witnessAck.ProposerID != types.NewNodeID(pubKey) {
 		return ErrIncorrectWitnessSignature
 	}
 	return nil
@@ -123,7 +123,7 @@ func (cc *compactionChain) prepareWitnessAck(prvKey crypto.PrivateKey) (
 		return
 	}
 	witnessAck = &types.WitnessAck{
-		ProposerID:       types.NewValidatorID(prvKey.PublicKey()),
+		ProposerID:       types.NewNodeID(prvKey.PublicKey()),
 		WitnessBlockHash: lastBlock.Hash,
 		Signature:        sig,
 		Hash:             hash,
@@ -230,10 +230,10 @@ func (cc *compactionChain) processPendingWitnessAcks() {
 	cc.pendingAck = pendingAck
 }
 
-func (cc *compactionChain) witnessAcks() map[types.ValidatorID]*types.WitnessAck {
+func (cc *compactionChain) witnessAcks() map[types.NodeID]*types.WitnessAck {
 	cc.witnessAcksLock.RLock()
 	defer cc.witnessAcksLock.RUnlock()
-	acks := make(map[types.ValidatorID]*types.WitnessAck)
+	acks := make(map[types.NodeID]*types.WitnessAck)
 	for k, v := range cc.latestWitnessAcks {
 		acks[k] = v.Clone()
 	}

@@ -34,11 +34,11 @@ func stableRandomHash(block *types.Block) (common.Hash, error) {
 	return common.NewRandomHash(), nil
 }
 
-// GenerateRandomValidatorIDs generates randomly a slices of types.ValidatorID.
-func GenerateRandomValidatorIDs(validatorCount int) (vIDs types.ValidatorIDs) {
-	vIDs = types.ValidatorIDs{}
-	for i := 0; i < validatorCount; i++ {
-		vIDs = append(vIDs, types.ValidatorID{Hash: common.NewRandomHash()})
+// GenerateRandomNodeIDs generates randomly a slices of types.NodeID.
+func GenerateRandomNodeIDs(nodeCount int) (nIDs types.NodeIDs) {
+	nIDs = types.NodeIDs{}
+	for i := 0; i < nodeCount; i++ {
+		nIDs = append(nIDs, types.NodeID{Hash: common.NewRandomHash()})
 	}
 	return
 }

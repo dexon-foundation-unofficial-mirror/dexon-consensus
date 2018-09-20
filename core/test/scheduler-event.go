@@ -27,8 +27,8 @@ import (
 type Event struct {
 	// HistoryIndex is the index of this event in history.
 	HistoryIndex int
-	// ValidatorID is the ID of handler that this event deginated to.
-	ValidatorID types.ValidatorID
+	// NodeID is the ID of handler that this event deginated to.
+	NodeID types.NodeID
 	// Time is the expected execution time of this event.
 	Time time.Time
 	// ExecError record the error when handling this event.
@@ -67,12 +67,12 @@ func (eq *eventQueue) Pop() interface{} {
 
 // NewEvent is the constructor for Event.
 func NewEvent(
-	vID types.ValidatorID, when time.Time, payload interface{}) *Event {
+	nID types.NodeID, when time.Time, payload interface{}) *Event {
 
 	return &Event{
 		HistoryIndex:       -1,
 		ParentHistoryIndex: -1,
-		ValidatorID:        vID,
+		NodeID:             nID,
 		Time:               when,
 		Payload:            payload,
 	}

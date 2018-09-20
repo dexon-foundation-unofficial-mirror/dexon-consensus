@@ -21,13 +21,13 @@ func (s *EventStatsTestSuite) TestCalculate() {
 		req              = s.Require()
 	)
 
-	apps, dbs, validators, err := PrepareValidators(
+	apps, dbs, nodes, err := PrepareNodes(
 		7, networkLatency, proposingLatency)
 	req.Nil(err)
 
 	sch := test.NewScheduler(test.NewStopByConfirmedBlocks(50, apps, dbs))
 	now := time.Now().UTC()
-	for vID, v := range validators {
+	for vID, v := range nodes {
 		sch.RegisterEventHandler(vID, v)
 		req.Nil(sch.Seed(NewProposeBlockEvent(vID, now)))
 	}
@@ -43,8 +43,8 @@ func (s *EventStatsTestSuite) TestCalculate() {
 	req.True(stats.All.DeliveredBlockCount >= 350)
 	req.Equal(stats.All.ProposingLatency, 300*time.Millisecond)
 	req.Equal(stats.All.ReceivingLatency, 100*time.Millisecond)
-	// Check statistics for each validator.
-	for _, vStats := range stats.ByValidator {
+	// Check statistics for each node.
+	for _, vStats := range stats.ByNode {
 		req.True(vStats.ProposedBlockCount > 50)
 		req.True(vStats.ReceivedBlockCount > 50)
 		req.True(vStats.StronglyAckedBlockCount > 50)

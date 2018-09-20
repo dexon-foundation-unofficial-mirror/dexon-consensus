@@ -29,27 +29,27 @@ import (
 
 // simApp is an DEXON app for simulation.
 type simApp struct {
-	ValidatorID types.ValidatorID
-	Outputs     []*types.Block
-	Early       bool
-	netModule   *network
-	DeliverID   int
+	NodeID    types.NodeID
+	Outputs   []*types.Block
+	Early     bool
+	netModule *network
+	DeliverID int
 	// blockSeen stores the time when block is delivered by Total Ordering.
 	blockSeen map[common.Hash]time.Time
 	// uncofirmBlocks stores the blocks whose timestamps are not ready.
-	unconfirmedBlocks map[types.ValidatorID]common.Hashes
+	unconfirmedBlocks map[types.NodeID]common.Hashes
 	blockByHash       map[common.Hash]*types.Block
 	blockByHashMutex  sync.RWMutex
 }
 
 // newSimApp returns point to a new instance of simApp.
-func newSimApp(id types.ValidatorID, netModule *network) *simApp {
+func newSimApp(id types.NodeID, netModule *network) *simApp {
 	return &simApp{
-		ValidatorID:       id,
+		NodeID:            id,
 		netModule:         netModule,
 		DeliverID:         0,
 		blockSeen:         make(map[common.Hash]time.Time),
-		unconfirmedBlocks: make(map[types.ValidatorID]common.Hashes),
+		unconfirmedBlocks: make(map[types.NodeID]common.Hashes),
 		blockByHash:       make(map[common.Hash]*types.Block),
 	}
 }
@@ -116,13 +116,13 @@ func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 	}
 	a.Outputs = blocks
 	a.Early = early
-	fmt.Println("OUTPUT", a.ValidatorID, a.Early, a.Outputs)
+	fmt.Println("OUTPUT", a.NodeID, a.Early, a.Outputs)
 
 	confirmLatency := []time.Duration{}
 
 	payload := []timestampMessage{}
 	for _, block := range blocks {
-		if block.ProposerID == a.ValidatorID {
+		if block.ProposerID == a.NodeID {
 			confirmLatency = append(confirmLatency,
 				now.Sub(block.Timestamp))
 		}

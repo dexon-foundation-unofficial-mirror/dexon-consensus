@@ -85,7 +85,7 @@ func (s *LeaderSelectorTestSuite) TestLeaderBlockHash() {
 		prv, err := eth.NewPrivateKey()
 		s.Require().Nil(err)
 		block := &types.Block{
-			ProposerID: types.NewValidatorID(prv.PublicKey()),
+			ProposerID: types.NewNodeID(prv.PublicKey()),
 			Hash:       common.NewRandomHash(),
 		}
 		s.Require().Nil(leader.prepareBlock(block, prv))
@@ -110,7 +110,7 @@ func (s *LeaderSelectorTestSuite) TestPrepareBlock() {
 	prv, err := eth.NewPrivateKey()
 	s.Require().Nil(err)
 	block := &types.Block{
-		ProposerID: types.NewValidatorID(prv.PublicKey()),
+		ProposerID: types.NewNodeID(prv.PublicKey()),
 	}
 	s.Require().Nil(leader.prepareBlock(block, prv))
 	s.Nil(leader.processBlock(block))

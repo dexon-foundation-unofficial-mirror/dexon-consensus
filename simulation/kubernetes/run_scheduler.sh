@@ -20,11 +20,11 @@ start_simulation() {
 }
 
 main() {
-    local num_validators=$1
+    local num_nodes=$1
     local num_cpus=$2
 
-    if [ "$num_validators" == "" ]; then
-      num_validators=31
+    if [ "$num_nodes" == "" ]; then
+      num_nodes=31
     fi
 
     if [ "$num_cpus" == "" ]; then
@@ -33,7 +33,7 @@ main() {
 
 
     # Render configuration files.
-    sed "s/{{numValidators}}/$num_validators/" config.toml.in > config.toml
+    sed "s/{{numNodes}}/$num_nodes/" config.toml.in > config.toml
     sed "s/{{numCPUs}}/$num_cpus/" scheduler.yaml.in > scheduler.yaml
 
     build_binary

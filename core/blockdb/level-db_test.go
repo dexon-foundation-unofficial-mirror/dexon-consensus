@@ -51,9 +51,9 @@ func (s *LevelDBTestSuite) TestBasicUsage() {
 	s.Equal(ErrBlockDoesNotExist, err)
 
 	// Update on an empty database should not success.
-	validator1 := types.ValidatorID{Hash: common.NewRandomHash()}
+	node1 := types.NodeID{Hash: common.NewRandomHash()}
 	block1 := types.Block{
-		ProposerID: validator1,
+		ProposerID: node1,
 		Hash:       hash1,
 		Position: types.Position{
 			Height: 1,
@@ -78,7 +78,7 @@ func (s *LevelDBTestSuite) TestBasicUsage() {
 	err = db.Update(queried)
 	s.Nil(err)
 
-	// Try to get it back via ValidatorID and height.
+	// Try to get it back via NodeID and height.
 	queried, err = db.Get(block1.Hash)
 
 	s.Nil(err)
@@ -100,7 +100,7 @@ func (s *LevelDBTestSuite) TestSyncIndex() {
 	blocks := [10]types.Block{}
 	for i := range blocks {
 		block := types.Block{
-			ProposerID: types.ValidatorID{Hash: common.NewRandomHash()},
+			ProposerID: types.NodeID{Hash: common.NewRandomHash()},
 			Hash:       common.NewRandomHash(),
 			Position: types.Position{
 				Height: uint64(i),

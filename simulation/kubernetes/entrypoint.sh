@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if [ "$ROLE" = "validator" ]; then
+if [ "$ROLE" = "node" ]; then
   exec ./dexcon-simulation -config config.toml
 elif [ "$ROLE" = "peer-server" ]; then
   exec ./dexcon-simulation-peer-server -config config.toml

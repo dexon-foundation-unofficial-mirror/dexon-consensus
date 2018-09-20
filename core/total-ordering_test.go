@@ -34,7 +34,7 @@ type TotalOrderingTestSuite struct {
 }
 
 func (s *TotalOrderingTestSuite) genGenesisBlock(
-	vIDs types.ValidatorIDs,
+	vIDs types.NodeIDs,
 	chainID uint32,
 	acks common.Hashes) *types.Block {
 
@@ -77,9 +77,9 @@ func (s *TotalOrderingTestSuite) TestBlockRelation() {
 	//
 	// The DAG used below is:
 	//  A <- B <- C
-	validators := test.GenerateRandomValidatorIDs(5)
-	vID := validators[0]
-	blockA := s.genGenesisBlock(validators, 0, common.Hashes{})
+	nodes := test.GenerateRandomNodeIDs(5)
+	vID := nodes[0]
+	blockA := s.genGenesisBlock(nodes, 0, common.Hashes{})
 	blockB := &types.Block{
 		ProposerID: vID,
 		ParentHash: blockA.Hash,
@@ -101,7 +101,7 @@ func (s *TotalOrderingTestSuite) TestBlockRelation() {
 		Acks: common.NewSortedHashes(common.Hashes{blockB.Hash}),
 	}
 
-	to := newTotalOrdering(1, 3, uint32(len(validators)))
+	to := newTotalOrdering(1, 3, uint32(len(nodes)))
 	s.checkNotDeliver(to, blockA)
 	s.checkNotDeliver(to, blockB)
 	s.checkNotDeliver(to, blockC)
@@ -204,15 +204,15 @@ func (s *TotalOrderingTestSuite) TestGrade() {
 	// This test case just fake some internal structure used
 	// when performing total ordering.
 	var (
-		validators      = test.GenerateRandomValidatorIDs(5)
-		cache           = newTotalOrderingObjectCache(5)
-		dirtyValidators = []int{0, 1, 2, 3, 4}
+		nodes      = test.GenerateRandomNodeIDs(5)
+		cache      = newTotalOrderingObjectCache(5)
+		dirtyNodes = []int{0, 1, 2, 3, 4}
 	)
-	ansLength := uint64(len(map[types.ValidatorID]struct{}{
-		validators[0]: struct{}{},
-		validators[1]: struct{}{},
-		validators[2]: struct{}{},
-		validators[3]: struct{}{},
+	ansLength := uint64(len(map[types.NodeID]struct{}{
+		nodes[0]: struct{}{},
+		nodes[1]: struct{}{},
+		nodes[2]: struct{}{},
+		nodes[3]: struct{}{},
 	}))
 	candidate1 := newTotalOrderingCandidateInfo(common.Hash{}, cache)
 	candidate1.cachedHeightVector = []uint64{
@@ -225,29 +225,29 @@ func (s *TotalOrderingTestSuite) TestGrade() {
 		1, 1, infinity, infinity, infinity}
 
 	candidate2.updateWinRecord(
-		0, candidate1, dirtyValidators, cache)
+		0, candidate1, dirtyNodes, cache)
 	s.Equal(candidate2.winRecords[0].grade(5, 3, ansLength), 1)
 	candidate1.updateWinRecord(
-		1, candidate2, dirtyValidators, cache)
+		1, candidate2, dirtyNodes, cache)
 	s.Equal(candidate1.winRecords[1].grade(5, 3, ansLength), 0)
 	candidate2.updateWinRecord(
-		2, candidate3, dirtyValidators, cache)
+		2, candidate3, dirtyNodes, cache)
 	s.Equal(candidate2.winRecords[2].grade(5, 3, ansLength), -1)
 	candidate3.updateWinRecord(
-		1, candidate2, dirtyValidators, cache)
+		1, candidate2, dirtyNodes, cache)
 	s.Equal(candidate3.winRecords[1].grade(5, 3, ansLength), 0)
 }
 
 func (s *TotalOrderingTestSuite) TestCycleDetection() {
 	// Make sure we don't get hang by cycle from
 	// block's acks.
-	validators := test.GenerateRandomValidatorIDs(5)
+	nodes := test.GenerateRandomNodeIDs(5)
 
 	// create blocks with cycles in acking relation.
 	cycledHash := common.NewRandomHash()
-	b00 := s.genGenesisBlock(validators, 0, common.Hashes{cycledHash})
+	b00 := s.genGenesisBlock(nodes, 0, common.Hashes{cycledHash})
 	b01 := &types.Block{
-		ProposerID: validators[0],
+		ProposerID: nodes[0],
 		ParentHash: b00.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -257,7 +257,7 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 		Acks: common.NewSortedHashes(common.Hashes{b00.Hash}),
 	}
 	b02 := &types.Block{
-		ProposerID: validators[0],
+		ProposerID: nodes[0],
 		ParentHash: b01.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -267,7 +267,7 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 		Acks: common.NewSortedHashes(common.Hashes{b01.Hash}),
 	}
 	b03 := &types.Block{
-		ProposerID: validators[0],
+		ProposerID: nodes[0],
 		ParentHash: b02.Hash,
 		Hash:       cycledHash,
 		Position: types.Position{
@@ -278,11 +278,11 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 	}
 
 	// Create a block acks self.
-	b10 := s.genGenesisBlock(validators, 1, common.Hashes{})
+	b10 := s.genGenesisBlock(nodes, 1, common.Hashes{})
 	b10.Acks = append(b10.Acks, b10.Hash)
 
 	// Make sure we won't hang when cycle exists.
-	to := newTotalOrdering(1, 3, uint32(len(validators)))
+	to := newTotalOrdering(1, 3, uint32(len(nodes)))
 	s.checkNotDeliver(to, b00)
 	s.checkNotDeliver(to, b01)
 	s.checkNotDeliver(to, b02)
@@ -294,12 +294,12 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 }
 
 func (s *TotalOrderingTestSuite) TestNotValidDAGDetection() {
-	validators := test.GenerateRandomValidatorIDs(5)
-	to := newTotalOrdering(1, 3, uint32(len(validators)))
+	nodes := test.GenerateRandomNodeIDs(5)
+	to := newTotalOrdering(1, 3, uint32(len(nodes)))
 
-	b00 := s.genGenesisBlock(validators, 0, common.Hashes{})
+	b00 := s.genGenesisBlock(nodes, 0, common.Hashes{})
 	b01 := &types.Block{
-		ProposerID: validators[0],
+		ProposerID: nodes[0],
 		ParentHash: b00.Hash,
 		Position: types.Position{
 			Height:  1,
@@ -326,8 +326,8 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 	//     A    B
 	//  Even when B is not received, A should
 	//  be able to be delivered.
-	validators := test.GenerateRandomValidatorIDs(5)
-	to := newTotalOrdering(2, 3, uint32(len(validators)))
+	nodes := test.GenerateRandomNodeIDs(5)
+	to := newTotalOrdering(2, 3, uint32(len(nodes)))
 	genNextBlock := func(b *types.Block) *types.Block {
 		return &types.Block{
 			ProposerID: b.ProposerID,
@@ -341,19 +341,19 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 		}
 	}
 
-	b00 := s.genGenesisBlock(validators, 0, common.Hashes{})
+	b00 := s.genGenesisBlock(nodes, 0, common.Hashes{})
 	b01 := genNextBlock(b00)
 	b02 := genNextBlock(b01)
 
-	b10 := s.genGenesisBlock(validators, 1, common.Hashes{b00.Hash})
+	b10 := s.genGenesisBlock(nodes, 1, common.Hashes{b00.Hash})
 	b11 := genNextBlock(b10)
 	b12 := genNextBlock(b11)
 
-	b20 := s.genGenesisBlock(validators, 2, common.Hashes{b00.Hash})
+	b20 := s.genGenesisBlock(nodes, 2, common.Hashes{b00.Hash})
 	b21 := genNextBlock(b20)
 	b22 := genNextBlock(b21)
 
-	b30 := s.genGenesisBlock(validators, 3, common.Hashes{b00.Hash})
+	b30 := s.genGenesisBlock(nodes, 3, common.Hashes{b00.Hash})
 	b31 := genNextBlock(b30)
 	b32 := genNextBlock(b31)
 
@@ -431,16 +431,16 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 
 func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	// It's a handcrafted test case.
-	validators := test.GenerateRandomValidatorIDs(5)
-	to := newTotalOrdering(2, 3, uint32(len(validators)))
+	nodes := test.GenerateRandomNodeIDs(5)
+	to := newTotalOrdering(2, 3, uint32(len(nodes)))
 	// Setup blocks.
-	b00 := s.genGenesisBlock(validators, 0, common.Hashes{})
-	b10 := s.genGenesisBlock(validators, 1, common.Hashes{})
-	b20 := s.genGenesisBlock(validators, 2, common.Hashes{b10.Hash})
-	b30 := s.genGenesisBlock(validators, 3, common.Hashes{b20.Hash})
-	b40 := s.genGenesisBlock(validators, 4, common.Hashes{})
+	b00 := s.genGenesisBlock(nodes, 0, common.Hashes{})
+	b10 := s.genGenesisBlock(nodes, 1, common.Hashes{})
+	b20 := s.genGenesisBlock(nodes, 2, common.Hashes{b10.Hash})
+	b30 := s.genGenesisBlock(nodes, 3, common.Hashes{b20.Hash})
+	b40 := s.genGenesisBlock(nodes, 4, common.Hashes{})
 	b11 := &types.Block{
-		ProposerID: validators[1],
+		ProposerID: nodes[1],
 		ParentHash: b10.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -450,7 +450,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		Acks: common.NewSortedHashes(common.Hashes{b10.Hash, b00.Hash}),
 	}
 	b01 := &types.Block{
-		ProposerID: validators[0],
+		ProposerID: nodes[0],
 		ParentHash: b00.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -460,7 +460,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		Acks: common.NewSortedHashes(common.Hashes{b00.Hash, b11.Hash}),
 	}
 	b21 := &types.Block{
-		ProposerID: validators[2],
+		ProposerID: nodes[2],
 		ParentHash: b20.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -470,7 +470,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		Acks: common.NewSortedHashes(common.Hashes{b20.Hash, b01.Hash}),
 	}
 	b31 := &types.Block{
-		ProposerID: validators[3],
+		ProposerID: nodes[3],
 		ParentHash: b30.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -480,7 +480,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		Acks: common.NewSortedHashes(common.Hashes{b30.Hash, b21.Hash}),
 	}
 	b02 := &types.Block{
-		ProposerID: validators[0],
+		ProposerID: nodes[0],
 		ParentHash: b01.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -490,7 +490,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		Acks: common.NewSortedHashes(common.Hashes{b01.Hash, b21.Hash}),
 	}
 	b12 := &types.Block{
-		ProposerID: validators[1],
+		ProposerID: nodes[1],
 		ParentHash: b11.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -500,7 +500,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		Acks: common.NewSortedHashes(common.Hashes{b11.Hash, b21.Hash}),
 	}
 	b32 := &types.Block{
-		ProposerID: validators[3],
+		ProposerID: nodes[3],
 		ParentHash: b31.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -510,7 +510,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		Acks: common.NewSortedHashes(common.Hashes{b31.Hash}),
 	}
 	b22 := &types.Block{
-		ProposerID: validators[2],
+		ProposerID: nodes[2],
 		ParentHash: b21.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -520,7 +520,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		Acks: common.NewSortedHashes(common.Hashes{b21.Hash, b32.Hash}),
 	}
 	b23 := &types.Block{
-		ProposerID: validators[2],
+		ProposerID: nodes[2],
 		ParentHash: b22.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -530,7 +530,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		Acks: common.NewSortedHashes(common.Hashes{b22.Hash}),
 	}
 	b03 := &types.Block{
-		ProposerID: validators[0],
+		ProposerID: nodes[0],
 		ParentHash: b02.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -540,7 +540,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		Acks: common.NewSortedHashes(common.Hashes{b02.Hash, b22.Hash}),
 	}
 	b13 := &types.Block{
-		ProposerID: validators[1],
+		ProposerID: nodes[1],
 		ParentHash: b12.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -550,7 +550,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		Acks: common.NewSortedHashes(common.Hashes{b12.Hash, b22.Hash}),
 	}
 	b14 := &types.Block{
-		ProposerID: validators[1],
+		ProposerID: nodes[1],
 		ParentHash: b13.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -560,7 +560,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		Acks: common.NewSortedHashes(common.Hashes{b13.Hash}),
 	}
 	b41 := &types.Block{
-		ProposerID: validators[4],
+		ProposerID: nodes[4],
 		ParentHash: b40.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -570,7 +570,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		Acks: common.NewSortedHashes(common.Hashes{b40.Hash}),
 	}
 	b42 := &types.Block{
-		ProposerID: validators[4],
+		ProposerID: nodes[4],
 		ParentHash: b41.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -766,17 +766,17 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 	//  v   v   v    v
 	//  o   o   o <- o        Height: 0
 	var (
-		req        = s.Require()
-		validators = test.GenerateRandomValidatorIDs(5)
-		to         = newTotalOrdering(0, 3, uint32(len(validators)))
+		req   = s.Require()
+		nodes = test.GenerateRandomNodeIDs(5)
+		to    = newTotalOrdering(0, 3, uint32(len(nodes)))
 	)
 	// Setup blocks.
-	b00 := s.genGenesisBlock(validators, 0, common.Hashes{})
-	b10 := s.genGenesisBlock(validators, 1, common.Hashes{})
-	b20 := s.genGenesisBlock(validators, 2, common.Hashes{})
-	b30 := s.genGenesisBlock(validators, 3, common.Hashes{b20.Hash})
+	b00 := s.genGenesisBlock(nodes, 0, common.Hashes{})
+	b10 := s.genGenesisBlock(nodes, 1, common.Hashes{})
+	b20 := s.genGenesisBlock(nodes, 2, common.Hashes{})
+	b30 := s.genGenesisBlock(nodes, 3, common.Hashes{b20.Hash})
 	b01 := &types.Block{
-		ProposerID: validators[0],
+		ProposerID: nodes[0],
 		ParentHash: b00.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -786,7 +786,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 		Acks: common.NewSortedHashes(common.Hashes{b00.Hash, b10.Hash}),
 	}
 	b11 := &types.Block{
-		ProposerID: validators[1],
+		ProposerID: nodes[1],
 		ParentHash: b10.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -796,7 +796,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 		Acks: common.NewSortedHashes(common.Hashes{b10.Hash, b20.Hash}),
 	}
 	b21 := &types.Block{
-		ProposerID: validators[2],
+		ProposerID: nodes[2],
 		ParentHash: b20.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -806,7 +806,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 		Acks: common.NewSortedHashes(common.Hashes{b20.Hash}),
 	}
 	b31 := &types.Block{
-		ProposerID: validators[3],
+		ProposerID: nodes[3],
 		ParentHash: b30.Hash,
 		Hash:       common.NewRandomHash(),
 		Position: types.Position{
@@ -815,7 +815,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 		},
 		Acks: common.NewSortedHashes(common.Hashes{b21.Hash, b30.Hash}),
 	}
-	b40 := s.genGenesisBlock(validators, 4, common.Hashes{b31.Hash})
+	b40 := s.genGenesisBlock(nodes, 4, common.Hashes{b31.Hash})
 
 	s.checkNotDeliver(to, b00)
 	s.checkNotDeliver(to, b10)
@@ -864,8 +864,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 }
 
 func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
-	totalOrderingConstructor func(types.ValidatorIDs) *totalOrdering,
-	validatorCount, blockCount int,
+	totalOrderingConstructor func(types.NodeIDs) *totalOrdering,
+	nodeCount, blockCount int,
 	ackingCountGenerator func() int,
 	repeat int) {
 
@@ -878,10 +878,10 @@ func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.Nil(err)
-	validators, err := gen.Generate(
-		validatorCount, blockCount, ackingCountGenerator, db)
+	nodes, err := gen.Generate(
+		nodeCount, blockCount, ackingCountGenerator, db)
 	req.Nil(err)
-	req.Len(validators, validatorCount)
+	req.Len(nodes, nodeCount)
 	iter, err := db.GetAll()
 	req.Nil(err)
 	// Setup a revealer that would reveal blocks forming
@@ -894,7 +894,7 @@ func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 		revealed := ""
 		ordered := ""
 		revealer.Reset()
-		to := totalOrderingConstructor(validators)
+		to := totalOrderingConstructor(nodes)
 		for {
 			// Reveal next block.
 			b, err := revealer.Next()
@@ -937,44 +937,44 @@ func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 
 func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 	var (
-		validatorCount        = 13
-		blockCount            = 50
-		phi            uint64 = 10
-		repeat                = 8
+		nodeCount         = 13
+		blockCount        = 50
+		phi        uint64 = 10
+		repeat            = 8
 	)
 
 	ackingCountGenerators := []func() int{
 		nil, // Acking frequency with normal distribution.
-		test.MaxAckingCountGenerator(0),              // Low acking frequency.
-		test.MaxAckingCountGenerator(validatorCount), // High acking frequency.
+		test.MaxAckingCountGenerator(0),         // Low acking frequency.
+		test.MaxAckingCountGenerator(nodeCount), // High acking frequency.
 	}
 
 	// Test based on different acking frequency.
 	for _, gen := range ackingCountGenerators {
 		// Test for K=0.
-		constructor := func(validators types.ValidatorIDs) *totalOrdering {
-			return newTotalOrdering(0, phi, uint32(len(validators)))
+		constructor := func(nodes types.NodeIDs) *totalOrdering {
+			return newTotalOrdering(0, phi, uint32(len(nodes)))
 		}
 		s.baseTestRandomlyGeneratedBlocks(
-			constructor, validatorCount, blockCount, gen, repeat)
+			constructor, nodeCount, blockCount, gen, repeat)
 		// Test for K=1,
-		constructor = func(validators types.ValidatorIDs) *totalOrdering {
-			return newTotalOrdering(1, phi, uint32(len(validators)))
+		constructor = func(nodes types.NodeIDs) *totalOrdering {
+			return newTotalOrdering(1, phi, uint32(len(nodes)))
 		}
 		s.baseTestRandomlyGeneratedBlocks(
-			constructor, validatorCount, blockCount, gen, repeat)
+			constructor, nodeCount, blockCount, gen, repeat)
 		// Test for K=2,
-		constructor = func(validators types.ValidatorIDs) *totalOrdering {
-			return newTotalOrdering(2, phi, uint32(len(validators)))
+		constructor = func(nodes types.NodeIDs) *totalOrdering {
+			return newTotalOrdering(2, phi, uint32(len(nodes)))
 		}
 		s.baseTestRandomlyGeneratedBlocks(
-			constructor, validatorCount, blockCount, gen, repeat)
+			constructor, nodeCount, blockCount, gen, repeat)
 		// Test for K=3,
-		constructor = func(validators types.ValidatorIDs) *totalOrdering {
-			return newTotalOrdering(3, phi, uint32(len(validators)))
+		constructor = func(nodes types.NodeIDs) *totalOrdering {
+			return newTotalOrdering(3, phi, uint32(len(nodes)))
 		}
 		s.baseTestRandomlyGeneratedBlocks(
-			constructor, validatorCount, blockCount, gen, repeat)
+			constructor, nodeCount, blockCount, gen, repeat)
 	}
 }
 

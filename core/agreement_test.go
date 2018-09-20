@@ -57,8 +57,8 @@ func (s *AgreementTestSuite) proposeBlock(
 
 type AgreementTestSuite struct {
 	suite.Suite
-	ID          types.ValidatorID
-	prvKey      map[types.ValidatorID]crypto.PrivateKey
+	ID          types.NodeID
+	prvKey      map[types.NodeID]crypto.PrivateKey
 	voteChan    chan *types.Vote
 	blockChan   chan common.Hash
 	confirmChan chan common.Hash
@@ -69,8 +69,8 @@ type AgreementTestSuite struct {
 func (s *AgreementTestSuite) SetupTest() {
 	prvKey, err := eth.NewPrivateKey()
 	s.Require().Nil(err)
-	s.ID = types.NewValidatorID(prvKey.PublicKey())
-	s.prvKey = map[types.ValidatorID]crypto.PrivateKey{
+	s.ID = types.NewNodeID(prvKey.PublicKey())
+	s.prvKey = map[types.NodeID]crypto.PrivateKey{
 		s.ID: prvKey,
 	}
 	s.voteChan = make(chan *types.Vote, 100)
@@ -79,25 +79,25 @@ func (s *AgreementTestSuite) SetupTest() {
 	s.block = make(map[common.Hash]*types.Block)
 }
 
-func (s *AgreementTestSuite) newAgreement(numValidator int) *agreement {
+func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 	leader := newGenesisLeaderSelector("🖖👽", eth.SigToPub)
 	agreementIdx := len(s.agreement)
 	blockProposer := func() *types.Block {
 		return s.proposeBlock(agreementIdx)
 	}
 
-	validators := make(types.ValidatorIDs, numValidator-1)
-	for i := range validators {
+	notarySet := make(types.NodeIDs, numNotarySet-1)
+	for i := range notarySet {
 		prvKey, err := eth.NewPrivateKey()
 		s.Require().Nil(err)
-		validators[i] = types.NewValidatorID(prvKey.PublicKey())
-		s.prvKey[validators[i]] = prvKey
+		notarySet[i] = types.NewNodeID(prvKey.PublicKey())
+		s.prvKey[notarySet[i]] = prvKey
 	}
-	validators = append(validators, s.ID)
+	notarySet = append(notarySet, s.ID)
 	agreement := newAgreement(
 		s.ID,
 		&agreementTestReceiver{s},
-		validators,
+		notarySet,
 		leader,
 		eth.SigToPub,
 		blockProposer,
@@ -116,7 +116,7 @@ func (s *AgreementTestSuite) prepareVote(vote *types.Vote) {
 }
 
 func (s *AgreementTestSuite) copyVote(
-	vote *types.Vote, proposer types.ValidatorID) *types.Vote {
+	vote *types.Vote, proposer types.NodeID) *types.Vote {
 	v := vote.Clone()
 	v.ProposerID = proposer
 	s.prepareVote(v)
@@ -138,8 +138,8 @@ func (s *AgreementTestSuite) TestSimpleConfirm() {
 	s.Require().Len(s.voteChan, 1)
 	vote := <-s.voteChan
 	s.Equal(types.VoteAck, vote.Type)
-	for vID := range s.prvKey {
-		v := s.copyVote(vote, vID)
+	for nID := range s.prvKey {
+		v := s.copyVote(vote, nID)
 		s.Require().NoError(a.processVote(v))
 	}
 	a.nextState()
@@ -147,8 +147,8 @@ func (s *AgreementTestSuite) TestSimpleConfirm() {
 	s.Require().Len(s.voteChan, 1)
 	vote = <-s.voteChan
 	s.Equal(types.VoteConfirm, vote.Type)
-	for vID := range s.prvKey {
-		v := s.copyVote(vote, vID)
+	for nID := range s.prvKey {
+		v := s.copyVote(vote, nID)
 		s.Require().NoError(a.processVote(v))
 	}
 	// We have enough of Confirm-Votes.

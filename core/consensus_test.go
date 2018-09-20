@@ -47,7 +47,7 @@ func (n *network) BroadcastWitnessAck(witnessAck *types.WitnessAck) {
 
 // SendDKGPrivateShare sends PrivateShare to a DKG participant.
 func (n *network) SendDKGPrivateShare(
-	recv types.ValidatorID, prvShare *types.DKGPrivateShare) {
+	recv types.NodeID, prvShare *types.DKGPrivateShare) {
 }
 
 // ReceiveChan returns a channel to receive messages from DEXON network.
@@ -60,7 +60,7 @@ type ConsensusTestSuite struct {
 }
 
 func (s *ConsensusTestSuite) prepareGenesisBlock(
-	proposerID types.ValidatorID,
+	proposerID types.NodeID,
 	chainID uint32,
 	con *Consensus) *types.Block {
 
@@ -76,12 +76,12 @@ func (s *ConsensusTestSuite) prepareGenesisBlock(
 }
 
 func (s *ConsensusTestSuite) prepareConsensus(
-	gov *test.Governance, vID types.ValidatorID) (*Application, *Consensus) {
+	gov *test.Governance, nID types.NodeID) (*Application, *Consensus) {
 
 	app := test.NewApp()
 	db, err := blockdb.NewMemBackedBlockDB()
 	s.Require().Nil(err)
-	prv, exist := gov.GetPrivateKey(vID)
+	prv, exist := gov.GetPrivateKey(nID)
 	s.Require().Nil(exist)
 	con := NewConsensus(app, gov, db, &network{}, prv, eth.SigToPub)
 	return &con.app, con
@@ -96,29 +96,29 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	// | o | | <- the only block which is acked by all other blocks
 	// |/|\|\|    at the same height.
 	// o o o o <- genesis blocks
-	// 0 1 2 3 <- index of validator ID
+	// 0 1 2 3 <- index of node ID
 	//
 	// This test case only works for Total Ordering with K=0.
 	var (
 		minInterval = 50 * time.Millisecond
 		gov, err    = test.NewGovernance(4, time.Second)
 		req         = s.Require()
-		validators  []types.ValidatorID
+		nodes       []types.NodeID
 	)
 	s.Require().Nil(err)
 
-	for vID := range gov.GetNotarySet() {
-		validators = append(validators, vID)
+	for nID := range gov.GetNotarySet() {
+		nodes = append(nodes, nID)
 	}
 
 	// Setup core.Consensus and test.App.
-	objs := map[types.ValidatorID]*struct {
+	objs := map[types.NodeID]*struct {
 		app *Application
 		con *Consensus
 	}{}
-	for _, vID := range validators {
-		app, con := s.prepareConsensus(gov, vID)
-		objs[vID] = &struct {
+	for _, nID := range nodes {
+		app, con := s.prepareConsensus(gov, nID)
+		objs[nID] = &struct {
 			app *Application
 			con *Consensus
 		}{app, con}
@@ -131,13 +131,13 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		}
 	}
 	// Genesis blocks
-	b00 := s.prepareGenesisBlock(validators[0], 0, objs[validators[0]].con)
+	b00 := s.prepareGenesisBlock(nodes[0], 0, objs[nodes[0]].con)
 	time.Sleep(minInterval)
-	b10 := s.prepareGenesisBlock(validators[1], 1, objs[validators[1]].con)
+	b10 := s.prepareGenesisBlock(nodes[1], 1, objs[nodes[1]].con)
 	time.Sleep(minInterval)
-	b20 := s.prepareGenesisBlock(validators[2], 2, objs[validators[2]].con)
+	b20 := s.prepareGenesisBlock(nodes[2], 2, objs[nodes[2]].con)
 	time.Sleep(minInterval)
-	b30 := s.prepareGenesisBlock(validators[3], 3, objs[validators[3]].con)
+	b30 := s.prepareGenesisBlock(nodes[3], 3, objs[nodes[3]].con)
 	broadcast(b00)
 	broadcast(b10)
 	broadcast(b20)
@@ -145,14 +145,14 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	// Setup b11.
 	time.Sleep(minInterval)
 	b11 := &types.Block{
-		ProposerID: validators[1],
+		ProposerID: nodes[1],
 		Position: types.Position{
 			ChainID: 1,
 		},
 	}
 	b11.Hash, err = hashBlock(b11)
 	s.Require().Nil(err)
-	req.Nil(objs[validators[1]].con.PrepareBlock(b11, time.Now().UTC()))
+	req.Nil(objs[nodes[1]].con.PrepareBlock(b11, time.Now().UTC()))
 	req.Len(b11.Acks, 4)
 	req.Contains(b11.Acks, b00.Hash)
 	req.Contains(b11.Acks, b10.Hash)
@@ -162,37 +162,37 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	// Setup b01.
 	time.Sleep(minInterval)
 	b01 := &types.Block{
-		ProposerID: validators[0],
+		ProposerID: nodes[0],
 		Position: types.Position{
 			ChainID: 0,
 		},
 		Hash: common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[0]].con.PrepareBlock(b01, time.Now().UTC()))
+	req.Nil(objs[nodes[0]].con.PrepareBlock(b01, time.Now().UTC()))
 	req.Len(b01.Acks, 4)
 	req.Contains(b01.Acks, b11.Hash)
 	// Setup b21.
 	time.Sleep(minInterval)
 	b21 := &types.Block{
-		ProposerID: validators[2],
+		ProposerID: nodes[2],
 		Position: types.Position{
 			ChainID: 2,
 		},
 		Hash: common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[2]].con.PrepareBlock(b21, time.Now().UTC()))
+	req.Nil(objs[nodes[2]].con.PrepareBlock(b21, time.Now().UTC()))
 	req.Len(b21.Acks, 4)
 	req.Contains(b21.Acks, b11.Hash)
 	// Setup b31.
 	time.Sleep(minInterval)
 	b31 := &types.Block{
-		ProposerID: validators[3],
+		ProposerID: nodes[3],
 		Position: types.Position{
 			ChainID: 3,
 		},
 		Hash: common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[3]].con.PrepareBlock(b31, time.Now().UTC()))
+	req.Nil(objs[nodes[3]].con.PrepareBlock(b31, time.Now().UTC()))
 	req.Len(b31.Acks, 4)
 	req.Contains(b31.Acks, b11.Hash)
 	// Broadcast other height=1 blocks.
@@ -203,13 +203,13 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	// Setup b02.
 	time.Sleep(minInterval)
 	b02 := &types.Block{
-		ProposerID: validators[0],
+		ProposerID: nodes[0],
 		Position: types.Position{
 			ChainID: 0,
 		},
 		Hash: common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[0]].con.PrepareBlock(b02, time.Now().UTC()))
+	req.Nil(objs[nodes[0]].con.PrepareBlock(b02, time.Now().UTC()))
 	req.Len(b02.Acks, 3)
 	req.Contains(b02.Acks, b01.Hash)
 	req.Contains(b02.Acks, b21.Hash)
@@ -217,13 +217,13 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	// Setup b12.
 	time.Sleep(minInterval)
 	b12 := &types.Block{
-		ProposerID: validators[1],
+		ProposerID: nodes[1],
 		Position: types.Position{
 			ChainID: 1,
 		},
 		Hash: common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[1]].con.PrepareBlock(b12, time.Now().UTC()))
+	req.Nil(objs[nodes[1]].con.PrepareBlock(b12, time.Now().UTC()))
 	req.Len(b12.Acks, 4)
 	req.Contains(b12.Acks, b01.Hash)
 	req.Contains(b12.Acks, b11.Hash)
@@ -232,13 +232,13 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	// Setup b22.
 	time.Sleep(minInterval)
 	b22 := &types.Block{
-		ProposerID: validators[2],
+		ProposerID: nodes[2],
 		Position: types.Position{
 			ChainID: 2,
 		},
 		Hash: common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[2]].con.PrepareBlock(b22, time.Now().UTC()))
+	req.Nil(objs[nodes[2]].con.PrepareBlock(b22, time.Now().UTC()))
 	req.Len(b22.Acks, 3)
 	req.Contains(b22.Acks, b01.Hash)
 	req.Contains(b22.Acks, b21.Hash)
@@ -246,13 +246,13 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	// Setup b32.
 	time.Sleep(minInterval)
 	b32 := &types.Block{
-		ProposerID: validators[3],
+		ProposerID: nodes[3],
 		Position: types.Position{
 			ChainID: 3,
 		},
 		Hash: common.NewRandomHash(),
 	}
-	req.Nil(objs[validators[3]].con.PrepareBlock(b32, time.Now().UTC()))
+	req.Nil(objs[nodes[3]].con.PrepareBlock(b32, time.Now().UTC()))
 	req.Len(b32.Acks, 3)
 	req.Contains(b32.Acks, b01.Hash)
 	req.Contains(b32.Acks, b21.Hash)
@@ -324,30 +324,30 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 	//  - Make sure Consensus.PrepareBlock would only attempt to
 	//    ack the prepared block.
 	var (
-		gov, err   = test.NewGovernance(4, time.Second)
-		req        = s.Require()
-		validators []types.ValidatorID
+		gov, err = test.NewGovernance(4, time.Second)
+		req      = s.Require()
+		nodes    []types.NodeID
 	)
 	s.Require().Nil(err)
-	for vID := range gov.GetNotarySet() {
-		validators = append(validators, vID)
+	for nID := range gov.GetNotarySet() {
+		nodes = append(nodes, nID)
 	}
 	// Setup core.Consensus and test.App.
-	objs := map[types.ValidatorID]*struct {
+	objs := map[types.NodeID]*struct {
 		app *Application
 		con *Consensus
 	}{}
-	for _, vID := range validators {
-		app, con := s.prepareConsensus(gov, vID)
-		objs[vID] = &struct {
+	for _, nID := range nodes {
+		app, con := s.prepareConsensus(gov, nID)
+		objs[nID] = &struct {
 			app *Application
 			con *Consensus
 		}{app, con}
 	}
-	b00 := s.prepareGenesisBlock(validators[0], 0, objs[validators[0]].con)
-	b10 := s.prepareGenesisBlock(validators[1], 1, objs[validators[1]].con)
-	b20 := s.prepareGenesisBlock(validators[2], 2, objs[validators[2]].con)
-	b30 := s.prepareGenesisBlock(validators[3], 3, objs[validators[3]].con)
+	b00 := s.prepareGenesisBlock(nodes[0], 0, objs[nodes[0]].con)
+	b10 := s.prepareGenesisBlock(nodes[1], 1, objs[nodes[1]].con)
+	b20 := s.prepareGenesisBlock(nodes[2], 2, objs[nodes[2]].con)
+	b30 := s.prepareGenesisBlock(nodes[3], 3, objs[nodes[3]].con)
 	for _, obj := range objs {
 		con := obj.con
 		req.Nil(con.ProcessBlock(b00))
@@ -356,11 +356,11 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 		req.Nil(con.ProcessBlock(b30))
 	}
 	b11 := &types.Block{
-		ProposerID: validators[1],
+		ProposerID: nodes[1],
 	}
 	// Sleep to make sure 'now' is slower than b10's timestamp.
 	time.Sleep(100 * time.Millisecond)
-	req.Nil(objs[validators[1]].con.PrepareBlock(b11, time.Now().UTC()))
+	req.Nil(objs[nodes[1]].con.PrepareBlock(b11, time.Now().UTC()))
 	// Make sure we would assign 'now' to the timestamp belongs to
 	// the proposer.
 	req.True(
@@ -371,25 +371,25 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 		req.Nil(con.ProcessBlock(b11))
 	}
 	b12 := &types.Block{
-		ProposerID: validators[1],
+		ProposerID: nodes[1],
 	}
-	req.Nil(objs[validators[1]].con.PrepareBlock(b12, time.Now().UTC()))
+	req.Nil(objs[nodes[1]].con.PrepareBlock(b12, time.Now().UTC()))
 	req.Len(b12.Acks, 1)
 	req.Contains(b12.Acks, b11.Hash)
 }
 
 func (s *ConsensusTestSuite) TestPrepareGenesisBlock() {
 	var (
-		gov, err   = test.NewGovernance(4, time.Second)
-		validators []types.ValidatorID
+		gov, err = test.NewGovernance(4, time.Second)
+		nodes    []types.NodeID
 	)
 	s.Require().Nil(err)
-	for vID := range gov.GetNotarySet() {
-		validators = append(validators, vID)
+	for nID := range gov.GetNotarySet() {
+		nodes = append(nodes, nID)
 	}
-	_, con := s.prepareConsensus(gov, validators[0])
+	_, con := s.prepareConsensus(gov, nodes[0])
 	block := &types.Block{
-		ProposerID: validators[0],
+		ProposerID: nodes[0],
 	}
 	con.PrepareGenesisBlock(block, time.Now().UTC())
 	s.True(block.IsGenesis())

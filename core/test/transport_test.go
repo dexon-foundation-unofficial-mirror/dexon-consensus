@@ -32,21 +32,21 @@ import (
 )
 
 type testPeer struct {
-	vID               types.ValidatorID
+	nID               types.NodeID
 	trans             TransportClient
 	recv              <-chan *TransportEnvelope
 	expectedEchoHash  common.Hash
 	echoBlock         *types.Block
 	myBlock           *types.Block
 	myBlockSentTime   time.Time
-	blocks            map[types.ValidatorID]*types.Block
+	blocks            map[types.NodeID]*types.Block
 	blocksReceiveTime map[common.Hash]time.Time
 }
 
 type testPeerServer struct {
 	trans      TransportServer
 	recv       chan *TransportEnvelope
-	peerBlocks map[types.ValidatorID]*types.Block
+	peerBlocks map[types.NodeID]*types.Block
 }
 
 type testMarshaller struct{}
@@ -88,7 +88,7 @@ type TransportTestSuite struct {
 
 func (s *TransportTestSuite) baseTest(
 	server *testPeerServer,
-	peers map[types.ValidatorID]*testPeer,
+	peers map[types.NodeID]*testPeer,
 	delay time.Duration) {
 
 	var (
@@ -98,11 +98,11 @@ func (s *TransportTestSuite) baseTest(
 
 	// For each peers, do following stuffs:
 	//  - broadcast 1 block.
-	//  - report one random block to server, along with its validator ID.
+	//  - report one random block to server, along with its node ID.
 	// Server would echo the random block back to the peer.
 	handleServer := func(server *testPeerServer) {
 		defer wg.Done()
-		server.peerBlocks = make(map[types.ValidatorID]*types.Block)
+		server.peerBlocks = make(map[types.NodeID]*types.Block)
 		for {
 			select {
 			case e := <-server.recv:
@@ -123,14 +123,14 @@ func (s *TransportTestSuite) baseTest(
 	}
 	handlePeer := func(peer *testPeer) {
 		defer wg.Done()
-		peer.blocks = make(map[types.ValidatorID]*types.Block)
+		peer.blocks = make(map[types.NodeID]*types.Block)
 		peer.blocksReceiveTime = make(map[common.Hash]time.Time)
 		for {
 			select {
 			case e := <-peer.recv:
 				switch v := e.Msg.(type) {
 				case *types.Block:
-					if v.ProposerID == peer.vID {
+					if v.ProposerID == peer.nID {
 						req.Equal(e.PeerType, TransportPeerServer)
 						peer.echoBlock = v
 					} else {
@@ -150,11 +150,11 @@ func (s *TransportTestSuite) baseTest(
 	}
 	wg.Add(len(peers) + 1)
 	go handleServer(server)
-	for vID, peer := range peers {
+	for nID, peer := range peers {
 		go handlePeer(peer)
 		// Broadcast a block.
 		peer.myBlock = &types.Block{
-			ProposerID: vID,
+			ProposerID: nID,
 			Hash:       common.NewRandomHash(),
 		}
 		peer.myBlockSentTime = time.Now()
@@ -162,28 +162,28 @@ func (s *TransportTestSuite) baseTest(
 		// Report a block to server.
 		peer.expectedEchoHash = common.NewRandomHash()
 		peer.trans.Report(&types.Block{
-			ProposerID: vID,
+			ProposerID: nID,
 			Hash:       peer.expectedEchoHash,
 		})
 	}
 	wg.Wait()
 	// Make sure each sent block is received.
-	for vID, peer := range peers {
+	for nID, peer := range peers {
 		req.NotNil(peer.echoBlock)
 		req.Equal(peer.echoBlock.Hash, peer.expectedEchoHash)
-		for otherVID, otherPeer := range peers {
-			if vID == otherVID {
+		for othernID, otherPeer := range peers {
+			if nID == othernID {
 				continue
 			}
 			req.Equal(
 				peer.myBlock.Hash,
-				otherPeer.blocks[peer.vID].Hash)
+				otherPeer.blocks[peer.nID].Hash)
 		}
 	}
 	// Make sure the latency is expected.
-	for vID, peer := range peers {
-		for otherVID, otherPeer := range peers {
-			if otherVID == vID {
+	for nID, peer := range peers {
+		for othernID, otherPeer := range peers {
+			if othernID == nID {
 				continue
 			}
 			req.True(otherPeer.blocksReceiveTime[peer.myBlock.Hash].Sub(
@@ -196,8 +196,8 @@ func (s *TransportTestSuite) TestFake() {
 	var (
 		peerCount = 13
 		req       = s.Require()
-		peers     = make(map[types.ValidatorID]*testPeer)
-		vIDs      = GenerateRandomValidatorIDs(peerCount)
+		peers     = make(map[types.NodeID]*testPeer)
+		nIDs      = GenerateRandomNodeIDs(peerCount)
 		err       error
 		wg        sync.WaitGroup
 		latency   = &FixedLatencyModel{Latency: 300}
@@ -207,13 +207,13 @@ func (s *TransportTestSuite) TestFake() {
 	server.recv, err = server.trans.Host()
 	req.Nil(err)
 	// Setup Peers
-	wg.Add(len(vIDs))
-	for _, vID := range vIDs {
+	wg.Add(len(nIDs))
+	for _, nID := range nIDs {
 		peer := &testPeer{
-			vID:   vID,
-			trans: NewFakeTransportClient(vID, latency),
+			nID:   nID,
+			trans: NewFakeTransportClient(nID, latency),
 		}
-		peers[vID] = peer
+		peers[nID] = peer
 		go func() {
 			defer wg.Done()
 			recv, err := peer.trans.Join(server.recv)
@@ -236,8 +236,8 @@ func (s *TransportTestSuite) TestTCPLocal() {
 	var (
 		peerCount  = 25
 		req        = s.Require()
-		peers      = make(map[types.ValidatorID]*testPeer)
-		vIDs       = GenerateRandomValidatorIDs(peerCount)
+		peers      = make(map[types.NodeID]*testPeer)
+		nIDs       = GenerateRandomNodeIDs(peerCount)
 		err        error
 		wg         sync.WaitGroup
 		latency    = &FixedLatencyModel{Latency: 300}
@@ -250,13 +250,13 @@ func (s *TransportTestSuite) TestTCPLocal() {
 	server.recv, err = server.trans.Host()
 	req.Nil(err)
 	// Setup Peers
-	wg.Add(len(vIDs))
-	for _, vID := range vIDs {
+	wg.Add(len(nIDs))
+	for _, nID := range nIDs {
 		peer := &testPeer{
-			vID:   vID,
-			trans: NewTCPTransportClient(vID, latency, &testMarshaller{}, true),
+			nID:   nID,
+			trans: NewTCPTransportClient(nID, latency, &testMarshaller{}, true),
 		}
-		peers[vID] = peer
+		peers[nID] = peer
 		go func() {
 			defer wg.Done()
 

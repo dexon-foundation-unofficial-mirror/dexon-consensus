@@ -28,94 +28,97 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
+// TODO(mission): blocks generator should generate blocks based on chain,
+//                not nodes.
+
 // ErrParentNotAcked would be raised when some block doesn't
 // ack its parent block.
 var ErrParentNotAcked = errors.New("parent is not acked")
 
-// validatorStatus is a state holder for each validator
+// nodeStatus is a state holder for each node
 // during generating blocks.
-type validatorStatus struct {
+type nodeStatus struct {
 	blocks           []*types.Block
-	lastAckingHeight map[types.ValidatorID]uint64
+	lastAckingHeight map[types.NodeID]uint64
 }
 
 type hashBlockFn func(*types.Block) (common.Hash, error)
 
 // getAckedBlockHash would randomly pick one block between
 // last acked one to current head.
-func (vs *validatorStatus) getAckedBlockHash(
-	ackedVID types.ValidatorID,
-	ackedValidator *validatorStatus,
+func (vs *nodeStatus) getAckedBlockHash(
+	ackedNID types.NodeID,
+	ackedNode *nodeStatus,
 	randGen *rand.Rand) (
 	hash common.Hash, ok bool) {
 
-	baseAckingHeight, exists := vs.lastAckingHeight[ackedVID]
+	baseAckingHeight, exists := vs.lastAckingHeight[ackedNID]
 	if exists {
 		// Do not ack the same block(height) twice.
 		baseAckingHeight++
 	}
-	totalBlockCount := uint64(len(ackedValidator.blocks))
+	totalBlockCount := uint64(len(ackedNode.blocks))
 	if totalBlockCount <= baseAckingHeight {
 		// There is no new block to ack.
 		return
 	}
 	ackableRange := totalBlockCount - baseAckingHeight
 	height := uint64((randGen.Uint64() % ackableRange) + baseAckingHeight)
-	vs.lastAckingHeight[ackedVID] = height
-	hash = ackedValidator.blocks[height].Hash
+	vs.lastAckingHeight[ackedNID] = height
+	hash = ackedNode.blocks[height].Hash
 	ok = true
 	return
 }
 
-// validatorSetStatus is a state holder for all validators
+// nodeSetStatus is a state holder for all nodes
 // during generating blocks.
-type validatorSetStatus struct {
-	status        map[types.ValidatorID]*validatorStatus
-	proposerChain map[types.ValidatorID]uint32
+type nodeSetStatus struct {
+	status        map[types.NodeID]*nodeStatus
+	proposerChain map[types.NodeID]uint32
 	timestamps    []time.Time
-	validatorIDs  []types.ValidatorID
+	nodeIDs       []types.NodeID
 	randGen       *rand.Rand
 	hashBlock     hashBlockFn
 }
 
-func newValidatorSetStatus(vIDs []types.ValidatorID, hashBlock hashBlockFn) *validatorSetStatus {
-	status := make(map[types.ValidatorID]*validatorStatus)
-	timestamps := make([]time.Time, 0, len(vIDs))
-	proposerChain := make(map[types.ValidatorID]uint32)
-	for i, vID := range vIDs {
-		status[vID] = &validatorStatus{
+func newNodeSetStatus(nIDs []types.NodeID, hashBlock hashBlockFn) *nodeSetStatus {
+	status := make(map[types.NodeID]*nodeStatus)
+	timestamps := make([]time.Time, 0, len(nIDs))
+	proposerChain := make(map[types.NodeID]uint32)
+	for i, nID := range nIDs {
+		status[nID] = &nodeStatus{
 			blocks:           []*types.Block{},
-			lastAckingHeight: make(map[types.ValidatorID]uint64),
+			lastAckingHeight: make(map[types.NodeID]uint64),
 		}
 		timestamps = append(timestamps, time.Now().UTC())
-		proposerChain[vID] = uint32(i)
+		proposerChain[nID] = uint32(i)
 	}
-	return &validatorSetStatus{
+	return &nodeSetStatus{
 		status:        status,
 		proposerChain: proposerChain,
 		timestamps:    timestamps,
-		validatorIDs:  vIDs,
+		nodeIDs:       nIDs,
 		randGen:       rand.New(rand.NewSource(time.Now().UnixNano())),
 		hashBlock:     hashBlock,
 	}
 }
 
-// findIncompleteValidators is a helper to check which validator
+// findIncompleteNodes is a helper to check which node
 // doesn't generate enough blocks.
-func (vs *validatorSetStatus) findIncompleteValidators(
-	blockCount int) (vIDs []types.ValidatorID) {
+func (vs *nodeSetStatus) findIncompleteNodes(
+	blockCount int) (nIDs []types.NodeID) {
 
-	for vID, status := range vs.status {
+	for nID, status := range vs.status {
 		if len(status.blocks) < blockCount {
-			vIDs = append(vIDs, vID)
+			nIDs = append(nIDs, nID)
 		}
 	}
 	return
 }
 
 // prepareAcksForNewBlock collects acks for one block.
-func (vs *validatorSetStatus) prepareAcksForNewBlock(
-	proposerID types.ValidatorID, ackingCount int) (
+func (vs *nodeSetStatus) prepareAcksForNewBlock(
+	proposerID types.NodeID, ackingCount int) (
 	acks common.Hashes, err error) {
 
 	acks = common.Hashes{}
@@ -123,22 +126,22 @@ func (vs *validatorSetStatus) prepareAcksForNewBlock(
 		// The 'Acks' filed of genesis blocks would always be empty.
 		return
 	}
-	// Pick validatorIDs to be acked.
-	ackingVIDs := map[types.ValidatorID]struct{}{
+	// Pick nodeIDs to be acked.
+	ackingNIDs := map[types.NodeID]struct{}{
 		proposerID: struct{}{}, // Acking parent block is always required.
 	}
 	if ackingCount > 0 {
 		ackingCount-- // We would always include ack to parent block.
 	}
-	for _, i := range vs.randGen.Perm(len(vs.validatorIDs))[:ackingCount] {
-		ackingVIDs[vs.validatorIDs[i]] = struct{}{}
+	for _, i := range vs.randGen.Perm(len(vs.nodeIDs))[:ackingCount] {
+		ackingNIDs[vs.nodeIDs[i]] = struct{}{}
 	}
 	// Generate acks.
-	for vID := range ackingVIDs {
+	for nID := range ackingNIDs {
 		ack, ok := vs.status[proposerID].getAckedBlockHash(
-			vID, vs.status[vID], vs.randGen)
+			nID, vs.status[nID], vs.randGen)
 		if !ok {
-			if vID == proposerID {
+			if nID == proposerID {
 				err = ErrParentNotAcked
 			}
 			continue
@@ -148,9 +151,9 @@ func (vs *validatorSetStatus) prepareAcksForNewBlock(
 	return
 }
 
-// proposeBlock propose new block and update validator status.
-func (vs *validatorSetStatus) proposeBlock(
-	proposerID types.ValidatorID,
+// proposeBlock propose new block and update node status.
+func (vs *nodeSetStatus) proposeBlock(
+	proposerID types.NodeID,
 	acks common.Hashes) (*types.Block, error) {
 
 	status := vs.status[proposerID]
@@ -171,8 +174,8 @@ func (vs *validatorSetStatus) proposeBlock(
 		Acks:      common.NewSortedHashes(acks),
 		Timestamp: vs.timestamps[chainID],
 	}
-	for i, vID := range vs.validatorIDs {
-		if vID == proposerID {
+	for i, nID := range vs.nodeIDs {
+		if nID == proposerID {
 			newBlock.Position.ChainID = uint32(i)
 		}
 	}
@@ -188,13 +191,13 @@ func (vs *validatorSetStatus) proposeBlock(
 // normalAckingCountGenerator would randomly pick acking count
 // by a normal distribution.
 func normalAckingCountGenerator(
-	validatorCount int, mean, deviation float64) func() int {
+	nodeCount int, mean, deviation float64) func() int {
 
 	return func() int {
 		var expected float64
 		for {
 			expected = rand.NormFloat64()*deviation + mean
-			if expected >= 0 && expected <= float64(validatorCount) {
+			if expected >= 0 && expected <= float64(nodeCount) {
 				break
 			}
 		}
@@ -208,32 +211,32 @@ func MaxAckingCountGenerator(count int) func() int {
 	return func() int { return count }
 }
 
-// generateValidatorPicker is a function generator, which would generate
-// a function to randomly pick one validator ID from a slice of validator ID.
-func generateValidatorPicker() func([]types.ValidatorID) types.ValidatorID {
+// generateNodePicker is a function generator, which would generate
+// a function to randomly pick one node ID from a slice of node ID.
+func generateNodePicker() func([]types.NodeID) types.NodeID {
 	privateRand := rand.New(rand.NewSource(time.Now().UnixNano()))
-	return func(vIDs []types.ValidatorID) types.ValidatorID {
-		return vIDs[privateRand.Intn(len(vIDs))]
+	return func(nIDs []types.NodeID) types.NodeID {
+		return nIDs[privateRand.Intn(len(nIDs))]
 	}
 }
 
 // BlocksGenerator could generate blocks forming valid DAGs.
 type BlocksGenerator struct {
-	validatorPicker func([]types.ValidatorID) types.ValidatorID
-	hashBlock       hashBlockFn
+	nodePicker func([]types.NodeID) types.NodeID
+	hashBlock  hashBlockFn
 }
 
 // NewBlocksGenerator constructs BlockGenerator.
-func NewBlocksGenerator(validatorPicker func(
-	[]types.ValidatorID) types.ValidatorID,
+func NewBlocksGenerator(nodePicker func(
+	[]types.NodeID) types.NodeID,
 	hashBlock hashBlockFn) *BlocksGenerator {
 
-	if validatorPicker == nil {
-		validatorPicker = generateValidatorPicker()
+	if nodePicker == nil {
+		nodePicker = generateNodePicker()
 	}
 	return &BlocksGenerator{
-		validatorPicker: validatorPicker,
-		hashBlock:       hashBlock,
+		nodePicker: nodePicker,
+		hashBlock:  hashBlock,
 	}
 }
 
@@ -244,45 +247,45 @@ func NewBlocksGenerator(validatorPicker func(
 // has maximum 2 acks.
 //   func () int { return 2 }
 // The default ackingCountGenerator would randomly pick a number based on
-// the validatorCount you provided with a normal distribution.
+// the nodeCount you provided with a normal distribution.
 func (gen *BlocksGenerator) Generate(
-	validatorCount int,
+	nodeCount int,
 	blockCount int,
 	ackingCountGenerator func() int,
 	writer blockdb.Writer) (
-	validators types.ValidatorIDs, err error) {
+	nodes types.NodeIDs, err error) {
 
 	if ackingCountGenerator == nil {
 		ackingCountGenerator = normalAckingCountGenerator(
-			validatorCount,
-			float64(validatorCount/2),
-			float64(validatorCount/4+1))
+			nodeCount,
+			float64(nodeCount/2),
+			float64(nodeCount/4+1))
 	}
-	validators = types.ValidatorIDs{}
-	for i := 0; i < validatorCount; i++ {
-		validators = append(
-			validators, types.ValidatorID{Hash: common.NewRandomHash()})
+	nodes = types.NodeIDs{}
+	for i := 0; i < nodeCount; i++ {
+		nodes = append(
+			nodes, types.NodeID{Hash: common.NewRandomHash()})
 	}
-	status := newValidatorSetStatus(validators, gen.hashBlock)
+	status := newNodeSetStatus(nodes, gen.hashBlock)
 
 	// We would record the smallest height of block that could be acked
-	// from each validator's point-of-view.
-	toAck := make(map[types.ValidatorID]map[types.ValidatorID]uint64)
-	for _, vID := range validators {
-		toAck[vID] = make(map[types.ValidatorID]uint64)
+	// from each node's point-of-view.
+	toAck := make(map[types.NodeID]map[types.NodeID]uint64)
+	for _, nID := range nodes {
+		toAck[nID] = make(map[types.NodeID]uint64)
 	}
 
 	for {
-		// Find validators that doesn't propose enough blocks and
+		// Find nodes that doesn't propose enough blocks and
 		// pick one from them randomly.
-		notYet := status.findIncompleteValidators(blockCount)
+		notYet := status.findIncompleteNodes(blockCount)
 		if len(notYet) == 0 {
 			break
 		}
 
 		// Propose a new block.
 		var (
-			proposerID = gen.validatorPicker(notYet)
+			proposerID = gen.nodePicker(notYet)
 			acks       common.Hashes
 		)
 		acks, err = status.prepareAcksForNewBlock(

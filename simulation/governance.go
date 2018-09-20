@@ -29,28 +29,28 @@ import (
 // simGovernance is a simulated governance contract implementing the
 // core.Governance interface.
 type simGovernance struct {
-	id                    types.ValidatorID
-	lock                  sync.RWMutex
-	notarySet             map[types.ValidatorID]struct{}
-	expectedNumValidators int
-	k                     int
-	phiRatio              float32
-	chainNum              uint32
-	crs                   string
-	dkgComplaint          map[uint64][]*types.DKGComplaint
-	dkgMasterPublicKey    map[uint64][]*types.DKGMasterPublicKey
-	lambda                time.Duration
-	network               *network
+	id                 types.NodeID
+	lock               sync.RWMutex
+	notarySet          map[types.NodeID]struct{}
+	expectedNumNodes   int
+	k                  int
+	phiRatio           float32
+	chainNum           uint32
+	crs                string
+	dkgComplaint       map[uint64][]*types.DKGComplaint
+	dkgMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
+	lambda             time.Duration
+	network            *network
 }
 
 // newSimGovernance returns a new simGovernance instance.
 func newSimGovernance(
-	id types.ValidatorID,
-	numValidators int, consensusConfig config.Consensus) *simGovernance {
+	id types.NodeID,
+	numNodes int, consensusConfig config.Consensus) *simGovernance {
 	return &simGovernance{
-		id:                    id,
-		notarySet:             make(map[types.ValidatorID]struct{}),
-		expectedNumValidators: numValidators,
+		id:                 id,
+		notarySet:          make(map[types.NodeID]struct{}),
+		expectedNumNodes:   numNodes,
 		k:                  consensusConfig.K,
 		phiRatio:           consensusConfig.PhiRatio,
 		chainNum:           consensusConfig.ChainNum,
@@ -66,12 +66,12 @@ func (g *simGovernance) setNetwork(network *network) {
 }
 
 // GetNotarySet returns the current notary set.
-func (g *simGovernance) GetNotarySet() map[types.ValidatorID]struct{} {
+func (g *simGovernance) GetNotarySet() map[types.NodeID]struct{} {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
 	// Return the cloned notarySet.
-	ret := make(map[types.ValidatorID]struct{})
+	ret := make(map[types.NodeID]struct{})
 	for k := range g.notarySet {
 		ret[k] = struct{}{}
 	}
@@ -90,18 +90,18 @@ func (g *simGovernance) GetConfiguration(blockHeight uint64) *types.Config {
 	}
 }
 
-// addValidator add a new validator into the simulated governance contract.
-func (g *simGovernance) addValidator(vID types.ValidatorID) {
+// addNode add a new node into the simulated governance contract.
+func (g *simGovernance) addNode(nID types.NodeID) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	if _, exists := g.notarySet[vID]; exists {
+	if _, exists := g.notarySet[nID]; exists {
 		return
 	}
-	if len(g.notarySet) == g.expectedNumValidators {
-		panic(fmt.Errorf("attempt to add validator when ready"))
+	if len(g.notarySet) == g.expectedNumNodes {
+		panic(fmt.Errorf("attempt to add node when ready"))
 	}
-	g.notarySet[vID] = struct{}{}
+	g.notarySet[nID] = struct{}{}
 }
 
 // AddDKGComplaint adds a DKGComplaint.

@@ -54,7 +54,7 @@ func NewBlock() (b *Block) {
 
 // Block represents a single event broadcasted on the network.
 type Block struct {
-	ProposerID ValidatorID         `json:"proposer_id"`
+	ProposerID NodeID              `json:"proposer_id"`
 	ParentHash common.Hash         `json:"parent_hash"`
 	Hash       common.Hash         `json:"hash"`
 	Position   Position            `json:"position"`

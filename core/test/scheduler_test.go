@@ -33,16 +33,16 @@ type SchedulerTestSuite struct {
 
 type simpleStopper struct {
 	lock         sync.Mutex
-	touched      map[types.ValidatorID]int
+	touched      map[types.NodeID]int
 	touchedCount int
 }
 
 func newSimpleStopper(
-	validators []types.ValidatorID, touchedCount int) *simpleStopper {
+	nodes []types.NodeID, touchedCount int) *simpleStopper {
 
-	touched := make(map[types.ValidatorID]int)
-	for _, vID := range validators {
-		touched[vID] = 0
+	touched := make(map[types.NodeID]int)
+	for _, nID := range nodes {
+		touched[nID] = 0
 	}
 	return &simpleStopper{
 		touched:      touched,
@@ -50,11 +50,11 @@ func newSimpleStopper(
 	}
 }
 
-func (stopper *simpleStopper) ShouldStop(vID types.ValidatorID) bool {
+func (stopper *simpleStopper) ShouldStop(nID types.NodeID) bool {
 	stopper.lock.Lock()
 	defer stopper.lock.Unlock()
 
-	stopper.touched[vID] = stopper.touched[vID] + 1
+	stopper.touched[nID] = stopper.touched[nID] + 1
 	for _, count := range stopper.touched {
 		if count < stopper.touchedCount {
 			return false
@@ -65,26 +65,26 @@ func (stopper *simpleStopper) ShouldStop(vID types.ValidatorID) bool {
 
 type simpleHandler struct {
 	count int
-	vID   types.ValidatorID
+	nID   types.NodeID
 }
 
 func (handler *simpleHandler) Handle(e *Event) (events []*Event) {
-	if e.ValidatorID == handler.vID {
+	if e.NodeID == handler.nID {
 		handler.count++
 	}
 	return
 }
 
 type fixedLatencyHandler struct {
-	vID types.ValidatorID
+	nID types.NodeID
 }
 
 func (handler *fixedLatencyHandler) Handle(e *Event) (events []*Event) {
 	// Simulate execution time.
 	time.Sleep(500 * time.Millisecond)
 	return []*Event{&Event{
-		ValidatorID: handler.vID,
-		Time:        e.Time.Add(800 * time.Millisecond),
+		NodeID: handler.nID,
+		Time:   e.Time.Add(800 * time.Millisecond),
 	}}
 }
 
@@ -114,22 +114,22 @@ func (s *SchedulerTestSuite) TestEventSequence() {
 
 func (s *SchedulerTestSuite) TestBasicRound() {
 	// This test case makes sure these facts:
-	//  - event is dispatched by validatorID attached to each handler.
+	//  - event is dispatched by NodeID attached to each handler.
 	//  - stopper can stop the execution when condition is met.
 	var (
-		req        = s.Require()
-		validators = GenerateRandomValidatorIDs(3)
-		stopper    = newSimpleStopper(validators, 2)
-		sch        = NewScheduler(stopper)
-		handlers   = make(map[types.ValidatorID]*simpleHandler)
+		req      = s.Require()
+		nodes    = GenerateRandomNodeIDs(3)
+		stopper  = newSimpleStopper(nodes, 2)
+		sch      = NewScheduler(stopper)
+		handlers = make(map[types.NodeID]*simpleHandler)
 	)
 
-	for _, vID := range validators {
-		handler := &simpleHandler{vID: vID}
-		handlers[vID] = handler
-		sch.RegisterEventHandler(vID, handler)
-		req.Nil(sch.Seed(&Event{ValidatorID: vID}))
-		req.Nil(sch.Seed(&Event{ValidatorID: vID}))
+	for _, nID := range nodes {
+		handler := &simpleHandler{nID: nID}
+		handlers[nID] = handler
+		sch.RegisterEventHandler(nID, handler)
+		req.Nil(sch.Seed(&Event{NodeID: nID}))
+		req.Nil(sch.Seed(&Event{NodeID: nID}))
 	}
 	sch.Run(10)
 	// Verify result.
@@ -143,16 +143,16 @@ func (s *SchedulerTestSuite) TestChildEvent() {
 	// assigned correctly.
 	var (
 		req     = s.Require()
-		vID     = types.ValidatorID{Hash: common.NewRandomHash()}
-		stopper = newSimpleStopper(types.ValidatorIDs{vID}, 3)
-		handler = &fixedLatencyHandler{vID: vID}
+		nID     = types.NodeID{Hash: common.NewRandomHash()}
+		stopper = newSimpleStopper(types.NodeIDs{nID}, 3)
+		handler = &fixedLatencyHandler{nID: nID}
 		sch     = NewScheduler(stopper)
 	)
 
-	sch.RegisterEventHandler(vID, handler)
+	sch.RegisterEventHandler(nID, handler)
 	req.Nil(sch.Seed(&Event{
-		ValidatorID: vID,
-		Time:        time.Now().UTC(),
+		NodeID: nID,
+		Time:   time.Now().UTC(),
 	}))
 	sch.Run(1)
 	// Verify result.

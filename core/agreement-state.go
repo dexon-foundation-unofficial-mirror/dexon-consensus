@@ -242,7 +242,7 @@ func (s *pass2State) nextState() (agreementState, error) {
 		s.a.defaultBlock = hash
 		s.a.period++
 		oldBlock := s.a.blocks[s.a.ID]
-		s.a.blocks = map[types.ValidatorID]*types.Block{
+		s.a.blocks = map[types.NodeID]*types.Block{
 			s.a.ID: oldBlock,
 		}
 	}

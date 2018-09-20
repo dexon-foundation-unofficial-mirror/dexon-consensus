@@ -7,7 +7,7 @@ metadata:
     type: cobinhood
 spec:
   revisionHistoryLimit: 5
-  replicas: {{numValidators}}
+  replicas: {{numNodes}}
   template:
     metadata:
       name: dexcon-simulation
@@ -35,4 +35,4 @@ spec:
               memory: 2Gi
           env:
             - name: ROLE
-              value: "validator"
+              value: "node"

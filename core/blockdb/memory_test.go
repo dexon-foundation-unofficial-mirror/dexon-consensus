@@ -29,12 +29,12 @@ import (
 type MemBackedBlockDBTestSuite struct {
 	suite.Suite
 
-	v0            types.ValidatorID
+	v0            types.NodeID
 	b00, b01, b02 *types.Block
 }
 
 func (s *MemBackedBlockDBTestSuite) SetupSuite() {
-	s.v0 = types.ValidatorID{Hash: common.NewRandomHash()}
+	s.v0 = types.NodeID{Hash: common.NewRandomHash()}
 
 	genesisHash := common.NewRandomHash()
 	s.b00 = &types.Block{

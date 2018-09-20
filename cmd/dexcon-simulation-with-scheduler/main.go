@@ -43,29 +43,29 @@ func main() {
 	if err != nil {
 		log.Fatal("unable to read config: ", err)
 	}
-	// Setup latencies, validators.
+	// Setup latencies, nodes.
 	networkLatency := &test.NormalLatencyModel{
 		Sigma: cfg.Networking.Sigma,
 		Mean:  cfg.Networking.Mean,
 	}
 	proposingLatency := &test.NormalLatencyModel{
-		Sigma: cfg.Validator.Legacy.ProposeIntervalSigma,
-		Mean:  cfg.Validator.Legacy.ProposeIntervalMean,
+		Sigma: cfg.Node.Legacy.ProposeIntervalSigma,
+		Mean:  cfg.Node.Legacy.ProposeIntervalMean,
 	}
-	// Setup validators and other consensus related stuffs.
-	apps, dbs, validators, err := integration.PrepareValidators(
-		cfg.Validator.Num, networkLatency, proposingLatency)
+	// Setup nodes and other consensus related stuffs.
+	apps, dbs, nodes, err := integration.PrepareNodes(
+		cfg.Node.Num, networkLatency, proposingLatency)
 	if err != nil {
-		log.Fatal("could not setup validators: ", err)
+		log.Fatal("could not setup nodes: ", err)
 	}
-	blockPerValidator := int(math.Ceil(
-		float64(cfg.Validator.MaxBlock) / float64(cfg.Validator.Num)))
+	blockPerNode := int(math.Ceil(
+		float64(cfg.Node.MaxBlock) / float64(cfg.Node.Num)))
 	sch := test.NewScheduler(
-		test.NewStopByConfirmedBlocks(blockPerValidator, apps, dbs))
-	for vID, v := range validators {
-		sch.RegisterEventHandler(vID, v)
+		test.NewStopByConfirmedBlocks(blockPerNode, apps, dbs))
+	for nID, v := range nodes {
+		sch.RegisterEventHandler(nID, v)
 		if err = sch.Seed(integration.NewProposeBlockEvent(
-			vID, time.Now().UTC())); err != nil {
+			nID, time.Now().UTC())); err != nil {
 
 			log.Fatal("unable to set seed simulation events: ", err)
 		}

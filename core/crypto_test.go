@@ -33,7 +33,7 @@ type CryptoTestSuite struct {
 	suite.Suite
 }
 
-var myVID = types.ValidatorID{Hash: common.NewRandomHash()}
+var myNID = types.NodeID{Hash: common.NewRandomHash()}
 
 func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 	acks := common.Hashes{}
@@ -181,9 +181,9 @@ func (s *CryptoTestSuite) TestVoteSignature() {
 	prv, err := eth.NewPrivateKey()
 	s.Require().Nil(err)
 	pub := prv.PublicKey()
-	vID := types.NewValidatorID(pub)
+	nID := types.NewNodeID(pub)
 	vote := &types.Vote{
-		ProposerID: vID,
+		ProposerID: nID,
 		Type:       types.VoteAck,
 		BlockHash:  common.NewRandomHash(),
 		Period:     1,
@@ -200,9 +200,9 @@ func (s *CryptoTestSuite) TestCRSSignature() {
 	prv, err := eth.NewPrivateKey()
 	s.Require().Nil(err)
 	pub := prv.PublicKey()
-	vID := types.NewValidatorID(pub)
+	nID := types.NewNodeID(pub)
 	block := &types.Block{
-		ProposerID: vID,
+		ProposerID: nID,
 	}
 	block.CRSSignature, err = prv.Sign(hashCRS(block, crs))
 	s.Require().Nil(err)
@@ -214,9 +214,9 @@ func (s *CryptoTestSuite) TestCRSSignature() {
 func (s *CryptoTestSuite) TestDKGSignature() {
 	prv, err := eth.NewPrivateKey()
 	s.Require().Nil(err)
-	vID := types.NewValidatorID(prv.PublicKey())
+	nID := types.NewNodeID(prv.PublicKey())
 	prvShare := &types.DKGPrivateShare{
-		ProposerID:   vID,
+		ProposerID:   nID,
 		Round:        5,
 		PrivateShare: *dkg.NewPrivateKey(),
 	}
@@ -229,7 +229,7 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	id := dkg.NewID([]byte{13})
 	_, pkShare := dkg.NewPrivateKeyShares(1)
 	mpk := &types.DKGMasterPublicKey{
-		ProposerID:      vID,
+		ProposerID:      nID,
 		Round:           5,
 		DKGID:           id,
 		PublicKeyShares: *pkShare,
@@ -241,7 +241,7 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	s.False(verifyDKGMasterPublicKeySignature(mpk, eth.SigToPub))
 
 	complaint := &types.DKGComplaint{
-		ProposerID:   vID,
+		ProposerID:   nID,
 		Round:        5,
 		PrivateShare: *prvShare,
 	}
@@ -252,7 +252,7 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	s.False(verifyDKGComplaintSignature(complaint, eth.SigToPub))
 
 	sig := &types.DKGPartialSignature{
-		ProposerID:       vID,
+		ProposerID:       nID,
 		Round:            5,
 		PartialSignature: dkg.PartialSignature{},
 	}

@@ -31,8 +31,8 @@ import (
 
 type AgreementStateTestSuite struct {
 	suite.Suite
-	ID          types.ValidatorID
-	prvKey      map[types.ValidatorID]crypto.PrivateKey
+	ID          types.NodeID
+	prvKey      map[types.NodeID]crypto.PrivateKey
 	voteChan    chan *types.Vote
 	blockChan   chan common.Hash
 	confirmChan chan common.Hash
@@ -67,13 +67,13 @@ func (s *AgreementStateTestSuite) proposeBlock(
 }
 
 func (s *AgreementStateTestSuite) prepareVote(
-	vID types.ValidatorID, voteType types.VoteType, blockHash common.Hash,
+	nID types.NodeID, voteType types.VoteType, blockHash common.Hash,
 	period uint64) (
 	vote *types.Vote) {
-	prvKey, exist := s.prvKey[vID]
+	prvKey, exist := s.prvKey[nID]
 	s.Require().True(exist)
 	vote = &types.Vote{
-		ProposerID: vID,
+		ProposerID: nID,
 		Type:       voteType,
 		BlockHash:  blockHash,
 		Period:     period,
@@ -87,8 +87,8 @@ func (s *AgreementStateTestSuite) prepareVote(
 func (s *AgreementStateTestSuite) SetupTest() {
 	prvKey, err := eth.NewPrivateKey()
 	s.Require().Nil(err)
-	s.ID = types.NewValidatorID(prvKey.PublicKey())
-	s.prvKey = map[types.ValidatorID]crypto.PrivateKey{
+	s.ID = types.NewNodeID(prvKey.PublicKey())
+	s.prvKey = map[types.NodeID]crypto.PrivateKey{
 		s.ID: prvKey,
 	}
 	s.voteChan = make(chan *types.Vote, 100)
@@ -97,24 +97,24 @@ func (s *AgreementStateTestSuite) SetupTest() {
 	s.block = make(map[common.Hash]*types.Block)
 }
 
-func (s *AgreementStateTestSuite) newAgreement(numValidator int) *agreement {
+func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 	leader := newGenesisLeaderSelector("I ❤️ DEXON", eth.SigToPub)
 	blockProposer := func() *types.Block {
 		return s.proposeBlock(leader)
 	}
 
-	validators := make(types.ValidatorIDs, numValidator-1)
-	for i := range validators {
+	notarySet := make(types.NodeIDs, numNode-1)
+	for i := range notarySet {
 		prvKey, err := eth.NewPrivateKey()
 		s.Require().Nil(err)
-		validators[i] = types.NewValidatorID(prvKey.PublicKey())
-		s.prvKey[validators[i]] = prvKey
+		notarySet[i] = types.NewNodeID(prvKey.PublicKey())
+		s.prvKey[notarySet[i]] = prvKey
 	}
-	validators = append(validators, s.ID)
+	notarySet = append(notarySet, s.ID)
 	agreement := newAgreement(
 		s.ID,
 		&agreementStateTestReceiver{s},
-		validators,
+		notarySet,
 		leader,
 		eth.SigToPub,
 		blockProposer,
@@ -144,8 +144,8 @@ func (s *AgreementStateTestSuite) TestPrepareState() {
 	_, err = state.nextState()
 	s.Equal(ErrNoEnoughVoteInPrepareState, err)
 
-	for vID := range a.validators {
-		vote := s.prepareVote(vID, types.VotePass, common.Hash{}, 1)
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VotePass, common.Hash{}, 1)
 		s.Require().Nil(a.processVote(vote))
 	}
 
@@ -159,11 +159,11 @@ func (s *AgreementStateTestSuite) TestPrepareState() {
 	block := s.proposeBlock(a.data.leader)
 	prv, err := eth.NewPrivateKey()
 	s.Require().Nil(err)
-	block.ProposerID = types.NewValidatorID(prv.PublicKey())
+	block.ProposerID = types.NewNodeID(prv.PublicKey())
 	s.Require().Nil(a.data.leader.prepareBlock(block, prv))
 	s.Require().Nil(a.processBlock(block))
-	for vID := range a.validators {
-		vote := s.prepareVote(vID, types.VotePass, block.Hash, 2)
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VotePass, block.Hash, 2)
 		s.Require().Nil(a.processVote(vote))
 	}
 
@@ -183,7 +183,7 @@ func (s *AgreementStateTestSuite) TestAckState() {
 		blocks[i] = s.proposeBlock(a.data.leader)
 		prv, err := eth.NewPrivateKey()
 		s.Require().Nil(err)
-		blocks[i].ProposerID = types.NewValidatorID(prv.PublicKey())
+		blocks[i].ProposerID = types.NewNodeID(prv.PublicKey())
 		s.Require().Nil(a.data.leader.prepareBlock(blocks[i], prv))
 		s.Require().Nil(a.processBlock(blocks[i]))
 	}
@@ -201,8 +201,8 @@ func (s *AgreementStateTestSuite) TestAckState() {
 	// For period >= 2, if block v equal to {} has more than 2f+1 pass-vote
 	// in period 1, propose ack-vote for the block having largest potential.
 	a.data.period = 2
-	for vID := range a.validators {
-		vote := s.prepareVote(vID, types.VotePass, common.Hash{}, 1)
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VotePass, common.Hash{}, 1)
 		s.Require().Nil(a.processVote(vote))
 	}
 	newState, err = state.nextState()
@@ -217,8 +217,8 @@ func (s *AgreementStateTestSuite) TestAckState() {
 	// in period 1, propose ack-vote for block v.
 	hash := blocks[0].Hash
 	a.data.period = 3
-	for vID := range a.validators {
-		vote := s.prepareVote(vID, types.VotePass, hash, 2)
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VotePass, hash, 2)
 		s.Require().Nil(a.processVote(vote))
 	}
 	newState, err = state.nextState()
@@ -241,8 +241,8 @@ func (s *AgreementStateTestSuite) TestConfirmState() {
 	a.data.period = 1
 	block := s.proposeBlock(a.data.leader)
 	s.Require().Nil(a.processBlock(block))
-	for vID := range a.validators {
-		vote := s.prepareVote(vID, types.VoteAck, block.Hash, 1)
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VoteAck, block.Hash, 1)
 		s.Require().Nil(a.processVote(vote))
 	}
 	s.Require().Nil(state.receiveVote())
@@ -265,8 +265,8 @@ func (s *AgreementStateTestSuite) TestConfirmState() {
 	// If there are 2f+1 ack-vote for block v equal to {},
 	// no vote should be proposed.
 	a.data.period = 3
-	for vID := range a.validators {
-		vote := s.prepareVote(vID, types.VoteAck, common.Hash{}, 3)
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VoteAck, common.Hash{}, 3)
 		s.Require().Nil(a.processVote(vote))
 	}
 	s.Require().Nil(state.receiveVote())
@@ -299,8 +299,8 @@ func (s *AgreementStateTestSuite) TestPass1State() {
 	// Else if period >= 2 and has 2f+1 pass-vote in period-1 for block {},
 	// propose pass-vote for block {}.
 	a.data.period = 2
-	for vID := range a.validators {
-		vote := s.prepareVote(vID, types.VotePass, common.Hash{}, 1)
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VotePass, common.Hash{}, 1)
 		s.Require().Nil(a.processVote(vote))
 	}
 	vote = s.prepareVote(s.ID, types.VoteAck, common.Hash{}, 2)
@@ -318,8 +318,8 @@ func (s *AgreementStateTestSuite) TestPass1State() {
 	block := s.proposeBlock(a.data.leader)
 	a.data.defaultBlock = block.Hash
 	hash = common.NewRandomHash()
-	for vID := range a.validators {
-		vote := s.prepareVote(vID, types.VotePass, hash, 2)
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VotePass, hash, 2)
 		s.Require().Nil(a.processVote(vote))
 	}
 	vote = s.prepareVote(s.ID, types.VoteAck, common.Hash{}, 3)
@@ -371,8 +371,8 @@ func (s *AgreementStateTestSuite) TestPass2State() {
 	// propose pass-vote for v.
 	block := s.proposeBlock(a.data.leader)
 	s.Require().Nil(a.processBlock(block))
-	for vID := range a.validators {
-		vote := s.prepareVote(vID, types.VoteAck, block.Hash, 1)
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VoteAck, block.Hash, 1)
 		s.Require().Nil(a.processVote(vote))
 	}
 	s.Require().Nil(state.receiveVote())
@@ -386,8 +386,8 @@ func (s *AgreementStateTestSuite) TestPass2State() {
 	a = s.newAgreement(4)
 	state = newPass2State(a.data)
 	a.data.period = 2
-	for vID := range a.validators {
-		vote := s.prepareVote(vID, types.VotePass, common.Hash{}, 1)
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VotePass, common.Hash{}, 1)
 		s.Require().Nil(a.processVote(vote))
 	}
 	vote := s.prepareVote(s.ID, types.VoteAck, common.Hash{}, 2)
@@ -412,8 +412,8 @@ func (s *AgreementStateTestSuite) TestPass2State() {
 	a = s.newAgreement(4)
 	state = newPass2State(a.data)
 	a.data.period = 1
-	for vID := range a.validators {
-		vote := s.prepareVote(vID, types.VotePass, common.Hash{}, 1)
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VotePass, common.Hash{}, 1)
 		s.Require().Nil(a.processVote(vote))
 	}
 	s.Require().Nil(state.receiveVote())

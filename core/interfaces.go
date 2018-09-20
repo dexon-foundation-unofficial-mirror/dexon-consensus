@@ -63,7 +63,7 @@ type Network interface {
 	BroadcastWitnessAck(witnessAck *types.WitnessAck)
 
 	// SendDKGPrivateShare sends PrivateShare to a DKG participant.
-	SendDKGPrivateShare(recv types.ValidatorID, prvShare *types.DKGPrivateShare)
+	SendDKGPrivateShare(recv types.NodeID, prvShare *types.DKGPrivateShare)
 
 	// ReceiveChan returns a channel to receive messages from DEXON network.
 	ReceiveChan() <-chan interface{}
@@ -76,8 +76,8 @@ type Governance interface {
 	// GetConfiguration returns the configuration at a given block height.
 	GetConfiguration(blockHeight uint64) *types.Config
 
-	// Get the current validator set.
-	GetNotarySet() map[types.ValidatorID]struct{}
+	// Get the current notary set.
+	GetNotarySet() map[types.NodeID]struct{}
 
 	//// DKG-related methods.
 

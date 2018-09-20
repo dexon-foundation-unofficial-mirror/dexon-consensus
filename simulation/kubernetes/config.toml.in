@@ -1,17 +1,17 @@
 title = "DEXON Consensus Simulation Config"
 
-[validator]
-num = {{numValidators}}
+[node]
+num = {{numNode}}
 lambda = 250
 max_block = 1000
 
-[validator.consensus]
+[node.consensus]
 phi_ratio = 6.66670024394989e-01
 k = 1
 chain_num = 7
 genesis_crs = "In DEXON we trust."
 
-[validator.legacy]
+[node.legacy]
 propose_interval_mean = 5e+02
 propose_interval_sigma = 5e+01
 

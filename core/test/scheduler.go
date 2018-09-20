@@ -48,7 +48,7 @@ type Scheduler struct {
 	history           []*Event
 	historyLock       sync.RWMutex
 	isStarted         bool
-	handlers          map[types.ValidatorID]*schedulerHandlerRecord
+	handlers          map[types.NodeID]*schedulerHandlerRecord
 	handlersLock      sync.RWMutex
 	eventNotification chan struct{}
 	ctx               context.Context
@@ -62,7 +62,7 @@ func NewScheduler(stopper Stopper) *Scheduler {
 	return &Scheduler{
 		events:            eventQueue{},
 		history:           []*Event{},
-		handlers:          make(map[types.ValidatorID]*schedulerHandlerRecord),
+		handlers:          make(map[types.NodeID]*schedulerHandlerRecord),
 		eventNotification: make(chan struct{}, 100000),
 		ctx:               ctx,
 		cancelFunc:        cancel,
@@ -98,15 +98,15 @@ func (sch *Scheduler) Seed(e *Event) error {
 }
 
 // RegisterEventHandler register an event handler by providing ID of
-// corresponding validator.
+// corresponding node.
 func (sch *Scheduler) RegisterEventHandler(
-	vID types.ValidatorID,
+	nID types.NodeID,
 	handler EventHandler) {
 
 	sch.handlersLock.Lock()
 	defer sch.handlersLock.Unlock()
 
-	sch.handlers[vID] = &schedulerHandlerRecord{handler: handler}
+	sch.handlers[nID] = &schedulerHandlerRecord{handler: handler}
 }
 
 // nextTick would pick the oldest event from eventQueue.
@@ -144,12 +144,12 @@ func (sch *Scheduler) workerRoutine(wg *sync.WaitGroup) {
 
 	handleEvent := func(e *Event) {
 		// Find correspond handler record.
-		hRec := func(vID types.ValidatorID) *schedulerHandlerRecord {
+		hRec := func(nID types.NodeID) *schedulerHandlerRecord {
 			sch.handlersLock.RLock()
 			defer sch.handlersLock.RUnlock()
 
-			return sch.handlers[vID]
-		}(e.ValidatorID)
+			return sch.handlers[nID]
+		}(e.NodeID)
 
 		newEvents := func() []*Event {
 			// This lock makes sure there would be no concurrent access
@@ -161,8 +161,8 @@ func (sch *Scheduler) workerRoutine(wg *sync.WaitGroup) {
 			beforeExecution := time.Now().UTC()
 			newEvents := hRec.handler.Handle(e)
 			e.ExecInterval = time.Now().UTC().Sub(beforeExecution)
-			// It's safe to check status of that validator under 'hRec.lock'.
-			if sch.stopper.ShouldStop(e.ValidatorID) {
+			// It's safe to check status of that node under 'hRec.lock'.
+			if sch.stopper.ShouldStop(e.NodeID) {
 				sch.cancelFunc()
 			}
 			return newEvents

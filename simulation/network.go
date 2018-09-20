@@ -70,8 +70,8 @@ const (
 
 // infoMessage is a struct used by peerServer's /info.
 type infoMessage struct {
-	Status infoStatus                   `json:"status"`
-	Peers  map[types.ValidatorID]string `json:"peers"`
+	Status infoStatus              `json:"status"`
+	Peers  map[types.NodeID]string `json:"peers"`
 }
 
 // network implements core.Network interface and other methods for simulation
@@ -83,12 +83,12 @@ type network struct {
 	trans         test.TransportClient
 	fromTransport <-chan *test.TransportEnvelope
 	toConsensus   chan interface{}
-	toValidator   chan interface{}
+	toNode        chan interface{}
 }
 
-// newNetwork setup network stuffs for validators, which provides an
+// newNetwork setup network stuffs for nodes, which provides an
 // implementation of core.Network based on test.TransportClient.
-func newNetwork(vID types.ValidatorID, cfg config.Networking) (n *network) {
+func newNetwork(nID types.NodeID, cfg config.Networking) (n *network) {
 	// Construct latency model.
 	latency := &test.NormalLatencyModel{
 		Mean:  cfg.Mean,
@@ -97,7 +97,7 @@ func newNetwork(vID types.ValidatorID, cfg config.Networking) (n *network) {
 	// Construct basic network instance.
 	n = &network{
 		cfg:         cfg,
-		toValidator: make(chan interface{}, 1000),
+		toNode:      make(chan interface{}, 1000),
 		toConsensus: make(chan interface{}, 1000),
 	}
 	n.ctx, n.ctxCancel = context.WithCancel(context.Background())
@@ -105,12 +105,12 @@ func newNetwork(vID types.ValidatorID, cfg config.Networking) (n *network) {
 	switch cfg.Type {
 	case config.NetworkTypeTCPLocal:
 		n.trans = test.NewTCPTransportClient(
-			vID, latency, &jsonMarshaller{}, true)
+			nID, latency, &jsonMarshaller{}, true)
 	case config.NetworkTypeTCP:
 		n.trans = test.NewTCPTransportClient(
-			vID, latency, &jsonMarshaller{}, false)
+			nID, latency, &jsonMarshaller{}, false)
 	case config.NetworkTypeFake:
-		n.trans = test.NewFakeTransportClient(vID, latency)
+		n.trans = test.NewFakeTransportClient(nID, latency)
 	default:
 		panic(fmt.Errorf("unknown network type: %v", cfg.Type))
 	}
@@ -138,7 +138,7 @@ func (n *network) BroadcastWitnessAck(witnessAck *types.WitnessAck) {
 	}
 }
 
-// broadcast message to all other validators in the network.
+// broadcast message to all other nodes in the network.
 func (n *network) broadcast(message interface{}) {
 	if err := n.trans.Broadcast(message); err != nil {
 		panic(err)
@@ -147,7 +147,7 @@ func (n *network) broadcast(message interface{}) {
 
 // SendDKGPrivateShare implements core.Network interface.
 func (n *network) SendDKGPrivateShare(
-	recv types.ValidatorID, prvShare *types.DKGPrivateShare) {
+	recv types.NodeID, prvShare *types.DKGPrivateShare) {
 	if err := n.trans.Send(recv, prvShare); err != nil {
 		panic(err)
 	}
@@ -158,10 +158,10 @@ func (n *network) ReceiveChan() <-chan interface{} {
 	return n.toConsensus
 }
 
-// receiveChanForValidator returns a channel for validators' specific
+// receiveChanForNode returns a channel for nodes' specific
 // messages.
-func (n *network) receiveChanForValidator() <-chan interface{} {
-	return n.toValidator
+func (n *network) receiveChanForNode() <-chan interface{} {
+	return n.toNode
 }
 
 // setup transport layer.
@@ -185,14 +185,14 @@ func (n *network) setup(serverEndpoint interface{}) (err error) {
 // run the main loop.
 func (n *network) run() {
 	// The dispatcher declararion:
-	// to consensus or validator, that's the question.
+	// to consensus or node, that's the question.
 	disp := func(e *test.TransportEnvelope) {
 		switch e.Msg.(type) {
 		case *types.Block, *types.Vote, *types.WitnessAck,
 			*types.DKGPrivateShare, *types.DKGPartialSignature:
 			n.toConsensus <- e.Msg
 		default:
-			n.toValidator <- e.Msg
+			n.toNode <- e.Msg
 		}
 	}
 MainLoop:
@@ -219,8 +219,8 @@ func (n *network) Close() (err error) {
 	n.ctxCancel()
 	close(n.toConsensus)
 	n.toConsensus = nil
-	close(n.toValidator)
-	n.toValidator = nil
+	close(n.toNode)
+	n.toNode = nil
 	if err = n.trans.Close(); err != nil {
 		return
 	}
@@ -233,6 +233,6 @@ func (n *network) report(msg interface{}) error {
 }
 
 // peers exports 'Peers' method of test.Transport.
-func (n *network) peers() map[types.ValidatorID]struct{} {
+func (n *network) peers() map[types.NodeID]struct{} {
 	return n.trans.Peers()
 }

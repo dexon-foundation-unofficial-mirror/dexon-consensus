@@ -28,7 +28,7 @@ import (
 
 // WitnessAck represents the acking to the compaction chain.
 type WitnessAck struct {
-	ProposerID       ValidatorID `json:"proposer_id"`
+	ProposerID       NodeID      `json:"proposer_id"`
 	WitnessBlockHash common.Hash `json:"witness_block_hash"`
 	Hash             common.Hash `json:"hash"`
 	// WitnessSignature is the signature of the hash value of BlockWitness.

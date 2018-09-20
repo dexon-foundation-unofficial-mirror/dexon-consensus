@@ -32,7 +32,7 @@ import (
 
 // PeerServer is the main object to collect results and monitor simulation.
 type PeerServer struct {
-	peers            map[types.ValidatorID]struct{}
+	peers            map[types.NodeID]struct{}
 	msgChannel       chan *test.TransportEnvelope
 	trans            test.TransportServer
 	peerTotalOrder   PeerTotalOrder
@@ -47,22 +47,22 @@ type PeerServer struct {
 func NewPeerServer() *PeerServer {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &PeerServer{
-		peers:          make(map[types.ValidatorID]struct{}),
+		peers:          make(map[types.NodeID]struct{}),
 		peerTotalOrder: make(PeerTotalOrder),
 		ctx:            ctx,
 		ctxCancel:      cancel,
 	}
 }
 
-// isValidator checks if vID is in p.peers. If peer server restarts but
-// validators are not, it will cause panic if validators send message.
-func (p *PeerServer) isValidator(vID types.ValidatorID) bool {
-	_, exist := p.peers[vID]
+// isNode checks if nID is in p.peers. If peer server restarts but
+// nodes are not, it will cause panic if nodes send message.
+func (p *PeerServer) isNode(nID types.NodeID) bool {
+	_, exist := p.peers[nID]
 	return exist
 }
 
 // handleBlockList is the handler for messages with BlockList as payload.
-func (p *PeerServer) handleBlockList(id types.ValidatorID, blocks *BlockList) {
+func (p *PeerServer) handleBlockList(id types.NodeID, blocks *BlockList) {
 	p.peerTotalOrderMu.Lock()
 	defer p.peerTotalOrderMu.Unlock()
 
@@ -71,7 +71,7 @@ func (p *PeerServer) handleBlockList(id types.ValidatorID, blocks *BlockList) {
 		return
 	}
 	// Verify the total order result.
-	go func(id types.ValidatorID) {
+	go func(id types.NodeID) {
 		p.peerTotalOrderMu.Lock()
 		defer p.peerTotalOrderMu.Unlock()
 
@@ -82,7 +82,7 @@ func (p *PeerServer) handleBlockList(id types.ValidatorID, blocks *BlockList) {
 			log.Printf("The result of Total Ordering Algorithm has error.\n")
 		}
 		p.verifiedLen += uint64(length)
-		if p.verifiedLen >= p.cfg.Validator.MaxBlock {
+		if p.verifiedLen >= p.cfg.Node.MaxBlock {
 			if err := p.trans.Broadcast(statusShutdown); err != nil {
 				panic(err)
 			}
@@ -91,7 +91,7 @@ func (p *PeerServer) handleBlockList(id types.ValidatorID, blocks *BlockList) {
 }
 
 // handleMessage is the handler for messages with Message as payload.
-func (p *PeerServer) handleMessage(id types.ValidatorID, m *message) {
+func (p *PeerServer) handleMessage(id types.NodeID, m *message) {
 	switch m.Type {
 	case shutdownAck:
 		delete(p.peers, id)
@@ -125,7 +125,7 @@ func (p *PeerServer) mainLoop() {
 		case <-p.ctx.Done():
 			return
 		case e := <-p.msgChannel:
-			if !p.isValidator(e.From) {
+			if !p.isNode(e.From) {
 				break
 			}
 			// Handle messages based on their type.
@@ -164,7 +164,7 @@ func (p *PeerServer) Setup(
 
 // Run the simulation.
 func (p *PeerServer) Run() {
-	if err := p.trans.WaitForPeers(p.cfg.Validator.Num); err != nil {
+	if err := p.trans.WaitForPeers(p.cfg.Node.Num); err != nil {
 		panic(err)
 	}
 	// Cache peers' info.

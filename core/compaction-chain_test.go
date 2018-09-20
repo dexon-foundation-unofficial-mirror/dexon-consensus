@@ -117,8 +117,8 @@ func (s *CompactionChainTestSuite) TestProcessWitnessAck() {
 	s.Require().Nil(err)
 	prv2, err := eth.NewPrivateKey()
 	s.Require().Nil(err)
-	vID1 := types.NewValidatorID(prv1.PublicKey())
-	vID2 := types.NewValidatorID(prv2.PublicKey())
+	nID1 := types.NewNodeID(prv1.PublicKey())
+	nID2 := types.NewNodeID(prv2.PublicKey())
 	witnessAcks1 := []*types.WitnessAck{}
 	witnessAcks2 := []*types.WitnessAck{}
 	for _, block := range blocks {
@@ -150,8 +150,8 @@ func (s *CompactionChainTestSuite) TestProcessWitnessAck() {
 	s.Nil(cc.processWitnessAck(witnessAcks1[3]))
 
 	acks := cc.witnessAcks()
-	s.Equal(blocks[3].Hash, acks[vID1].WitnessBlockHash)
-	s.Equal(blocks[1].Hash, acks[vID2].WitnessBlockHash)
+	s.Equal(blocks[3].Hash, acks[nID1].WitnessBlockHash)
+	s.Equal(blocks[1].Hash, acks[nID2].WitnessBlockHash)
 
 	// Test that witnessAck on less Witness.Height should be ignored.
 	s.Require().Nil(s.db.Put(*blocks[4]))
@@ -162,8 +162,8 @@ func (s *CompactionChainTestSuite) TestProcessWitnessAck() {
 	s.Nil(cc.processWitnessAck(witnessAcks2[4]))
 
 	acks = cc.witnessAcks()
-	s.Equal(blocks[5].Hash, acks[vID1].WitnessBlockHash)
-	s.Equal(blocks[5].Hash, acks[vID2].WitnessBlockHash)
+	s.Equal(blocks[5].Hash, acks[nID1].WitnessBlockHash)
+	s.Equal(blocks[5].Hash, acks[nID2].WitnessBlockHash)
 }
 
 func TestCompactionChain(t *testing.T) {

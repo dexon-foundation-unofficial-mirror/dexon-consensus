@@ -49,8 +49,8 @@ type Legacy struct {
 	ProposeIntervalSigma float64
 }
 
-// Validator config for the simulation.
-type Validator struct {
+// Node config for the simulation.
+type Node struct {
 	Consensus Consensus
 	Legacy    Legacy
 	Num       int
@@ -75,7 +75,7 @@ type Scheduler struct {
 // Config represents the configuration for simulation.
 type Config struct {
 	Title      string
-	Validator  Validator
+	Node       Node
 	Networking Networking
 	Scheduler  Scheduler
 }
@@ -90,7 +90,7 @@ func GenerateDefault(path string) error {
 
 	config := Config{
 		Title: "DEXON Consensus Simulation Config",
-		Validator: Validator{
+		Node: Node{
 			Consensus: Consensus{
 				PhiRatio:   float32(2) / 3,
 				K:          1,

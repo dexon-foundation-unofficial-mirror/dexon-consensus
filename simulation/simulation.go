@@ -33,13 +33,13 @@ func Run(cfg *config.Config, legacy bool) {
 		err         error
 	)
 
-	// init is a function to init a validator.
+	// init is a function to init a node.
 	init := func(serverEndpoint interface{}) {
 		prv, err := eth.NewPrivateKey()
 		if err != nil {
 			panic(err)
 		}
-		v := newValidator(prv, eth.SigToPub, *cfg)
+		v := newNode(prv, eth.SigToPub, *cfg)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -64,8 +64,8 @@ func Run(cfg *config.Config, legacy bool) {
 			defer wg.Done()
 			server.Run()
 		}()
-		// Initialize all validators.
-		for i := 0; i < cfg.Validator.Num; i++ {
+		// Initialize all nodes.
+		for i := 0; i < cfg.Node.Num; i++ {
 			init(serverEndpoint)
 		}
 	}

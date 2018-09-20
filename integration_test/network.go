@@ -38,7 +38,7 @@ func (n *Network) BroadcastWitnessAck(witnessAck *types.WitnessAck) {
 
 // SendDKGPrivateShare sends PrivateShare to a DKG participant.
 func (n *Network) SendDKGPrivateShare(
-	recv types.ValidatorID, prvShare *types.DKGPrivateShare) {
+	recv types.NodeID, prvShare *types.DKGPrivateShare) {
 }
 
 // ReceiveChan returns a channel to receive messages from DEXON network.

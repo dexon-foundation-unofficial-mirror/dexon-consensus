@@ -41,17 +41,17 @@ func (s *NonByzantineTestSuite) TestNonByzantine() {
 			Sigma: 30,
 			Mean:  500,
 		}
-		apps = make(map[types.ValidatorID]*test.App)
-		dbs  = make(map[types.ValidatorID]blockdb.BlockDatabase)
+		apps = make(map[types.NodeID]*test.App)
+		dbs  = make(map[types.NodeID]blockdb.BlockDatabase)
 		req  = s.Require()
 	)
 
-	apps, dbs, validators, err := PrepareValidators(
+	apps, dbs, nodes, err := PrepareNodes(
 		25, networkLatency, proposingLatency)
 	req.Nil(err)
 	now := time.Now().UTC()
 	sch := test.NewScheduler(test.NewStopByConfirmedBlocks(50, apps, dbs))
-	for vID, v := range validators {
+	for vID, v := range nodes {
 		sch.RegisterEventHandler(vID, v)
 		req.Nil(sch.Seed(NewProposeBlockEvent(vID, now)))
 	}

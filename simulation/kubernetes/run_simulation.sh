@@ -28,19 +28,19 @@ start_simulation() {
     sleep 1
   done
 
-  kubectl apply -f validator.yaml
+  kubectl apply -f node.yaml
 }
 
 main() {
-  local num_validators=$1
+  local num_nodes=$1
 
-  if [ "$num_validators" == "" ]; then
-    num_validators=7
+  if [ "$num_nodes" == "" ]; then
+    num_nodes=7
   fi
 
   # Render configuration files.
-  sed "s/{{numValidators}}/$num_validators/" validator.yaml.in > validator.yaml
-  sed "s/{{numValidators}}/$num_validators/" config.toml.in > config.toml
+  sed "s/{{numNodes}}/$num_nodes/" node.yaml.in > node.yaml
+  sed "s/{{numNodes}}/$num_nodes/" config.toml.in > config.toml
 
   build_binary
   build_docker_image

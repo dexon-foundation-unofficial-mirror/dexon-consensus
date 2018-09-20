@@ -103,7 +103,7 @@ func verifyVoteSignature(vote *types.Vote, sigToPub SigToPubFn) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if vote.ProposerID != types.NewValidatorID(pubKey) {
+	if vote.ProposerID != types.NewNodeID(pubKey) {
 		return false, nil
 	}
 	return true, nil
@@ -121,7 +121,7 @@ func verifyCRSSignature(block *types.Block, crs common.Hash, sigToPub SigToPubFn
 	if err != nil {
 		return false, err
 	}
-	if block.ProposerID != types.NewValidatorID(pubKey) {
+	if block.ProposerID != types.NewNodeID(pubKey) {
 		return false, nil
 	}
 	return true, nil
@@ -162,7 +162,7 @@ func verifyDKGPrivateShareSignature(
 	if err != nil {
 		return false, err
 	}
-	if prvShare.ProposerID != types.NewValidatorID(pubKey) {
+	if prvShare.ProposerID != types.NewNodeID(pubKey) {
 		return false, nil
 	}
 	return true, nil
@@ -187,7 +187,7 @@ func verifyDKGMasterPublicKeySignature(
 	if err != nil {
 		return false, err
 	}
-	if mpk.ProposerID != types.NewValidatorID(pubKey) {
+	if mpk.ProposerID != types.NewNodeID(pubKey) {
 		return false, nil
 	}
 	return true, nil
@@ -213,7 +213,7 @@ func verifyDKGComplaintSignature(
 	if err != nil {
 		return false, err
 	}
-	if complaint.ProposerID != types.NewValidatorID(pubKey) {
+	if complaint.ProposerID != types.NewNodeID(pubKey) {
 		return false, nil
 	}
 	return true, nil
@@ -237,7 +237,7 @@ func verifyDKGPartialSignatureSignature(
 	if err != nil {
 		return false, err
 	}
-	if psig.ProposerID != types.NewValidatorID(pubKey) {
+	if psig.ProposerID != types.NewNodeID(pubKey) {
 		return false, nil
 	}
 	return true, nil

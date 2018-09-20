@@ -38,7 +38,7 @@ type Stopper interface {
 	// moment.
 	// The Stopper should check state of that handler and return 'true'
 	// if the execution could be stopped.
-	ShouldStop(vID types.ValidatorID) bool
+	ShouldStop(nID types.NodeID) bool
 }
 
 // EventHandler defines an interface to handle a Scheduler event.
@@ -62,8 +62,8 @@ type TransportEnvelope struct {
 	// PeerType defines the type of source peer, could be either "peer" or
 	// "server".
 	PeerType TransportPeerType
-	// From defines the validatorID of the source peer.
-	From types.ValidatorID
+	// From defines the nodeID of the source peer.
+	From types.NodeID
 	// Msg is the actual payload of this message.
 	Msg interface{}
 }
@@ -92,14 +92,14 @@ type Transport interface {
 	// Broadcast a message to all peers in network.
 	Broadcast(msg interface{}) error
 	// Send one message to a peer.
-	Send(endpoint types.ValidatorID, msg interface{}) error
+	Send(endpoint types.NodeID, msg interface{}) error
 	// Close would cleanup allocated resources.
 	Close() error
 
-	// Peers return IDs of all connected validators in p2p favor.
+	// Peers return IDs of all connected nodes in p2p favor.
 	// This method should be accessed after ether 'Join' or 'WaitForPeers'
 	// returned.
-	Peers() map[types.ValidatorID]struct{}
+	Peers() map[types.NodeID]struct{}
 }
 
 // Marshaller defines an interface to convert between interface{} and []byte.

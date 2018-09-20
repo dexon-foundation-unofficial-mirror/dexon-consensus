@@ -24,13 +24,13 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-// StopByConfirmedBlocks would make sure each validators confirms
+// StopByConfirmedBlocks would make sure each nodes confirms
 // at least X blocks proposed by itself.
 type StopByConfirmedBlocks struct {
-	apps               map[types.ValidatorID]*App
-	dbs                map[types.ValidatorID]blockdb.BlockDatabase
-	lastCheckDelivered map[types.ValidatorID]int
-	confirmedBlocks    map[types.ValidatorID]int
+	apps               map[types.NodeID]*App
+	dbs                map[types.NodeID]blockdb.BlockDatabase
+	lastCheckDelivered map[types.NodeID]int
+	confirmedBlocks    map[types.NodeID]int
 	blockCount         int
 	lock               sync.Mutex
 }
@@ -38,45 +38,45 @@ type StopByConfirmedBlocks struct {
 // NewStopByConfirmedBlocks construct an StopByConfirmedBlocks instance.
 func NewStopByConfirmedBlocks(
 	blockCount int,
-	apps map[types.ValidatorID]*App,
-	dbs map[types.ValidatorID]blockdb.BlockDatabase) *StopByConfirmedBlocks {
+	apps map[types.NodeID]*App,
+	dbs map[types.NodeID]blockdb.BlockDatabase) *StopByConfirmedBlocks {
 
-	confirmedBlocks := make(map[types.ValidatorID]int)
-	for vID := range apps {
-		confirmedBlocks[vID] = 0
+	confirmedBlocks := make(map[types.NodeID]int)
+	for nID := range apps {
+		confirmedBlocks[nID] = 0
 	}
 	return &StopByConfirmedBlocks{
 		apps:               apps,
 		dbs:                dbs,
-		lastCheckDelivered: make(map[types.ValidatorID]int),
+		lastCheckDelivered: make(map[types.NodeID]int),
 		confirmedBlocks:    confirmedBlocks,
 		blockCount:         blockCount,
 	}
 }
 
 // ShouldStop implements Stopper interface.
-func (s *StopByConfirmedBlocks) ShouldStop(vID types.ValidatorID) bool {
+func (s *StopByConfirmedBlocks) ShouldStop(nID types.NodeID) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	// Accumulate confirmed blocks proposed by this validator in this round.
-	lastChecked := s.lastCheckDelivered[vID]
-	currentConfirmedBlocks := s.confirmedBlocks[vID]
-	db := s.dbs[vID]
-	s.apps[vID].Check(func(app *App) {
+	// Accumulate confirmed blocks proposed by this node in this round.
+	lastChecked := s.lastCheckDelivered[nID]
+	currentConfirmedBlocks := s.confirmedBlocks[nID]
+	db := s.dbs[nID]
+	s.apps[nID].Check(func(app *App) {
 		for _, h := range app.DeliverSequence[lastChecked:] {
 			b, err := db.Get(h)
 			if err != nil {
 				panic(err)
 			}
-			if b.ProposerID == vID {
+			if b.ProposerID == nID {
 				currentConfirmedBlocks++
 			}
 		}
-		s.lastCheckDelivered[vID] = len(app.DeliverSequence)
+		s.lastCheckDelivered[nID] = len(app.DeliverSequence)
 	})
-	s.confirmedBlocks[vID] = currentConfirmedBlocks
-	// Check if all validators confirmed at least 'blockCount' blocks.
+	s.confirmedBlocks[nID] = currentConfirmedBlocks
+	// Check if all nodes confirmed at least 'blockCount' blocks.
 	for _, v := range s.confirmedBlocks {
 		if v < s.blockCount {
 			return false

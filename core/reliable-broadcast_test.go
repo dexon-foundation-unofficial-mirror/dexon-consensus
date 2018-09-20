@@ -46,8 +46,8 @@ func (s *ReliableBroadcastTest) SetupTest() {
 }
 
 func (s *ReliableBroadcastTest) prepareGenesisBlock(
-	proposerID types.ValidatorID,
-	validatorIDs []types.ValidatorID) (b *types.Block) {
+	proposerID types.NodeID,
+	nodeIDs []types.NodeID) (b *types.Block) {
 
 	b = &types.Block{
 		ProposerID: proposerID,
@@ -58,7 +58,7 @@ func (s *ReliableBroadcastTest) prepareGenesisBlock(
 		Acks:      common.NewSortedHashes(common.Hashes{}),
 		Timestamp: time.Now().UTC(),
 	}
-	for i, vID := range validatorIDs {
+	for i, vID := range nodeIDs {
 		if proposerID == vID {
 			b.Position.ChainID = uint32(i)
 			break
@@ -79,16 +79,16 @@ func (s *ReliableBroadcastTest) prepareGenesisBlock(
 //  1  |     1
 //  |  |     |
 //  0  0  0  0 (block height)
-//  0  1  2  3 (validator)
-func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.ValidatorID {
-	// Create new reliableBroadcast instance with 4 validators
+//  0  1  2  3 (node)
+func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.NodeID {
+	// Create new reliableBroadcast instance with 4 nodes
 	var b *types.Block
 	var h common.Hash
 
-	vids := []types.ValidatorID{}
+	vids := []types.NodeID{}
 	for i := 0; i < 4; i++ {
-		vid := types.ValidatorID{Hash: common.NewRandomHash()}
-		rb.addValidator(vid)
+		vid := types.NodeID{Hash: common.NewRandomHash()}
+		rb.addNode(vid)
 		vids = append(vids, vid)
 	}
 	rb.setChainNum(uint32(len(vids)))
@@ -176,20 +176,20 @@ func genTestCase1(s *ReliableBroadcastTest, rb *reliableBroadcast) []types.Valid
 	return vids
 }
 
-func (s *ReliableBroadcastTest) TestAddValidator() {
+func (s *ReliableBroadcastTest) TestAddNode() {
 	rb := newReliableBroadcast()
 	s.Require().Equal(len(rb.lattice), 0)
 	vids := genTestCase1(s, rb)
 	s.Require().Equal(len(rb.lattice), 4)
 	for _, vid := range vids {
-		rb.deleteValidator(vid)
+		rb.deleteNode(vid)
 	}
 }
 
 func (s *ReliableBroadcastTest) TestSanityCheck() {
 	var b *types.Block
 	var h common.Hash
-	var vids []types.ValidatorID
+	var vids []types.NodeID
 	var err error
 	rb := newReliableBroadcast()
 	vids = genTestCase1(s, rb)
@@ -247,7 +247,7 @@ func (s *ReliableBroadcastTest) TestSanityCheck() {
 	// Invalid proposer ID.
 	h = rb.lattice[1].blocks[0].Hash
 	b = &types.Block{
-		ProposerID: types.ValidatorID{Hash: common.NewRandomHash()},
+		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
 		ParentHash: h,
 		Position: types.Position{
 			Height: 1,
@@ -365,7 +365,7 @@ func (s *ReliableBroadcastTest) TestAreAllAcksInLattice() {
 
 func (s *ReliableBroadcastTest) TestStrongAck() {
 	var b *types.Block
-	var vids []types.ValidatorID
+	var vids []types.NodeID
 
 	rb := newReliableBroadcast()
 	vids = genTestCase1(s, rb)
@@ -491,13 +491,13 @@ func (s *ReliableBroadcastTest) TestExtractBlocks() {
 
 func (s *ReliableBroadcastTest) TestRandomIntensiveAcking() {
 	rb := newReliableBroadcast()
-	vids := test.GenerateRandomValidatorIDs(4)
-	heights := map[types.ValidatorID]uint64{}
+	vids := test.GenerateRandomNodeIDs(4)
+	heights := map[types.NodeID]uint64{}
 	extractedBlocks := []*types.Block{}
 
-	// Generate validators.
+	// Generate nodes.
 	for _, vid := range vids {
-		rb.addValidator(vid)
+		rb.addNode(vid)
 	}
 	rb.setChainNum(uint32(len(vids)))
 	// Generate genesis blocks.
@@ -545,9 +545,9 @@ func (s *ReliableBroadcastTest) TestRandomIntensiveAcking() {
 
 func (s *ReliableBroadcastTest) TestRandomlyGeneratedBlocks() {
 	var (
-		validatorCount = 19
-		blockCount     = 50
-		repeat         = 20
+		nodeCount  = 19
+		blockCount = 50
+		repeat     = 20
 	)
 
 	// Prepare a randomly generated blocks.
@@ -560,7 +560,7 @@ func (s *ReliableBroadcastTest) TestRandomlyGeneratedBlocks() {
 		}
 	}()
 	gen := test.NewBlocksGenerator(nil, hashBlock)
-	_, err = gen.Generate(validatorCount, blockCount, nil, db)
+	_, err = gen.Generate(nodeCount, blockCount, nil, db)
 	s.Require().Nil(err)
 	iter, err := db.GetAll()
 	s.Require().Nil(err)
@@ -570,9 +570,9 @@ func (s *ReliableBroadcastTest) TestRandomlyGeneratedBlocks() {
 
 	stronglyAckedHashesAsString := map[string]struct{}{}
 	for i := 0; i < repeat; i++ {
-		validators := map[types.ValidatorID]struct{}{}
+		nodes := map[types.NodeID]struct{}{}
 		rb := newReliableBroadcast()
-		rb.setChainNum(uint32(validatorCount))
+		rb.setChainNum(uint32(nodeCount))
 		stronglyAckedHashes := common.Hashes{}
 		revealer.Reset()
 
@@ -587,10 +587,10 @@ func (s *ReliableBroadcastTest) TestRandomlyGeneratedBlocks() {
 			}
 			s.Require().Nil(err)
 
-			// It's a hack to add validator to reliableBroadcast module.
-			if _, added := validators[b.ProposerID]; !added {
-				rb.addValidator(b.ProposerID)
-				validators[b.ProposerID] = struct{}{}
+			// It's a hack to add node to reliableBroadcast module.
+			if _, added := nodes[b.ProposerID]; !added {
+				rb.addNode(b.ProposerID)
+				nodes[b.ProposerID] = struct{}{}
 			}
 			// Perform reliable broadcast process.
 			s.Require().Nil(rb.processBlock(&b))
@@ -621,21 +621,21 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 		req         = s.Require()
 		rb          = newReliableBroadcast()
 		minInterval = 50 * time.Millisecond
-		validators  = test.GenerateRandomValidatorIDs(4)
+		nodes       = test.GenerateRandomNodeIDs(4)
 	)
-	// Prepare validator IDs.
-	for _, vID := range validators {
-		rb.addValidator(vID)
+	// Prepare node IDs.
+	for _, vID := range nodes {
+		rb.addNode(vID)
 	}
-	rb.setChainNum(uint32(len(validators)))
+	rb.setChainNum(uint32(len(nodes)))
 	// Setup genesis blocks.
-	b00 := s.prepareGenesisBlock(validators[0], validators)
+	b00 := s.prepareGenesisBlock(nodes[0], nodes)
 	time.Sleep(minInterval)
-	b10 := s.prepareGenesisBlock(validators[1], validators)
+	b10 := s.prepareGenesisBlock(nodes[1], nodes)
 	time.Sleep(minInterval)
-	b20 := s.prepareGenesisBlock(validators[2], validators)
+	b20 := s.prepareGenesisBlock(nodes[2], nodes)
 	time.Sleep(minInterval)
-	b30 := s.prepareGenesisBlock(validators[3], validators)
+	b30 := s.prepareGenesisBlock(nodes[3], nodes)
 	// Submit these blocks to reliableBroadcast instance.
 	s.Require().Nil(rb.processBlock(b00))
 	s.Require().Nil(rb.processBlock(b10))
@@ -644,7 +644,7 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 	// We should be able to collect all 4 genesis blocks by calling
 	// prepareBlock.
 	b11 := &types.Block{
-		ProposerID: validators[1],
+		ProposerID: nodes[1],
 		Position: types.Position{
 			ChainID: 1,
 		},
@@ -664,7 +664,7 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 	s.Require().Nil(rb.processBlock(b11))
 	// Propose/Process a block based on collected info.
 	b12 := &types.Block{
-		ProposerID: validators[1],
+		ProposerID: nodes[1],
 		Position: types.Position{
 			ChainID: 1,
 		},
@@ -677,10 +677,10 @@ func (s *ReliableBroadcastTest) TestPrepareBlock() {
 	req.Contains(b12.Acks, b11.Hash)
 	req.Equal(b12.ParentHash, b11.Hash)
 	req.Equal(b12.Position.Height, uint64(2))
-	// When calling with other validator ID, we should be able to
+	// When calling with other node ID, we should be able to
 	// get 4 blocks to ack.
 	b01 := &types.Block{
-		ProposerID: validators[0],
+		ProposerID: nodes[0],
 		Position: types.Position{
 			ChainID: 0,
 		},
