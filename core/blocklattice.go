@@ -240,9 +240,9 @@ func (bl *blockLattice) areAllAcksInLattice(b *types.Block) bool {
 	return true
 }
 
-// processBlock processes block, it does sanity check, inserts block into
-// lattice, handles strong acking and deletes blocks which will not be used.
-func (bl *blockLattice) processBlock(
+// addBlock processes block, it does sanity check, inserts block into
+// lattice and deletes blocks which will not be used.
+func (bl *blockLattice) addBlock(
 	block *types.Block) (deliverable []*types.Block, err error) {
 
 	var (

@@ -82,7 +82,7 @@ func (s *BlockLatticeTest) genTestCase1() (bl *blockLattice) {
 	// Add genesis blocks.
 	for i := uint32(0); i < chainNum; i++ {
 		b = s.prepareGenesisBlock(i)
-		delivered, err = bl.processBlock(b)
+		delivered, err = bl.addBlock(b)
 		// Genesis blocks are safe to be added to DAG, they acks no one.
 		req.Len(delivered, 1)
 		req.Nil(err)
@@ -101,7 +101,7 @@ func (s *BlockLatticeTest) genTestCase1() (bl *blockLattice) {
 		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	s.hashBlock(b)
-	delivered, err = bl.processBlock(b)
+	delivered, err = bl.addBlock(b)
 	req.Len(delivered, 1)
 	req.Equal(delivered[0].Hash, b.Hash)
 	req.Nil(err)
@@ -122,7 +122,7 @@ func (s *BlockLatticeTest) genTestCase1() (bl *blockLattice) {
 		}),
 	}
 	s.hashBlock(b)
-	delivered, err = bl.processBlock(b)
+	delivered, err = bl.addBlock(b)
 	req.Len(delivered, 1)
 	req.Equal(delivered[0].Hash, b.Hash)
 	req.Nil(err)
@@ -141,7 +141,7 @@ func (s *BlockLatticeTest) genTestCase1() (bl *blockLattice) {
 		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	s.hashBlock(b)
-	delivered, err = bl.processBlock(b)
+	delivered, err = bl.addBlock(b)
 	req.Len(delivered, 1)
 	req.Equal(delivered[0].Hash, b.Hash)
 	req.Nil(err)
@@ -160,7 +160,7 @@ func (s *BlockLatticeTest) genTestCase1() (bl *blockLattice) {
 		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	s.hashBlock(b)
-	delivered, err = bl.processBlock(b)
+	delivered, err = bl.addBlock(b)
 	req.Len(delivered, 1)
 	req.Equal(delivered[0].Hash, b.Hash)
 	req.Nil(err)
@@ -372,7 +372,7 @@ func (s *BlockLatticeTest) TestRandomIntensiveAcking() {
 	// Generate genesis blocks.
 	for i := uint32(0); i < chainNum; i++ {
 		b = s.prepareGenesisBlock(i)
-		delivered, err = bl.processBlock(b)
+		delivered, err = bl.addBlock(b)
 		req.Len(delivered, 1)
 		req.Nil(err)
 	}
@@ -386,7 +386,7 @@ func (s *BlockLatticeTest) TestRandomIntensiveAcking() {
 		}
 		bl.prepareBlock(b)
 		s.hashBlock(b)
-		delivered, err = bl.processBlock(b)
+		delivered, err = bl.addBlock(b)
 		req.Nil(err)
 		extracted = append(extracted, delivered...)
 	}
@@ -441,7 +441,7 @@ func (s *BlockLatticeTest) TestRandomlyGeneratedBlocks() {
 			revealedHashes = append(revealedHashes, b.Hash)
 
 			// Pass blocks to blocklattice.
-			delivered, err = bl.processBlock(&b)
+			delivered, err = bl.addBlock(&b)
 			req.Nil(err)
 			for _, b := range delivered {
 				deliveredHashes = append(deliveredHashes, b.Hash)
@@ -516,16 +516,16 @@ func (s *BlockLatticeTest) TestPrepareBlock() {
 	time.Sleep(minInterval)
 	b30 := s.prepareGenesisBlock(3)
 	// Submit these blocks to blocklattice.
-	delivered, err = bl.processBlock(b00)
+	delivered, err = bl.addBlock(b00)
 	req.Len(delivered, 1)
 	req.Nil(err)
-	delivered, err = bl.processBlock(b10)
+	delivered, err = bl.addBlock(b10)
 	req.Len(delivered, 1)
 	req.Nil(err)
-	delivered, err = bl.processBlock(b20)
+	delivered, err = bl.addBlock(b20)
 	req.Len(delivered, 1)
 	req.Nil(err)
-	delivered, err = bl.processBlock(b30)
+	delivered, err = bl.addBlock(b30)
 	req.Len(delivered, 1)
 	req.Nil(err)
 	// We should be able to collect all 4 genesis blocks by calling
@@ -544,7 +544,7 @@ func (s *BlockLatticeTest) TestPrepareBlock() {
 	req.Contains(b11.Acks, b30.Hash)
 	req.Equal(b11.ParentHash, b10.Hash)
 	req.Equal(b11.Position.Height, uint64(1))
-	delivered, err = bl.processBlock(b11)
+	delivered, err = bl.addBlock(b11)
 	req.Len(delivered, 1)
 	req.Nil(err)
 	// Propose/Process a block based on collected info.

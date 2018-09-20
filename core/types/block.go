@@ -125,14 +125,29 @@ func (b ByHash) Swap(i int, j int) {
 // ByHeight is the helper type for sorting slice of blocks by height.
 type ByHeight []*Block
 
-func (b ByHeight) Len() int {
-	return len(b)
+// Len implements Len method in sort.Sort interface.
+func (bs ByHeight) Len() int {
+	return len(bs)
 }
 
-func (b ByHeight) Less(i int, j int) bool {
-	return b[i].Position.Height < b[j].Position.Height
+// Less implements Less method in sort.Sort interface.
+func (bs ByHeight) Less(i int, j int) bool {
+	return bs[i].Position.Height < bs[j].Position.Height
 }
 
-func (b ByHeight) Swap(i int, j int) {
-	b[i], b[j] = b[j], b[i]
+// Swap implements Swap method in sort.Sort interface.
+func (bs ByHeight) Swap(i int, j int) {
+	bs[i], bs[j] = bs[j], bs[i]
+}
+
+// Push implements Push method in heap interface.
+func (bs *ByHeight) Push(x interface{}) {
+	*bs = append(*bs, x.(*Block))
+}
+
+// Pop implements Pop method in heap interface.
+func (bs *ByHeight) Pop() (ret interface{}) {
+	n := len(*bs)
+	*bs, ret = (*bs)[0:n-1], (*bs)[n-1]
+	return
 }
