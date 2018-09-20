@@ -154,6 +154,12 @@ func (app *nonBlockingApplication) DeliverBlock(
 	app.addEvent(deliverBlockEvent{blockHash, timestamp})
 }
 
+// BlockProcessedChan returns a channel to receive the block hashes that have
+// finished processing by the application.
+func (app *nonBlockingApplication) BlockProcessedChan() <-chan types.WitnessResult {
+	return app.app.BlockProcessedChan()
+}
+
 // WitnessAckDeliver is called when a witness ack is created.
 func (app *nonBlockingApplication) WitnessAckDeliver(witnessAck *types.WitnessAck) {
 	app.addEvent(witnessAckEvent{witnessAck})

@@ -34,6 +34,7 @@ type slowApp struct {
 	totalOrderingDeliver map[common.Hash]struct{}
 	deliverBlock         map[common.Hash]struct{}
 	witnessAck           map[common.Hash]struct{}
+	witnessResultChan    chan types.WitnessResult
 }
 
 func newSlowApp(sleep time.Duration) *slowApp {
@@ -44,6 +45,7 @@ func newSlowApp(sleep time.Duration) *slowApp {
 		totalOrderingDeliver: make(map[common.Hash]struct{}),
 		deliverBlock:         make(map[common.Hash]struct{}),
 		witnessAck:           make(map[common.Hash]struct{}),
+		witnessResultChan:    make(chan types.WitnessResult),
 	}
 }
 
@@ -75,6 +77,10 @@ func (app *slowApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) 
 func (app *slowApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 	time.Sleep(app.sleep)
 	app.deliverBlock[blockHash] = struct{}{}
+}
+
+func (app *slowApp) BlockProcessedChan() <-chan types.WitnessResult {
+	return app.witnessResultChan
 }
 
 func (app *slowApp) WitnessAckDeliver(witnessAck *types.WitnessAck) {

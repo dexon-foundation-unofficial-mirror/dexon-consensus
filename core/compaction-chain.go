@@ -107,14 +107,34 @@ func (cc *compactionChain) processBlock(block *types.Block) error {
 	return nil
 }
 
-func (cc *compactionChain) prepareWitnessAck(prvKey crypto.PrivateKey) (
-	witnessAck *types.WitnessAck, err error) {
-	lastBlock := cc.lastBlock()
-	if lastBlock == nil {
-		err = ErrNoWitnessToAck
-		return
+func (cc *compactionChain) processWitnessResult(
+	block *types.Block, result types.WitnessResult) error {
+	block.Witness.Data = result.Data
+
+	// block is a genesis block, no need to update witness parent hash.
+	if block.IsGenesis() {
+		return nil
 	}
-	hash, err := hashWitness(lastBlock)
+
+	prevBlock, err := cc.db.Get(block.ParentHash)
+	if err != nil {
+		return err
+	}
+
+	hash, err := hashWitness(&prevBlock)
+	if err != nil {
+		return err
+	}
+
+	block.Witness.ParentHash = hash
+	return nil
+}
+
+func (cc *compactionChain) prepareWitnessAck(
+	block *types.Block, prvKey crypto.PrivateKey) (
+	witnessAck *types.WitnessAck, err error) {
+
+	hash, err := hashWitness(block)
 	if err != nil {
 		return
 	}
@@ -124,7 +144,7 @@ func (cc *compactionChain) prepareWitnessAck(prvKey crypto.PrivateKey) (
 	}
 	witnessAck = &types.WitnessAck{
 		ProposerID:       types.NewNodeID(prvKey.PublicKey()),
-		WitnessBlockHash: lastBlock.Hash,
+		WitnessBlockHash: block.Hash,
 		Signature:        sig,
 		Hash:             hash,
 	}

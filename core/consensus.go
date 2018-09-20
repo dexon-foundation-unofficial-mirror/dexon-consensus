@@ -217,6 +217,8 @@ func (con *Consensus) Run() {
 		go con.runBA(i, tick)
 	}
 	go con.processMsg(con.network.ReceiveChan(), con.PreProcessBlock)
+	go con.processWitnessData()
+
 	// Reset ticker.
 	<-con.tickerObj.Tick()
 	<-con.tickerObj.Tick()
@@ -272,6 +274,7 @@ BALoop:
 // RunLegacy starts running Legacy DEXON Consensus.
 func (con *Consensus) RunLegacy() {
 	go con.processMsg(con.network.ReceiveChan(), con.ProcessBlock)
+	go con.processWitnessData()
 
 	chainID := uint32(0)
 	hashes := make(common.Hashes, 0, len(con.gov.GetNotarySet()))
@@ -383,6 +386,45 @@ func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
 	return err
 }
 
+// processWitnessData process witness acks.
+func (con *Consensus) processWitnessData() {
+	ch := con.app.BlockProcessedChan()
+
+	for {
+		select {
+		case <-con.ctx.Done():
+			return
+		case result := <-ch:
+			block, err := con.db.Get(result.BlockHash)
+			if err != nil {
+				panic(err)
+			}
+
+			if err = con.ccModule.processWitnessResult(&block, result); err != nil {
+				panic(err)
+			}
+			if err := con.db.Update(block); err != nil {
+				panic(err)
+			}
+
+			// TODO(w): move the acking interval into governance.
+			if block.Witness.Height%5 != 0 {
+				continue
+			}
+
+			witnessAck, err := con.ccModule.prepareWitnessAck(&block, con.prvKey)
+			if err != nil {
+				panic(err)
+			}
+			err = con.ProcessWitnessAck(witnessAck)
+			if err != nil {
+				panic(err)
+			}
+			con.app.WitnessAckDeliver(witnessAck)
+		}
+	}
+}
+
 // prepareVote prepares a vote.
 func (con *Consensus) prepareVote(chainID uint32, vote *types.Vote) error {
 	return con.baModules[chainID].prepareVote(vote, con.prvKey)
@@ -482,16 +524,6 @@ func (con *Consensus) ProcessBlock(block *types.Block) (err error) {
 			//                nonBlockingApplication and let them recycle the
 			//                block.
 		}
-		var witnessAck *types.WitnessAck
-		witnessAck, err = con.ccModule.prepareWitnessAck(con.prvKey)
-		if err != nil {
-			return
-		}
-		err = con.ProcessWitnessAck(witnessAck)
-		if err != nil {
-			return
-		}
-		con.app.WitnessAckDeliver(witnessAck)
 	}
 	return
 }

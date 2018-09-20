@@ -50,4 +50,12 @@ type Witness struct {
 	ParentHash common.Hash `json:"parent_hash"`
 	Timestamp  time.Time   `json:"timestamp"`
 	Height     uint64      `json:"height"`
+	Data       []byte      `json:"data"`
+}
+
+// WitnessResult is the result pass from application containing the witness
+// data.
+type WitnessResult struct {
+	BlockHash common.Hash
+	Data      []byte
 }

@@ -35,7 +35,8 @@ func hashWitness(block *types.Block) (common.Hash, error) {
 	hash := crypto.Keccak256Hash(
 		block.Witness.ParentHash[:],
 		binaryTime,
-		binaryHeight)
+		binaryHeight,
+		block.Witness.Data[:])
 	return hash, nil
 }
 

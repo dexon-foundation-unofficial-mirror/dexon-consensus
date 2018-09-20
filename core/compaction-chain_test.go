@@ -93,20 +93,20 @@ func (s *CompactionChainTestSuite) TestProcessBlock() {
 
 func (s *CompactionChainTestSuite) TestPrepareWitnessAck() {
 	cc := s.newCompactionChain()
-	blocks := s.generateBlocks(10, cc)
+	blocks := s.generateBlocks(2, cc)
 	prv, err := eth.NewPrivateKey()
 	s.Require().Nil(err)
-	for _, block := range blocks {
-		witnessAck, err := cc.prepareWitnessAck(prv)
-		s.Require().Nil(err)
-		if cc.prevBlock != nil {
-			s.True(verifyWitnessSignature(
-				prv.PublicKey(),
-				cc.prevBlock,
-				witnessAck.Signature))
-			s.Equal(witnessAck.WitnessBlockHash, cc.prevBlock.Hash)
-		}
-		cc.prevBlock = block
+
+	block := blocks[1]
+	witnessAck, err := cc.prepareWitnessAck(block, prv)
+	s.Require().Nil(err)
+	if cc.prevBlock != nil {
+		verified, _ := verifyWitnessSignature(
+			prv.PublicKey(),
+			cc.prevBlock,
+			witnessAck.Signature)
+		s.True(verified)
+		s.Equal(witnessAck.WitnessBlockHash, block.Hash)
 	}
 }
 
@@ -123,9 +123,9 @@ func (s *CompactionChainTestSuite) TestProcessWitnessAck() {
 	witnessAcks2 := []*types.WitnessAck{}
 	for _, block := range blocks {
 		cc.prevBlock = block
-		witnessAck1, err := cc.prepareWitnessAck(prv1)
+		witnessAck1, err := cc.prepareWitnessAck(block, prv1)
 		s.Require().Nil(err)
-		witnessAck2, err := cc.prepareWitnessAck(prv2)
+		witnessAck2, err := cc.prepareWitnessAck(block, prv2)
 		s.Require().Nil(err)
 		witnessAcks1 = append(witnessAcks1, witnessAck1)
 		witnessAcks2 = append(witnessAcks2, witnessAck2)

@@ -46,6 +46,10 @@ type Application interface {
 	// DeliverBlock is called when a block is add to the compaction chain.
 	DeliverBlock(blockHash common.Hash, timestamp time.Time)
 
+	// BlockProcessedChan returns a channel to receive the block hashes that have
+	// finished processing by the application.
+	BlockProcessedChan() <-chan types.WitnessResult
+
 	// WitnessAckDeliver is called when a witness ack is created.
 	WitnessAckDeliver(witnessAck *types.WitnessAck)
 }

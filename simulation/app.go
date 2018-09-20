@@ -40,6 +40,7 @@ type simApp struct {
 	unconfirmedBlocks map[types.NodeID]common.Hashes
 	blockByHash       map[common.Hash]*types.Block
 	blockByHashMutex  sync.RWMutex
+	witnessResultChan chan types.WitnessResult
 }
 
 // newSimApp returns point to a new instance of simApp.
@@ -51,6 +52,7 @@ func newSimApp(id types.NodeID, netModule *network) *simApp {
 		blockSeen:         make(map[common.Hash]time.Time),
 		unconfirmedBlocks: make(map[types.NodeID]common.Hashes),
 		blockByHash:       make(map[common.Hash]*types.Block),
+		witnessResultChan: make(chan types.WitnessResult),
 	}
 }
 
@@ -193,6 +195,19 @@ func (a *simApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 		Payload: jsonPayload,
 	}
 	a.netModule.report(msg)
+
+	go func() {
+		a.witnessResultChan <- types.WitnessResult{
+			BlockHash: blockHash,
+			Data:      []byte(fmt.Sprintf("Block %s", blockHash)),
+		}
+	}()
+}
+
+// BlockProcessedChan returns a channel to receive the block hashes that have
+// finished processing by the application.
+func (a *simApp) BlockProcessedChan() <-chan types.WitnessResult {
+	return a.witnessResultChan
 }
 
 // WitnessAckDeliver is called when a witness ack is created.

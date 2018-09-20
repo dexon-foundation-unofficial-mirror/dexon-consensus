@@ -89,6 +89,7 @@ type App struct {
 	deliveredLock      sync.RWMutex
 	WitnessAckSequence []*types.WitnessAck
 	witnessAckLock     sync.RWMutex
+	witnessResultChan  chan types.WitnessResult
 }
 
 // NewApp constructs a TestApp instance.
@@ -99,6 +100,7 @@ func NewApp() *App {
 		TotalOrderedByHash: make(map[common.Hash]*AppTotalOrderRecord),
 		Delivered:          make(map[common.Hash]*AppDeliveredRecord),
 		DeliverSequence:    common.Hashes{},
+		witnessResultChan:  make(chan types.WitnessResult),
 	}
 }
 
@@ -153,6 +155,12 @@ func (app *App) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 		When:          time.Now().UTC(),
 	}
 	app.DeliverSequence = append(app.DeliverSequence, blockHash)
+}
+
+// BlockProcessedChan returns a channel to receive the block hashes that have
+// finished processing by the application.
+func (app *App) BlockProcessedChan() <-chan types.WitnessResult {
+	return app.witnessResultChan
 }
 
 // WitnessAckDeliver implements Application interface.
