@@ -1,5 +1,7 @@
 # Environment variables for the project.
 
+export GITROOT=$(git rev-parse --show-toplevel)
+
 # Setup custom build flags for non-root homebrew installation.
 if [ "$(uname -o)" = "Darwin" ] && [ "$(brew --prefix)" != "/usr/local" ]; then
   export BLS256_SLIB_LDFLAGS="-L$(brew --prefix gmp)/lib"
@@ -8,4 +10,6 @@ if [ "$(uname -o)" = "Darwin" ] && [ "$(brew --prefix)" != "/usr/local" ]; then
   export CFLAGS="-I$(brew --prefix gmp)/include -I$(brew --prefix openssl)/include $CFLAGS"
   export LDFLAGS="-L$(brew --prefix gmp)/lib $LDFLAGS -L$(brew --prefix openssl)/lib $LDFLAGS"
   export CGO_LDFLAGS=$LDFLAGS
+  export LD_LIBRARY_PATH=$GITROOT/lib
+  export DYLD_LIBRARY_PATH=$LD_LIBRARY_PATH
 fi
