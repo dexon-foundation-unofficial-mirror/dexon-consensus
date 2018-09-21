@@ -151,6 +151,7 @@ func hashDKGPrivateShare(prvShare *types.DKGPrivateShare) common.Hash {
 
 	return crypto.Keccak256Hash(
 		prvShare.ProposerID.Hash[:],
+		prvShare.ReceiverID.Hash[:],
 		binaryRound,
 		prvShare.PrivateShare.Bytes(),
 	)

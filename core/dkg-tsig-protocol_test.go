@@ -41,19 +41,21 @@ type DKGTSIGProtocolTestSuite struct {
 type testDKGReceiver struct {
 	s *DKGTSIGProtocolTestSuite
 
-	prvKey     crypto.PrivateKey
-	complaints map[types.NodeID]*types.DKGComplaint
-	mpk        *types.DKGMasterPublicKey
-	prvShare   map[types.NodeID]*types.DKGPrivateShare
+	prvKey         crypto.PrivateKey
+	complaints     map[types.NodeID]*types.DKGComplaint
+	mpk            *types.DKGMasterPublicKey
+	prvShare       map[types.NodeID]*types.DKGPrivateShare
+	antiComplaints map[types.NodeID]*types.DKGPrivateShare
 }
 
 func newTestDKGReceiver(
 	s *DKGTSIGProtocolTestSuite, prvKey crypto.PrivateKey) *testDKGReceiver {
 	return &testDKGReceiver{
-		s:          s,
-		prvKey:     prvKey,
-		complaints: make(map[types.NodeID]*types.DKGComplaint),
-		prvShare:   make(map[types.NodeID]*types.DKGPrivateShare),
+		s:              s,
+		prvKey:         prvKey,
+		complaints:     make(map[types.NodeID]*types.DKGComplaint),
+		prvShare:       make(map[types.NodeID]*types.DKGPrivateShare),
+		antiComplaints: make(map[types.NodeID]*types.DKGPrivateShare),
 	}
 }
 
@@ -71,12 +73,21 @@ func (r *testDKGReceiver) ProposeDKGMasterPublicKey(
 	r.s.Require().NoError(err)
 	r.mpk = mpk
 }
+
 func (r *testDKGReceiver) ProposeDKGPrivateShare(
-	to types.NodeID, prv *types.DKGPrivateShare) {
+	prv *types.DKGPrivateShare) {
 	var err error
 	prv.Signature, err = r.prvKey.Sign(hashDKGPrivateShare(prv))
 	r.s.Require().NoError(err)
-	r.prvShare[to] = prv
+	r.prvShare[prv.ReceiverID] = prv
+}
+
+func (r *testDKGReceiver) ProposeDKGAntiNackComplaint(
+	prv *types.DKGPrivateShare) {
+	var err error
+	prv.Signature, err = r.prvKey.Sign(hashDKGPrivateShare(prv))
+	r.s.Require().NoError(err)
+	r.antiComplaints[prv.ReceiverID] = prv
 }
 
 func (s *DKGTSIGProtocolTestSuite) setupDKGParticipants(n int) {
@@ -147,6 +158,23 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 
 	for _, protocol := range protocols {
 		protocol.proposeNackComplaints()
+	}
+
+	for _, recv := range receivers {
+		s.Require().Len(recv.complaints, 0)
+	}
+
+	for _, protocol := range protocols {
+		s.Require().NoError(protocol.processNackComplaints(
+			gov.DKGComplaints(round)))
+	}
+
+	for _, recv := range receivers {
+		s.Require().Len(recv.antiComplaints, 0)
+	}
+
+	for _, protocol := range protocols {
+		protocol.enforceNackComplaints(gov.DKGComplaints(round))
 	}
 
 	for _, recv := range receivers {
@@ -234,6 +262,7 @@ func (s *DKGTSIGProtocolTestSuite) TestNackComplaint() {
 
 	for _, recv := range receivers {
 		complaint, exist := recv.complaints[byzantineID]
+		s.True(complaint.IsNack())
 		s.Require().True(exist)
 		s.True(verifyDKGComplaintSignature(complaint, eth.SigToPub))
 	}
@@ -267,26 +296,145 @@ func (s *DKGTSIGProtocolTestSuite) TestComplaint() {
 	// These messages are not valid.
 	err = protocol.processPrivateShare(&types.DKGPrivateShare{
 		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
+		ReceiverID: targetID,
 		Round:      round,
 	})
 	s.Error(ErrNotDKGParticipant, err)
 	err = protocol.processPrivateShare(&types.DKGPrivateShare{
 		ProposerID: byzantineID,
+		ReceiverID: targetID,
 		Round:      round,
 	})
 	s.Error(ErrIncorrectPrivateShareSignature, err)
 
 	// Byzantine node is sending incorrect private share.
-	err = protocol.processPrivateShare(receivers[byzantineID].prvShare[byzantineID])
-	s.NoError(err)
+	receivers[byzantineID].ProposeDKGPrivateShare(&types.DKGPrivateShare{
+		ProposerID: byzantineID,
+		ReceiverID: targetID,
+		Round:      round,
+	})
+	invalidShare := receivers[byzantineID].prvShare[targetID]
+	s.Require().NoError(protocol.processPrivateShare(invalidShare))
 	s.Require().Len(receiver.complaints, 1)
 	complaint, exist := receiver.complaints[byzantineID]
 	s.True(exist)
 	s.Equal(byzantineID, complaint.PrivateShare.ProposerID)
+
+	// Sending the incorrect private share again should not complain.
+	delete(receiver.complaints, byzantineID)
+	s.Require().NoError(protocol.processPrivateShare(invalidShare))
+	s.Len(receiver.complaints, 0)
 }
 
-// TestQualifyIDs tests if there is a id with t+1 complaints, it should not be
-// in the qualifyIDs.
+// TestAntiComplaint tests if a nack complaint is received,
+// create an anti complaint.
+func (s *DKGTSIGProtocolTestSuite) TestAntiComplaint() {
+	k := 3
+	n := 10
+	round := uint64(1)
+	gov, err := test.NewGovernance(5, 100)
+	s.Require().NoError(err)
+
+	receivers, protocols := s.newProtocols(k, n, round)
+
+	byzantineID := s.nIDs[0]
+	targetID := s.nIDs[1]
+	thirdPerson := s.nIDs[2]
+
+	for _, receiver := range receivers {
+		gov.AddDKGMasterPublicKey(receiver.mpk)
+	}
+
+	for _, protocol := range protocols {
+		s.Require().NoError(
+			protocol.processMasterPublicKeys(gov.DKGMasterPublicKeys(round)))
+	}
+
+	// Creating Nack complaint.
+	protocols[targetID].proposeNackComplaints()
+	protocols[thirdPerson].proposeNackComplaints()
+	complaint, exist := receivers[targetID].complaints[byzantineID]
+	s.Require().True(exist)
+	s.Require().True(complaint.IsNack())
+	s.Require().Equal(byzantineID, complaint.PrivateShare.ProposerID)
+
+	complaint2, exist := receivers[thirdPerson].complaints[byzantineID]
+	s.Require().True(exist)
+	s.Require().True(complaint2.IsNack())
+	s.Require().Equal(byzantineID, complaint2.PrivateShare.ProposerID)
+
+	// Creating an anti-nack complaint.
+	err = protocols[byzantineID].processNackComplaints(
+		[]*types.DKGComplaint{complaint})
+	s.Require().NoError(err)
+	s.Require().Len(receivers[byzantineID].antiComplaints, 1)
+	antiComplaint, exist := receivers[byzantineID].antiComplaints[targetID]
+	s.Require().True(exist)
+	s.Require().Equal(targetID, antiComplaint.ReceiverID)
+
+	// The anti-complaint should be successfully verified by all others.
+	receivers[targetID].complaints = make(map[types.NodeID]*types.DKGComplaint)
+	s.Require().NoError(protocols[targetID].processPrivateShare(antiComplaint))
+	s.Len(receivers[targetID].complaints, 0)
+
+	receivers[thirdPerson].complaints = make(map[types.NodeID]*types.DKGComplaint)
+	s.Require().NoError(protocols[thirdPerson].processPrivateShare(antiComplaint))
+	s.Len(receivers[thirdPerson].complaints, 0)
+}
+
+// TestEncorceNackComplaint tests if the nack complaint is enforced properly.
+func (s *DKGTSIGProtocolTestSuite) TestEncorceNackComplaint() {
+	k := 3
+	n := 10
+	round := uint64(1)
+	gov, err := test.NewGovernance(5, 100)
+	s.Require().NoError(err)
+
+	receivers, protocols := s.newProtocols(k, n, round)
+
+	byzantineID := s.nIDs[0]
+	targetID := s.nIDs[1]
+	thirdPerson := s.nIDs[2]
+
+	for _, receiver := range receivers {
+		gov.AddDKGMasterPublicKey(receiver.mpk)
+	}
+
+	for _, protocol := range protocols {
+		s.Require().NoError(
+			protocol.processMasterPublicKeys(gov.DKGMasterPublicKeys(round)))
+	}
+
+	// Creating nack complaint.
+	protocols[targetID].proposeNackComplaints()
+	complaint, exist := receivers[targetID].complaints[byzantineID]
+	s.Require().True(exist)
+	s.Require().True(complaint.IsNack())
+	s.Require().Equal(byzantineID, complaint.PrivateShare.ProposerID)
+
+	// Encorce nack complaint.
+	protocols[thirdPerson].enforceNackComplaints([]*types.DKGComplaint{complaint})
+	complaint2, exist := receivers[thirdPerson].complaints[byzantineID]
+	s.Require().True(exist)
+	s.Require().True(complaint2.IsNack())
+	s.Require().Equal(byzantineID, complaint2.PrivateShare.ProposerID)
+
+	// Received valid private share, do not enforce nack complaint.
+	delete(receivers[thirdPerson].complaints, byzantineID)
+	err = protocols[byzantineID].processNackComplaints(
+		[]*types.DKGComplaint{complaint})
+	s.Require().NoError(err)
+	antiComplaint, exist := receivers[byzantineID].antiComplaints[targetID]
+	s.Require().True(exist)
+	s.Require().Equal(targetID, antiComplaint.ReceiverID)
+	s.Require().NoError(protocols[thirdPerson].processPrivateShare(antiComplaint))
+	protocols[thirdPerson].enforceNackComplaints([]*types.DKGComplaint{complaint})
+	_, exist = receivers[thirdPerson].complaints[byzantineID]
+	s.Require().False(exist)
+}
+
+// TestQualifyIDs tests if there is a id with t+1 nack complaints
+// or a complaint, it should not be in the qualifyIDs.
 func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 	k := 3
 	n := 10
@@ -302,6 +450,7 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 		gov.AddDKGMasterPublicKey(receiver.mpk)
 	}
 
+	// Test for nack complaints.
 	complaints := make([]*types.DKGComplaint, k+1)
 	for i := range complaints {
 		nID := s.nIDs[i]
@@ -313,6 +462,7 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 				Round:      round,
 			},
 		}
+		s.Require().True(complaints[i].IsNack())
 	}
 
 	gpk, err := newDKGGroupPublicKey(round,
@@ -331,6 +481,19 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 	)
 	s.Require().NoError(err)
 	s.Require().Len(gpk2.qualifyIDs, n)
+
+	// Test for complaint.
+	complaints[0].PrivateShare.Signature = crypto.Signature{0}
+	s.Require().False(complaints[0].IsNack())
+	gpk3, err := newDKGGroupPublicKey(round,
+		gov.DKGMasterPublicKeys(round), complaints[:1],
+		k, eth.SigToPub,
+	)
+	s.Require().NoError(err)
+	s.Require().Len(gpk3.qualifyIDs, n-1)
+	for _, id := range gpk3.qualifyIDs {
+		s.NotEqual(id, byzantineID)
+	}
 }
 
 // TestPartialSignature tests if tsigProtocol can handle incorrect partial

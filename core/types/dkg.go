@@ -25,6 +25,7 @@ import (
 // DKGPrivateShare describe a secret share in DKG protocol.
 type DKGPrivateShare struct {
 	ProposerID   NodeID           `json:"proposer_id"`
+	ReceiverID   NodeID           `json:"receiver_id"`
 	Round        uint64           `json:"round"`
 	PrivateShare dkg.PrivateKey   `json:"private_share"`
 	Signature    crypto.Signature `json:"signature"`
@@ -53,4 +54,9 @@ type DKGPartialSignature struct {
 	Round            uint64               `json:"round"`
 	PartialSignature dkg.PartialSignature `json:"partial_signature"`
 	Signature        crypto.Signature     `json:"signature"`
+}
+
+// IsNack returns true if it's a nack complaint in DKG protocol.
+func (c *DKGComplaint) IsNack() bool {
+	return len(c.PrivateShare.Signature) == 0
 }

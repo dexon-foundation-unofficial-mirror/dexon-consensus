@@ -46,7 +46,7 @@ var (
 		"not enough of partial signatures")
 )
 
-type dkgComplaintReceiver interface {
+type dkgReceiver interface {
 	// ProposeDKGComplaint proposes a DKGComplaint.
 	ProposeDKGComplaint(complaint *types.DKGComplaint)
 
@@ -54,12 +54,15 @@ type dkgComplaintReceiver interface {
 	ProposeDKGMasterPublicKey(mpk *types.DKGMasterPublicKey)
 
 	// ProposeDKGPrivateShare propose a DKGPrivateShare.
-	ProposeDKGPrivateShare(to types.NodeID, prv *types.DKGPrivateShare)
+	ProposeDKGPrivateShare(prv *types.DKGPrivateShare)
+
+	// ProposeDKGAntiNackComplaint propose a DKGPrivateShare as an anti complaint.
+	ProposeDKGAntiNackComplaint(prv *types.DKGPrivateShare)
 }
 
 type dkgProtocol struct {
 	ID                 types.NodeID
-	recv               dkgComplaintReceiver
+	recv               dkgReceiver
 	round              uint64
 	threshold          int
 	sigToPub           SigToPubFn
@@ -68,6 +71,9 @@ type dkgProtocol struct {
 	masterPrivateShare *dkg.PrivateKeyShares
 	prvShares          *dkg.PrivateKeyShares
 	prvSharesReceived  map[types.NodeID]struct{}
+	nodeComplained     map[types.NodeID]struct{}
+	// Complaint[from][to]'s anti is saved to antiComplaint[from][to].
+	antiComplaintReceived map[types.NodeID]map[types.NodeID]struct{}
 }
 
 type dkgShareSecret struct {
@@ -96,7 +102,7 @@ func newDKGID(ID types.NodeID) dkg.ID {
 
 func newDKGProtocol(
 	ID types.NodeID,
-	recv dkgComplaintReceiver,
+	recv dkgReceiver,
 	round uint64,
 	threshold int,
 	sigToPub SigToPubFn) *dkgProtocol {
@@ -111,16 +117,18 @@ func newDKGProtocol(
 	})
 
 	return &dkgProtocol{
-		ID:                 ID,
-		recv:               recv,
-		round:              round,
-		threshold:          threshold,
-		sigToPub:           sigToPub,
-		idMap:              make(map[types.NodeID]dkg.ID),
-		mpkMap:             make(map[types.NodeID]*dkg.PublicKeyShares),
-		masterPrivateShare: prvShare,
-		prvShares:          dkg.NewEmptyPrivateKeyShares(),
-		prvSharesReceived:  make(map[types.NodeID]struct{}),
+		ID:                    ID,
+		recv:                  recv,
+		round:                 round,
+		threshold:             threshold,
+		sigToPub:              sigToPub,
+		idMap:                 make(map[types.NodeID]dkg.ID),
+		mpkMap:                make(map[types.NodeID]*dkg.PublicKeyShares),
+		masterPrivateShare:    prvShare,
+		prvShares:             dkg.NewEmptyPrivateKeyShares(),
+		prvSharesReceived:     make(map[types.NodeID]struct{}),
+		nodeComplained:        make(map[types.NodeID]struct{}),
+		antiComplaintReceived: make(map[types.NodeID]map[types.NodeID]struct{}),
 	}
 }
 
@@ -142,8 +150,9 @@ func (d *dkgProtocol) processMasterPublicKeys(
 		if !ok {
 			return ErrIDShareNotFound
 		}
-		d.recv.ProposeDKGPrivateShare(mpk.ProposerID, &types.DKGPrivateShare{
+		d.recv.ProposeDKGPrivateShare(&types.DKGPrivateShare{
 			ProposerID:   d.ID,
+			ReceiverID:   mpk.ProposerID,
 			Round:        d.round,
 			PrivateShare: *share,
 		})
@@ -167,6 +176,56 @@ func (d *dkgProtocol) proposeNackComplaints() {
 	}
 }
 
+func (d *dkgProtocol) processNackComplaints(complaints []*types.DKGComplaint) (
+	err error) {
+	for _, complaint := range complaints {
+		if !complaint.IsNack() {
+			continue
+		}
+		if complaint.PrivateShare.ProposerID != d.ID {
+			continue
+		}
+		id, exist := d.idMap[complaint.ProposerID]
+		if !exist {
+			err = ErrNotDKGParticipant
+			continue
+		}
+		share, ok := d.masterPrivateShare.Share(id)
+		if !ok {
+			err = ErrIDShareNotFound
+			continue
+		}
+		d.recv.ProposeDKGAntiNackComplaint(&types.DKGPrivateShare{
+			ProposerID:   d.ID,
+			ReceiverID:   complaint.ProposerID,
+			Round:        d.round,
+			PrivateShare: *share,
+		})
+	}
+	return
+}
+
+func (d *dkgProtocol) enforceNackComplaints(complaints []*types.DKGComplaint) {
+	for _, complaint := range complaints {
+		if !complaint.IsNack() {
+			continue
+		}
+		from := complaint.ProposerID
+		to := complaint.PrivateShare.ProposerID
+		if _, exist :=
+			d.antiComplaintReceived[from][to]; !exist {
+			d.recv.ProposeDKGComplaint(&types.DKGComplaint{
+				ProposerID: d.ID,
+				Round:      d.round,
+				PrivateShare: types.DKGPrivateShare{
+					ProposerID: to,
+					Round:      d.round,
+				},
+			})
+		}
+	}
+}
+
 func (d *dkgProtocol) sanityCheck(prvShare *types.DKGPrivateShare) error {
 	if _, exist := d.idMap[prvShare.ProposerID]; !exist {
 		return ErrNotDKGParticipant
@@ -186,7 +245,7 @@ func (d *dkgProtocol) processPrivateShare(
 	if d.round != prvShare.Round {
 		return nil
 	}
-	self, exist := d.idMap[d.ID]
+	receiverID, exist := d.idMap[prvShare.ReceiverID]
 	// This node is not a DKG participant, ignore the private share.
 	if !exist {
 		return nil
@@ -195,23 +254,37 @@ func (d *dkgProtocol) processPrivateShare(
 		return err
 	}
 	mpk := d.mpkMap[prvShare.ProposerID]
-	ok, err := mpk.VerifyPrvShare(self, &prvShare.PrivateShare)
+	ok, err := mpk.VerifyPrvShare(receiverID, &prvShare.PrivateShare)
 	if err != nil {
 		return err
 	}
-	d.prvSharesReceived[prvShare.ProposerID] = struct{}{}
+	if prvShare.ReceiverID == d.ID {
+		d.prvSharesReceived[prvShare.ProposerID] = struct{}{}
+	}
 	if !ok {
+		if _, exist := d.nodeComplained[prvShare.ProposerID]; exist {
+			return nil
+		}
 		complaint := &types.DKGComplaint{
 			ProposerID:   d.ID,
 			Round:        d.round,
 			PrivateShare: *prvShare,
 		}
+		d.nodeComplained[prvShare.ProposerID] = struct{}{}
 		d.recv.ProposeDKGComplaint(complaint)
-	} else {
+	} else if prvShare.ReceiverID == d.ID {
 		sender := d.idMap[prvShare.ProposerID]
 		if err := d.prvShares.AddShare(sender, &prvShare.PrivateShare); err != nil {
 			return err
 		}
+	} else {
+		// The prvShare is an anti complaint.
+		if _, exist := d.antiComplaintReceived[prvShare.ReceiverID]; !exist {
+			d.antiComplaintReceived[prvShare.ReceiverID] =
+				make(map[types.NodeID]struct{})
+		}
+		d.antiComplaintReceived[prvShare.ReceiverID][prvShare.ProposerID] =
+			struct{}{}
 	}
 	return nil
 }
@@ -242,11 +315,15 @@ func newDKGGroupPublicKey(
 	threshold int, sigToPub SigToPubFn) (
 	*dkgGroupPublicKey, error) {
 	// Calculate qualify members.
+	disqualifyIDs := map[types.NodeID]struct{}{}
 	complaintsByID := map[types.NodeID]int{}
 	for _, complaint := range complaints {
-		complaintsByID[complaint.PrivateShare.ProposerID]++
+		if complaint.IsNack() {
+			complaintsByID[complaint.PrivateShare.ProposerID]++
+		} else {
+			disqualifyIDs[complaint.PrivateShare.ProposerID] = struct{}{}
+		}
 	}
-	disqualifyIDs := map[types.NodeID]struct{}{}
 	for nID, num := range complaintsByID {
 		if num > threshold {
 			disqualifyIDs[nID] = struct{}{}
