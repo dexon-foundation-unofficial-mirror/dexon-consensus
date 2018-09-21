@@ -65,8 +65,13 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 
 // GetNotarySet implements Governance interface to return current
 // notary set.
-func (g *Governance) GetNotarySet() map[types.NodeID]struct{} {
-	return g.notarySet
+func (g *Governance) GetNotarySet() (ret map[types.NodeID]struct{}) {
+	// Return a cloned map.
+	ret = make(map[types.NodeID]struct{})
+	for k := range g.notarySet {
+		ret[k] = struct{}{}
+	}
+	return
 }
 
 // GetConfiguration returns the configuration at a given block height.

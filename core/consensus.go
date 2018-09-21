@@ -104,7 +104,7 @@ func (recv *consensusReceiver) ConfirmBlock(hash common.Hash) {
 		log.Println(ErrUnknownBlockConfirmed, hash)
 		return
 	}
-	if err := recv.consensus.ProcessBlock(block); err != nil {
+	if err := recv.consensus.processBlock(block); err != nil {
 		log.Println(err)
 		return
 	}
@@ -273,7 +273,7 @@ BALoop:
 
 // RunLegacy starts running Legacy DEXON Consensus.
 func (con *Consensus) RunLegacy() {
-	go con.processMsg(con.network.ReceiveChan(), con.ProcessBlock)
+	go con.processMsg(con.network.ReceiveChan(), con.processBlock)
 	go con.processWitnessData()
 
 	chainID := uint32(0)
@@ -299,7 +299,7 @@ func (con *Consensus) RunLegacy() {
 	if err := con.PrepareGenesisBlock(genesisBlock, time.Now().UTC()); err != nil {
 		log.Println(err)
 	}
-	if err := con.ProcessBlock(genesisBlock); err != nil {
+	if err := con.processBlock(genesisBlock); err != nil {
 		log.Println(err)
 	}
 	con.network.BroadcastBlock(genesisBlock)
@@ -317,10 +317,10 @@ ProposingBlockLoop:
 				ChainID: chainID,
 			},
 		}
-		if err := con.PrepareBlock(block, time.Now().UTC()); err != nil {
+		if err := con.prepareBlock(block, time.Now().UTC()); err != nil {
 			log.Println(err)
 		}
-		if err := con.ProcessBlock(block); err != nil {
+		if err := con.processBlock(block); err != nil {
 			log.Println(err)
 		}
 		con.network.BroadcastBlock(block)
@@ -368,7 +368,7 @@ func (con *Consensus) proposeBlock(chainID uint32) *types.Block {
 			Height:  con.rbModule.nextHeight(chainID),
 		},
 	}
-	if err := con.PrepareBlock(block, time.Now().UTC()); err != nil {
+	if err := con.prepareBlock(block, time.Now().UTC()); err != nil {
 		log.Println(err)
 		return nil
 	}
@@ -464,8 +464,8 @@ func (con *Consensus) PreProcessBlock(b *types.Block) (err error) {
 	return
 }
 
-// ProcessBlock is the entry point to submit one block to a Consensus instance.
-func (con *Consensus) ProcessBlock(block *types.Block) (err error) {
+// processBlock is the entry point to submit one block to a Consensus instance.
+func (con *Consensus) processBlock(block *types.Block) (err error) {
 	if err := con.sanityCheck(block); err != nil {
 		return err
 	}
@@ -538,7 +538,7 @@ func (con *Consensus) checkPrepareBlock(
 }
 
 // PrepareBlock would setup header fields of block based on its ProposerID.
-func (con *Consensus) PrepareBlock(b *types.Block,
+func (con *Consensus) prepareBlock(b *types.Block,
 	proposeTime time.Time) (err error) {
 	if err = con.checkPrepareBlock(b, proposeTime); err != nil {
 		return

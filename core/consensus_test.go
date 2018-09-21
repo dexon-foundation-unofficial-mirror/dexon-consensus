@@ -127,7 +127,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	// to all core.Consensus objects.
 	broadcast := func(b *types.Block) {
 		for _, obj := range objs {
-			req.Nil(obj.con.ProcessBlock(b))
+			req.Nil(obj.con.processBlock(b))
 		}
 	}
 	// Genesis blocks
@@ -152,7 +152,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	}
 	b11.Hash, err = hashBlock(b11)
 	s.Require().Nil(err)
-	req.Nil(objs[nodes[1]].con.PrepareBlock(b11, time.Now().UTC()))
+	req.Nil(objs[nodes[1]].con.prepareBlock(b11, time.Now().UTC()))
 	req.Len(b11.Acks, 4)
 	req.Contains(b11.Acks, b00.Hash)
 	req.Contains(b11.Acks, b10.Hash)
@@ -168,7 +168,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		},
 		Hash: common.NewRandomHash(),
 	}
-	req.Nil(objs[nodes[0]].con.PrepareBlock(b01, time.Now().UTC()))
+	req.Nil(objs[nodes[0]].con.prepareBlock(b01, time.Now().UTC()))
 	req.Len(b01.Acks, 4)
 	req.Contains(b01.Acks, b11.Hash)
 	// Setup b21.
@@ -180,7 +180,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		},
 		Hash: common.NewRandomHash(),
 	}
-	req.Nil(objs[nodes[2]].con.PrepareBlock(b21, time.Now().UTC()))
+	req.Nil(objs[nodes[2]].con.prepareBlock(b21, time.Now().UTC()))
 	req.Len(b21.Acks, 4)
 	req.Contains(b21.Acks, b11.Hash)
 	// Setup b31.
@@ -192,7 +192,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		},
 		Hash: common.NewRandomHash(),
 	}
-	req.Nil(objs[nodes[3]].con.PrepareBlock(b31, time.Now().UTC()))
+	req.Nil(objs[nodes[3]].con.prepareBlock(b31, time.Now().UTC()))
 	req.Len(b31.Acks, 4)
 	req.Contains(b31.Acks, b11.Hash)
 	// Broadcast other height=1 blocks.
@@ -209,7 +209,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		},
 		Hash: common.NewRandomHash(),
 	}
-	req.Nil(objs[nodes[0]].con.PrepareBlock(b02, time.Now().UTC()))
+	req.Nil(objs[nodes[0]].con.prepareBlock(b02, time.Now().UTC()))
 	req.Len(b02.Acks, 3)
 	req.Contains(b02.Acks, b01.Hash)
 	req.Contains(b02.Acks, b21.Hash)
@@ -223,7 +223,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		},
 		Hash: common.NewRandomHash(),
 	}
-	req.Nil(objs[nodes[1]].con.PrepareBlock(b12, time.Now().UTC()))
+	req.Nil(objs[nodes[1]].con.prepareBlock(b12, time.Now().UTC()))
 	req.Len(b12.Acks, 4)
 	req.Contains(b12.Acks, b01.Hash)
 	req.Contains(b12.Acks, b11.Hash)
@@ -238,7 +238,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		},
 		Hash: common.NewRandomHash(),
 	}
-	req.Nil(objs[nodes[2]].con.PrepareBlock(b22, time.Now().UTC()))
+	req.Nil(objs[nodes[2]].con.prepareBlock(b22, time.Now().UTC()))
 	req.Len(b22.Acks, 3)
 	req.Contains(b22.Acks, b01.Hash)
 	req.Contains(b22.Acks, b21.Hash)
@@ -252,7 +252,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		},
 		Hash: common.NewRandomHash(),
 	}
-	req.Nil(objs[nodes[3]].con.PrepareBlock(b32, time.Now().UTC()))
+	req.Nil(objs[nodes[3]].con.prepareBlock(b32, time.Now().UTC()))
 	req.Len(b32.Acks, 3)
 	req.Contains(b32.Acks, b01.Hash)
 	req.Contains(b32.Acks, b21.Hash)
@@ -318,10 +318,10 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 func (s *ConsensusTestSuite) TestPrepareBlock() {
 	// This test case would test these steps:
 	//  - Add all genesis blocks into lattice.
-	//  - Make sure Consensus.PrepareBlock would attempt to ack
+	//  - Make sure Consensus.prepareBlock would attempt to ack
 	//    all genesis blocks.
 	//  - Add the prepared block into lattice.
-	//  - Make sure Consensus.PrepareBlock would only attempt to
+	//  - Make sure Consensus.prepareBlock would only attempt to
 	//    ack the prepared block.
 	var (
 		gov, err = test.NewGovernance(4, time.Second)
@@ -350,17 +350,17 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 	b30 := s.prepareGenesisBlock(nodes[3], 3, objs[nodes[3]].con)
 	for _, obj := range objs {
 		con := obj.con
-		req.Nil(con.ProcessBlock(b00))
-		req.Nil(con.ProcessBlock(b10))
-		req.Nil(con.ProcessBlock(b20))
-		req.Nil(con.ProcessBlock(b30))
+		req.Nil(con.processBlock(b00))
+		req.Nil(con.processBlock(b10))
+		req.Nil(con.processBlock(b20))
+		req.Nil(con.processBlock(b30))
 	}
 	b11 := &types.Block{
 		ProposerID: nodes[1],
 	}
 	// Sleep to make sure 'now' is slower than b10's timestamp.
 	time.Sleep(100 * time.Millisecond)
-	req.Nil(objs[nodes[1]].con.PrepareBlock(b11, time.Now().UTC()))
+	req.Nil(objs[nodes[1]].con.prepareBlock(b11, time.Now().UTC()))
 	// Make sure we would assign 'now' to the timestamp belongs to
 	// the proposer.
 	req.True(
@@ -368,12 +368,12 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 			b10.Timestamp) > 100*time.Millisecond)
 	for _, obj := range objs {
 		con := obj.con
-		req.Nil(con.ProcessBlock(b11))
+		req.Nil(con.processBlock(b11))
 	}
 	b12 := &types.Block{
 		ProposerID: nodes[1],
 	}
-	req.Nil(objs[nodes[1]].con.PrepareBlock(b12, time.Now().UTC()))
+	req.Nil(objs[nodes[1]].con.prepareBlock(b12, time.Now().UTC()))
 	req.Len(b12.Acks, 1)
 	req.Contains(b12.Acks, b11.Hash)
 }

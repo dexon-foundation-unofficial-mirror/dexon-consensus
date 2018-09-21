@@ -48,7 +48,6 @@ func PrepareNodes(
 			gov,
 			dbs[nID],
 			key,
-			nID,
 			networkLatency,
 			proposingLatency)
 	}
