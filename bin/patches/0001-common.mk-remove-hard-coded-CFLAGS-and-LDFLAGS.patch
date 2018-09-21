@@ -1,25 +1,26 @@
-From 3601ad3d9104fa1d6e24e4bfeaa9467e1a5259ce Mon Sep 17 00:00:00 2001
+From 8fbe73cbbf524cfa6955a10a6617f02161ffa33b Mon Sep 17 00:00:00 2001
 From: Wei-Ning Huang <w@cobinhood.com>
-Date: Tue, 18 Sep 2018 12:28:15 +0800
+Date: Fri, 21 Sep 2018 18:12:20 +0800
 Subject: [PATCH] common.mk: remove hard coded CFLAGS and LDFLAGS
 
 ---
- common.mk | 2 --
- 1 file changed, 2 deletions(-)
+ common.mk | 3 ---
+ 1 file changed, 3 deletions(-)
 
 diff --git a/common.mk b/common.mk
-index 986e88f..9b42060 100644
+index 3a82835..9b42060 100644
 --- a/common.mk
 +++ b/common.mk
-@@ -14,8 +14,6 @@ ifeq ($(UNAME_S),Darwin)
+@@ -14,9 +14,6 @@ ifeq ($(UNAME_S),Darwin)
    OS=mac
    ARCH=x86_64
    LIB_SUF=dylib
--  CFLAGS+=-I/usr/local/opt/openssl/include
--  LDFLAGS+=-L/usr/local/opt/openssl/lib
+-  OPENSSL_DIR?=/usr/local/opt/openssl
+-  CFLAGS+=-I$(OPENSSL_DIR)/include
+-  LDFLAGS+=-L$(OPENSSL_DIR)/lib
  else
    LIB_SUF=so
  endif
 -- 
-2.15.2 (Apple Git-101.1)
+2.17.1 (Apple Git-112)
 
