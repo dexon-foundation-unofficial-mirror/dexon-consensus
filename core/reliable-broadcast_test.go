@@ -545,9 +545,9 @@ func (s *ReliableBroadcastTest) TestRandomIntensiveAcking() {
 
 func (s *ReliableBroadcastTest) TestRandomlyGeneratedBlocks() {
 	var (
-		nodeCount  = 19
-		blockCount = 50
-		repeat     = 20
+		chainNum = uint32(19)
+		blockNum = 50
+		repeat   = 20
 	)
 
 	// Prepare a randomly generated blocks.
@@ -560,7 +560,7 @@ func (s *ReliableBroadcastTest) TestRandomlyGeneratedBlocks() {
 		}
 	}()
 	gen := test.NewBlocksGenerator(nil, hashBlock)
-	_, err = gen.Generate(nodeCount, blockCount, nil, db)
+	_, err = gen.Generate(chainNum, blockNum, nil, db)
 	s.Require().Nil(err)
 	iter, err := db.GetAll()
 	s.Require().Nil(err)
@@ -572,7 +572,7 @@ func (s *ReliableBroadcastTest) TestRandomlyGeneratedBlocks() {
 	for i := 0; i < repeat; i++ {
 		nodes := map[types.NodeID]struct{}{}
 		rb := newReliableBroadcast()
-		rb.setChainNum(uint32(nodeCount))
+		rb.setChainNum(chainNum)
 		stronglyAckedHashes := common.Hashes{}
 		revealer.Reset()
 

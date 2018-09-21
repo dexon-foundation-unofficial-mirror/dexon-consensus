@@ -26,6 +26,8 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
 )
 
 // TODO(mission): blocks generator should generate blocks based on chain,
@@ -81,7 +83,9 @@ type nodeSetStatus struct {
 	hashBlock     hashBlockFn
 }
 
-func newNodeSetStatus(nIDs []types.NodeID, hashBlock hashBlockFn) *nodeSetStatus {
+func newNodeSetStatus(
+	nIDs []types.NodeID, hashBlock hashBlockFn) *nodeSetStatus {
+
 	status := make(map[types.NodeID]*nodeStatus)
 	timestamps := make([]time.Time, 0, len(nIDs))
 	proposerChain := make(map[types.NodeID]uint32)
@@ -106,10 +110,10 @@ func newNodeSetStatus(nIDs []types.NodeID, hashBlock hashBlockFn) *nodeSetStatus
 // findIncompleteNodes is a helper to check which node
 // doesn't generate enough blocks.
 func (vs *nodeSetStatus) findIncompleteNodes(
-	blockCount int) (nIDs []types.NodeID) {
+	blockNum int) (nIDs []types.NodeID) {
 
 	for nID, status := range vs.status {
-		if len(status.blocks) < blockCount {
+		if len(status.blocks) < blockNum {
 			nIDs = append(nIDs, nID)
 		}
 	}
@@ -154,6 +158,7 @@ func (vs *nodeSetStatus) prepareAcksForNewBlock(
 // proposeBlock propose new block and update node status.
 func (vs *nodeSetStatus) proposeBlock(
 	proposerID types.NodeID,
+	prvKey crypto.PrivateKey,
 	acks common.Hashes) (*types.Block, error) {
 
 	status := vs.status[proposerID]
@@ -184,6 +189,10 @@ func (vs *nodeSetStatus) proposeBlock(
 	if err != nil {
 		return nil, err
 	}
+	newBlock.Signature, err = prvKey.Sign(newBlock.Hash)
+	if err != nil {
+		return nil, err
+	}
 	status.blocks = append(status.blocks, newBlock)
 	return newBlock, nil
 }
@@ -191,13 +200,13 @@ func (vs *nodeSetStatus) proposeBlock(
 // normalAckingCountGenerator would randomly pick acking count
 // by a normal distribution.
 func normalAckingCountGenerator(
-	nodeCount int, mean, deviation float64) func() int {
+	chainNum uint32, mean, deviation float64) func() int {
 
 	return func() int {
 		var expected float64
 		for {
 			expected = rand.NormFloat64()*deviation + mean
-			if expected >= 0 && expected <= float64(nodeCount) {
+			if expected >= 0 && expected <= float64(chainNum) {
 				break
 			}
 		}
@@ -207,8 +216,8 @@ func normalAckingCountGenerator(
 
 // MaxAckingCountGenerator return generator which returns
 // fixed maximum acking count.
-func MaxAckingCountGenerator(count int) func() int {
-	return func() int { return count }
+func MaxAckingCountGenerator(count uint32) func() int {
+	return func() int { return int(count) }
 }
 
 // generateNodePicker is a function generator, which would generate
@@ -249,22 +258,30 @@ func NewBlocksGenerator(nodePicker func(
 // The default ackingCountGenerator would randomly pick a number based on
 // the nodeCount you provided with a normal distribution.
 func (gen *BlocksGenerator) Generate(
-	nodeCount int,
-	blockCount int,
+	chainNum uint32,
+	blockNum int,
 	ackingCountGenerator func() int,
 	writer blockdb.Writer) (
-	nodes types.NodeIDs, err error) {
+	nodePrvKeys map[types.NodeID]crypto.PrivateKey, err error) {
 
+	var (
+		prvKey crypto.PrivateKey
+		nodes  = types.NodeIDs{}
+	)
 	if ackingCountGenerator == nil {
 		ackingCountGenerator = normalAckingCountGenerator(
-			nodeCount,
-			float64(nodeCount/2),
-			float64(nodeCount/4+1))
+			chainNum,
+			float64(chainNum/2),
+			float64(chainNum/4+1))
 	}
-	nodes = types.NodeIDs{}
-	for i := 0; i < nodeCount; i++ {
-		nodes = append(
-			nodes, types.NodeID{Hash: common.NewRandomHash()})
+	nodePrvKeys = map[types.NodeID]crypto.PrivateKey{}
+	for i := uint32(0); i < chainNum; i++ {
+		if prvKey, err = eth.NewPrivateKey(); err != nil {
+			return
+		}
+		id := types.NewNodeID(prvKey.PublicKey())
+		nodes = append(nodes, id)
+		nodePrvKeys[id] = prvKey
 	}
 	status := newNodeSetStatus(nodes, gen.hashBlock)
 
@@ -278,7 +295,7 @@ func (gen *BlocksGenerator) Generate(
 	for {
 		// Find nodes that doesn't propose enough blocks and
 		// pick one from them randomly.
-		notYet := status.findIncompleteNodes(blockCount)
+		notYet := status.findIncompleteNodes(blockNum)
 		if len(notYet) == 0 {
 			break
 		}
@@ -294,8 +311,9 @@ func (gen *BlocksGenerator) Generate(
 			return
 		}
 		var newBlock *types.Block
-		newBlock, err = status.proposeBlock(proposerID, acks)
-		if err != nil {
+		if newBlock, err = status.proposeBlock(
+			proposerID, nodePrvKeys[proposerID], acks); err != nil {
+
 			return
 		}
 

@@ -864,8 +864,9 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 }
 
 func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
-	totalOrderingConstructor func(types.NodeIDs) *totalOrdering,
-	nodeCount, blockCount int,
+	totalOrderingConstructor func(chainNum uint32) *totalOrdering,
+	chainNum uint32,
+	blockNum int,
 	ackingCountGenerator func() int,
 	repeat int) {
 
@@ -878,10 +879,10 @@ func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.Nil(err)
-	nodes, err := gen.Generate(
-		nodeCount, blockCount, ackingCountGenerator, db)
+	nodePrvKeys, err := gen.Generate(
+		chainNum, blockNum, ackingCountGenerator, db)
 	req.Nil(err)
-	req.Len(nodes, nodeCount)
+	req.Len(nodePrvKeys, int(chainNum))
 	iter, err := db.GetAll()
 	req.Nil(err)
 	// Setup a revealer that would reveal blocks forming
@@ -894,7 +895,7 @@ func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 		revealed := ""
 		ordered := ""
 		revealer.Reset()
-		to := totalOrderingConstructor(nodes)
+		to := totalOrderingConstructor(chainNum)
 		for {
 			// Reveal next block.
 			b, err := revealer.Next()
@@ -937,44 +938,44 @@ func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 
 func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 	var (
-		nodeCount         = 13
-		blockCount        = 50
-		phi        uint64 = 10
-		repeat            = 8
+		chainNum        = uint32(13)
+		blockNum        = 50
+		phi      uint64 = 10
+		repeat          = 8
 	)
 
 	ackingCountGenerators := []func() int{
 		nil, // Acking frequency with normal distribution.
-		test.MaxAckingCountGenerator(0),         // Low acking frequency.
-		test.MaxAckingCountGenerator(nodeCount), // High acking frequency.
+		test.MaxAckingCountGenerator(0),        // Low acking frequency.
+		test.MaxAckingCountGenerator(chainNum), // High acking frequency.
 	}
 
 	// Test based on different acking frequency.
 	for _, gen := range ackingCountGenerators {
 		// Test for K=0.
-		constructor := func(nodes types.NodeIDs) *totalOrdering {
-			return newTotalOrdering(0, phi, uint32(len(nodes)))
+		constructor := func(chainNum uint32) *totalOrdering {
+			return newTotalOrdering(0, phi, chainNum)
 		}
 		s.baseTestRandomlyGeneratedBlocks(
-			constructor, nodeCount, blockCount, gen, repeat)
+			constructor, chainNum, blockNum, gen, repeat)
 		// Test for K=1,
-		constructor = func(nodes types.NodeIDs) *totalOrdering {
-			return newTotalOrdering(1, phi, uint32(len(nodes)))
+		constructor = func(chainNum uint32) *totalOrdering {
+			return newTotalOrdering(1, phi, chainNum)
 		}
 		s.baseTestRandomlyGeneratedBlocks(
-			constructor, nodeCount, blockCount, gen, repeat)
+			constructor, chainNum, blockNum, gen, repeat)
 		// Test for K=2,
-		constructor = func(nodes types.NodeIDs) *totalOrdering {
-			return newTotalOrdering(2, phi, uint32(len(nodes)))
+		constructor = func(chainNum uint32) *totalOrdering {
+			return newTotalOrdering(2, phi, chainNum)
 		}
 		s.baseTestRandomlyGeneratedBlocks(
-			constructor, nodeCount, blockCount, gen, repeat)
+			constructor, chainNum, blockNum, gen, repeat)
 		// Test for K=3,
-		constructor = func(nodes types.NodeIDs) *totalOrdering {
-			return newTotalOrdering(3, phi, uint32(len(nodes)))
+		constructor = func(chainNum uint32) *totalOrdering {
+			return newTotalOrdering(3, phi, chainNum)
 		}
 		s.baseTestRandomlyGeneratedBlocks(
-			constructor, nodeCount, blockCount, gen, repeat)
+			constructor, chainNum, blockNum, gen, repeat)
 	}
 }
 

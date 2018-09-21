@@ -400,7 +400,7 @@ func (s *BlockLatticeTest) TestRandomIntensiveAcking() {
 func (s *BlockLatticeTest) TestRandomlyGeneratedBlocks() {
 	var (
 		chainNum      uint32 = 19
-		blockCount           = 50
+		blockNum             = 50
 		repeat               = 20
 		delivered     []*types.Block
 		err           error
@@ -412,7 +412,7 @@ func (s *BlockLatticeTest) TestRandomlyGeneratedBlocks() {
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.Nil(err)
 	gen := test.NewBlocksGenerator(nil, hashBlock)
-	_, err = gen.Generate(int(chainNum), blockCount, nil, db)
+	_, err = gen.Generate(chainNum, blockNum, nil, db)
 	req.Nil(err)
 	iter, err := db.GetAll()
 	req.Nil(err)
