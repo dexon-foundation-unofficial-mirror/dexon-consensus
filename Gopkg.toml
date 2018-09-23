@@ -42,8 +42,8 @@
   name = "github.com/syndtr/goleveldb"
 
 [[constraint]]
-  branch = "master"
-  name = "github.com/herumi/bls"
+  branch = "dev"
+  name = "github.com/Spiderpowa/bls"
 
 [prune]
   go-tests = true

@@ -40,7 +40,8 @@ type Consensus struct {
 	K          int
 	ChainNum   uint32
 	GenesisCRS string `toml:"genesis_crs"`
-	Lambda     int
+	LambdaBA   int    `toml:"lambda_ba"`
+	LambdaDKG  int    `toml:"lambda_dkg"`
 }
 
 // Legacy config.
@@ -96,7 +97,8 @@ func GenerateDefault(path string) error {
 				K:          1,
 				ChainNum:   7,
 				GenesisCRS: "In DEXON we trust.",
-				Lambda:     250,
+				LambdaBA:   250,
+				LambdaDKG:  1000,
 			},
 			Legacy: Legacy{
 				ProposeIntervalMean:  500,

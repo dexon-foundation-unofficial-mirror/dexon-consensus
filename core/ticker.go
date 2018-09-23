@@ -19,6 +19,15 @@ package core
 
 import "time"
 
+// TickerType is the type of ticker.
+type TickerType int
+
+// TickerType enum.
+const (
+	TickerBA TickerType = iota
+	TickerDKG
+)
+
 // defaultTicker is a wrapper to implement ticker interface based on
 // time.Ticker.
 type defaultTicker struct {
@@ -43,16 +52,23 @@ func (t *defaultTicker) Stop() {
 // newTicker is a helper to setup a ticker by giving an Governance. If
 // the governace object implements a ticker generator, a ticker from that
 // generator would be returned, else constructs a default one.
-func newTicker(gov Governance) (t Ticker) {
+func newTicker(gov Governance, tickerType TickerType) (t Ticker) {
 	type tickerGenerator interface {
-		NewTicker() Ticker
+		NewTicker(TickerType) Ticker
 	}
 
 	if gen, ok := gov.(tickerGenerator); ok {
-		t = gen.NewTicker()
+		t = gen.NewTicker(tickerType)
 	}
 	if t == nil {
-		t = newDefaultTicker(gov.GetConfiguration(0).Lambda)
+		var duration time.Duration
+		switch tickerType {
+		case TickerBA:
+			duration = gov.GetConfiguration(0).LambdaBA
+		case TickerDKG:
+			duration = gov.GetConfiguration(0).LambdaDKG
+		}
+		t = newDefaultTicker(duration)
 	}
 	return
 }

@@ -153,6 +153,14 @@ func (n *network) SendDKGPrivateShare(
 	}
 }
 
+// BroadcastDKGPrivateShare implements core.Network interface.
+func (n *network) BroadcastDKGPrivateShare(
+	prvShare *types.DKGPrivateShare) {
+	if err := n.trans.Broadcast(prvShare); err != nil {
+		panic(err)
+	}
+}
+
 // ReceiveChan implements core.Network interface.
 func (n *network) ReceiveChan() <-chan interface{} {
 	return n.toConsensus

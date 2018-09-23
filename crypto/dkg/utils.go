@@ -20,7 +20,7 @@ package dkg
 import (
 	"fmt"
 
-	"github.com/herumi/bls/ffi/go/bls"
+	"github.com/Spiderpowa/bls/ffi/go/bls"
 
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )

@@ -2,7 +2,8 @@ title = "DEXON Consensus Simulation Config"
 
 [node]
 num = {{numNode}}
-lambda = 250
+lambda_ba = 250
+lambda_dkg = 1000
 max_block = 1000
 
 [node.consensus]

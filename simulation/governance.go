@@ -39,7 +39,8 @@ type simGovernance struct {
 	crs                string
 	dkgComplaint       map[uint64][]*types.DKGComplaint
 	dkgMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
-	lambda             time.Duration
+	lambdaBA           time.Duration
+	lambdaDKG          time.Duration
 	network            *network
 }
 
@@ -57,7 +58,8 @@ func newSimGovernance(
 		crs:                consensusConfig.GenesisCRS,
 		dkgComplaint:       make(map[uint64][]*types.DKGComplaint),
 		dkgMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
-		lambda:             time.Duration(consensusConfig.Lambda) * time.Millisecond,
+		lambdaBA:           time.Duration(consensusConfig.LambdaBA) * time.Millisecond,
+		lambdaDKG:          time.Duration(consensusConfig.LambdaDKG) * time.Millisecond,
 	}
 }
 
@@ -84,7 +86,8 @@ func (g *simGovernance) GetConfiguration(blockHeight uint64) *types.Config {
 		NumShards:  1,
 		NumChains:  g.chainNum,
 		GenesisCRS: g.crs,
-		Lambda:     g.lambda,
+		LambdaBA:   g.lambdaBA,
+		LambdaDKG:  g.lambdaDKG,
 		K:          g.k,
 		PhiRatio:   g.phiRatio,
 	}

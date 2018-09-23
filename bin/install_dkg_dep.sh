@@ -10,7 +10,7 @@ if [ ! -d .dep/dkg ]; then
   cd .dep/dkg
   git clone --depth 1 git://github.com/herumi/xbyak.git &
   git clone --depth 1 git://github.com/herumi/cybozulib.git &
-  git clone --depth 1 git://github.com/herumi/bls.git &
+  git clone --depth 1 --single-branch -b dev git://github.com/Spiderpowa/bls.git &
   git clone --depth 1 git://github.com/herumi/mcl.git &
   wait
   if [ "$(uname -o)" = "Darwin" ] && [ "$(brew --prefix)" != "/usr/local" ]; then
@@ -23,7 +23,7 @@ if [ ! -d .dep/dkg ]; then
   cd ../../../
 fi
 cp -r .dep/dkg/* \
-  vendor/github.com/herumi
-mkdir lib > /dev/null
+  vendor/github.com/Spiderpowa
+mkdir -p lib
 cd lib
-ln -s ../vendor/github.com/herumi/bls/lib/* .
+ln -sf ../vendor/github.com/Spiderpowa/bls/lib/* .

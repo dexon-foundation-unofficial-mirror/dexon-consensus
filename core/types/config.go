@@ -26,8 +26,9 @@ type Config struct {
 	NumChains  uint32
 	GenesisCRS string
 
-	// Byzantine agreement related.
-	Lambda time.Duration
+	// Lambda related.
+	LambdaBA  time.Duration
+	LambdaDKG time.Duration
 
 	// Total ordering related.
 	K        int

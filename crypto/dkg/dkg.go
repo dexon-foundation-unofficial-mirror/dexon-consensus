@@ -18,9 +18,10 @@
 package dkg
 
 import (
+	"encoding/json"
 	"fmt"
 
-	"github.com/herumi/bls/ffi/go/bls"
+	"github.com/Spiderpowa/bls/ffi/go/bls"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
@@ -50,8 +51,17 @@ func init() {
 // Crypto.PrivateKey interface.
 type PrivateKey struct {
 	privateKey bls.SecretKey
-	id         bls.ID
 	publicKey  PublicKey
+}
+
+// MarshalJSON implements json.Marshaller.
+func (prv *PrivateKey) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&prv.privateKey)
+}
+
+// UnmarshalJSON implements json.Unmarshaller.
+func (prv *PrivateKey) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, &prv.privateKey)
 }
 
 // ID is the id for DKG protocol.
@@ -78,6 +88,37 @@ type PublicKeyShares struct {
 	shares          []PublicKey
 	shareIndex      map[ID]int
 	masterPublicKey []bls.PublicKey
+}
+
+// MarshalJSON implements json.Marshaller.
+func (pubs *PublicKeyShares) MarshalJSON() ([]byte, error) {
+	type Alias PublicKeyShares
+	data := &struct {
+		MasterPublicKeys []*bls.PublicKey `json:"master_public_keys"`
+	}{
+		make([]*bls.PublicKey, len(pubs.masterPublicKey)),
+	}
+	for i := range pubs.masterPublicKey {
+		data.MasterPublicKeys[i] = &pubs.masterPublicKey[i]
+	}
+	return json.Marshal(data)
+}
+
+// UnmarshalJSON implements json.Unmarshaller.
+func (pubs *PublicKeyShares) UnmarshalJSON(data []byte) error {
+	type Alias PublicKeyShares
+	aux := &struct {
+		MasterPublicKeys []*bls.PublicKey `json:"master_public_keys"`
+	}{}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	mpk := make([]bls.PublicKey, len(aux.MasterPublicKeys))
+	for i, pk := range aux.MasterPublicKeys {
+		mpk[i] = *pk
+	}
+	pubs.masterPublicKey = mpk
+	return nil
 }
 
 // NewID creates a ew ID structure.
@@ -299,6 +340,22 @@ func (prv *PrivateKey) Sign(hash common.Hash) (crypto.Signature, error) {
 // Bytes returns []byte representation of private key.
 func (prv *PrivateKey) Bytes() []byte {
 	return prv.privateKey.GetLittleEndian()
+}
+
+// SetBytes sets the private key data to []byte.
+func (prv *PrivateKey) SetBytes(bytes []byte) error {
+	var key bls.SecretKey
+	if err := key.SetLittleEndian(bytes); err != nil {
+		return err
+	}
+	prv.privateKey = key
+	prv.publicKey = *newPublicKey(&prv.privateKey)
+	return nil
+}
+
+// String returns string representation of privat key.
+func (prv *PrivateKey) String() string {
+	return prv.privateKey.GetHexString()
 }
 
 // VerifySignature checks that the given public key created signature over hash.

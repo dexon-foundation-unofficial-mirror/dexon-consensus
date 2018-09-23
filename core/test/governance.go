@@ -34,7 +34,8 @@ var (
 
 // Governance is an implementation of Goverance for testing purpose.
 type Governance struct {
-	lambda             time.Duration
+	lambdaBA           time.Duration
+	lambdaDKG          time.Duration
 	notarySet          map[types.NodeID]struct{}
 	privateKeys        map[types.NodeID]crypto.PrivateKey
 	DKGComplaint       map[uint64][]*types.DKGComplaint
@@ -45,7 +46,8 @@ type Governance struct {
 func NewGovernance(nodeCount int, lambda time.Duration) (
 	g *Governance, err error) {
 	g = &Governance{
-		lambda:             lambda,
+		lambdaBA:           lambda,
+		lambdaDKG:          lambda * 10,
 		notarySet:          make(map[types.NodeID]struct{}),
 		privateKeys:        make(map[types.NodeID]crypto.PrivateKey),
 		DKGComplaint:       make(map[uint64][]*types.DKGComplaint),
@@ -80,7 +82,8 @@ func (g *Governance) GetConfiguration(blockHeight uint64) *types.Config {
 		NumShards:  1,
 		NumChains:  uint32(len(g.notarySet)),
 		GenesisCRS: "__ DEXON",
-		Lambda:     g.lambda,
+		LambdaBA:   g.lambdaBA,
+		LambdaDKG:  g.lambdaDKG,
 		K:          0,
 		PhiRatio:   0.667,
 	}

@@ -18,7 +18,7 @@
 package dkg
 
 import (
-	"github.com/herumi/bls/ffi/go/bls"
+	"github.com/Spiderpowa/bls/ffi/go/bls"
 )
 
 const (

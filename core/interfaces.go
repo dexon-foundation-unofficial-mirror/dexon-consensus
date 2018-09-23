@@ -69,6 +69,9 @@ type Network interface {
 	// SendDKGPrivateShare sends PrivateShare to a DKG participant.
 	SendDKGPrivateShare(recv types.NodeID, prvShare *types.DKGPrivateShare)
 
+	// BroadcastDKGPrivateShare broadcasts PrivateShare to all DKG participants.
+	BroadcastDKGPrivateShare(prvShare *types.DKGPrivateShare)
+
 	// ReceiveChan returns a channel to receive messages from DEXON network.
 	ReceiveChan() <-chan interface{}
 }

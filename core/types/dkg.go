@@ -18,6 +18,8 @@
 package types
 
 import (
+	"fmt"
+
 	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/crypto/dkg"
 )
@@ -29,6 +31,15 @@ type DKGPrivateShare struct {
 	Round        uint64           `json:"round"`
 	PrivateShare dkg.PrivateKey   `json:"private_share"`
 	Signature    crypto.Signature `json:"signature"`
+}
+
+func (p *DKGPrivateShare) String() string {
+	return fmt.Sprintf("prvShare(%d:%s->%s:%s:%s)",
+		p.Round,
+		p.ProposerID.String()[:6],
+		p.ReceiverID.String()[:6],
+		p.PrivateShare.String(),
+		p.Signature.String()[:6])
 }
 
 // DKGMasterPublicKey decrtibe a master public key in DKG protocol.

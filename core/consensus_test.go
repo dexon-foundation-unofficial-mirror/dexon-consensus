@@ -50,6 +50,11 @@ func (n *network) SendDKGPrivateShare(
 	recv types.NodeID, prvShare *types.DKGPrivateShare) {
 }
 
+// BroadcastDKGPrivateShare broadcasts PrivateShare to all DKG participants.
+func (n *network) BroadcastDKGPrivateShare(
+	prvShare *types.DKGPrivateShare) {
+}
+
 // ReceiveChan returns a channel to receive messages from DEXON network.
 func (n *network) ReceiveChan() <-chan interface{} {
 	return make(chan interface{})

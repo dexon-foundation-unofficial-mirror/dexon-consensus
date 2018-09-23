@@ -83,6 +83,7 @@ type dkgShareSecret struct {
 type dkgGroupPublicKey struct {
 	round          uint64
 	qualifyIDs     dkg.IDs
+	qualifyNodeIDs types.NodeIDs
 	idMap          map[types.NodeID]dkg.ID
 	publicKeys     map[types.NodeID]*dkg.PublicKey
 	groupPublicKey *dkg.PublicKey
@@ -282,6 +283,7 @@ func (d *dkgProtocol) processPrivateShare(
 		if _, exist := d.antiComplaintReceived[prvShare.ReceiverID]; !exist {
 			d.antiComplaintReceived[prvShare.ReceiverID] =
 				make(map[types.NodeID]struct{})
+			d.recv.ProposeDKGAntiNackComplaint(prvShare)
 		}
 		d.antiComplaintReceived[prvShare.ReceiverID][prvShare.ProposerID] =
 			struct{}{}
@@ -330,6 +332,7 @@ func newDKGGroupPublicKey(
 		}
 	}
 	qualifyIDs := make(dkg.IDs, 0, len(mpks)-len(disqualifyIDs))
+	qualifyNodeIDs := make(types.NodeIDs, 0, cap(qualifyIDs))
 	mpkMap := make(map[dkg.ID]*types.DKGMasterPublicKey, cap(qualifyIDs))
 	idMap := make(map[types.NodeID]dkg.ID)
 	for _, mpk := range mpks {
@@ -339,6 +342,7 @@ func newDKGGroupPublicKey(
 		mpkMap[mpk.DKGID] = mpk
 		idMap[mpk.ProposerID] = mpk.DKGID
 		qualifyIDs = append(qualifyIDs, mpk.DKGID)
+		qualifyNodeIDs = append(qualifyNodeIDs, mpk.ProposerID)
 	}
 	// Recover qualify members' public key.
 	pubKeys := make(map[types.NodeID]*dkg.PublicKey, len(qualifyIDs))
@@ -368,6 +372,7 @@ func newDKGGroupPublicKey(
 	return &dkgGroupPublicKey{
 		round:          round,
 		qualifyIDs:     qualifyIDs,
+		qualifyNodeIDs: qualifyNodeIDs,
 		idMap:          idMap,
 		publicKeys:     pubKeys,
 		threshold:      threshold,

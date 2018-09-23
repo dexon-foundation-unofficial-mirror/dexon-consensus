@@ -193,6 +193,13 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 		qualifyIDs[id] = struct{}{}
 	}
 
+	for _, nID := range gpk.qualifyNodeIDs {
+		id, exist := gpk.idMap[nID]
+		s.Require().True(exist)
+		_, exist = qualifyIDs[id]
+		s.Require().True(exist)
+	}
+
 	shareSecrets := make(
 		map[types.NodeID]*dkgShareSecret, len(qualifyIDs))
 
@@ -299,21 +306,26 @@ func (s *DKGTSIGProtocolTestSuite) TestComplaint() {
 		ReceiverID: targetID,
 		Round:      round,
 	})
-	s.Error(ErrNotDKGParticipant, err)
-	err = protocol.processPrivateShare(&types.DKGPrivateShare{
-		ProposerID: byzantineID,
-		ReceiverID: targetID,
-		Round:      round,
-	})
-	s.Error(ErrIncorrectPrivateShareSignature, err)
-
-	// Byzantine node is sending incorrect private share.
+	s.Equal(ErrNotDKGParticipant, err)
 	receivers[byzantineID].ProposeDKGPrivateShare(&types.DKGPrivateShare{
 		ProposerID: byzantineID,
 		ReceiverID: targetID,
 		Round:      round,
 	})
 	invalidShare := receivers[byzantineID].prvShare[targetID]
+	invalidShare.Signature[1]++
+	err = protocol.processPrivateShare(invalidShare)
+	s.Equal(ErrIncorrectPrivateShareSignature, err)
+	delete(receivers[byzantineID].prvShare, targetID)
+
+	// Byzantine node is sending incorrect private share.
+	receivers[byzantineID].ProposeDKGPrivateShare(&types.DKGPrivateShare{
+		ProposerID:   byzantineID,
+		ReceiverID:   targetID,
+		Round:        round,
+		PrivateShare: *dkg.NewPrivateKey(),
+	})
+	invalidShare = receivers[byzantineID].prvShare[targetID]
 	s.Require().NoError(protocol.processPrivateShare(invalidShare))
 	s.Require().Len(receiver.complaints, 1)
 	complaint, exist := receiver.complaints[byzantineID]
@@ -575,16 +587,17 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 			PartialSignature: shareSecret.sign(msgHash),
 		}
 		if nID == byzantineID2 {
-			psig.PartialSignature[0]++
+			psig.PartialSignature = shareSecret.sign(
+				crypto.Keccak256Hash([]byte("💣")))
 		}
 		var err error
 		psig.Signature, err = s.prvKeys[nID].Sign(hashDKGPartialSignature(psig))
 		s.Require().NoError(err)
 		err = tsig.processPartialSignature(msgHash, psig)
 		if nID == byzantineID {
-			s.Require().Error(ErrNotQualifyDKGParticipant, err)
+			s.Require().Equal(ErrNotQualifyDKGParticipant, err)
 		} else if nID == byzantineID2 {
-			s.Require().Error(ErrIncorrectPartialSignature, err)
+			s.Require().Equal(ErrIncorrectPartialSignature, err)
 		} else {
 			s.Require().NoError(err)
 		}
