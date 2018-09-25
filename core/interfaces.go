@@ -108,3 +108,29 @@ type Ticker interface {
 	// Stop the ticker.
 	Stop()
 }
+
+// Signer defines a role to sign data.
+type Signer interface {
+	// SignBlock signs a block.
+	SignBlock(b *types.Block) error
+	// SignVote signs a vote.
+	SignVote(v *types.Vote) error
+	// SignCRS sign a block's CRS signature.
+	SignCRS(b *types.Block, crs common.Hash) error
+}
+
+// CryptoVerifier defines a role to verify data in crypto's way.
+type CryptoVerifier interface {
+	// VerifyBlock verifies if a block is properly signed or not.
+	VerifyBlock(b *types.Block) (ok bool, err error)
+	// VerifyVote verfies if a vote is properly signed or not.
+	VerifyVote(v *types.Vote) (ok bool, err error)
+	// VerifyCRS verifies if a CRS signature of one block is valid or not.
+	VerifyCRS(b *types.Block, crs common.Hash) (ok bool, err error)
+}
+
+// Authenticator verify/sign who own the data.
+type Authenticator interface {
+	Signer
+	CryptoVerifier
+}
