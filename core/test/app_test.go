@@ -62,7 +62,7 @@ func (s *AppTestSuite) setupAppByTotalOrderDeliver(
 	for _, h := range to.BlockHashes {
 		app.StronglyAcked(h)
 	}
-	app.TotalOrderingDeliver(to.BlockHashes, to.Early)
+	app.TotalOrderingDelivered(to.BlockHashes, to.Early)
 	for _, h := range to.BlockHashes {
 		// To make it simpler, use the index of hash sequence
 		// as the time.
@@ -80,7 +80,7 @@ func (s *AppTestSuite) deliverBlockWithTimeFromSequenceLength(
 func (s *AppTestSuite) deliverBlock(
 	app *App, hash common.Hash, timestamp time.Time) {
 
-	app.BlockDeliver(types.Block{
+	app.BlockDelivered(types.Block{
 		Hash: hash,
 		Witness: types.Witness{
 			Timestamp: timestamp,
@@ -100,7 +100,7 @@ func (s *AppTestSuite) TestCompare() {
 	s.setupAppByTotalOrderDeliver(app2, s.to2)
 	hash := common.NewRandomHash()
 	app2.StronglyAcked(hash)
-	app2.TotalOrderingDeliver(common.Hashes{hash}, false)
+	app2.TotalOrderingDelivered(common.Hashes{hash}, false)
 	s.deliverBlockWithTimeFromSequenceLength(app2, hash)
 	req.Equal(ErrMismatchBlockHashSequence, app1.Compare(app2))
 	// An App with different consensus time for the same block.
@@ -110,7 +110,7 @@ func (s *AppTestSuite) TestCompare() {
 	for _, h := range s.to3.BlockHashes {
 		app3.StronglyAcked(h)
 	}
-	app3.TotalOrderingDeliver(s.to3.BlockHashes, s.to3.Early)
+	app3.TotalOrderingDelivered(s.to3.BlockHashes, s.to3.Early)
 	wrongTime := time.Time{}.Add(
 		time.Duration(len(app3.DeliverSequence)) * time.Second)
 	wrongTime = wrongTime.Add(1 * time.Second)
@@ -141,7 +141,7 @@ func (s *AppTestSuite) TestVerify() {
 	for _, h := range s.to2.BlockHashes {
 		app2.StronglyAcked(h)
 	}
-	app2.TotalOrderingDeliver(s.to2.BlockHashes, s.to2.Early)
+	app2.TotalOrderingDelivered(s.to2.BlockHashes, s.to2.Early)
 	s.deliverBlock(app2, s.to2.BlockHashes[0], time.Time{})
 	req.Equal(ErrConsensusTimestampOutOfOrder, app2.Verify())
 	// A delivered block is not found in total ordering delivers.
@@ -157,15 +157,15 @@ func (s *AppTestSuite) TestVerify() {
 	for _, h := range s.to2.BlockHashes {
 		app4.StronglyAcked(h)
 	}
-	app4.TotalOrderingDeliver(s.to2.BlockHashes, s.to2.Early)
+	app4.TotalOrderingDelivered(s.to2.BlockHashes, s.to2.Early)
 	hash = common.NewRandomHash()
 	app4.StronglyAcked(hash)
-	app4.TotalOrderingDeliver(common.Hashes{hash}, false)
+	app4.TotalOrderingDelivered(common.Hashes{hash}, false)
 	s.deliverBlockWithTimeFromSequenceLength(app4, hash)
 	// Witness ack on unknown block.
 	app5 := NewApp()
 	s.setupAppByTotalOrderDeliver(app5, s.to1)
-	app5.WitnessAckDeliver(&types.WitnessAck{
+	app5.WitnessAckDelivered(&types.WitnessAck{
 		Hash:             common.NewRandomHash(),
 		WitnessBlockHash: common.NewRandomHash(),
 	})

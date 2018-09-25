@@ -560,7 +560,7 @@ func (con *Consensus) processWitnessData() {
 			if err != nil {
 				panic(err)
 			}
-			con.nbModule.WitnessAckDeliver(witnessAck)
+			con.nbModule.WitnessAckDelivered(witnessAck)
 		}
 	}
 }
@@ -645,7 +645,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		for idx := range deliveredBlocks {
 			hashes[idx] = deliveredBlocks[idx].Hash
 		}
-		con.nbModule.TotalOrderingDeliver(hashes, earlyDelivered)
+		con.nbModule.TotalOrderingDelivered(hashes, earlyDelivered)
 		// Perform timestamp generation.
 		err = con.ctModule.processBlocks(deliveredBlocks)
 		if err != nil {
@@ -658,7 +658,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 			if err = con.db.Update(*b); err != nil {
 				return
 			}
-			con.nbModule.BlockDeliver(*b)
+			con.nbModule.BlockDelivered(*b)
 			// TODO(mission): Find a way to safely recycle the block.
 			//                We should deliver block directly to
 			//                nonBlocking and let them recycle the

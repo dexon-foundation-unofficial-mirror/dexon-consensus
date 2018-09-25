@@ -60,8 +60,8 @@ func newSimApp(id types.NodeID, netModule *network) *simApp {
 func (a *simApp) BlockConfirmed(_ common.Hash) {
 }
 
-// VerifyPayloads implements core.Application.
-func (a *simApp) VerifyPayloads(payloads []byte) bool {
+// VerifyPayload implements core.Application.
+func (a *simApp) VerifyPayload(payloads []byte) bool {
 	return true
 }
 
@@ -101,9 +101,9 @@ func (a *simApp) PreparePayload(position types.Position) []byte {
 func (a *simApp) StronglyAcked(blockHash common.Hash) {
 }
 
-// TotalOrderingDeliver is called when blocks are delivered by the total
+// TotalOrderingDelivered is called when blocks are delivered by the total
 // ordering algorithm.
-func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
+func (a *simApp) TotalOrderingDelivered(blockHashes common.Hashes, early bool) {
 	fmt.Println("OUTPUT", a.NodeID, early, blockHashes)
 	blockList := &BlockList{
 		ID:        a.DeliverID,
@@ -113,8 +113,8 @@ func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 	a.DeliverID++
 }
 
-// BlockDeliver is called when a block in compaction chain is delivered.
-func (a *simApp) BlockDeliver(block types.Block) {
+// BlockDelivered is called when a block in compaction chain is delivered.
+func (a *simApp) BlockDelivered(block types.Block) {
 	func() {
 		a.blockByHashMutex.Lock()
 		defer a.blockByHashMutex.Unlock()
@@ -165,6 +165,6 @@ func (a *simApp) BlockProcessedChan() <-chan types.WitnessResult {
 	return a.witnessResultChan
 }
 
-// WitnessAckDeliver is called when a witness ack is created.
-func (a *simApp) WitnessAckDeliver(witnessAck *types.WitnessAck) {
+// WitnessAckDelivered is called when a witness ack is created.
+func (a *simApp) WitnessAckDelivered(witnessAck *types.WitnessAck) {
 }

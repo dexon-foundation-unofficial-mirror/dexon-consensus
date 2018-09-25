@@ -77,7 +77,7 @@ func (mgr *testShardMgr) processBlock(b *types.Block) (err error) {
 			if err = mgr.db.Update(*b); err != nil {
 				return
 			}
-			mgr.app.BlockDeliver(*b)
+			mgr.app.BlockDelivered(*b)
 		}
 		// Update pending blocks for verified block (pass sanity check).
 		pendings = append(pendings, verified...)

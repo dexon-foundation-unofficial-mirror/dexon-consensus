@@ -109,8 +109,8 @@ func (app *App) PreparePayload(position types.Position) []byte {
 	return []byte{}
 }
 
-// VerifyPayloads implements Application.
-func (app *App) VerifyPayloads(payloads []byte) bool {
+// VerifyPayload implements Application.
+func (app *App) VerifyPayload(payloads []byte) bool {
 	return true
 }
 
@@ -126,8 +126,8 @@ func (app *App) StronglyAcked(blockHash common.Hash) {
 	app.Acked[blockHash] = &AppAckedRecord{When: time.Now().UTC()}
 }
 
-// TotalOrderingDeliver implements Application interface.
-func (app *App) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
+// TotalOrderingDelivered implements Application interface.
+func (app *App) TotalOrderingDelivered(blockHashes common.Hashes, early bool) {
 	app.totalOrderedLock.Lock()
 	defer app.totalOrderedLock.Unlock()
 
@@ -145,8 +145,8 @@ func (app *App) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
 	}
 }
 
-// BlockDeliver implements Application interface.
-func (app *App) BlockDeliver(block types.Block) {
+// BlockDelivered implements Application interface.
+func (app *App) BlockDelivered(block types.Block) {
 	app.deliveredLock.Lock()
 	defer app.deliveredLock.Unlock()
 
@@ -163,8 +163,8 @@ func (app *App) BlockProcessedChan() <-chan types.WitnessResult {
 	return app.witnessResultChan
 }
 
-// WitnessAckDeliver implements Application interface.
-func (app *App) WitnessAckDeliver(witnessAck *types.WitnessAck) {
+// WitnessAckDelivered implements Application interface.
+func (app *App) WitnessAckDelivered(witnessAck *types.WitnessAck) {
 	app.witnessAckLock.Lock()
 	defer app.witnessAckLock.Unlock()
 

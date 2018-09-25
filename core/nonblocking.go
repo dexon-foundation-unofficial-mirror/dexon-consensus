@@ -33,12 +33,12 @@ type stronglyAckedEvent struct {
 	blockHash common.Hash
 }
 
-type totalOrderingDeliverEvent struct {
+type totalOrderingDeliveredEvent struct {
 	blockHashes common.Hashes
 	early       bool
 }
 
-type blockDeliverEvent struct {
+type blockDeliveredEvent struct {
 	block *types.Block
 }
 
@@ -99,12 +99,12 @@ func (nb *nonBlocking) run() {
 			nb.debug.StronglyAcked(e.blockHash)
 		case blockConfirmedEvent:
 			nb.debug.BlockConfirmed(e.blockHash)
-		case totalOrderingDeliverEvent:
-			nb.debug.TotalOrderingDeliver(e.blockHashes, e.early)
-		case blockDeliverEvent:
-			nb.app.BlockDeliver(*e.block)
+		case totalOrderingDeliveredEvent:
+			nb.debug.TotalOrderingDelivered(e.blockHashes, e.early)
+		case blockDeliveredEvent:
+			nb.app.BlockDelivered(*e.block)
 		case witnessAckEvent:
-			nb.app.WitnessAckDeliver(e.witnessAck)
+			nb.app.WitnessAckDelivered(e.witnessAck)
 		default:
 			fmt.Printf("Unknown event %v.", e)
 		}
@@ -129,9 +129,9 @@ func (nb *nonBlocking) PreparePayload(
 	return nb.app.PreparePayload(position)
 }
 
-// VerifyPayloads cannot be non-blocking.
-func (nb *nonBlocking) VerifyPayloads(payloads []byte) bool {
-	return nb.app.VerifyPayloads(payloads)
+// VerifyPayload cannot be non-blocking.
+func (nb *nonBlocking) VerifyPayload(payloads []byte) bool {
+	return nb.app.VerifyPayload(payloads)
 }
 
 // BlockConfirmed is called when a block is confirmed and added to lattice.
@@ -148,18 +148,18 @@ func (nb *nonBlocking) StronglyAcked(blockHash common.Hash) {
 	}
 }
 
-// TotalOrderingDeliver is called when the total ordering algorithm deliver
+// TotalOrderingDelivered is called when the total ordering algorithm deliver
 // a set of block.
-func (nb *nonBlocking) TotalOrderingDeliver(
+func (nb *nonBlocking) TotalOrderingDelivered(
 	blockHashes common.Hashes, early bool) {
 	if nb.debug != nil {
-		nb.addEvent(totalOrderingDeliverEvent{blockHashes, early})
+		nb.addEvent(totalOrderingDeliveredEvent{blockHashes, early})
 	}
 }
 
-// BlockDeliver is called when a block is add to the compaction chain.
-func (nb *nonBlocking) BlockDeliver(block types.Block) {
-	nb.addEvent(blockDeliverEvent{&block})
+// BlockDelivered is called when a block is add to the compaction chain.
+func (nb *nonBlocking) BlockDelivered(block types.Block) {
+	nb.addEvent(blockDeliveredEvent{&block})
 }
 
 // BlockProcessedChan returns a channel to receive the block hashes that have
@@ -168,7 +168,7 @@ func (nb *nonBlocking) BlockProcessedChan() <-chan types.WitnessResult {
 	return nb.app.BlockProcessedChan()
 }
 
-// WitnessAckDeliver is called when a witness ack is created.
-func (nb *nonBlocking) WitnessAckDeliver(witnessAck *types.WitnessAck) {
+// WitnessAckDelivered is called when a witness ack is created.
+func (nb *nonBlocking) WitnessAckDelivered(witnessAck *types.WitnessAck) {
 	nb.addEvent(witnessAckEvent{witnessAck})
 }

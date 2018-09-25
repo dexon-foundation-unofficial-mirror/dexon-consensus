@@ -30,18 +30,18 @@ type Application interface {
 	// PreparePayload is called when consensus core is preparing a block.
 	PreparePayload(position types.Position) []byte
 
-	// VerifyPayloads verifies if the payloads are valid.
-	VerifyPayloads(payloads []byte) bool
+	// VerifyPayload verifies if the payloads are valid.
+	VerifyPayload(payloads []byte) bool
 
-	// BlockDeliver is called when a block is add to the compaction chain.
-	BlockDeliver(block types.Block)
+	// BlockDelivered is called when a block is add to the compaction chain.
+	BlockDelivered(block types.Block)
 
 	// BlockProcessedChan returns a channel to receive the block hashes that have
 	// finished processing by the application.
 	BlockProcessedChan() <-chan types.WitnessResult
 
-	// WitnessAckDeliver is called when a witness ack is created.
-	WitnessAckDeliver(witnessAck *types.WitnessAck)
+	// WitnessAckDelivered is called when a witness ack is created.
+	WitnessAckDelivered(witnessAck *types.WitnessAck)
 }
 
 // Debug describes the application interface that requires
@@ -53,9 +53,9 @@ type Debug interface {
 	// StronglyAcked is called when a block is strongly acked.
 	StronglyAcked(blockHash common.Hash)
 
-	// TotalOrderingDeliver is called when the total ordering algorithm deliver
+	// TotalOrderingDelivered is called when the total ordering algorithm deliver
 	// a set of block.
-	TotalOrderingDeliver(blockHashes common.Hashes, early bool)
+	TotalOrderingDelivered(blockHashes common.Hashes, early bool)
 }
 
 // Network describs the network interface that interacts with DEXON consensus

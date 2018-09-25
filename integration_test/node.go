@@ -204,7 +204,7 @@ func (n *Node) processBlock(b *types.Block) (err error) {
 			if err = n.db.Update(*b); err != nil {
 				return
 			}
-			n.app.BlockDeliver(*b)
+			n.app.BlockDelivered(*b)
 		}
 		// Update pending blocks for verified block (pass sanity check).
 		pendings = append(pendings, verified...)

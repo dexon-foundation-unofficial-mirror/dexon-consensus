@@ -192,7 +192,7 @@ func (s *Shard) ProcessBlock(
 			hashes[idx] = toDelivered[idx].Hash
 		}
 		if s.debug != nil {
-			s.debug.TotalOrderingDeliver(hashes, earlyDelivered)
+			s.debug.TotalOrderingDelivered(hashes, earlyDelivered)
 		}
 		// Perform timestamp generation.
 		if err = s.ctModule.processBlocks(toDelivered); err != nil {
