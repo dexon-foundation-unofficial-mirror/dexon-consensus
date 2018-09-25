@@ -77,7 +77,7 @@ func (mgr *testShardMgr) processBlock(b *types.Block) (err error) {
 			if err = mgr.db.Update(*b); err != nil {
 				return
 			}
-			mgr.app.DeliverBlock(b.Hash, b.Witness.Timestamp)
+			mgr.app.BlockDeliver(*b)
 		}
 		// Update pending blocks for verified block (pass sanity check).
 		pendings = append(pendings, verified...)
@@ -109,6 +109,7 @@ func (s *ShardTestSuite) newTestShardMgr(cfg *types.Config) *testShardMgr {
 			cfg,
 			prvKey,
 			eth.SigToPub,
+			app,
 			app,
 			db)}
 }

@@ -61,7 +61,9 @@ func (s *StopperTestSuite) TestStopByConfirmedBlocks() {
 			}
 			app.TotalOrderingDeliver(hashes, false)
 			for _, h := range hashes {
-				app.DeliverBlock(h, time.Time{})
+				app.BlockDeliver(types.Block{
+					Hash:    h,
+					Witness: types.Witness{Timestamp: time.Time{}}})
 			}
 		}
 	}

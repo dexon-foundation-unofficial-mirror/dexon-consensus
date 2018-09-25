@@ -36,6 +36,7 @@ type Shard struct {
 	sigToPub SigToPubFn
 	chainNum uint32
 	app      Application
+	debug    Debug
 	db       blockdb.BlockDatabase
 	pool     blockPool
 	lattice  *blockLattice
@@ -50,6 +51,7 @@ func NewShard(
 	prvKey crypto.PrivateKey,
 	sigToPub SigToPubFn,
 	app Application,
+	debug Debug,
 	db blockdb.BlockDatabase) (s *Shard) {
 
 	s = &Shard{
@@ -59,6 +61,7 @@ func NewShard(
 		sigToPub: sigToPub,
 		chainNum: cfg.NumChains,
 		app:      app,
+		debug:    debug,
 		db:       db,
 		pool:     newBlockPool(cfg.NumChains),
 		lattice:  newBlockLattice(ID, cfg.NumChains),
@@ -155,8 +158,10 @@ func (s *Shard) ProcessBlock(
 	}
 	// TODO(mission): remove this hack, BA related stuffs should not
 	//                be done here.
-	s.app.StronglyAcked(input.Hash)
-	s.app.BlockConfirmed(input)
+	if s.debug != nil {
+		s.debug.StronglyAcked(input.Hash)
+		s.debug.BlockConfirmed(input.Hash)
+	}
 	// Purge blocks in pool with the same chainID and lower height.
 	s.pool.purgeBlocks(input.Position.ChainID, input.Position.Height)
 	// Replay tips in pool to check their validity.
@@ -186,7 +191,9 @@ func (s *Shard) ProcessBlock(
 		for idx := range toDelivered {
 			hashes[idx] = toDelivered[idx].Hash
 		}
-		s.app.TotalOrderingDeliver(hashes, earlyDelivered)
+		if s.debug != nil {
+			s.debug.TotalOrderingDeliver(hashes, earlyDelivered)
+		}
 		// Perform timestamp generation.
 		if err = s.ctModule.processBlocks(toDelivered); err != nil {
 			return

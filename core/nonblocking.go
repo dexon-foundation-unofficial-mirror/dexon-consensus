@@ -20,14 +20,13 @@ package core
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
 type blockConfirmedEvent struct {
-	block *types.Block
+	blockHash common.Hash
 }
 
 type stronglyAckedEvent struct {
@@ -39,128 +38,137 @@ type totalOrderingDeliverEvent struct {
 	early       bool
 }
 
-type deliverBlockEvent struct {
-	blockHash common.Hash
-	timestamp time.Time
+type blockDeliverEvent struct {
+	block *types.Block
 }
 
 type witnessAckEvent struct {
 	witnessAck *types.WitnessAck
 }
 
-// nonBlockingApplication implements Application and is a decorator for
-// Application that makes the methods to be non-blocking.
-type nonBlockingApplication struct {
+// nonBlocking implements these interfaces and is a decorator for
+// them that makes the methods to be non-blocking.
+//  - Application
+//  - Debug
+//  - It also provides nonblockig for blockdb update.
+type nonBlocking struct {
 	app          Application
+	debug        Debug
 	eventChan    chan interface{}
 	events       []interface{}
 	eventsChange *sync.Cond
 	running      sync.WaitGroup
 }
 
-func newNonBlockingApplication(app Application) *nonBlockingApplication {
-	nonBlockingApp := &nonBlockingApplication{
+func newNonBlocking(app Application, debug Debug) *nonBlocking {
+	nonBlockingModule := &nonBlocking{
 		app:          app,
+		debug:        debug,
 		eventChan:    make(chan interface{}, 6),
 		events:       make([]interface{}, 0, 100),
 		eventsChange: sync.NewCond(&sync.Mutex{}),
 	}
-	go nonBlockingApp.run()
-	return nonBlockingApp
+	go nonBlockingModule.run()
+	return nonBlockingModule
 }
 
-func (app *nonBlockingApplication) addEvent(event interface{}) {
-	app.eventsChange.L.Lock()
-	defer app.eventsChange.L.Unlock()
-	app.events = append(app.events, event)
-	app.eventsChange.Broadcast()
+func (nb *nonBlocking) addEvent(event interface{}) {
+	nb.eventsChange.L.Lock()
+	defer nb.eventsChange.L.Unlock()
+	nb.events = append(nb.events, event)
+	nb.eventsChange.Broadcast()
 }
 
-func (app *nonBlockingApplication) run() {
+func (nb *nonBlocking) run() {
 	// This go routine consume the first event from events and call the
-	// corresponding method of app.
+	// corresponding methods of Application/Debug/blockdb.
 	for {
 		var event interface{}
 		func() {
-			app.eventsChange.L.Lock()
-			defer app.eventsChange.L.Unlock()
-			for len(app.events) == 0 {
-				app.eventsChange.Wait()
+			nb.eventsChange.L.Lock()
+			defer nb.eventsChange.L.Unlock()
+			for len(nb.events) == 0 {
+				nb.eventsChange.Wait()
 			}
-			event = app.events[0]
-			app.events = app.events[1:]
-			app.running.Add(1)
+			event = nb.events[0]
+			nb.events = nb.events[1:]
+			nb.running.Add(1)
 		}()
 		switch e := event.(type) {
 		case stronglyAckedEvent:
-			app.app.StronglyAcked(e.blockHash)
+			nb.debug.StronglyAcked(e.blockHash)
 		case blockConfirmedEvent:
-			app.app.BlockConfirmed(e.block)
+			nb.debug.BlockConfirmed(e.blockHash)
 		case totalOrderingDeliverEvent:
-			app.app.TotalOrderingDeliver(e.blockHashes, e.early)
-		case deliverBlockEvent:
-			app.app.DeliverBlock(e.blockHash, e.timestamp)
+			nb.debug.TotalOrderingDeliver(e.blockHashes, e.early)
+		case blockDeliverEvent:
+			nb.app.BlockDeliver(*e.block)
 		case witnessAckEvent:
-			app.app.WitnessAckDeliver(e.witnessAck)
+			nb.app.WitnessAckDeliver(e.witnessAck)
 		default:
 			fmt.Printf("Unknown event %v.", e)
 		}
-		app.running.Done()
-		app.eventsChange.Broadcast()
+		nb.running.Done()
+		nb.eventsChange.Broadcast()
 	}
 }
 
 // wait will wait for all event in events finishes.
-func (app *nonBlockingApplication) wait() {
-	app.eventsChange.L.Lock()
-	defer app.eventsChange.L.Unlock()
-	for len(app.events) > 0 {
-		app.eventsChange.Wait()
+func (nb *nonBlocking) wait() {
+	nb.eventsChange.L.Lock()
+	defer nb.eventsChange.L.Unlock()
+	for len(nb.events) > 0 {
+		nb.eventsChange.Wait()
 	}
-	app.running.Wait()
+	nb.running.Wait()
 }
 
 // PreparePayload cannot be non-blocking.
-func (app *nonBlockingApplication) PreparePayload(
+func (nb *nonBlocking) PreparePayload(
 	position types.Position) []byte {
-	return app.app.PreparePayload(position)
+	return nb.app.PreparePayload(position)
 }
 
 // VerifyPayloads cannot be non-blocking.
-func (app *nonBlockingApplication) VerifyPayloads(payloads []byte) bool {
-	return app.app.VerifyPayloads(payloads)
+func (nb *nonBlocking) VerifyPayloads(payloads []byte) bool {
+	return nb.app.VerifyPayloads(payloads)
 }
 
 // BlockConfirmed is called when a block is confirmed and added to lattice.
-func (app *nonBlockingApplication) BlockConfirmed(block *types.Block) {
-	app.addEvent(blockConfirmedEvent{block})
+func (nb *nonBlocking) BlockConfirmed(blockHash common.Hash) {
+	if nb.debug != nil {
+		nb.addEvent(blockConfirmedEvent{blockHash})
+	}
 }
 
 // StronglyAcked is called when a block is strongly acked.
-func (app *nonBlockingApplication) StronglyAcked(blockHash common.Hash) {
-	app.addEvent(stronglyAckedEvent{blockHash})
+func (nb *nonBlocking) StronglyAcked(blockHash common.Hash) {
+	if nb.debug != nil {
+		nb.addEvent(stronglyAckedEvent{blockHash})
+	}
 }
 
 // TotalOrderingDeliver is called when the total ordering algorithm deliver
 // a set of block.
-func (app *nonBlockingApplication) TotalOrderingDeliver(
+func (nb *nonBlocking) TotalOrderingDeliver(
 	blockHashes common.Hashes, early bool) {
-	app.addEvent(totalOrderingDeliverEvent{blockHashes, early})
+	if nb.debug != nil {
+		nb.addEvent(totalOrderingDeliverEvent{blockHashes, early})
+	}
 }
 
-// DeliverBlock is called when a block is add to the compaction chain.
-func (app *nonBlockingApplication) DeliverBlock(
-	blockHash common.Hash, timestamp time.Time) {
-	app.addEvent(deliverBlockEvent{blockHash, timestamp})
+// BlockDeliver is called when a block is add to the compaction chain.
+func (nb *nonBlocking) BlockDeliver(block types.Block) {
+	nb.addEvent(blockDeliverEvent{&block})
 }
 
 // BlockProcessedChan returns a channel to receive the block hashes that have
 // finished processing by the application.
-func (app *nonBlockingApplication) BlockProcessedChan() <-chan types.WitnessResult {
-	return app.app.BlockProcessedChan()
+func (nb *nonBlocking) BlockProcessedChan() <-chan types.WitnessResult {
+	return nb.app.BlockProcessedChan()
 }
 
 // WitnessAckDeliver is called when a witness ack is created.
-func (app *nonBlockingApplication) WitnessAckDeliver(witnessAck *types.WitnessAck) {
-	app.addEvent(witnessAckEvent{witnessAck})
+func (nb *nonBlocking) WitnessAckDeliver(witnessAck *types.WitnessAck) {
+	nb.addEvent(witnessAckEvent{witnessAck})
 }

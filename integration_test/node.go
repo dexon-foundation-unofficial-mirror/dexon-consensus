@@ -118,6 +118,7 @@ func NewNode(
 			privateKey,
 			eth.SigToPub,
 			app,
+			app,
 			db),
 	}
 }
@@ -203,7 +204,7 @@ func (n *Node) processBlock(b *types.Block) (err error) {
 			if err = n.db.Update(*b); err != nil {
 				return
 			}
-			n.app.DeliverBlock(b.Hash, b.Witness.Timestamp)
+			n.app.BlockDeliver(*b)
 		}
 		// Update pending blocks for verified block (pass sanity check).
 		pendings = append(pendings, verified...)

@@ -33,18 +33,8 @@ type Application interface {
 	// VerifyPayloads verifies if the payloads are valid.
 	VerifyPayloads(payloads []byte) bool
 
-	// BlockConfirmed is called when a block is confirmed and added to lattice.
-	BlockConfirmed(block *types.Block)
-
-	// StronglyAcked is called when a block is strongly acked.
-	StronglyAcked(blockHash common.Hash)
-
-	// TotalOrderingDeliver is called when the total ordering algorithm deliver
-	// a set of block.
-	TotalOrderingDeliver(blockHashes common.Hashes, early bool)
-
-	// DeliverBlock is called when a block is add to the compaction chain.
-	DeliverBlock(blockHash common.Hash, timestamp time.Time)
+	// BlockDeliver is called when a block is add to the compaction chain.
+	BlockDeliver(block types.Block)
 
 	// BlockProcessedChan returns a channel to receive the block hashes that have
 	// finished processing by the application.
@@ -52,6 +42,20 @@ type Application interface {
 
 	// WitnessAckDeliver is called when a witness ack is created.
 	WitnessAckDeliver(witnessAck *types.WitnessAck)
+}
+
+// Debug describes the application interface that requires
+// more detailed consensus execution.
+type Debug interface {
+	// BlockConfirmed is called when a block is confirmed and added to lattice.
+	BlockConfirmed(blockHash common.Hash)
+
+	// StronglyAcked is called when a block is strongly acked.
+	StronglyAcked(blockHash common.Hash)
+
+	// TotalOrderingDeliver is called when the total ordering algorithm deliver
+	// a set of block.
+	TotalOrderingDeliver(blockHashes common.Hashes, early bool)
 }
 
 // Network describs the network interface that interacts with DEXON consensus

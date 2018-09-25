@@ -81,7 +81,7 @@ func (s *ConsensusTestSuite) prepareGenesisBlock(
 }
 
 func (s *ConsensusTestSuite) prepareConsensus(
-	gov *test.Governance, nID types.NodeID) (*Application, *Consensus) {
+	gov *test.Governance, nID types.NodeID) (*test.App, *Consensus) {
 
 	app := test.NewApp()
 	db, err := blockdb.NewMemBackedBlockDB()
@@ -89,7 +89,7 @@ func (s *ConsensusTestSuite) prepareConsensus(
 	prv, exist := gov.GetPrivateKey(nID)
 	s.Require().Nil(exist)
 	con := NewConsensus(app, gov, db, &network{}, prv, eth.SigToPub)
-	return &con.app, con
+	return app, con
 }
 
 func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
@@ -118,13 +118,13 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 
 	// Setup core.Consensus and test.App.
 	objs := map[types.NodeID]*struct {
-		app *Application
+		app *test.App
 		con *Consensus
 	}{}
 	for _, nID := range nodes {
 		app, con := s.prepareConsensus(gov, nID)
 		objs[nID] = &struct {
-			app *Application
+			app *test.App
 			con *Consensus
 		}{app, con}
 	}
@@ -309,14 +309,8 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		req.Equal(t, app.Delivered[b11.Hash].ConsensusTime)
 	}
 	for _, obj := range objs {
-		app := *obj.app
-		if nbapp, ok := app.(*nonBlockingApplication); ok {
-			nbapp.wait()
-			app = nbapp.app
-		}
-		testApp, ok := app.(*test.App)
-		s.Require().True(ok)
-		verify(testApp)
+		obj.con.nbModule.wait()
+		verify(obj.app)
 	}
 }
 
@@ -338,23 +332,16 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 		nodes = append(nodes, nID)
 	}
 	// Setup core.Consensus and test.App.
-	objs := map[types.NodeID]*struct {
-		app *Application
-		con *Consensus
-	}{}
+	cons := map[types.NodeID]*Consensus{}
 	for _, nID := range nodes {
-		app, con := s.prepareConsensus(gov, nID)
-		objs[nID] = &struct {
-			app *Application
-			con *Consensus
-		}{app, con}
+		_, con := s.prepareConsensus(gov, nID)
+		cons[nID] = con
 	}
-	b00 := s.prepareGenesisBlock(nodes[0], 0, objs[nodes[0]].con)
-	b10 := s.prepareGenesisBlock(nodes[1], 1, objs[nodes[1]].con)
-	b20 := s.prepareGenesisBlock(nodes[2], 2, objs[nodes[2]].con)
-	b30 := s.prepareGenesisBlock(nodes[3], 3, objs[nodes[3]].con)
-	for _, obj := range objs {
-		con := obj.con
+	b00 := s.prepareGenesisBlock(nodes[0], 0, cons[nodes[0]])
+	b10 := s.prepareGenesisBlock(nodes[1], 1, cons[nodes[1]])
+	b20 := s.prepareGenesisBlock(nodes[2], 2, cons[nodes[2]])
+	b30 := s.prepareGenesisBlock(nodes[3], 3, cons[nodes[3]])
+	for _, con := range cons {
 		req.Nil(con.processBlock(b00))
 		req.Nil(con.processBlock(b10))
 		req.Nil(con.processBlock(b20))
@@ -365,20 +352,19 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 	}
 	// Sleep to make sure 'now' is slower than b10's timestamp.
 	time.Sleep(100 * time.Millisecond)
-	req.Nil(objs[nodes[1]].con.prepareBlock(b11, time.Now().UTC()))
+	req.Nil(cons[nodes[1]].prepareBlock(b11, time.Now().UTC()))
 	// Make sure we would assign 'now' to the timestamp belongs to
 	// the proposer.
 	req.True(
 		b11.Timestamp.Sub(
 			b10.Timestamp) > 100*time.Millisecond)
-	for _, obj := range objs {
-		con := obj.con
+	for _, con := range cons {
 		req.Nil(con.processBlock(b11))
 	}
 	b12 := &types.Block{
 		ProposerID: nodes[1],
 	}
-	req.Nil(objs[nodes[1]].con.prepareBlock(b12, time.Now().UTC()))
+	req.Nil(cons[nodes[1]].prepareBlock(b12, time.Now().UTC()))
 	req.Len(b12.Acks, 1)
 	req.Contains(b12.Acks, b11.Hash)
 }

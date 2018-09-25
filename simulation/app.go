@@ -57,12 +57,7 @@ func newSimApp(id types.NodeID, netModule *network) *simApp {
 }
 
 // BlockConfirmed implements core.Application.
-func (a *simApp) BlockConfirmed(block *types.Block) {
-	a.blockByHashMutex.Lock()
-	defer a.blockByHashMutex.Unlock()
-
-	// TODO(jimmy-dexon) : Remove block in this hash if it's no longer needed.
-	a.blockByHash[block.Hash] = block
+func (a *simApp) BlockConfirmed(_ common.Hash) {
 }
 
 // VerifyPayloads implements core.Application.
@@ -109,78 +104,38 @@ func (a *simApp) StronglyAcked(blockHash common.Hash) {
 // TotalOrderingDeliver is called when blocks are delivered by the total
 // ordering algorithm.
 func (a *simApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) {
-	now := time.Now()
-	blocks := make([]*types.Block, len(blockHashes))
-	a.blockByHashMutex.RLock()
-	defer a.blockByHashMutex.RUnlock()
-	for idx := range blockHashes {
-		blocks[idx] = a.blockByHash[blockHashes[idx]]
-	}
-	a.Outputs = blocks
-	a.Early = early
-	fmt.Println("OUTPUT", a.NodeID, a.Early, a.Outputs)
-
-	confirmLatency := []time.Duration{}
-
-	payload := []timestampMessage{}
-	for _, block := range blocks {
-		if block.ProposerID == a.NodeID {
-			confirmLatency = append(confirmLatency,
-				now.Sub(block.Timestamp))
-		}
-		for _, hash := range block.Acks {
-			for _, blockHash := range a.getAckedBlocks(hash) {
-				payload = append(payload, timestampMessage{
-					BlockHash: blockHash,
-					Event:     timestampAck,
-					Timestamp: now,
-				})
-				delete(a.blockSeen, block.Hash)
-			}
-		}
-	}
-	if len(payload) > 0 {
-		jsonPayload, err := json.Marshal(payload)
-		if err != nil {
-			fmt.Println(err)
-		} else {
-			msg := &message{
-				Type:    blockTimestamp,
-				Payload: jsonPayload,
-			}
-			a.netModule.report(msg)
-		}
-	}
-
+	fmt.Println("OUTPUT", a.NodeID, early, blockHashes)
 	blockList := &BlockList{
-		ID:             a.DeliverID,
-		BlockHash:      blockHashes,
-		ConfirmLatency: confirmLatency,
+		ID:        a.DeliverID,
+		BlockHash: blockHashes,
 	}
 	a.netModule.report(blockList)
 	a.DeliverID++
-	for _, block := range blocks {
-		a.blockSeen[block.Hash] = now
-		a.unconfirmedBlocks[block.ProposerID] = append(
-			a.unconfirmedBlocks[block.ProposerID], block.Hash)
-	}
 }
 
-// DeliverBlock is called when a block in compaction chain is delivered.
-func (a *simApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
-	seenTime, exist := a.blockSeen[blockHash]
+// BlockDeliver is called when a block in compaction chain is delivered.
+func (a *simApp) BlockDeliver(block types.Block) {
+	func() {
+		a.blockByHashMutex.Lock()
+		defer a.blockByHashMutex.Unlock()
+
+		// TODO(jimmy-dexon) : Remove block in this hash if it's no longer needed.
+		a.blockByHash[block.Hash] = &block
+	}()
+
+	seenTime, exist := a.blockSeen[block.Hash]
 	if !exist {
 		return
 	}
 	now := time.Now()
 	payload := []timestampMessage{
 		{
-			BlockHash: blockHash,
+			BlockHash: block.Hash,
 			Event:     blockSeen,
 			Timestamp: seenTime,
 		},
 		{
-			BlockHash: blockHash,
+			BlockHash: block.Hash,
 			Event:     timestampConfirm,
 			Timestamp: now,
 		},
@@ -198,8 +153,8 @@ func (a *simApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
 
 	go func() {
 		a.witnessResultChan <- types.WitnessResult{
-			BlockHash: blockHash,
-			Data:      []byte(fmt.Sprintf("Block %s", blockHash)),
+			BlockHash: block.Hash,
+			Data:      []byte(fmt.Sprintf("Block %s", block.Hash)),
 		}
 	}()
 }

@@ -172,7 +172,7 @@ func (recv *consensusDKGReceiver) ProposeDKGAntiNackComplaint(
 // Consensus implements DEXON Consensus algorithm.
 type Consensus struct {
 	ID         types.NodeID
-	app        Application
+	nbModule   *nonBlocking
 	gov        Governance
 	config     *types.Config
 	baModules  []*agreement
@@ -239,13 +239,15 @@ func NewConsensus(
 		len(gov.GetNotarySet())/3,
 		sigToPub)
 
+	// Check if the application implement Debug interface.
+	debug, _ := app.(Debug)
 	con := &Consensus{
 		ID:        ID,
 		rbModule:  rb,
 		toModule:  to,
 		ctModule:  newConsensusTimestamp(),
 		ccModule:  newCompactionChain(db, sigToPub),
-		app:       newNonBlockingApplication(app),
+		nbModule:  newNonBlocking(app, debug),
 		gov:       gov,
 		config:    config,
 		db:        db,
@@ -530,7 +532,7 @@ func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
 
 // processWitnessData process witness acks.
 func (con *Consensus) processWitnessData() {
-	ch := con.app.BlockProcessedChan()
+	ch := con.nbModule.BlockProcessedChan()
 
 	for {
 		select {
@@ -541,14 +543,10 @@ func (con *Consensus) processWitnessData() {
 			if err != nil {
 				panic(err)
 			}
-
-			if err = con.ccModule.processWitnessResult(&block, result); err != nil {
-				panic(err)
-			}
+			block.Witness.Data = result.Data
 			if err := con.db.Update(block); err != nil {
 				panic(err)
 			}
-
 			// TODO(w): move the acking interval into governance.
 			if block.Witness.Height%5 != 0 {
 				continue
@@ -562,7 +560,7 @@ func (con *Consensus) processWitnessData() {
 			if err != nil {
 				panic(err)
 			}
-			con.app.WitnessAckDeliver(witnessAck)
+			con.nbModule.WitnessAckDeliver(witnessAck)
 		}
 	}
 }
@@ -625,10 +623,10 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 	if err = con.rbModule.processBlock(b); err != nil {
 		return err
 	}
-	con.app.BlockConfirmed(block)
+	con.nbModule.BlockConfirmed(block.Hash)
 	for _, b := range con.rbModule.extractBlocks() {
 		// Notify application layer that some block is strongly acked.
-		con.app.StronglyAcked(b.Hash)
+		con.nbModule.StronglyAcked(b.Hash)
 		// Perform total ordering.
 		deliveredBlocks, earlyDelivered, err = con.toModule.processBlock(b)
 		if err != nil {
@@ -647,7 +645,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		for idx := range deliveredBlocks {
 			hashes[idx] = deliveredBlocks[idx].Hash
 		}
-		con.app.TotalOrderingDeliver(hashes, earlyDelivered)
+		con.nbModule.TotalOrderingDeliver(hashes, earlyDelivered)
 		// Perform timestamp generation.
 		err = con.ctModule.processBlocks(deliveredBlocks)
 		if err != nil {
@@ -660,10 +658,10 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 			if err = con.db.Update(*b); err != nil {
 				return
 			}
-			con.app.DeliverBlock(b.Hash, b.Witness.Timestamp)
+			con.nbModule.BlockDeliver(*b)
 			// TODO(mission): Find a way to safely recycle the block.
 			//                We should deliver block directly to
-			//                nonBlockingApplication and let them recycle the
+			//                nonBlocking and let them recycle the
 			//                block.
 		}
 	}
@@ -690,7 +688,7 @@ func (con *Consensus) prepareBlock(b *types.Block,
 
 	con.rbModule.prepareBlock(b)
 	b.Timestamp = proposeTime
-	b.Payload = con.app.PreparePayload(b.Position)
+	b.Payload = con.nbModule.PreparePayload(b.Position)
 	b.Hash, err = hashBlock(b)
 	if err != nil {
 		return

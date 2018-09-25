@@ -32,7 +32,7 @@ type slowApp struct {
 	blockConfirmed       map[common.Hash]struct{}
 	stronglyAcked        map[common.Hash]struct{}
 	totalOrderingDeliver map[common.Hash]struct{}
-	deliverBlock         map[common.Hash]struct{}
+	blockDeliver         map[common.Hash]struct{}
 	witnessAck           map[common.Hash]struct{}
 	witnessResultChan    chan types.WitnessResult
 }
@@ -43,7 +43,7 @@ func newSlowApp(sleep time.Duration) *slowApp {
 		blockConfirmed:       make(map[common.Hash]struct{}),
 		stronglyAcked:        make(map[common.Hash]struct{}),
 		totalOrderingDeliver: make(map[common.Hash]struct{}),
-		deliverBlock:         make(map[common.Hash]struct{}),
+		blockDeliver:         make(map[common.Hash]struct{}),
 		witnessAck:           make(map[common.Hash]struct{}),
 		witnessResultChan:    make(chan types.WitnessResult),
 	}
@@ -57,9 +57,9 @@ func (app *slowApp) VerifyPayloads(_ []byte) bool {
 	return true
 }
 
-func (app *slowApp) BlockConfirmed(block *types.Block) {
+func (app *slowApp) BlockConfirmed(blockHash common.Hash) {
 	time.Sleep(app.sleep)
-	app.blockConfirmed[block.Hash] = struct{}{}
+	app.blockConfirmed[blockHash] = struct{}{}
 }
 
 func (app *slowApp) StronglyAcked(blockHash common.Hash) {
@@ -74,9 +74,9 @@ func (app *slowApp) TotalOrderingDeliver(blockHashes common.Hashes, early bool) 
 	}
 }
 
-func (app *slowApp) DeliverBlock(blockHash common.Hash, timestamp time.Time) {
+func (app *slowApp) BlockDeliver(block types.Block) {
 	time.Sleep(app.sleep)
-	app.deliverBlock[blockHash] = struct{}{}
+	app.blockDeliver[block.Hash] = struct{}{}
 }
 
 func (app *slowApp) BlockProcessedChan() <-chan types.WitnessResult {
@@ -88,14 +88,14 @@ func (app *slowApp) WitnessAckDeliver(witnessAck *types.WitnessAck) {
 	app.witnessAck[witnessAck.Hash] = struct{}{}
 }
 
-type NonBlockingAppTestSuite struct {
+type NonBlockingTestSuite struct {
 	suite.Suite
 }
 
-func (s *NonBlockingAppTestSuite) TestNonBlockingApplication() {
+func (s *NonBlockingTestSuite) TestNonBlocking() {
 	sleep := 50 * time.Millisecond
 	app := newSlowApp(sleep)
-	nbapp := newNonBlockingApplication(app)
+	nbModule := newNonBlocking(app, app)
 	hashes := make(common.Hashes, 10)
 	for idx := range hashes {
 		hashes[idx] = common.NewRandomHash()
@@ -105,26 +105,29 @@ func (s *NonBlockingAppTestSuite) TestNonBlockingApplication() {
 
 	// Start doing some 'heavy' job.
 	for _, hash := range hashes {
-		nbapp.BlockConfirmed(&types.Block{Hash: hash})
-		nbapp.StronglyAcked(hash)
-		nbapp.DeliverBlock(hash, time.Now().UTC())
-		nbapp.WitnessAckDeliver(&types.WitnessAck{Hash: hash})
+		nbModule.BlockConfirmed(hash)
+		nbModule.StronglyAcked(hash)
+		nbModule.BlockDeliver(types.Block{
+			Hash:    hash,
+			Witness: types.Witness{Timestamp: time.Now().UTC()},
+		})
+		nbModule.WitnessAckDeliver(&types.WitnessAck{Hash: hash})
 	}
-	nbapp.TotalOrderingDeliver(hashes, true)
+	nbModule.TotalOrderingDeliver(hashes, true)
 
-	// nonBlockingApplication should be non-blocking.
+	// nonBlocking should be non-blocking.
 	s.True(shouldFinish.After(time.Now().UTC()))
 
-	nbapp.wait()
+	nbModule.wait()
 	for _, hash := range hashes {
 		s.Contains(app.blockConfirmed, hash)
 		s.Contains(app.stronglyAcked, hash)
 		s.Contains(app.totalOrderingDeliver, hash)
-		s.Contains(app.deliverBlock, hash)
+		s.Contains(app.blockDeliver, hash)
 		s.Contains(app.witnessAck, hash)
 	}
 }
 
-func TestNonBlockingApplication(t *testing.T) {
-	suite.Run(t, new(NonBlockingAppTestSuite))
+func TestNonBlocking(t *testing.T) {
+	suite.Run(t, new(NonBlockingTestSuite))
 }
