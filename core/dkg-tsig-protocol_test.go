@@ -313,7 +313,7 @@ func (s *DKGTSIGProtocolTestSuite) TestComplaint() {
 		Round:      round,
 	})
 	invalidShare := receivers[byzantineID].prvShare[targetID]
-	invalidShare.Signature[1]++
+	invalidShare.ReceiverID = s.nIDs[2]
 	err = protocol.processPrivateShare(invalidShare)
 	s.Equal(ErrIncorrectPrivateShareSignature, err)
 	delete(receivers[byzantineID].prvShare, targetID)
