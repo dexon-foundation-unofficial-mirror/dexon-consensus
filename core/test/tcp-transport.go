@@ -447,7 +447,7 @@ func (t *TCPTransportClient) Join(
 		conn      string
 	)
 	for {
-		addr = net.JoinHostPort("0.0.0.0", strconv.Itoa(t.localPort))
+		addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(t.localPort))
 		ln, err = net.Listen("tcp", addr)
 		if err == nil {
 			break
@@ -564,7 +564,7 @@ func (t *TCPTransportServer) Host() (chan *TransportEnvelope, error) {
 	// if we can listen on the pre-defiend part, we don't have to
 	// retry with other random ports.
 	ln, err := net.Listen(
-		"tcp", net.JoinHostPort("0.0.0.0", strconv.Itoa(t.localPort)))
+		"tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(t.localPort)))
 	if err != nil {
 		return nil, err
 	}

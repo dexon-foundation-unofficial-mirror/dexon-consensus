@@ -171,27 +171,41 @@ func (recv *consensusDKGReceiver) ProposeDKGAntiNackComplaint(
 
 // Consensus implements DEXON Consensus algorithm.
 type Consensus struct {
-	ID         types.NodeID
-	nbModule   *nonBlocking
-	gov        Governance
-	config     *types.Config
-	baModules  []*agreement
-	receivers  []*consensusReceiver
-	rbModule   *reliableBroadcast
-	toModule   *totalOrdering
-	ctModule   *consensusTimestamp
-	ccModule   *compactionChain
-	db         blockdb.BlockDatabase
-	network    Network
-	tickerObj  Ticker
-	prvKey     crypto.PrivateKey
+	// Node Info.
+	ID            types.NodeID
+	prvKey        crypto.PrivateKey
+	currentConfig *types.Config
+
+	// Modules.
+	nbModule *nonBlocking
+
+	// BA.
+	baModules []*agreement
+	receivers []*consensusReceiver
+
+	// DKG.
 	dkgRunning int32
 	dkgReady   *sync.Cond
 	dkgModule  *dkgProtocol
-	sigToPub   SigToPubFn
-	lock       sync.RWMutex
-	ctx        context.Context
-	ctxCancel  context.CancelFunc
+
+	// Dexon consensus modules.
+	rbModule *reliableBroadcast
+	toModule *totalOrdering
+	ctModule *consensusTimestamp
+	ccModule *compactionChain
+
+	// Interfaces.
+	db        blockdb.BlockDatabase
+	gov       Governance
+	network   Network
+	tickerObj Ticker
+	sigToPub  SigToPubFn
+
+	// Misc.
+	notarySet map[types.NodeID]struct{}
+	lock      sync.RWMutex
+	ctx       context.Context
+	ctxCancel context.CancelFunc
 }
 
 // NewConsensus construct an Consensus instance.
@@ -203,8 +217,11 @@ func NewConsensus(
 	prv crypto.PrivateKey,
 	sigToPub SigToPubFn) *Consensus {
 
-	config := gov.GetConfiguration(0)
-	notarySet := gov.GetNotarySet()
+	// TODO(w): load latest blockHeight from DB, and use config at that height.
+	var blockHeight uint64
+	config := gov.GetConfiguration(blockHeight)
+	notarySet := gov.GetNotarySet(blockHeight)
+
 	ID := types.NewNodeID(prv.PublicKey())
 
 	// Setup acking by information returned from Governace.
@@ -236,34 +253,35 @@ func NewConsensus(
 			network: network,
 		},
 		0,
-		len(gov.GetNotarySet())/3,
+		len(notarySet)/3,
 		sigToPub)
 
 	// Check if the application implement Debug interface.
 	debug, _ := app.(Debug)
 	con := &Consensus{
-		ID:        ID,
-		rbModule:  rb,
-		toModule:  to,
-		ctModule:  newConsensusTimestamp(),
-		ccModule:  newCompactionChain(db, sigToPub),
-		nbModule:  newNonBlocking(app, debug),
-		gov:       gov,
-		config:    config,
-		db:        db,
-		network:   network,
-		tickerObj: newTicker(gov, TickerBA),
-		prvKey:    prv,
-		dkgReady:  sync.NewCond(&sync.Mutex{}),
-		dkgModule: dkgModule,
-		sigToPub:  sigToPub,
-		ctx:       ctx,
-		ctxCancel: ctxCancel,
+		ID:            ID,
+		currentConfig: config,
+		rbModule:      rb,
+		toModule:      to,
+		ctModule:      newConsensusTimestamp(),
+		ccModule:      newCompactionChain(db, sigToPub),
+		nbModule:      newNonBlocking(app, debug),
+		gov:           gov,
+		db:            db,
+		network:       network,
+		tickerObj:     newTicker(gov, TickerBA),
+		prvKey:        prv,
+		dkgReady:      sync.NewCond(&sync.Mutex{}),
+		dkgModule:     dkgModule,
+		sigToPub:      sigToPub,
+		notarySet:     notarySet,
+		ctx:           ctx,
+		ctxCancel:     ctxCancel,
 	}
 
-	con.baModules = make([]*agreement, con.config.NumChains)
-	con.receivers = make([]*consensusReceiver, con.config.NumChains)
-	for i := uint32(0); i < con.config.NumChains; i++ {
+	con.baModules = make([]*agreement, config.NumChains)
+	con.receivers = make([]*consensusReceiver, config.NumChains)
+	for i := uint32(0); i < config.NumChains; i++ {
 		chainID := i
 		con.receivers[chainID] = &consensusReceiver{
 			consensus: con,
@@ -279,7 +297,7 @@ func NewConsensus(
 			con.ID,
 			con.receivers[chainID],
 			nodes,
-			newGenesisLeaderSelector(con.config.GenesisCRS, con.sigToPub),
+			newGenesisLeaderSelector(config.CRS, con.sigToPub),
 			con.sigToPub,
 			blockProposer,
 		)
@@ -296,8 +314,8 @@ func (con *Consensus) Run() {
 	for con.dkgRunning != 2 {
 		con.dkgReady.Wait()
 	}
-	ticks := make([]chan struct{}, 0, con.config.NumChains)
-	for i := uint32(0); i < con.config.NumChains; i++ {
+	ticks := make([]chan struct{}, 0, con.currentConfig.NumChains)
+	for i := uint32(0); i < con.currentConfig.NumChains; i++ {
 		tick := make(chan struct{})
 		ticks = append(ticks, tick)
 		go con.runBA(i, tick)
@@ -317,9 +335,9 @@ func (con *Consensus) Run() {
 
 func (con *Consensus) runBA(chainID uint32, tick <-chan struct{}) {
 	// TODO(jimmy-dexon): move this function inside agreement.
-	notarySet := con.gov.GetNotarySet()
-	nodes := make(types.NodeIDs, 0, len(notarySet))
-	for nID := range notarySet {
+
+	nodes := make(types.NodeIDs, 0, len(con.notarySet))
+	for nID := range con.notarySet {
 		nodes = append(nodes, nID)
 	}
 	agreement := con.baModules[chainID]
@@ -414,8 +432,8 @@ func (con *Consensus) RunLegacy() {
 	go con.processWitnessData()
 
 	chainID := uint32(0)
-	hashes := make(common.Hashes, 0, len(con.gov.GetNotarySet()))
-	for nID := range con.gov.GetNotarySet() {
+	hashes := make(common.Hashes, 0, len(con.notarySet))
+	for nID := range con.notarySet {
 		hashes = append(hashes, nID.Hash)
 	}
 	sort.Sort(hashes)
@@ -727,7 +745,7 @@ func (con *Consensus) PrepareGenesisBlock(b *types.Block,
 // ProcessWitnessAck is the entry point to submit one witness ack.
 func (con *Consensus) ProcessWitnessAck(witnessAck *types.WitnessAck) (err error) {
 	witnessAck = witnessAck.Clone()
-	if _, exists := con.gov.GetNotarySet()[witnessAck.ProposerID]; !exists {
+	if _, exists := con.notarySet[witnessAck.ProposerID]; !exists {
 		err = ErrProposerNotInNotarySet
 		return
 	}

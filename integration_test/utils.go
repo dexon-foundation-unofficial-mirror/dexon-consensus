@@ -31,7 +31,7 @@ func PrepareNodes(
 	if err != nil {
 		return
 	}
-	for nID := range gov.GetNotarySet() {
+	for nID := range gov.GetNotarySet(0) {
 		apps[nID] = test.NewApp()
 
 		if db, err = blockdb.NewMemBackedBlockDB(); err != nil {
@@ -39,7 +39,7 @@ func PrepareNodes(
 		}
 		dbs[nID] = db
 	}
-	for nID := range gov.GetNotarySet() {
+	for nID := range gov.GetNotarySet(0) {
 		if key, err = gov.GetPrivateKey(nID); err != nil {
 			return
 		}

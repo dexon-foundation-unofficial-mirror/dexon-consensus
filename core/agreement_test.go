@@ -80,7 +80,7 @@ func (s *AgreementTestSuite) SetupTest() {
 }
 
 func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
-	leader := newGenesisLeaderSelector("🖖👽", eth.SigToPub)
+	leader := newGenesisLeaderSelector([]byte("🖖👽"), eth.SigToPub)
 	agreementIdx := len(s.agreement)
 	blockProposer := func() *types.Block {
 		return s.proposeBlock(agreementIdx)

@@ -36,7 +36,7 @@ type simGovernance struct {
 	k                  int
 	phiRatio           float32
 	chainNum           uint32
-	crs                string
+	crs                []byte
 	dkgComplaint       map[uint64][]*types.DKGComplaint
 	dkgMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
 	lambdaBA           time.Duration
@@ -55,7 +55,7 @@ func newSimGovernance(
 		k:                  consensusConfig.K,
 		phiRatio:           consensusConfig.PhiRatio,
 		chainNum:           consensusConfig.ChainNum,
-		crs:                consensusConfig.GenesisCRS,
+		crs:                []byte(consensusConfig.GenesisCRS),
 		dkgComplaint:       make(map[uint64][]*types.DKGComplaint),
 		dkgMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
 		lambdaBA:           time.Duration(consensusConfig.LambdaBA) * time.Millisecond,
@@ -68,7 +68,8 @@ func (g *simGovernance) setNetwork(network *network) {
 }
 
 // GetNotarySet returns the current notary set.
-func (g *simGovernance) GetNotarySet() map[types.NodeID]struct{} {
+func (g *simGovernance) GetNotarySet(
+	blockHeight uint64) map[types.NodeID]struct{} {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
@@ -83,13 +84,13 @@ func (g *simGovernance) GetNotarySet() map[types.NodeID]struct{} {
 // GetConfiguration returns the configuration at a given block height.
 func (g *simGovernance) GetConfiguration(blockHeight uint64) *types.Config {
 	return &types.Config{
-		NumShards:  1,
-		NumChains:  g.chainNum,
-		GenesisCRS: g.crs,
-		LambdaBA:   g.lambdaBA,
-		LambdaDKG:  g.lambdaDKG,
-		K:          g.k,
-		PhiRatio:   g.phiRatio,
+		NumShards: 1,
+		NumChains: g.chainNum,
+		CRS:       g.crs,
+		LambdaBA:  g.lambdaBA,
+		LambdaDKG: g.lambdaDKG,
+		K:         g.k,
+		PhiRatio:  g.phiRatio,
 	}
 }
 

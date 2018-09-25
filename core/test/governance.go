@@ -67,7 +67,8 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 
 // GetNotarySet implements Governance interface to return current
 // notary set.
-func (g *Governance) GetNotarySet() (ret map[types.NodeID]struct{}) {
+func (g *Governance) GetNotarySet(blockHeight uint64) (
+	ret map[types.NodeID]struct{}) {
 	// Return a cloned map.
 	ret = make(map[types.NodeID]struct{})
 	for k := range g.notarySet {
@@ -79,13 +80,13 @@ func (g *Governance) GetNotarySet() (ret map[types.NodeID]struct{}) {
 // GetConfiguration returns the configuration at a given block height.
 func (g *Governance) GetConfiguration(blockHeight uint64) *types.Config {
 	return &types.Config{
-		NumShards:  1,
-		NumChains:  uint32(len(g.notarySet)),
-		GenesisCRS: "__ DEXON",
-		LambdaBA:   g.lambdaBA,
-		LambdaDKG:  g.lambdaDKG,
-		K:          0,
-		PhiRatio:   0.667,
+		CRS:       []byte("__ DEXON"),
+		NumShards: 1,
+		NumChains: uint32(len(g.notarySet)),
+		LambdaBA:  g.lambdaBA,
+		LambdaDKG: g.lambdaDKG,
+		K:         0,
+		PhiRatio:  0.667,
 	}
 }
 

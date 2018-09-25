@@ -30,8 +30,8 @@ type Application interface {
 	// PreparePayload is called when consensus core is preparing a block.
 	PreparePayload(position types.Position) []byte
 
-	// VerifyPayload verifies if the payloads are valid.
-	VerifyPayload(payloads []byte) bool
+	// VerifyPayload verifies if the payload is valid.
+	VerifyPayload(payload []byte) bool
 
 	// BlockDelivered is called when a block is add to the compaction chain.
 	BlockDelivered(block types.Block)
@@ -85,10 +85,12 @@ type Network interface {
 // interface only define those that are required to run the consensus algorithm.
 type Governance interface {
 	// GetConfiguration returns the configuration at a given block height.
+	// Return the genesis configuration if blockHeight == 0.
 	GetConfiguration(blockHeight uint64) *types.Config
 
 	// Get the current notary set.
-	GetNotarySet() map[types.NodeID]struct{}
+	// Return the genesis notary set if blockHeight == 0.
+	GetNotarySet(blockHeight uint64) map[types.NodeID]struct{}
 
 	//// DKG-related methods.
 
@@ -109,6 +111,7 @@ type Governance interface {
 type Ticker interface {
 	// Tick would return a channel, which would be triggered until next tick.
 	Tick() <-chan time.Time
+
 	// Stop the ticker.
 	Stop()
 }
@@ -117,8 +120,10 @@ type Ticker interface {
 type Signer interface {
 	// SignBlock signs a block.
 	SignBlock(b *types.Block) error
+
 	// SignVote signs a vote.
 	SignVote(v *types.Vote) error
+
 	// SignCRS sign a block's CRS signature.
 	SignCRS(b *types.Block, crs common.Hash) error
 }
@@ -127,8 +132,10 @@ type Signer interface {
 type CryptoVerifier interface {
 	// VerifyBlock verifies if a block is properly signed or not.
 	VerifyBlock(b *types.Block) (ok bool, err error)
+
 	// VerifyVote verfies if a vote is properly signed or not.
 	VerifyVote(v *types.Vote) (ok bool, err error)
+
 	// VerifyCRS verifies if a CRS signature of one block is valid or not.
 	VerifyCRS(b *types.Block, crs common.Hash) (ok bool, err error)
 }

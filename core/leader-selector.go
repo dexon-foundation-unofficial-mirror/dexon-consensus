@@ -56,9 +56,9 @@ type leaderSelector struct {
 }
 
 func newGenesisLeaderSelector(
-	crs string,
+	crs []byte,
 	sigToPub SigToPubFn) *leaderSelector {
-	hash := crypto.Keccak256Hash([]byte(crs[:]))
+	hash := crypto.Keccak256Hash(crs)
 	return newLeaderSelector(hash, sigToPub)
 }
 

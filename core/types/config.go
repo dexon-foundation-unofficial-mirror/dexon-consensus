@@ -21,10 +21,12 @@ import "time"
 
 // Config stands for Current Configuration Parameters.
 type Config struct {
+	// CRS.
+	CRS []byte
+
 	// Network related.
-	NumShards  uint32
-	NumChains  uint32
-	GenesisCRS string
+	NumShards uint32
+	NumChains uint32
 
 	// Lambda related.
 	LambdaBA  time.Duration

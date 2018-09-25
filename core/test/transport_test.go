@@ -242,7 +242,7 @@ func (s *TransportTestSuite) TestTCPLocal() {
 		wg         sync.WaitGroup
 		latency    = &FixedLatencyModel{Latency: 300}
 		serverPort = 8080
-		serverAddr = net.JoinHostPort("0.0.0.0", strconv.Itoa(serverPort))
+		serverAddr = net.JoinHostPort("127.0.0.1", strconv.Itoa(serverPort))
 		server     = &testPeerServer{
 			trans: NewTCPTransportServer(&testMarshaller{}, serverPort)}
 	)

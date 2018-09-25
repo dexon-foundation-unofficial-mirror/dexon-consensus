@@ -61,7 +61,7 @@ func (a *simApp) BlockConfirmed(_ common.Hash) {
 }
 
 // VerifyPayload implements core.Application.
-func (a *simApp) VerifyPayload(payloads []byte) bool {
+func (a *simApp) VerifyPayload(payload []byte) bool {
 	return true
 }
 
