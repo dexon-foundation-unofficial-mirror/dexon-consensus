@@ -50,14 +50,6 @@
   revision = "2e65f85255dbc3072edf28d6b5b8efc472979f5a"
 
 [[projects]]
-  branch = "master"
-  digest = "1:575eb8ef612810bdfc3787cab5583a81278e81c060ae7d68ed7486ad55d0a5a6"
-  name = "github.com/herumi/bls"
-  packages = ["ffi/go/bls"]
-  pruneopts = "UT"
-  revision = "1c36a87da5bbc1cd6dc0e9d9c0e5fbf2e4640dad"
-
-[[projects]]
   digest = "1:b56c589214f01a5601e0821387db484617392d0042f26234bf2da853a2f498a1"
   name = "github.com/naoina/go-stringutil"
   packages = ["."]
@@ -123,7 +115,6 @@
   input-imports = [
     "github.com/Spiderpowa/bls/ffi/go/bls",
     "github.com/ethereum/go-ethereum/crypto",
-    "github.com/herumi/bls/ffi/go/bls",
     "github.com/naoina/toml",
     "github.com/stretchr/testify/suite",
     "github.com/syndtr/goleveldb/leveldb",

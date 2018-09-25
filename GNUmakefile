@@ -70,7 +70,7 @@ vet:
 
 test:
 	@for pkg in `go list ./... | grep -v 'vendor'`; do \
-		if ! env LD_LIBRARY_PATH=`pwd`/lib DYLD_LIBRARY_PATH=`pwd`/lib go test -race $$pkg; then \
+		if ! go test -race $$pkg; then \
 			echo 'Some test failed, abort'; \
 			exit 1; \
 		fi; \
@@ -78,7 +78,7 @@ test:
 
 bench:
 	@for pkg in `go list ./... | grep -v 'vendor'`; do \
-		if ! env LD_LIBRARY_PATH=`pwd`/lib DYLD_LIBRARY_PATH=`pwd`/lib go test -bench=. -run=^$$ $$pkg; then \
+		if ! go test -bench=. -run=^$$ $$pkg; then \
 			echo 'Some test failed, abort'; \
 			exit 1; \
 		fi; \
