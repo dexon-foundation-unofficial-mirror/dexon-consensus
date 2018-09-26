@@ -155,7 +155,7 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 	recv := newTestCCReceiver(s)
 
 	for _, nID := range s.nIDs {
-		gov, err := test.NewGovernance(0, 50*time.Millisecond)
+		gov, err := test.NewGovernance(0, 100*time.Millisecond)
 		s.Require().NoError(err)
 		cfgChains[nID] = newConfigurationChain(nID, recv, gov)
 		recv.nodes[nID] = cfgChains[nID]
@@ -193,11 +193,13 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 	}
 
 	tsigs := make([]crypto.Signature, 0, n)
-	tsigChan := make(chan crypto.Signature)
+	errs := make(chan error, n)
+	tsigChan := make(chan crypto.Signature, n)
 	for _, cc := range cfgChains {
 		go func(cc *configurationChain) {
 			tsig, err := cc.runBlockTSig(round, hash)
-			s.Require().NoError(err)
+			// Prevent racing by collecting errors and check ing main thread.
+			errs <- err
 			tsigChan <- tsig
 		}(cc)
 		for _, psig := range psigs {
@@ -206,6 +208,7 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 		}
 	}
 	for range cfgChains {
+		s.Require().NoError(<-errs)
 		tsig := <-tsigChan
 		for _, prevTsig := range tsigs {
 			s.Equal(prevTsig, tsig)
