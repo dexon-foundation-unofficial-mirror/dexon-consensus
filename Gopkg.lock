@@ -3,19 +3,19 @@
 
 [[projects]]
   branch = "dev"
-  digest = "1:5a9cebf2fc674675971f1ef67a67af7d682f04bd9ce46f19adaed3fb38b8c358"
+  digest = "1:e1b678344fe7ac9b92facf33893ca3ce4f8e62b00c798c9efdd7e2a2d7b488f8"
   name = "github.com/Spiderpowa/bls"
   packages = ["ffi/go/bls"]
   pruneopts = "UT"
-  revision = "95f2449c4fb0925fd9206d5b8d7efea118b33398"
+  revision = "32fbf283dfdcf1224c57fbf7cf9db5f290cda1d1"
 
 [[projects]]
   branch = "master"
-  digest = "1:2c00f064ba355903866cbfbf3f7f4c0fe64af6638cc7d1b8bdcf3181bc67f1d8"
+  digest = "1:c0decf632843204d2b8781de7b26e7038584e2dcccc7e2f401e88ae85b1df2b7"
   name = "github.com/btcsuite/btcd"
   packages = ["btcec"]
   pruneopts = "UT"
-  revision = "92494a5188cd5fb1056d55ce597f38d5db4e343d"
+  revision = "2a560b2036bee5e3679ec2133eb6520b2f195213"
 
 [[projects]]
   digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
@@ -26,8 +26,9 @@
   version = "v1.1.1"
 
 [[projects]]
-  digest = "1:32282b2f1ea5689b7d684abc2f0c3839ddbcb99101f053456f50f33e45106cde"
-  name = "github.com/ethereum/go-ethereum"
+  branch = "dev"
+  digest = "1:2b010a52e574bc0f815d5fdf403a8b36384665ac0923c94a28b99f8537fbf9fe"
+  name = "github.com/dexon-foundation/dexon"
   packages = [
     "common",
     "common/hexutil",
@@ -38,8 +39,7 @@
     "rlp",
   ]
   pruneopts = "UT"
-  revision = "89451f7c382ad2185987ee369f16416f89c28a7d"
-  version = "v1.8.15"
+  revision = "abe4e80a8b6cf9dee93652ea36cdc56065a39a0f"
 
 [[projects]]
   branch = "master"
@@ -114,7 +114,7 @@
   analyzer-version = 1
   input-imports = [
     "github.com/Spiderpowa/bls/ffi/go/bls",
-    "github.com/ethereum/go-ethereum/crypto",
+    "github.com/dexon-foundation/dexon/crypto",
     "github.com/naoina/toml",
     "github.com/stretchr/testify/suite",
     "github.com/syndtr/goleveldb/leveldb",

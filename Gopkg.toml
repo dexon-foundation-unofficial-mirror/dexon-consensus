@@ -1,6 +1,6 @@
 # Gopkg.toml example
 #
-# Refer to https://golang.github.io/dep/docs/Gopkg.toml.html
+# Refer to https://github.com/golang/dep/blob/master/docs/Gopkg.toml.md
 # for detailed Gopkg.toml documentation.
 #
 # required = ["github.com/user/thing/cmd/thing"]
@@ -26,6 +26,14 @@
 
 
 [[constraint]]
+  branch = "dev"
+  name = "github.com/Spiderpowa/bls"
+
+[[constraint]]
+  branch = "dev"
+  name = "github.com/dexon-foundation/dexon"
+
+[[constraint]]
   name = "github.com/naoina/toml"
   version = "0.1.1"
 
@@ -34,16 +42,8 @@
   version = "1.2.2"
 
 [[constraint]]
-  name = "github.com/ethereum/go-ethereum"
-  version = "1.8.13"
-
-[[constraint]]
   branch = "master"
   name = "github.com/syndtr/goleveldb"
-
-[[constraint]]
-  branch = "dev"
-  name = "github.com/Spiderpowa/bls"
 
 [prune]
   go-tests = true

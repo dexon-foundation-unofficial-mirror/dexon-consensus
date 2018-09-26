@@ -20,7 +20,7 @@ package eth
 import (
 	"crypto/ecdsa"
 
-	ethcrypto "github.com/ethereum/go-ethereum/crypto"
+	ethcrypto "github.com/dexon-foundation/dexon/crypto"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
