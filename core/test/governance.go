@@ -19,6 +19,7 @@ package test
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -41,6 +42,7 @@ type Governance struct {
 	tsig               map[uint64]crypto.Signature
 	DKGComplaint       map[uint64][]*types.DKGComplaint
 	DKGMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
+	lock               sync.RWMutex
 }
 
 // NewGovernance constructs a Governance instance.
@@ -108,23 +110,32 @@ func (g *Governance) GetPrivateKey(
 // ProposeThresholdSignature porposes a ThresholdSignature of round.
 func (g *Governance) ProposeThresholdSignature(
 	round uint64, signature crypto.Signature) {
+	g.lock.Lock()
+	defer g.lock.Unlock()
 	g.tsig[round] = signature
 }
 
 // GetThresholdSignature gets a ThresholdSignature of round.
 func (g *Governance) GetThresholdSignature(round uint64) (
 	sig crypto.Signature, exist bool) {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
 	sig, exist = g.tsig[round]
 	return
 }
 
 // AddDKGComplaint add a DKGComplaint.
 func (g *Governance) AddDKGComplaint(complaint *types.DKGComplaint) {
-	g.DKGComplaint[complaint.Round] = append(g.DKGComplaint[complaint.Round], complaint)
+	g.lock.Lock()
+	defer g.lock.Unlock()
+	g.DKGComplaint[complaint.Round] = append(g.DKGComplaint[complaint.Round],
+		complaint)
 }
 
 // DKGComplaints returns the DKGComplaints of round.
 func (g *Governance) DKGComplaints(round uint64) []*types.DKGComplaint {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
 	complaints, exist := g.DKGComplaint[round]
 	if !exist {
 		return []*types.DKGComplaint{}
@@ -135,6 +146,8 @@ func (g *Governance) DKGComplaints(round uint64) []*types.DKGComplaint {
 // AddDKGMasterPublicKey adds a DKGMasterPublicKey.
 func (g *Governance) AddDKGMasterPublicKey(
 	masterPublicKey *types.DKGMasterPublicKey) {
+	g.lock.Lock()
+	defer g.lock.Unlock()
 	g.DKGMasterPublicKey[masterPublicKey.Round] = append(
 		g.DKGMasterPublicKey[masterPublicKey.Round], masterPublicKey)
 }
@@ -142,6 +155,8 @@ func (g *Governance) AddDKGMasterPublicKey(
 // DKGMasterPublicKeys returns the DKGMasterPublicKeys of round.
 func (g *Governance) DKGMasterPublicKeys(
 	round uint64) []*types.DKGMasterPublicKey {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
 	masterPublicKeys, exist := g.DKGMasterPublicKey[round]
 	if !exist {
 		return []*types.DKGMasterPublicKey{}
