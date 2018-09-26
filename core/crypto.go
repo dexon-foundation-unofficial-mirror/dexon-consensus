@@ -98,9 +98,9 @@ func hashVote(vote *types.Vote) common.Hash {
 	return hash
 }
 
-func verifyVoteSignature(vote *types.Vote, sigToPub SigToPubFn) (bool, error) {
+func verifyVoteSignature(vote *types.Vote) (bool, error) {
 	hash := hashVote(vote)
-	pubKey, err := sigToPub(hash, vote.Signature)
+	pubKey, err := crypto.SigToPub(hash, vote.Signature)
 	if err != nil {
 		return false, err
 	}
@@ -115,10 +115,10 @@ func hashCRS(block *types.Block, crs common.Hash) common.Hash {
 	return crypto.Keccak256Hash(crs[:], hashPos[:])
 }
 
-func verifyCRSSignature(block *types.Block, crs common.Hash, sigToPub SigToPubFn) (
+func verifyCRSSignature(block *types.Block, crs common.Hash) (
 	bool, error) {
 	hash := hashCRS(block, crs)
-	pubKey, err := sigToPub(hash, block.CRSSignature)
+	pubKey, err := crypto.SigToPub(hash, block.CRSSignature)
 	if err != nil {
 		return false, err
 	}
@@ -158,9 +158,9 @@ func hashDKGPrivateShare(prvShare *types.DKGPrivateShare) common.Hash {
 }
 
 func verifyDKGPrivateShareSignature(
-	prvShare *types.DKGPrivateShare, sigToPub SigToPubFn) (bool, error) {
+	prvShare *types.DKGPrivateShare) (bool, error) {
 	hash := hashDKGPrivateShare(prvShare)
-	pubKey, err := sigToPub(hash, prvShare.Signature)
+	pubKey, err := crypto.SigToPub(hash, prvShare.Signature)
 	if err != nil {
 		return false, err
 	}
@@ -183,9 +183,9 @@ func hashDKGMasterPublicKey(mpk *types.DKGMasterPublicKey) common.Hash {
 }
 
 func verifyDKGMasterPublicKeySignature(
-	mpk *types.DKGMasterPublicKey, sigToPub SigToPubFn) (bool, error) {
+	mpk *types.DKGMasterPublicKey) (bool, error) {
 	hash := hashDKGMasterPublicKey(mpk)
-	pubKey, err := sigToPub(hash, mpk.Signature)
+	pubKey, err := crypto.SigToPub(hash, mpk.Signature)
 	if err != nil {
 		return false, err
 	}
@@ -209,9 +209,9 @@ func hashDKGComplaint(complaint *types.DKGComplaint) common.Hash {
 }
 
 func verifyDKGComplaintSignature(
-	complaint *types.DKGComplaint, sigToPub SigToPubFn) (bool, error) {
+	complaint *types.DKGComplaint) (bool, error) {
 	hash := hashDKGComplaint(complaint)
-	pubKey, err := sigToPub(hash, complaint.Signature)
+	pubKey, err := crypto.SigToPub(hash, complaint.Signature)
 	if err != nil {
 		return false, err
 	}
@@ -232,14 +232,14 @@ func hashDKGPartialSignature(psig *types.DKGPartialSignature) common.Hash {
 		psig.ProposerID.Hash[:],
 		binaryRound,
 		binaryType,
-		psig.PartialSignature[:],
+		psig.PartialSignature.Signature[:],
 	)
 }
 
 func verifyDKGPartialSignatureSignature(
-	psig *types.DKGPartialSignature, sigToPub SigToPubFn) (bool, error) {
+	psig *types.DKGPartialSignature) (bool, error) {
 	hash := hashDKGPartialSignature(psig)
-	pubKey, err := sigToPub(hash, psig.Signature)
+	pubKey, err := crypto.SigToPub(hash, psig.Signature)
 	if err != nil {
 		return false, err
 	}

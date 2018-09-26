@@ -101,14 +101,13 @@ func (s *ShardTestSuite) newTestShardMgr(cfg *types.Config) *testShardMgr {
 	app := test.NewApp()
 	// Setup shard.
 	return &testShardMgr{
-		ccModule: newCompactionChain(db, eth.SigToPub),
+		ccModule: newCompactionChain(db),
 		app:      app,
 		db:       db,
 		shard: NewShard(
 			uint32(0),
 			cfg,
 			prvKey,
-			eth.SigToPub,
 			app,
 			app,
 			db)}

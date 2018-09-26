@@ -38,6 +38,8 @@ var (
 	ErrShareNotFound = fmt.Errorf("share not found")
 )
 
+const cryptoType = "bls"
+
 var publicKeyLength int
 
 func init() {
@@ -334,7 +336,10 @@ func (prv *PrivateKey) PublicKey() crypto.PublicKey {
 func (prv *PrivateKey) Sign(hash common.Hash) (crypto.Signature, error) {
 	msg := string(hash[:])
 	sign := prv.privateKey.Sign(msg)
-	return crypto.Signature(sign.Serialize()), nil
+	return crypto.Signature{
+		Type:      cryptoType,
+		Signature: sign.Serialize(),
+	}, nil
 }
 
 // Bytes returns []byte representation of private key.
@@ -361,11 +366,11 @@ func (prv *PrivateKey) String() string {
 // VerifySignature checks that the given public key created signature over hash.
 func (pub PublicKey) VerifySignature(
 	hash common.Hash, signature crypto.Signature) bool {
-	if len(signature) == 0 {
+	if len(signature.Signature) == 0 {
 		return false
 	}
 	var sig bls.Sign
-	if err := sig.Deserialize(signature[:]); err != nil {
+	if err := sig.Deserialize(signature.Signature[:]); err != nil {
 		fmt.Println(err)
 		return false
 	}

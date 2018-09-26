@@ -26,6 +26,12 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 )
 
+const cryptoType = "eth"
+
+func init() {
+	crypto.RegisterSigToPub(cryptoType, SigToPub)
+}
+
 // PrivateKey represents a private key structure used in geth and implments
 // Crypto.PrivateKey interface.
 type PrivateKey struct {
@@ -82,7 +88,10 @@ func (prv *PrivateKey) PublicKey() crypto.PublicKey {
 func (prv *PrivateKey) Sign(hash common.Hash) (
 	sig crypto.Signature, err error) {
 	s, err := ethcrypto.Sign(hash[:], &prv.privateKey)
-	sig = crypto.Signature(s)
+	sig = crypto.Signature{
+		Type:      cryptoType,
+		Signature: s,
+	}
 	return
 }
 
@@ -92,11 +101,12 @@ func (prv *PrivateKey) Sign(hash common.Hash) (
 // The signature should have the 64 byte [R || S] format.
 func (pub publicKey) VerifySignature(
 	hash common.Hash, signature crypto.Signature) bool {
-	if len(signature) == 65 {
+	sig := signature.Signature
+	if len(sig) == 65 {
 		// The last byte is for ecrecover.
-		signature = signature[:64]
+		sig = sig[:64]
 	}
-	return ethcrypto.VerifySignature(pub.publicKey, hash[:], signature)
+	return ethcrypto.VerifySignature(pub.publicKey, hash[:], sig)
 }
 
 // Compress encodes a public key to the 33-byte compressed format.
@@ -112,7 +122,7 @@ func (pub publicKey) Bytes() []byte {
 // SigToPub returns the PublicKey that created the given signature.
 func SigToPub(
 	hash common.Hash, signature crypto.Signature) (crypto.PublicKey, error) {
-	key, err := ethcrypto.SigToPub(hash[:], signature[:])
+	key, err := ethcrypto.SigToPub(hash[:], signature.Signature[:])
 	if err != nil {
 		return publicKey{}, err
 	}

@@ -19,11 +19,29 @@ package crypto
 
 import (
 	"encoding/hex"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 )
+
+var (
+	// ErrSigToPubTypeNotFound is reported if the type is already used.
+	ErrSigToPubTypeNotFound = fmt.Errorf("type of sigToPub is not found")
+
+	// ErrSigToPubTypeAlreadyExist is reported if the type is already used.
+	ErrSigToPubTypeAlreadyExist = fmt.Errorf("type of sigToPub is already exist")
+)
+
+// SigToPubFn is a function to recover public key from signature.
+type SigToPubFn func(hash common.Hash, signature Signature) (PublicKey, error)
+
+var sigToPubCB map[string]SigToPubFn
+
+func init() {
+	sigToPubCB = make(map[string]SigToPubFn)
+}
 
 // Keccak256Hash calculates and returns the Keccak256 hash of the input data,
 // converting it to an internal Hash data structure.
@@ -33,9 +51,30 @@ func Keccak256Hash(data ...[]byte) (h common.Hash) {
 
 // Clone returns a deep copy of a signature.
 func (sig Signature) Clone() Signature {
-	return append(Signature{}, sig...)
+	return Signature{
+		Type:      sig.Type,
+		Signature: sig.Signature[:],
+	}
 }
 
 func (sig Signature) String() string {
-	return hex.EncodeToString([]byte(sig[:]))
+	return hex.EncodeToString([]byte(sig.Signature[:]))
+}
+
+// RegisterSigToPub registers a sigToPub function of type.
+func RegisterSigToPub(sigType string, sigToPub SigToPubFn) error {
+	if _, exist := sigToPubCB[sigType]; exist {
+		return ErrSigToPubTypeAlreadyExist
+	}
+	sigToPubCB[sigType] = sigToPub
+	return nil
+}
+
+// SigToPub recovers public key from signature.
+func SigToPub(hash common.Hash, signature Signature) (PublicKey, error) {
+	sigToPub, exist := sigToPubCB[signature.Type]
+	if !exist {
+		return nil, ErrSigToPubTypeNotFound
+	}
+	return sigToPub(hash, signature)
 }

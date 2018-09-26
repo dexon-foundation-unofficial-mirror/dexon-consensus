@@ -41,14 +41,12 @@ type node struct {
 	ID        types.NodeID
 	chainID   uint64
 	prvKey    crypto.PrivateKey
-	sigToPub  core.SigToPubFn
 	consensus *core.Consensus
 }
 
 // newNode returns a new empty node.
 func newNode(
 	prvKey crypto.PrivateKey,
-	sigToPub core.SigToPubFn,
 	config config.Config) *node {
 
 	id := types.NewNodeID(prvKey.PublicKey())
@@ -62,7 +60,6 @@ func newNode(
 	return &node{
 		ID:        id,
 		prvKey:    prvKey,
-		sigToPub:  sigToPub,
 		config:    config.Node,
 		app:       newSimApp(id, netModule),
 		gov:       gov,
@@ -100,7 +97,7 @@ func (n *node) run(serverEndpoint interface{}, legacy bool) {
 		}
 	}
 	n.consensus = core.NewConsensus(
-		n.app, n.gov, n.db, n.netModule, n.prvKey, n.sigToPub)
+		n.app, n.gov, n.db, n.netModule, n.prvKey)
 	if legacy {
 		go n.consensus.RunLegacy()
 	} else {

@@ -31,10 +31,6 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-// SigToPubFn is a function to recover public key from signature.
-type SigToPubFn func(hash common.Hash, signature crypto.Signature) (
-	crypto.PublicKey, error)
-
 // ErrMissingBlockInfo would be reported if some information is missing when
 // calling PrepareBlock. It implements error interface.
 type ErrMissingBlockInfo struct {
@@ -199,7 +195,6 @@ type Consensus struct {
 	gov       Governance
 	network   Network
 	tickerObj Ticker
-	sigToPub  SigToPubFn
 
 	// Misc.
 	notarySet map[types.NodeID]struct{}
@@ -214,8 +209,7 @@ func NewConsensus(
 	gov Governance,
 	db blockdb.BlockDatabase,
 	network Network,
-	prv crypto.PrivateKey,
-	sigToPub SigToPubFn) *Consensus {
+	prv crypto.PrivateKey) *Consensus {
 
 	// TODO(w): load latest blockHeight from DB, and use config at that height.
 	var blockHeight uint64
@@ -251,8 +245,7 @@ func NewConsensus(
 			prvKey:  prv,
 			network: network,
 		},
-		gov,
-		sigToPub)
+		gov)
 	// Register DKG for the initial round. This is a temporary function call for
 	// simulation.
 	cfgModule.registerDKG(0, len(notarySet)/3)
@@ -265,7 +258,7 @@ func NewConsensus(
 		rbModule:      rb,
 		toModule:      to,
 		ctModule:      newConsensusTimestamp(),
-		ccModule:      newCompactionChain(db, sigToPub),
+		ccModule:      newCompactionChain(db),
 		nbModule:      newNonBlocking(app, debug),
 		gov:           gov,
 		db:            db,
@@ -274,7 +267,6 @@ func NewConsensus(
 		prvKey:        prv,
 		dkgReady:      sync.NewCond(&sync.Mutex{}),
 		cfgModule:     cfgModule,
-		sigToPub:      sigToPub,
 		notarySet:     notarySet,
 		ctx:           ctx,
 		ctxCancel:     ctxCancel,
@@ -298,8 +290,7 @@ func NewConsensus(
 			con.ID,
 			con.receivers[chainID],
 			nodes,
-			newGenesisLeaderSelector(config.CRS, con.sigToPub),
-			con.sigToPub,
+			newGenesisLeaderSelector(config.CRS),
 			blockProposer,
 		)
 	}
@@ -594,7 +585,7 @@ func (con *Consensus) sanityCheck(b *types.Block) (err error) {
 	}
 
 	// Check the signer.
-	pubKey, err := con.sigToPub(b.Hash, b.Signature)
+	pubKey, err := crypto.SigToPub(b.Hash, b.Signature)
 	if err != nil {
 		return err
 	}

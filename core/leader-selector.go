@@ -51,32 +51,27 @@ type leaderSelector struct {
 	numCRS       *big.Int
 	minCRSBlock  *big.Int
 	minBlockHash common.Hash
-
-	sigToPub SigToPubFn
 }
 
 func newGenesisLeaderSelector(
-	crs []byte,
-	sigToPub SigToPubFn) *leaderSelector {
+	crs []byte) *leaderSelector {
 	hash := crypto.Keccak256Hash(crs)
-	return newLeaderSelector(hash, sigToPub)
+	return newLeaderSelector(hash)
 }
 
 func newLeaderSelector(
-	crs common.Hash,
-	sigToPub SigToPubFn) *leaderSelector {
+	crs common.Hash) *leaderSelector {
 	numCRS := big.NewInt(0)
 	numCRS.SetBytes(crs[:])
 	return &leaderSelector{
 		numCRS:      numCRS,
 		hashCRS:     crs,
 		minCRSBlock: maxHash,
-		sigToPub:    sigToPub,
 	}
 }
 
 func (l *leaderSelector) distance(sig crypto.Signature) *big.Int {
-	hash := crypto.Keccak256Hash(sig[:])
+	hash := crypto.Keccak256Hash(sig.Signature[:])
 	num := big.NewInt(0)
 	num.SetBytes(hash[:])
 	num.Abs(num.Sub(l.numCRS, num))
@@ -106,7 +101,7 @@ func (l *leaderSelector) prepareBlock(
 }
 
 func (l *leaderSelector) processBlock(block *types.Block) error {
-	ok, err := verifyCRSSignature(block, l.hashCRS, l.sigToPub)
+	ok, err := verifyCRSSignature(block, l.hashCRS)
 	if err != nil {
 		return err
 	}

@@ -33,7 +33,6 @@ type Shard struct {
 	ID       uint32
 	nodeID   types.NodeID
 	prvKey   crypto.PrivateKey
-	sigToPub SigToPubFn
 	chainNum uint32
 	app      Application
 	debug    Debug
@@ -49,7 +48,6 @@ func NewShard(
 	ID uint32,
 	cfg *types.Config,
 	prvKey crypto.PrivateKey,
-	sigToPub SigToPubFn,
 	app Application,
 	debug Debug,
 	db blockdb.BlockDatabase) (s *Shard) {
@@ -58,7 +56,6 @@ func NewShard(
 		ID:       ID,
 		nodeID:   types.NewNodeID(prvKey.PublicKey()),
 		prvKey:   prvKey,
-		sigToPub: sigToPub,
 		chainNum: cfg.NumChains,
 		app:      app,
 		debug:    debug,
@@ -113,7 +110,7 @@ func (s *Shard) SanityCheck(b *types.Block) (err error) {
 		return
 	}
 	// Check the signer.
-	pubKey, err := s.sigToPub(b.Hash, b.Signature)
+	pubKey, err := crypto.SigToPub(b.Hash, b.Signature)
 	if err != nil {
 		return
 	}

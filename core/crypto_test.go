@@ -190,9 +190,9 @@ func (s *CryptoTestSuite) TestVoteSignature() {
 	}
 	vote.Signature, err = prv.Sign(hashVote(vote))
 	s.Require().Nil(err)
-	s.True(verifyVoteSignature(vote, eth.SigToPub))
+	s.True(verifyVoteSignature(vote))
 	vote.Type = types.VoteConfirm
-	s.False(verifyVoteSignature(vote, eth.SigToPub))
+	s.False(verifyVoteSignature(vote))
 }
 
 func (s *CryptoTestSuite) TestCRSSignature() {
@@ -206,9 +206,9 @@ func (s *CryptoTestSuite) TestCRSSignature() {
 	}
 	block.CRSSignature, err = prv.Sign(hashCRS(block, crs))
 	s.Require().Nil(err)
-	s.True(verifyCRSSignature(block, crs, eth.SigToPub))
+	s.True(verifyCRSSignature(block, crs))
 	block.Position.Height++
-	s.False(verifyCRSSignature(block, crs, eth.SigToPub))
+	s.False(verifyCRSSignature(block, crs))
 }
 
 func (s *CryptoTestSuite) TestDKGSignature() {
@@ -222,9 +222,9 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	}
 	prvShare.Signature, err = prv.Sign(hashDKGPrivateShare(prvShare))
 	s.Require().Nil(err)
-	s.True(verifyDKGPrivateShareSignature(prvShare, eth.SigToPub))
+	s.True(verifyDKGPrivateShareSignature(prvShare))
 	prvShare.Round++
-	s.False(verifyDKGPrivateShareSignature(prvShare, eth.SigToPub))
+	s.False(verifyDKGPrivateShareSignature(prvShare))
 
 	id := dkg.NewID([]byte{13})
 	_, pkShare := dkg.NewPrivateKeyShares(1)
@@ -236,9 +236,9 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	}
 	mpk.Signature, err = prv.Sign(hashDKGMasterPublicKey(mpk))
 	s.Require().Nil(err)
-	s.True(verifyDKGMasterPublicKeySignature(mpk, eth.SigToPub))
+	s.True(verifyDKGMasterPublicKeySignature(mpk))
 	mpk.Round++
-	s.False(verifyDKGMasterPublicKeySignature(mpk, eth.SigToPub))
+	s.False(verifyDKGMasterPublicKeySignature(mpk))
 
 	complaint := &types.DKGComplaint{
 		ProposerID:   nID,
@@ -247,9 +247,9 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	}
 	complaint.Signature, err = prv.Sign(hashDKGComplaint(complaint))
 	s.Require().Nil(err)
-	s.True(verifyDKGComplaintSignature(complaint, eth.SigToPub))
+	s.True(verifyDKGComplaintSignature(complaint))
 	complaint.Round++
-	s.False(verifyDKGComplaintSignature(complaint, eth.SigToPub))
+	s.False(verifyDKGComplaintSignature(complaint))
 
 	sig := &types.DKGPartialSignature{
 		ProposerID:       nID,
@@ -258,9 +258,9 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	}
 	sig.Signature, err = prv.Sign(hashDKGPartialSignature(sig))
 	s.Require().Nil(err)
-	s.True(verifyDKGPartialSignatureSignature(sig, eth.SigToPub))
+	s.True(verifyDKGPartialSignatureSignature(sig))
 	sig.Round++
-	s.False(verifyDKGPartialSignatureSignature(sig, eth.SigToPub))
+	s.False(verifyDKGPartialSignatureSignature(sig))
 }
 
 func TestCrypto(t *testing.T) {

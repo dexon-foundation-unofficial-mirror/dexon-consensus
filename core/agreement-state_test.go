@@ -98,7 +98,7 @@ func (s *AgreementStateTestSuite) SetupTest() {
 }
 
 func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
-	leader := newGenesisLeaderSelector([]byte("I ❤️ DEXON"), eth.SigToPub)
+	leader := newGenesisLeaderSelector([]byte("I ❤️ DEXON"))
 	blockProposer := func() *types.Block {
 		return s.proposeBlock(leader)
 	}
@@ -116,7 +116,6 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 		&agreementStateTestReceiver{s},
 		notarySet,
 		leader,
-		eth.SigToPub,
 		blockProposer,
 	)
 	return agreement

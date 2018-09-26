@@ -284,7 +284,7 @@ func (s *DKGTestSuite) TestSignature() {
 	sig, err := prvKey.Sign(hash)
 	s.Require().NoError(err)
 	s.True(pubKey.VerifySignature(hash, sig))
-	sig[0]++
+	sig.Signature[0]++
 	s.False(pubKey.VerifySignature(hash, sig))
 	sig = crypto.Signature{}
 	s.False(pubKey.VerifySignature(hash, sig))

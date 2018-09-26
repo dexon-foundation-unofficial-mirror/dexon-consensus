@@ -22,7 +22,10 @@ import (
 )
 
 // Signature is the basic signature type in DEXON.
-type Signature []byte
+type Signature struct {
+	Type      string
+	Signature []byte
+}
 
 // PrivateKey describes the asymmetric cryptography interface that interacts
 // with the private key.

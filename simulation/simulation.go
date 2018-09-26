@@ -39,7 +39,7 @@ func Run(cfg *config.Config, legacy bool) {
 		if err != nil {
 			panic(err)
 		}
-		v := newNode(prv, eth.SigToPub, *cfg)
+		v := newNode(prv, *cfg)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

@@ -53,18 +53,15 @@ type compactionChain struct {
 	prevBlock         *types.Block
 	witnessAcksLock   sync.RWMutex
 	latestWitnessAcks map[types.NodeID]*types.WitnessAck
-	sigToPub          SigToPubFn
 }
 
 func newCompactionChain(
 	db blockdb.Reader,
-	sigToPub SigToPubFn,
 ) *compactionChain {
 	return &compactionChain{
 		db:                db,
 		pendingAck:        make(map[common.Hash]*pendingAck),
 		latestWitnessAcks: make(map[types.NodeID]*types.WitnessAck),
-		sigToPub:          sigToPub,
 	}
 }
 
@@ -79,7 +76,7 @@ func (cc *compactionChain) sanityCheck(
 			return ErrIncorrectWitnessHash
 		}
 	}
-	pubKey, err := cc.sigToPub(witnessAck.Hash, witnessAck.Signature)
+	pubKey, err := crypto.SigToPub(witnessAck.Hash, witnessAck.Signature)
 	if err != nil {
 		return err
 	}

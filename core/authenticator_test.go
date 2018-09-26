@@ -34,7 +34,7 @@ type AuthenticatorTestSuite struct {
 func (s *AuthenticatorTestSuite) setupAuthenticator() *Authenticator {
 	k, err := eth.NewPrivateKey()
 	s.NoError(err)
-	return NewAuthenticator(k, eth.SigToPub)
+	return NewAuthenticator(k)
 }
 
 func (s *AuthenticatorTestSuite) TestBlock() {

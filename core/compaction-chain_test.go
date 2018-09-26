@@ -40,7 +40,7 @@ func (s *CompactionChainTestSuite) SetupTest() {
 }
 
 func (s *CompactionChainTestSuite) newCompactionChain() *compactionChain {
-	return newCompactionChain(s.db, eth.SigToPub)
+	return newCompactionChain(s.db)
 }
 
 func (s *CompactionChainTestSuite) generateBlocks(

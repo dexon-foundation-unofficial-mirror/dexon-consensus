@@ -86,5 +86,5 @@ type DKGPartialSignature struct {
 
 // IsNack returns true if it's a nack complaint in DKG protocol.
 func (c *DKGComplaint) IsNack() bool {
-	return len(c.PrivateShare.Signature) == 0
+	return len(c.PrivateShare.Signature.Signature) == 0
 }

@@ -67,7 +67,6 @@ type dkgProtocol struct {
 	recv               dkgReceiver
 	round              uint64
 	threshold          int
-	sigToPub           SigToPubFn
 	idMap              map[types.NodeID]dkg.ID
 	mpkMap             map[types.NodeID]*dkg.PublicKeyShares
 	masterPrivateShare *dkg.PrivateKeyShares
@@ -90,7 +89,6 @@ type dkgGroupPublicKey struct {
 	publicKeys     map[types.NodeID]*dkg.PublicKey
 	groupPublicKey *dkg.PublicKey
 	threshold      int
-	sigToPub       SigToPubFn
 }
 
 type tsigProtocol struct {
@@ -109,8 +107,7 @@ func newDKGProtocol(
 	ID types.NodeID,
 	recv dkgReceiver,
 	round uint64,
-	threshold int,
-	sigToPub SigToPubFn) *dkgProtocol {
+	threshold int) *dkgProtocol {
 
 	prvShare, pubShare := dkg.NewPrivateKeyShares(threshold)
 
@@ -126,7 +123,6 @@ func newDKGProtocol(
 		recv:                  recv,
 		round:                 round,
 		threshold:             threshold,
-		sigToPub:              sigToPub,
 		idMap:                 make(map[types.NodeID]dkg.ID),
 		mpkMap:                make(map[types.NodeID]*dkg.PublicKeyShares),
 		masterPrivateShare:    prvShare,
@@ -235,7 +231,7 @@ func (d *dkgProtocol) sanityCheck(prvShare *types.DKGPrivateShare) error {
 	if _, exist := d.idMap[prvShare.ProposerID]; !exist {
 		return ErrNotDKGParticipant
 	}
-	ok, err := verifyDKGPrivateShareSignature(prvShare, d.sigToPub)
+	ok, err := verifyDKGPrivateShareSignature(prvShare)
 	if err != nil {
 		return err
 	}
@@ -318,7 +314,7 @@ func (ss *dkgShareSecret) sign(hash common.Hash) dkg.PartialSignature {
 func newDKGGroupPublicKey(
 	round uint64,
 	mpks []*types.DKGMasterPublicKey, complaints []*types.DKGComplaint,
-	threshold int, sigToPub SigToPubFn) (
+	threshold int) (
 	*dkgGroupPublicKey, error) {
 	// Calculate qualify members.
 	disqualifyIDs := map[types.NodeID]struct{}{}
@@ -381,7 +377,6 @@ func newDKGGroupPublicKey(
 		publicKeys:     pubKeys,
 		threshold:      threshold,
 		groupPublicKey: groupPK,
-		sigToPub:       sigToPub,
 	}, nil
 }
 
@@ -407,8 +402,7 @@ func (tsig *tsigProtocol) sanityCheck(psig *types.DKGPartialSignature) error {
 	if !exist {
 		return ErrNotQualifyDKGParticipant
 	}
-	ok, err := verifyDKGPartialSignatureSignature(
-		psig, tsig.groupPublicKey.sigToPub)
+	ok, err := verifyDKGPartialSignatureSignature(psig)
 	if err != nil {
 		return err
 	}
@@ -444,7 +438,7 @@ func (tsig *tsigProtocol) processPartialSignature(
 
 func (tsig *tsigProtocol) signature() (crypto.Signature, error) {
 	if len(tsig.sigs) <= tsig.groupPublicKey.threshold {
-		return nil, ErrNotEnoughtPartialSignatures
+		return crypto.Signature{}, ErrNotEnoughtPartialSignatures
 	}
 	ids := make(dkg.IDs, 0, len(tsig.sigs))
 	psigs := make([]dkg.PartialSignature, 0, len(tsig.sigs))

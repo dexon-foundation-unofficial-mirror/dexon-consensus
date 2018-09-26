@@ -39,7 +39,6 @@ type configurationChain struct {
 	ID        types.NodeID
 	recv      dkgReceiver
 	gov       Governance
-	sigToPub  SigToPubFn
 	dkg       *dkgProtocol
 	dkgLock   sync.RWMutex
 	dkgSigner map[uint64]*dkgShareSecret
@@ -55,13 +54,11 @@ type configurationChain struct {
 func newConfigurationChain(
 	ID types.NodeID,
 	recv dkgReceiver,
-	gov Governance,
-	sigToPub SigToPubFn) *configurationChain {
+	gov Governance) *configurationChain {
 	return &configurationChain{
 		ID:        ID,
 		recv:      recv,
 		gov:       gov,
-		sigToPub:  sigToPub,
 		dkgSigner: make(map[uint64]*dkgShareSecret),
 		gpk:       make(map[uint64]*dkgGroupPublicKey),
 		tsigReady: sync.NewCond(&sync.Mutex{}),
@@ -73,8 +70,7 @@ func (cc *configurationChain) registerDKG(round uint64, threshold int) {
 		cc.ID,
 		cc.recv,
 		round,
-		threshold,
-		cc.sigToPub)
+		threshold)
 }
 
 func (cc *configurationChain) runDKG(round uint64) error {
@@ -128,7 +124,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	gpk, err := newDKGGroupPublicKey(round,
 		cc.gov.DKGMasterPublicKeys(round),
 		cc.gov.DKGComplaints(round),
-		cc.dkg.threshold, cc.sigToPub)
+		cc.dkg.threshold)
 	if err != nil {
 		return err
 	}
@@ -176,7 +172,7 @@ func (cc *configurationChain) runBlockTSig(
 		return gpk, exist
 	}()
 	if !exist {
-		return nil, ErrDKGNotReady
+		return crypto.Signature{}, ErrDKGNotReady
 	}
 	cc.tsigReady.L.Lock()
 	defer cc.tsigReady.L.Unlock()
@@ -200,7 +196,7 @@ func (cc *configurationChain) runBlockTSig(
 	}
 	cc.tsig = nil
 	if err != nil {
-		return nil, err
+		return crypto.Signature{}, err
 	}
 	log.Printf("[%s] TSIG: %s\n", cc.ID, signature)
 	return signature, nil
@@ -221,7 +217,7 @@ func (cc *configurationChain) processPartialSignature(
 	cc.tsigReady.L.Lock()
 	defer cc.tsigReady.L.Unlock()
 	if cc.tsig == nil {
-		ok, err := verifyDKGPartialSignatureSignature(psig, cc.sigToPub)
+		ok, err := verifyDKGPartialSignatureSignature(psig)
 		if err != nil {
 			return err
 		}

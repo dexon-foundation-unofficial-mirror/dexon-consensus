@@ -25,17 +25,15 @@ import (
 
 // Authenticator verify data owner.
 type Authenticator struct {
-	prvKey   crypto.PrivateKey
-	pubKey   crypto.PublicKey
-	sigToPub SigToPubFn
+	prvKey crypto.PrivateKey
+	pubKey crypto.PublicKey
 }
 
 // NewAuthenticator constructs an Authenticator instance.
-func NewAuthenticator(prvKey crypto.PrivateKey, sigToPub SigToPubFn) *Authenticator {
+func NewAuthenticator(prvKey crypto.PrivateKey) *Authenticator {
 	return &Authenticator{
-		prvKey:   prvKey,
-		pubKey:   prvKey.PublicKey(),
-		sigToPub: sigToPub,
+		prvKey: prvKey,
+		pubKey: prvKey.PublicKey(),
 	}
 }
 
@@ -78,7 +76,7 @@ func (au *Authenticator) VerifyBlock(b *types.Block) (err error) {
 		err = ErrIncorrectHash
 		return
 	}
-	pubKey, err := au.sigToPub(b.Hash, b.Signature)
+	pubKey, err := crypto.SigToPub(b.Hash, b.Signature)
 	if err != nil {
 		return
 	}
@@ -91,10 +89,10 @@ func (au *Authenticator) VerifyBlock(b *types.Block) (err error) {
 
 // VerifyVote verifies the signature of types.Vote.
 func (au *Authenticator) VerifyVote(v *types.Vote) (bool, error) {
-	return verifyVoteSignature(v, au.sigToPub)
+	return verifyVoteSignature(v)
 }
 
 // VerifyCRS verifies the CRS signature of types.Block.
 func (au *Authenticator) VerifyCRS(b *types.Block, crs common.Hash) (bool, error) {
-	return verifyCRSSignature(b, crs, au.sigToPub)
+	return verifyCRSSignature(b, crs)
 }

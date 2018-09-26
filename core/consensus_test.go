@@ -24,7 +24,6 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
@@ -94,7 +93,7 @@ func (s *ConsensusTestSuite) prepareConsensus(
 	s.Require().Nil(err)
 	prv, exist := gov.GetPrivateKey(nID)
 	s.Require().Nil(exist)
-	con := NewConsensus(app, gov, db, &network{}, prv, eth.SigToPub)
+	con := NewConsensus(app, gov, db, &network{}, prv)
 	return app, con
 }
 

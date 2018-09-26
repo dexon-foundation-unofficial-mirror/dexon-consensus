@@ -120,7 +120,6 @@ func (s *DKGTSIGProtocolTestSuite) newProtocols(k, n int, round uint64) (
 			receivers[nID],
 			round,
 			k,
-			eth.SigToPub,
 		)
 		s.Require().NotNil(receivers[nID].mpk)
 	}
@@ -184,7 +183,7 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 	// DKG is fininished.
 	gpk, err := newDKGGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round),
-		k, eth.SigToPub,
+		k,
 	)
 	s.Require().NoError(err)
 	s.Require().Len(gpk.qualifyIDs, n)
@@ -272,7 +271,7 @@ func (s *DKGTSIGProtocolTestSuite) TestNackComplaint() {
 		complaint, exist := recv.complaints[byzantineID]
 		s.True(complaint.IsNack())
 		s.Require().True(exist)
-		s.True(verifyDKGComplaintSignature(complaint, eth.SigToPub))
+		s.True(verifyDKGComplaintSignature(complaint))
 	}
 }
 
@@ -480,7 +479,7 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 
 	gpk, err := newDKGGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), complaints,
-		k, eth.SigToPub,
+		k,
 	)
 	s.Require().NoError(err)
 	s.Require().Len(gpk.qualifyIDs, n-1)
@@ -490,17 +489,17 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 
 	gpk2, err := newDKGGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), complaints[:k],
-		k, eth.SigToPub,
+		k,
 	)
 	s.Require().NoError(err)
 	s.Require().Len(gpk2.qualifyIDs, n)
 
 	// Test for complaint.
-	complaints[0].PrivateShare.Signature = crypto.Signature{0}
+	complaints[0].PrivateShare.Signature = crypto.Signature{Signature: []byte{0}}
 	s.Require().False(complaints[0].IsNack())
 	gpk3, err := newDKGGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), complaints[:1],
-		k, eth.SigToPub,
+		k,
 	)
 	s.Require().NoError(err)
 	s.Require().Len(gpk3.qualifyIDs, n-1)
@@ -555,7 +554,7 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 	// DKG is fininished.
 	gpk, err := newDKGGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round),
-		k, eth.SigToPub,
+		k,
 	)
 	s.Require().NoError(err)
 	s.Require().Len(gpk.qualifyIDs, n-1)

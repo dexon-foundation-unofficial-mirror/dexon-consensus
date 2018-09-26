@@ -105,7 +105,6 @@ type agreement struct {
 	data           *agreementData
 	aID            *atomic.Value
 	notarySet      map[types.NodeID]struct{}
-	sigToPub       SigToPubFn
 	hasOutput      bool
 	lock           sync.RWMutex
 	pendingBlock   []pendingBlock
@@ -119,7 +118,6 @@ func newAgreement(
 	recv agreementReceiver,
 	notarySet types.NodeIDs,
 	leader *leaderSelector,
-	sigToPub SigToPubFn,
 	blockProposer blockProposerFn) *agreement {
 	agreement := &agreement{
 		data: &agreementData{
@@ -129,7 +127,6 @@ func newAgreement(
 			blockProposer: blockProposer,
 		},
 		aID:            &atomic.Value{},
-		sigToPub:       sigToPub,
 		candidateBlock: make(map[common.Hash]*types.Block),
 	}
 	agreement.restart(notarySet, types.Position{})
@@ -237,7 +234,7 @@ func (a *agreement) sanityCheck(vote *types.Vote) error {
 	}(); !exist {
 		return ErrNotInNotarySet
 	}
-	ok, err := verifyVoteSignature(vote, a.sigToPub)
+	ok, err := verifyVoteSignature(vote)
 	if err != nil {
 		return err
 	}

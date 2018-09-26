@@ -38,18 +38,20 @@ func RecoverSignature(sigs []PartialSignature, signerIDs IDs) (
 	crypto.Signature, error) {
 	blsSigs := make([]bls.Sign, len(sigs))
 	for i, sig := range sigs {
-		if len(sig) == 0 {
-			return nil, ErrEmptySignature
+		if len(sig.Signature) == 0 {
+			return crypto.Signature{}, ErrEmptySignature
 		}
-		if err := blsSigs[i].Deserialize([]byte(sig)); err != nil {
-			return nil, err
+		if err := blsSigs[i].Deserialize([]byte(sig.Signature)); err != nil {
+			return crypto.Signature{}, err
 		}
 	}
 	var recoverSig bls.Sign
 	if err := recoverSig.Recover(blsSigs, []bls.ID(signerIDs)); err != nil {
-		return nil, err
+		return crypto.Signature{}, err
 	}
-	return crypto.Signature(recoverSig.Serialize()), nil
+	return crypto.Signature{
+		Type:      cryptoType,
+		Signature: recoverSig.Serialize()}, nil
 }
 
 // RecoverGroupPublicKey recovers group public key.
