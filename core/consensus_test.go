@@ -55,6 +55,12 @@ func (n *network) BroadcastDKGPrivateShare(
 	prvShare *types.DKGPrivateShare) {
 }
 
+// BroadcastDKGPartialSignature broadcasts partialSignature to all
+// DKG participants.
+func (n *network) BroadcastDKGPartialSignature(
+	psig *types.DKGPartialSignature) {
+}
+
 // ReceiveChan returns a channel to receive messages from DEXON network.
 func (n *network) ReceiveChan() <-chan interface{} {
 	return make(chan interface{})

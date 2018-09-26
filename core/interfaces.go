@@ -22,6 +22,7 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
 // Application describes the application interface that interacts with DEXON
@@ -76,6 +77,10 @@ type Network interface {
 	// BroadcastDKGPrivateShare broadcasts PrivateShare to all DKG participants.
 	BroadcastDKGPrivateShare(prvShare *types.DKGPrivateShare)
 
+	// BroadcastDKGPartialSignature broadcasts partialSignature to all
+	// DKG participants.
+	BroadcastDKGPartialSignature(psig *types.DKGPartialSignature)
+
 	// ReceiveChan returns a channel to receive messages from DEXON network.
 	ReceiveChan() <-chan interface{}
 }
@@ -91,6 +96,12 @@ type Governance interface {
 	// Get the current notary set.
 	// Return the genesis notary set if blockHeight == 0.
 	GetNotarySet(blockHeight uint64) map[types.NodeID]struct{}
+
+	// Porpose a ThresholdSignature of round.
+	ProposeThresholdSignature(round uint64, signature crypto.Signature)
+
+	// Get a ThresholdSignature of round.
+	GetThresholdSignature(round uint64) (sig crypto.Signature, exist bool)
 
 	//// DKG-related methods.
 

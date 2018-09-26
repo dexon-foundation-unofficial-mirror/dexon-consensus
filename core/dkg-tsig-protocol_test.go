@@ -211,18 +211,19 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 		s.Require().NoError(err)
 	}
 
-	tsig := newTSigProtocol(gpk)
 	msgHash := crypto.Keccak256Hash([]byte("🏖🍹"))
+	tsig := newTSigProtocol(gpk, msgHash, types.TSigConfigurationBlock)
 	for nID, shareSecret := range shareSecrets {
 		psig := &types.DKGPartialSignature{
 			ProposerID:       nID,
 			Round:            round,
+			Type:             types.TSigConfigurationBlock,
 			PartialSignature: shareSecret.sign(msgHash),
 		}
 		var err error
 		psig.Signature, err = s.prvKeys[nID].Sign(hashDKGPartialSignature(psig))
 		s.Require().NoError(err)
-		s.Require().NoError(tsig.processPartialSignature(msgHash, psig))
+		s.Require().NoError(tsig.processPartialSignature(psig))
 		if len(tsig.sigs) > k {
 			break
 		}
@@ -577,28 +578,36 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 		s.Require().NoError(err)
 	}
 
-	tsig := newTSigProtocol(gpk)
 	msgHash := crypto.Keccak256Hash([]byte("🏖🍹"))
+	tsig := newTSigProtocol(gpk, msgHash, types.TSigConfigurationBlock)
 	byzantineID2 := s.nIDs[1]
+	byzantineID3 := s.nIDs[2]
 	for nID, shareSecret := range shareSecrets {
 		psig := &types.DKGPartialSignature{
 			ProposerID:       nID,
 			Round:            round,
+			Type:             types.TSigConfigurationBlock,
 			PartialSignature: shareSecret.sign(msgHash),
 		}
-		if nID == byzantineID2 {
+		switch nID {
+		case byzantineID2:
 			psig.PartialSignature = shareSecret.sign(
 				crypto.Keccak256Hash([]byte("💣")))
+		case byzantineID3:
+			psig.Type = types.TSigNotaryAck
 		}
 		var err error
 		psig.Signature, err = s.prvKeys[nID].Sign(hashDKGPartialSignature(psig))
 		s.Require().NoError(err)
-		err = tsig.processPartialSignature(msgHash, psig)
-		if nID == byzantineID {
+		err = tsig.processPartialSignature(psig)
+		switch nID {
+		case byzantineID:
 			s.Require().Equal(ErrNotQualifyDKGParticipant, err)
-		} else if nID == byzantineID2 {
+		case byzantineID2:
 			s.Require().Equal(ErrIncorrectPartialSignature, err)
-		} else {
+		case byzantineID3:
+			s.Require().Equal(ErrMismatchPartialSignatureType, err)
+		default:
 			s.Require().NoError(err)
 		}
 	}

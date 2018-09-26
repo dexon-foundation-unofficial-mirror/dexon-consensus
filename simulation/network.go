@@ -161,6 +161,14 @@ func (n *network) BroadcastDKGPrivateShare(
 	}
 }
 
+// BroadcastDKGPartialSignature implements core.Network interface.
+func (n *network) BroadcastDKGPartialSignature(
+	psig *types.DKGPartialSignature) {
+	if err := n.trans.Broadcast(psig); err != nil {
+		panic(err)
+	}
+}
+
 // ReceiveChan implements core.Network interface.
 func (n *network) ReceiveChan() <-chan interface{} {
 	return n.toConsensus

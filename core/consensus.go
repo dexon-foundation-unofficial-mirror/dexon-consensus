@@ -186,7 +186,7 @@ type Consensus struct {
 	// DKG.
 	dkgRunning int32
 	dkgReady   *sync.Cond
-	dkgModule  *dkgProtocol
+	cfgModule  *configurationChain
 
 	// Dexon consensus modules.
 	rbModule *reliableBroadcast
@@ -243,8 +243,7 @@ func NewConsensus(
 		uint64(float32(len(notarySet)-1)*config.PhiRatio+1),
 		config.NumChains)
 
-	// Setup DKG Protocol.
-	dkgModule := newDKGProtocol(
+	cfgModule := newConfigurationChain(
 		ID,
 		&consensusDKGReceiver{
 			ID:      ID,
@@ -252,9 +251,11 @@ func NewConsensus(
 			prvKey:  prv,
 			network: network,
 		},
-		0,
-		len(notarySet)/3,
+		gov,
 		sigToPub)
+	// Register DKG for the initial round. This is a temporary function call for
+	// simulation.
+	cfgModule.registerDKG(0, len(notarySet)/3)
 
 	// Check if the application implement Debug interface.
 	debug, _ := app.(Debug)
@@ -272,7 +273,7 @@ func NewConsensus(
 		tickerObj:     newTicker(gov, TickerBA),
 		prvKey:        prv,
 		dkgReady:      sync.NewCond(&sync.Mutex{}),
-		dkgModule:     dkgModule,
+		cfgModule:     cfgModule,
 		sigToPub:      sigToPub,
 		notarySet:     notarySet,
 		ctx:           ctx,
@@ -308,7 +309,7 @@ func NewConsensus(
 // Run starts running DEXON Consensus.
 func (con *Consensus) Run() {
 	go con.processMsg(con.network.ReceiveChan(), con.PreProcessBlock)
-	con.runDKG()
+	con.runDKGTSIG()
 	con.dkgReady.L.Lock()
 	defer con.dkgReady.L.Unlock()
 	for con.dkgRunning != 2 {
@@ -374,8 +375,8 @@ BALoop:
 	}
 }
 
-// runDKG starts running DKG protocol.
-func (con *Consensus) runDKG() {
+// runDKGTSIG starts running DKG+TSIG protocol.
+func (con *Consensus) runDKGTSIG() {
 	con.dkgReady.L.Lock()
 	defer con.dkgReady.L.Unlock()
 	if con.dkgRunning != 0 {
@@ -389,40 +390,30 @@ func (con *Consensus) runDKG() {
 			con.dkgReady.Broadcast()
 			con.dkgRunning = 2
 		}()
-		ticker := newTicker(con.gov, TickerDKG)
-		round := con.dkgModule.round
-		<-ticker.Tick()
-		// Phase 2(T = 0): Exchange DKG secret key share.
-		con.dkgModule.processMasterPublicKeys(con.gov.DKGMasterPublicKeys(round))
-		// Phase 3(T = 0~λ): Propose complaint.
-		// Propose complaint is done in `processMasterPublicKeys`.
-		<-ticker.Tick()
-		// Phase 4(T = λ): Propose nack complaints.
-		con.dkgModule.proposeNackComplaints()
-		<-ticker.Tick()
-		// Phase 5(T = 2λ): Propose Anti nack complaint.
-		con.dkgModule.processNackComplaints(con.gov.DKGComplaints(round))
-		<-ticker.Tick()
-		// Phase 6(T = 3λ): Rebroadcast anti nack complaint.
-		// Rebroadcast is done in `processPrivateShare`.
-		<-ticker.Tick()
-		// Phase 7(T = 4λ): Enforce complaints and nack complaints.
-		con.dkgModule.enforceNackComplaints(con.gov.DKGComplaints(round))
-		// Enforce complaint is done in `processPrivateShare`.
-		// Phase 8(T = 5λ): DKG is ready.
-		gpk, err := newDKGGroupPublicKey(round,
-			con.gov.DKGMasterPublicKeys(round),
-			con.gov.DKGComplaints(round),
-			con.dkgModule.threshold, con.sigToPub)
+		round := con.cfgModule.dkg.round
+		if err := con.cfgModule.runDKG(round); err != nil {
+			panic(err)
+		}
+		hash := HashConfigurationBlock(
+			con.gov.GetNotarySet(0),
+			con.gov.GetConfiguration(0),
+			common.Hash{},
+			con.cfgModule.prevHash)
+		psig, err := con.cfgModule.preparePartialSignature(round, hash)
 		if err != nil {
 			panic(err)
 		}
-		qualifies := ""
-		for _, nID := range gpk.qualifyNodeIDs {
-			qualifies += fmt.Sprintf("%s ", nID.String()[:6])
+		psig.Signature, err = con.prvKey.Sign(hashDKGPartialSignature(psig))
+		if err != nil {
+			panic(err)
 		}
-		log.Printf("[%s] Qualify Nodes(%d): %s\n",
-			con.ID, len(gpk.qualifyIDs), qualifies)
+		if err = con.cfgModule.processPartialSignature(psig); err != nil {
+			panic(err)
+		}
+		con.network.BroadcastDKGPartialSignature(psig)
+		if err = con.cfgModule.runBlockTSig(round, hash); err != nil {
+			panic(err)
+		}
 	}()
 }
 
@@ -512,10 +503,12 @@ func (con *Consensus) processMsg(
 				log.Println(err)
 			}
 		case *types.DKGPrivateShare:
-			if con.dkgRunning == 0 {
-				break
+			if err := con.cfgModule.processPrivateShare(val); err != nil {
+				log.Println(err)
 			}
-			if err := con.dkgModule.processPrivateShare(val); err != nil {
+
+		case *types.DKGPartialSignature:
+			if err := con.cfgModule.processPartialSignature(val); err != nil {
 				log.Println(err)
 			}
 		}

@@ -38,6 +38,7 @@ type Governance struct {
 	lambdaDKG          time.Duration
 	notarySet          map[types.NodeID]struct{}
 	privateKeys        map[types.NodeID]crypto.PrivateKey
+	tsig               map[uint64]crypto.Signature
 	DKGComplaint       map[uint64][]*types.DKGComplaint
 	DKGMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
 }
@@ -50,6 +51,7 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 		lambdaDKG:          lambda * 10,
 		notarySet:          make(map[types.NodeID]struct{}),
 		privateKeys:        make(map[types.NodeID]crypto.PrivateKey),
+		tsig:               make(map[uint64]crypto.Signature),
 		DKGComplaint:       make(map[uint64][]*types.DKGComplaint),
 		DKGMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
 	}
@@ -100,6 +102,19 @@ func (g *Governance) GetPrivateKey(
 		err = ErrPrivateKeyNotExists
 		return
 	}
+	return
+}
+
+// ProposeThresholdSignature porposes a ThresholdSignature of round.
+func (g *Governance) ProposeThresholdSignature(
+	round uint64, signature crypto.Signature) {
+	g.tsig[round] = signature
+}
+
+// GetThresholdSignature gets a ThresholdSignature of round.
+func (g *Governance) GetThresholdSignature(round uint64) (
+	sig crypto.Signature, exist bool) {
+	sig, exist = g.tsig[round]
 	return
 }
 

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
 
@@ -37,6 +38,7 @@ type simGovernance struct {
 	phiRatio           float32
 	chainNum           uint32
 	crs                []byte
+	tsig               map[uint64]crypto.Signature
 	dkgComplaint       map[uint64][]*types.DKGComplaint
 	dkgMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
 	lambdaBA           time.Duration
@@ -56,6 +58,7 @@ func newSimGovernance(
 		phiRatio:           consensusConfig.PhiRatio,
 		chainNum:           consensusConfig.ChainNum,
 		crs:                []byte(consensusConfig.GenesisCRS),
+		tsig:               make(map[uint64]crypto.Signature),
 		dkgComplaint:       make(map[uint64][]*types.DKGComplaint),
 		dkgMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
 		lambdaBA:           time.Duration(consensusConfig.LambdaBA) * time.Millisecond,
@@ -106,6 +109,19 @@ func (g *simGovernance) addNode(nID types.NodeID) {
 		panic(fmt.Errorf("attempt to add node when ready"))
 	}
 	g.notarySet[nID] = struct{}{}
+}
+
+// ProposeThresholdSignature porposes a ThresholdSignature of round.
+func (g *simGovernance) ProposeThresholdSignature(
+	round uint64, signature crypto.Signature) {
+	g.tsig[round] = signature
+}
+
+// GetThresholdSignature gets a ThresholdSignature of round.
+func (g *simGovernance) GetThresholdSignature(round uint64) (
+	sig crypto.Signature, exist bool) {
+	sig, exist = g.tsig[round]
+	return
 }
 
 // AddDKGComplaint adds a DKGComplaint.

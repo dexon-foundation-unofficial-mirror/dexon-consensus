@@ -225,9 +225,13 @@ func hashDKGPartialSignature(psig *types.DKGPartialSignature) common.Hash {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, psig.Round)
 
+	binaryType := make([]byte, 4)
+	binary.LittleEndian.PutUint32(binaryType, uint32(psig.Type))
+
 	return crypto.Keccak256Hash(
 		psig.ProposerID.Hash[:],
 		binaryRound,
+		binaryType,
 		psig.PartialSignature[:],
 	)
 }

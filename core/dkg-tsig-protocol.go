@@ -38,6 +38,8 @@ var (
 		"threshold not reach")
 	ErrIncorrectPrivateShareSignature = fmt.Errorf(
 		"incorrect private share signature")
+	ErrMismatchPartialSignatureType = fmt.Errorf(
+		"mismatch partialSignature type")
 	ErrIncorrectPartialSignatureSignature = fmt.Errorf(
 		"incorrect partialSignature signature")
 	ErrIncorrectPartialSignature = fmt.Errorf(
@@ -93,6 +95,8 @@ type dkgGroupPublicKey struct {
 
 type tsigProtocol struct {
 	groupPublicKey *dkgGroupPublicKey
+	hash           common.Hash
+	psigType       types.DKGPartialSignatureType
 	sigs           map[dkg.ID]dkg.PartialSignature
 	threshold      int
 }
@@ -386,9 +390,14 @@ func (gpk *dkgGroupPublicKey) verifySignature(
 	return gpk.groupPublicKey.VerifySignature(hash, sig)
 }
 
-func newTSigProtocol(gpk *dkgGroupPublicKey) *tsigProtocol {
+func newTSigProtocol(
+	gpk *dkgGroupPublicKey,
+	hash common.Hash,
+	psigType types.DKGPartialSignatureType) *tsigProtocol {
 	return &tsigProtocol{
 		groupPublicKey: gpk,
+		hash:           hash,
+		psigType:       psigType,
 		sigs:           make(map[dkg.ID]dkg.PartialSignature, gpk.threshold+1),
 	}
 }
@@ -406,11 +415,14 @@ func (tsig *tsigProtocol) sanityCheck(psig *types.DKGPartialSignature) error {
 	if !ok {
 		return ErrIncorrectPartialSignatureSignature
 	}
+	if psig.Type != tsig.psigType {
+		return ErrMismatchPartialSignatureType
+	}
 	return nil
 }
 
 func (tsig *tsigProtocol) processPartialSignature(
-	hash common.Hash, psig *types.DKGPartialSignature) error {
+	psig *types.DKGPartialSignature) error {
 	if psig.Round != tsig.groupPublicKey.round {
 		return nil
 	}
@@ -422,7 +434,8 @@ func (tsig *tsigProtocol) processPartialSignature(
 		return err
 	}
 	pubKey := tsig.groupPublicKey.publicKeys[psig.ProposerID]
-	if !pubKey.VerifySignature(hash, crypto.Signature(psig.PartialSignature)) {
+	if !pubKey.VerifySignature(
+		tsig.hash, crypto.Signature(psig.PartialSignature)) {
 		return ErrIncorrectPartialSignature
 	}
 	tsig.sigs[id] = psig.PartialSignature

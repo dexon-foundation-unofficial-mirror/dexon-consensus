@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
 var (
@@ -101,4 +103,30 @@ func removeFromSortedUint32Slice(xs []uint32, x uint32) []uint32 {
 		return xs
 	}
 	return append(xs[:indexToRemove], xs[indexToRemove+1:]...)
+}
+
+// HashConfigurationBlock returns the hash value of configuration block.
+func HashConfigurationBlock(
+	notarySet map[types.NodeID]struct{},
+	config *types.Config,
+	snapshotHash common.Hash,
+	prevHash common.Hash,
+) common.Hash {
+	notaryIDs := make(types.NodeIDs, 0, len(notarySet))
+	for nID := range notarySet {
+		notaryIDs = append(notaryIDs, nID)
+	}
+	sort.Sort(notaryIDs)
+	notarySetBytes := make([]byte, 0, len(notarySet)*len(common.Hash{}))
+	for _, nID := range notaryIDs {
+		notarySetBytes = append(notarySetBytes, nID.Hash[:]...)
+	}
+	configBytes := config.Bytes()
+
+	return crypto.Keccak256Hash(
+		notarySetBytes[:],
+		configBytes[:],
+		snapshotHash[:],
+		prevHash[:],
+	)
 }

@@ -17,7 +17,11 @@
 
 package types
 
-import "time"
+import (
+	"encoding/binary"
+	"math"
+	"time"
+)
 
 // Config stands for Current Configuration Parameters.
 type Config struct {
@@ -35,4 +39,41 @@ type Config struct {
 	// Total ordering related.
 	K        int
 	PhiRatio float32
+
+	// Confiuration chain related.
+	RoundHeight uint64
+}
+
+// Bytes returns []byte representation of Config.
+func (c *Config) Bytes() []byte {
+	binaryNumShards := make([]byte, 4)
+	binary.LittleEndian.PutUint32(binaryNumShards, c.NumShards)
+	binaryNumChains := make([]byte, 4)
+	binary.LittleEndian.PutUint32(binaryNumChains, c.NumChains)
+
+	binaryLambdaBA := make([]byte, 8)
+	binary.LittleEndian.PutUint64(
+		binaryLambdaBA, uint64(c.LambdaBA.Nanoseconds()))
+	binaryLambdaDKG := make([]byte, 8)
+	binary.LittleEndian.PutUint64(
+		binaryLambdaDKG, uint64(c.LambdaDKG.Nanoseconds()))
+
+	binaryK := make([]byte, 4)
+	binary.LittleEndian.PutUint32(binaryK, uint32(c.K))
+	binaryPhiRatio := make([]byte, 4)
+	binary.LittleEndian.PutUint32(binaryPhiRatio, math.Float32bits(c.PhiRatio))
+
+	binaryRoundHeight := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryRoundHeight, c.RoundHeight)
+
+	enc := make([]byte, 0, 40)
+	enc = append(enc, binaryNumShards...)
+	enc = append(enc, binaryNumChains...)
+	enc = append(enc, binaryLambdaBA...)
+	enc = append(enc, binaryLambdaDKG...)
+	enc = append(enc, binaryK...)
+	enc = append(enc, binaryPhiRatio...)
+	enc = append(enc, binaryRoundHeight...)
+
+	return enc
 }

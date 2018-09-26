@@ -36,12 +36,13 @@ const (
 
 // Consensus settings.
 type Consensus struct {
-	PhiRatio   float32
-	K          int
-	ChainNum   uint32
-	GenesisCRS string `toml:"genesis_crs"`
-	LambdaBA   int    `toml:"lambda_ba"`
-	LambdaDKG  int    `toml:"lambda_dkg"`
+	PhiRatio    float32
+	K           int
+	ChainNum    uint32
+	GenesisCRS  string `toml:"genesis_crs"`
+	LambdaBA    int    `toml:"lambda_ba"`
+	LambdaDKG   int    `toml:"lambda_dkg"`
+	RoundHeight uint64
 }
 
 // Legacy config.
@@ -93,12 +94,13 @@ func GenerateDefault(path string) error {
 		Title: "DEXON Consensus Simulation Config",
 		Node: Node{
 			Consensus: Consensus{
-				PhiRatio:   float32(2) / 3,
-				K:          1,
-				ChainNum:   7,
-				GenesisCRS: "In DEXON we trust.",
-				LambdaBA:   250,
-				LambdaDKG:  1000,
+				PhiRatio:    float32(2) / 3,
+				K:           1,
+				ChainNum:    7,
+				GenesisCRS:  "In DEXON we trust.",
+				LambdaBA:    250,
+				LambdaDKG:   1000,
+				RoundHeight: 60,
 			},
 			Legacy: Legacy{
 				ProposeIntervalMean:  500,
