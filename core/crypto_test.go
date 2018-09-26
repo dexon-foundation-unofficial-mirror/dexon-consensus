@@ -24,7 +24,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/dkg"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -99,7 +99,7 @@ func (s *CryptoTestSuite) generateCompactionChain(
 }
 
 func (s *CryptoTestSuite) TestWitnessAckSignature() {
-	prv, err := eth.NewPrivateKey()
+	prv, err := ecdsa.NewPrivateKey()
 	pub := prv.PublicKey()
 	s.Require().Nil(err)
 	blocks, witnessAcks := s.generateCompactionChain(10, prv)
@@ -150,7 +150,7 @@ func (s *CryptoTestSuite) generateBlockChain(
 }
 
 func (s *CryptoTestSuite) TestBlockSignature() {
-	prv, err := eth.NewPrivateKey()
+	prv, err := ecdsa.NewPrivateKey()
 	pub := prv.PublicKey()
 	s.Require().Nil(err)
 	blocks := s.generateBlockChain(10, prv)
@@ -178,7 +178,7 @@ func (s *CryptoTestSuite) TestBlockSignature() {
 }
 
 func (s *CryptoTestSuite) TestVoteSignature() {
-	prv, err := eth.NewPrivateKey()
+	prv, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 	pub := prv.PublicKey()
 	nID := types.NewNodeID(pub)
@@ -197,7 +197,7 @@ func (s *CryptoTestSuite) TestVoteSignature() {
 
 func (s *CryptoTestSuite) TestCRSSignature() {
 	crs := common.NewRandomHash()
-	prv, err := eth.NewPrivateKey()
+	prv, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 	pub := prv.PublicKey()
 	nID := types.NewNodeID(pub)
@@ -212,7 +212,7 @@ func (s *CryptoTestSuite) TestCRSSignature() {
 }
 
 func (s *CryptoTestSuite) TestDKGSignature() {
-	prv, err := eth.NewPrivateKey()
+	prv, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 	nID := types.NewNodeID(prv.PublicKey())
 	prvShare := &types.DKGPrivateShare{

@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -58,7 +58,7 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 		DKGMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
 	}
 	for i := 0; i < nodeCount; i++ {
-		prv, err := eth.NewPrivateKey()
+		prv, err := ecdsa.NewPrivateKey()
 		if err != nil {
 			return nil, err
 		}

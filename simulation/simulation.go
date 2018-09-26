@@ -20,7 +20,7 @@ package simulation
 import (
 	"sync"
 
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
 
@@ -35,7 +35,7 @@ func Run(cfg *config.Config, legacy bool) {
 
 	// init is a function to init a node.
 	init := func(serverEndpoint interface{}) {
-		prv, err := eth.NewPrivateKey()
+		prv, err := ecdsa.NewPrivateKey()
 		if err != nil {
 			panic(err)
 		}

@@ -26,7 +26,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -276,7 +276,7 @@ func (gen *BlocksGenerator) Generate(
 	}
 	nodePrvKeys = map[types.NodeID]crypto.PrivateKey{}
 	for i := uint32(0); i < chainNum; i++ {
-		if prvKey, err = eth.NewPrivateKey(); err != nil {
+		if prvKey, err = ecdsa.NewPrivateKey(); err != nil {
 			return
 		}
 		id := types.NewNodeID(prvKey.PublicKey())

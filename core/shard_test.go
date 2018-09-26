@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
@@ -92,7 +92,7 @@ type ShardTestSuite struct {
 func (s *ShardTestSuite) newTestShardMgr(cfg *types.Config) *testShardMgr {
 	var req = s.Require()
 	// Setup private key.
-	prvKey, err := eth.NewPrivateKey()
+	prvKey, err := ecdsa.NewPrivateKey()
 	req.Nil(err)
 	// Setup blockdb.
 	db, err := blockdb.NewMemBackedBlockDB()

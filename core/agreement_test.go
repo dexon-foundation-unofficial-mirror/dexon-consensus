@@ -22,7 +22,7 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -67,7 +67,7 @@ type AgreementTestSuite struct {
 }
 
 func (s *AgreementTestSuite) SetupTest() {
-	prvKey, err := eth.NewPrivateKey()
+	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 	s.ID = types.NewNodeID(prvKey.PublicKey())
 	s.prvKey = map[types.NodeID]crypto.PrivateKey{
@@ -88,7 +88,7 @@ func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 
 	notarySet := make(types.NodeIDs, numNotarySet-1)
 	for i := range notarySet {
-		prvKey, err := eth.NewPrivateKey()
+		prvKey, err := ecdsa.NewPrivateKey()
 		s.Require().Nil(err)
 		notarySet[i] = types.NewNodeID(prvKey.PublicKey())
 		s.prvKey[notarySet[i]] = prvKey

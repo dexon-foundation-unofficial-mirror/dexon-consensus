@@ -27,7 +27,7 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/dkg"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
@@ -130,7 +130,7 @@ func (s *ConfigurationChainTestSuite) setupNodes(n int) {
 	s.dkgIDs = make(map[types.NodeID]dkg.ID)
 	ids := make(dkg.IDs, 0, n)
 	for i := 0; i < n; i++ {
-		prvKey, err := eth.NewPrivateKey()
+		prvKey, err := ecdsa.NewPrivateKey()
 		s.Require().NoError(err)
 		nID := types.NewNodeID(prvKey.PublicKey())
 		s.nIDs = append(s.nIDs, nID)

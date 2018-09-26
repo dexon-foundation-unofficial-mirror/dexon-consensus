@@ -15,7 +15,7 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package eth
+package ecdsa
 
 import (
 	"crypto/ecdsa"
@@ -26,7 +26,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 )
 
-const cryptoType = "eth"
+const cryptoType = "ecdsa"
 
 func init() {
 	crypto.RegisterSigToPub(cryptoType, SigToPub)

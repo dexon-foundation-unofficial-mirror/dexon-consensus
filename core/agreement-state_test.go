@@ -25,7 +25,7 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -85,7 +85,7 @@ func (s *AgreementStateTestSuite) prepareVote(
 }
 
 func (s *AgreementStateTestSuite) SetupTest() {
-	prvKey, err := eth.NewPrivateKey()
+	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 	s.ID = types.NewNodeID(prvKey.PublicKey())
 	s.prvKey = map[types.NodeID]crypto.PrivateKey{
@@ -105,7 +105,7 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 
 	notarySet := make(types.NodeIDs, numNode-1)
 	for i := range notarySet {
-		prvKey, err := eth.NewPrivateKey()
+		prvKey, err := ecdsa.NewPrivateKey()
 		s.Require().Nil(err)
 		notarySet[i] = types.NewNodeID(prvKey.PublicKey())
 		s.prvKey[notarySet[i]] = prvKey
@@ -156,7 +156,7 @@ func (s *AgreementStateTestSuite) TestPrepareState() {
 	// is more than 2f+1, proposing the block v.
 	a.data.period = 3
 	block := s.proposeBlock(a.data.leader)
-	prv, err := eth.NewPrivateKey()
+	prv, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 	block.ProposerID = types.NewNodeID(prv.PublicKey())
 	s.Require().Nil(a.data.leader.prepareBlock(block, prv))
@@ -180,7 +180,7 @@ func (s *AgreementStateTestSuite) TestAckState() {
 	blocks := make([]*types.Block, 3)
 	for i := range blocks {
 		blocks[i] = s.proposeBlock(a.data.leader)
-		prv, err := eth.NewPrivateKey()
+		prv, err := ecdsa.NewPrivateKey()
 		s.Require().Nil(err)
 		blocks[i].ProposerID = types.NewNodeID(prv.PublicKey())
 		s.Require().Nil(a.data.leader.prepareBlock(blocks[i], prv))

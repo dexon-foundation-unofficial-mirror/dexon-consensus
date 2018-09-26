@@ -23,7 +23,7 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -94,7 +94,7 @@ func (s *CompactionChainTestSuite) TestProcessBlock() {
 func (s *CompactionChainTestSuite) TestPrepareWitnessAck() {
 	cc := s.newCompactionChain()
 	blocks := s.generateBlocks(2, cc)
-	prv, err := eth.NewPrivateKey()
+	prv, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 
 	block := blocks[1]
@@ -113,9 +113,9 @@ func (s *CompactionChainTestSuite) TestPrepareWitnessAck() {
 func (s *CompactionChainTestSuite) TestProcessWitnessAck() {
 	cc := s.newCompactionChain()
 	blocks := s.generateBlocks(10, cc)
-	prv1, err := eth.NewPrivateKey()
+	prv1, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
-	prv2, err := eth.NewPrivateKey()
+	prv2, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 	nID1 := types.NewNodeID(prv1.PublicKey())
 	nID2 := types.NewNodeID(prv2.PublicKey())

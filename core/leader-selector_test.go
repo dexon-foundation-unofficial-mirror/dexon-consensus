@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -38,7 +38,7 @@ func (s *LeaderSelectorTestSuite) newLeader() *leaderSelector {
 func (s *LeaderSelectorTestSuite) TestDistance() {
 	leader := s.newLeader()
 	hash := common.NewRandomHash()
-	prv, err := eth.NewPrivateKey()
+	prv, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 	sig, err := prv.Sign(hash)
 	s.Require().Nil(err)
@@ -48,9 +48,9 @@ func (s *LeaderSelectorTestSuite) TestDistance() {
 
 func (s *LeaderSelectorTestSuite) TestProbability() {
 	leader := s.newLeader()
-	prv1, err := eth.NewPrivateKey()
+	prv1, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
-	prv2, err := eth.NewPrivateKey()
+	prv2, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 	for {
 		hash := common.NewRandomHash()
@@ -82,7 +82,7 @@ func (s *LeaderSelectorTestSuite) TestLeaderBlockHash() {
 	leader := s.newLeader()
 	blocks := make(map[common.Hash]*types.Block)
 	for i := 0; i < 10; i++ {
-		prv, err := eth.NewPrivateKey()
+		prv, err := ecdsa.NewPrivateKey()
 		s.Require().Nil(err)
 		block := &types.Block{
 			ProposerID: types.NewNodeID(prv.PublicKey()),
@@ -107,7 +107,7 @@ func (s *LeaderSelectorTestSuite) TestLeaderBlockHash() {
 
 func (s *LeaderSelectorTestSuite) TestPrepareBlock() {
 	leader := s.newLeader()
-	prv, err := eth.NewPrivateKey()
+	prv, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 	block := &types.Block{
 		ProposerID: types.NewNodeID(prv.PublicKey()),

@@ -15,7 +15,7 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package eth
+package ecdsa
 
 import (
 	"testing"

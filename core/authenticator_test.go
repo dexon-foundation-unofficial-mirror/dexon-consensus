@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -32,7 +32,7 @@ type AuthenticatorTestSuite struct {
 }
 
 func (s *AuthenticatorTestSuite) setupAuthenticator() *Authenticator {
-	k, err := eth.NewPrivateKey()
+	k, err := ecdsa.NewPrivateKey()
 	s.NoError(err)
 	return NewAuthenticator(k)
 }
