@@ -23,8 +23,8 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
 // Shard represents a unit to produce a global ordering from multiple chains.

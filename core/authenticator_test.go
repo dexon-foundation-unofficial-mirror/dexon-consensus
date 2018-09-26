@@ -22,23 +22,23 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
 	"github.com/stretchr/testify/suite"
 )
 
-type KeyHolderTestSuite struct {
+type AuthenticatorTestSuite struct {
 	suite.Suite
 }
 
-func (s *KeyHolderTestSuite) setupKeyHolder() *keyHolder {
+func (s *AuthenticatorTestSuite) setupAuthenticator() *Authenticator {
 	k, err := eth.NewPrivateKey()
 	s.NoError(err)
-	return newKeyHolder(k, eth.SigToPub)
+	return NewAuthenticator(k, eth.SigToPub)
 }
 
-func (s *KeyHolderTestSuite) TestBlock() {
-	k := s.setupKeyHolder()
+func (s *AuthenticatorTestSuite) TestBlock() {
+	k := s.setupAuthenticator()
 	b := &types.Block{
 		ParentHash: common.NewRandomHash(),
 		Position: types.Position{
@@ -52,8 +52,8 @@ func (s *KeyHolderTestSuite) TestBlock() {
 	s.NoError(k.VerifyBlock(b))
 }
 
-func (s *KeyHolderTestSuite) TestVote() {
-	k := s.setupKeyHolder()
+func (s *AuthenticatorTestSuite) TestVote() {
+	k := s.setupAuthenticator()
 	v := &types.Vote{
 		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
 		Type:       types.VoteConfirm,
@@ -70,8 +70,8 @@ func (s *KeyHolderTestSuite) TestVote() {
 	s.NoError(err)
 }
 
-func (s *KeyHolderTestSuite) TestCRS() {
-	k := s.setupKeyHolder()
+func (s *AuthenticatorTestSuite) TestCRS() {
+	k := s.setupAuthenticator()
 	b := &types.Block{
 		ParentHash: common.NewRandomHash(),
 		Position: types.Position{
@@ -91,6 +91,6 @@ func (s *KeyHolderTestSuite) TestCRS() {
 	s.NoError(err)
 }
 
-func TestKeyHolder(t *testing.T) {
-	suite.Run(t, new(KeyHolderTestSuite))
+func TestAuthenticator(t *testing.T) {
+	suite.Run(t, new(AuthenticatorTestSuite))
 }

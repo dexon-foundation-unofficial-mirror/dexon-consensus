@@ -24,8 +24,8 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
 // Errors for agreement module.

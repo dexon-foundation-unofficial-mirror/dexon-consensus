@@ -23,19 +23,19 @@ import (
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 )
 
 // PrivateKey represents a private key structure used in geth and implments
 // Crypto.PrivateKey interface.
 type PrivateKey struct {
 	privateKey ecdsa.PrivateKey
-	publicKey  PublicKey
+	publicKey  publicKey
 }
 
-// PublicKey represents a public key structure used in geth and implements
+// publicKey represents a public key structure used in geth and implements
 // Crypto.PublicKey interface.
-type PublicKey struct {
+type publicKey struct {
 	publicKey []byte
 }
 
@@ -52,16 +52,16 @@ func NewPrivateKey() (*PrivateKey, error) {
 }
 
 // newPublicKey creates a new PublicKey structure.
-func newPublicKey(prvKey *ecdsa.PrivateKey) *PublicKey {
-	return &PublicKey{
+func newPublicKey(prvKey *ecdsa.PrivateKey) *publicKey {
+	return &publicKey{
 		publicKey: ethcrypto.CompressPubkey(&prvKey.PublicKey),
 	}
 }
 
-// DecompressPubkey parses a public key in the 33-byte compressed format.
-func DecompressPubkey(pubkey []byte) (PublicKey, error) {
+// decompressPubkey parses a public key in the 33-byte compressed format.
+func decompressPubkey(pubkey []byte) (publicKey, error) {
 	_, err := ethcrypto.DecompressPubkey(pubkey)
-	return PublicKey{
+	return publicKey{
 		publicKey: pubkey,
 	}, err
 }
@@ -90,7 +90,7 @@ func (prv *PrivateKey) Sign(hash common.Hash) (
 // The public key should be in compressed (33 bytes) or uncompressed (65 bytes)
 // format.
 // The signature should have the 64 byte [R || S] format.
-func (pub PublicKey) VerifySignature(
+func (pub publicKey) VerifySignature(
 	hash common.Hash, signature crypto.Signature) bool {
 	if len(signature) == 65 {
 		// The last byte is for ecrecover.
@@ -100,12 +100,12 @@ func (pub PublicKey) VerifySignature(
 }
 
 // Compress encodes a public key to the 33-byte compressed format.
-func (pub PublicKey) Compress() []byte {
+func (pub publicKey) Compress() []byte {
 	return pub.publicKey
 }
 
 // Bytes returns the []byte representation of public key.
-func (pub PublicKey) Bytes() []byte {
+func (pub publicKey) Bytes() []byte {
 	return pub.Compress()
 }
 
@@ -114,7 +114,7 @@ func SigToPub(
 	hash common.Hash, signature crypto.Signature) (crypto.PublicKey, error) {
 	key, err := ethcrypto.SigToPub(hash[:], signature[:])
 	if err != nil {
-		return PublicKey{}, err
+		return publicKey{}, err
 	}
-	return PublicKey{publicKey: ethcrypto.CompressPubkey(key)}, nil
+	return publicKey{publicKey: ethcrypto.CompressPubkey(key)}, nil
 }

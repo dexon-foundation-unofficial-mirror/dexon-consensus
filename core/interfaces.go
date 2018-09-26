@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
 // Application describes the application interface that interacts with DEXON
@@ -56,7 +56,7 @@ type Debug interface {
 
 	// TotalOrderingDelivered is called when the total ordering algorithm deliver
 	// a set of block.
-	TotalOrderingDelivered(blockHashes common.Hashes, early bool)
+	TotalOrderingDelivered(common.Hashes, bool)
 }
 
 // Network describs the network interface that interacts with DEXON consensus
@@ -101,7 +101,7 @@ type Governance interface {
 	ProposeThresholdSignature(round uint64, signature crypto.Signature)
 
 	// Get a ThresholdSignature of round.
-	GetThresholdSignature(round uint64) (sig crypto.Signature, exist bool)
+	GetThresholdSignature(round uint64) (crypto.Signature, bool)
 
 	//// DKG-related methods.
 
@@ -125,34 +125,4 @@ type Ticker interface {
 
 	// Stop the ticker.
 	Stop()
-}
-
-// Signer defines a role to sign data.
-type Signer interface {
-	// SignBlock signs a block.
-	SignBlock(b *types.Block) error
-
-	// SignVote signs a vote.
-	SignVote(v *types.Vote) error
-
-	// SignCRS sign a block's CRS signature.
-	SignCRS(b *types.Block, crs common.Hash) error
-}
-
-// CryptoVerifier defines a role to verify data in crypto's way.
-type CryptoVerifier interface {
-	// VerifyBlock verifies if a block is properly signed or not.
-	VerifyBlock(b *types.Block) (ok bool, err error)
-
-	// VerifyVote verfies if a vote is properly signed or not.
-	VerifyVote(v *types.Vote) (ok bool, err error)
-
-	// VerifyCRS verifies if a CRS signature of one block is valid or not.
-	VerifyCRS(b *types.Block, crs common.Hash) (ok bool, err error)
-}
-
-// Authenticator verify/sign who own the data.
-type Authenticator interface {
-	Signer
-	CryptoVerifier
 }

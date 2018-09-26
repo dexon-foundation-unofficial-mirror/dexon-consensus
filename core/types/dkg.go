@@ -20,8 +20,8 @@ package types
 import (
 	"fmt"
 
-	"github.com/dexon-foundation/dexon-consensus-core/crypto"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto/dkg"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/dkg"
 )
 
 // DKGPrivateShare describe a secret share in DKG protocol.

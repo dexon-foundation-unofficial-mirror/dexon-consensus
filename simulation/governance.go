@@ -22,8 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
 

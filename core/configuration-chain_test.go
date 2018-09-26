@@ -25,11 +25,11 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/dkg"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto/dkg"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
 )
 
 type ConfigurationChainTestSuite struct {
@@ -113,7 +113,12 @@ func (r *testCCReceiver) ProposeDKGAntiNackComplaint(
 		prv.Signature, err = prvKey.Sign(hashDKGPrivateShare(prv))
 		r.s.Require().NoError(err)
 		for _, cc := range r.nodes {
-			err = cc.processPrivateShare(prv)
+			// Use Marshal/Unmarshal to do deep copy.
+			data, err := json.Marshal(prv)
+			r.s.Require().NoError(err)
+			prvCopy := &types.DKGPrivateShare{}
+			r.s.Require().NoError(json.Unmarshal(data, prvCopy))
+			err = cc.processPrivateShare(prvCopy)
 			r.s.Require().NoError(err)
 		}
 	}()

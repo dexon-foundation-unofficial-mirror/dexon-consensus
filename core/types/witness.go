@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 )
 
 // WitnessAck represents the acking to the compaction chain.

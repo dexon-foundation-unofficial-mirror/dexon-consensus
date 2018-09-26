@@ -20,7 +20,7 @@ package simulation
 import (
 	"sync"
 
-	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
 

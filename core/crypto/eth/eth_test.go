@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -55,7 +55,7 @@ func (s *ETHCryptoTestSuite) TestSignature() {
 	s.NotEqual(sig11, sig12)
 
 	// Test VerifySignature with correct public key.
-	pub1, ok := prv1.PublicKey().(PublicKey)
+	pub1, ok := prv1.PublicKey().(publicKey)
 	s.Require().True(ok)
 	s.True(pub1.VerifySignature(hash1, sig11))
 
@@ -69,7 +69,7 @@ func (s *ETHCryptoTestSuite) TestSignature() {
 
 	// Test compress and decompress of public key.
 	compressPub1 := pub1.Compress()
-	decompressPub1, err := DecompressPubkey(compressPub1)
+	decompressPub1, err := decompressPubkey(compressPub1)
 	s.Require().Nil(err)
 	s.Equal(pub1, decompressPub1)
 	s.True(decompressPub1.VerifySignature(hash1, sig11))

@@ -24,7 +24,7 @@ import (
 	"github.com/Spiderpowa/bls/ffi/go/bls"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 )
 
 var (

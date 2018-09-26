@@ -24,9 +24,9 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/eth"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto/eth"
 	"github.com/stretchr/testify/suite"
 )
 

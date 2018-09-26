@@ -19,55 +19,57 @@ package core
 
 import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
-type keyHolder struct {
+// Authenticator verify data owner.
+type Authenticator struct {
 	prvKey   crypto.PrivateKey
 	pubKey   crypto.PublicKey
 	sigToPub SigToPubFn
 }
 
-func newKeyHolder(prvKey crypto.PrivateKey, sigToPub SigToPubFn) *keyHolder {
-	return &keyHolder{
+// NewAuthenticator constructs an Authenticator instance.
+func NewAuthenticator(prvKey crypto.PrivateKey, sigToPub SigToPubFn) *Authenticator {
+	return &Authenticator{
 		prvKey:   prvKey,
 		pubKey:   prvKey.PublicKey(),
 		sigToPub: sigToPub,
 	}
 }
 
-// SignBlock implements core.Signer.
-func (h *keyHolder) SignBlock(b *types.Block) (err error) {
-	b.ProposerID = types.NewNodeID(h.pubKey)
+// SignBlock signs a types.Block.
+func (au *Authenticator) SignBlock(b *types.Block) (err error) {
+	b.ProposerID = types.NewNodeID(au.pubKey)
 	if b.Hash, err = hashBlock(b); err != nil {
 		return
 	}
-	if b.Signature, err = h.prvKey.Sign(b.Hash); err != nil {
+	if b.Signature, err = au.prvKey.Sign(b.Hash); err != nil {
 		return
 	}
 	return
 }
 
-// SignVote implements core.Signer.
-func (h *keyHolder) SignVote(v *types.Vote) (err error) {
-	v.ProposerID = types.NewNodeID(h.pubKey)
-	v.Signature, err = h.prvKey.Sign(hashVote(v))
+// SignVote signs a types.Vote.
+func (au *Authenticator) SignVote(v *types.Vote) (err error) {
+	v.ProposerID = types.NewNodeID(au.pubKey)
+	v.Signature, err = au.prvKey.Sign(hashVote(v))
 	return
 }
 
-// SignCRS implements core.Signer
-func (h *keyHolder) SignCRS(b *types.Block, crs common.Hash) (err error) {
-	if b.ProposerID != types.NewNodeID(h.pubKey) {
+// SignCRS signs CRS signature of types.Block.
+func (au *Authenticator) SignCRS(b *types.Block, crs common.Hash) (err error) {
+	if b.ProposerID != types.NewNodeID(au.pubKey) {
 		err = ErrInvalidProposerID
 		return
 	}
-	b.CRSSignature, err = h.prvKey.Sign(hashCRS(b, crs))
+	b.CRSSignature, err = au.prvKey.Sign(hashCRS(b, crs))
 	return
 }
 
-// VerifyBlock implements core.CryptoVerifier.
-func (h *keyHolder) VerifyBlock(b *types.Block) (err error) {
+// VerifyBlock verifies the signature of types.Block.
+func (au *Authenticator) VerifyBlock(b *types.Block) (err error) {
 	hash, err := hashBlock(b)
 	if err != nil {
 		return
@@ -76,7 +78,7 @@ func (h *keyHolder) VerifyBlock(b *types.Block) (err error) {
 		err = ErrIncorrectHash
 		return
 	}
-	pubKey, err := h.sigToPub(b.Hash, b.Signature)
+	pubKey, err := au.sigToPub(b.Hash, b.Signature)
 	if err != nil {
 		return
 	}
@@ -87,12 +89,12 @@ func (h *keyHolder) VerifyBlock(b *types.Block) (err error) {
 	return
 }
 
-// VerifyVote implements core.CryptoVerifier.
-func (h *keyHolder) VerifyVote(v *types.Vote) (bool, error) {
-	return verifyVoteSignature(v, h.sigToPub)
+// VerifyVote verifies the signature of types.Vote.
+func (au *Authenticator) VerifyVote(v *types.Vote) (bool, error) {
+	return verifyVoteSignature(v, au.sigToPub)
 }
 
-// VerifyWitness implements core.CryptoVerifier.
-func (h *keyHolder) VerifyCRS(b *types.Block, crs common.Hash) (bool, error) {
-	return verifyCRSSignature(b, crs, h.sigToPub)
+// VerifyCRS verifies the CRS signature of types.Block.
+func (au *Authenticator) VerifyCRS(b *types.Block, crs common.Hash) (bool, error) {
+	return verifyCRSSignature(b, crs, au.sigToPub)
 }

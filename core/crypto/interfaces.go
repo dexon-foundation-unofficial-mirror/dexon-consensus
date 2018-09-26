@@ -31,7 +31,7 @@ type PrivateKey interface {
 	PublicKey() PublicKey
 
 	// Sign calculates a signature.
-	Sign(hash common.Hash) (sig Signature, err error)
+	Sign(hash common.Hash) (Signature, error)
 }
 
 // PublicKey describes the asymmetric cryptography interface that interacts
