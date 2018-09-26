@@ -168,7 +168,7 @@ func (cc *configurationChain) preparePartialSignature(
 }
 
 func (cc *configurationChain) runBlockTSig(
-	round uint64, hash common.Hash) error {
+	round uint64, hash common.Hash) (crypto.Signature, error) {
 	gpk, exist := func() (*dkgGroupPublicKey, bool) {
 		cc.dkgResult.RLock()
 		defer cc.dkgResult.RUnlock()
@@ -176,7 +176,7 @@ func (cc *configurationChain) runBlockTSig(
 		return gpk, exist
 	}()
 	if !exist {
-		return ErrDKGNotReady
+		return nil, ErrDKGNotReady
 	}
 	cc.tsigReady.L.Lock()
 	defer cc.tsigReady.L.Unlock()
@@ -200,10 +200,10 @@ func (cc *configurationChain) runBlockTSig(
 	}
 	cc.tsig = nil
 	if err != nil {
-		return err
+		return nil, err
 	}
 	log.Printf("[%s] TSIG: %s\n", cc.ID, signature)
-	return nil
+	return signature, nil
 }
 
 func (cc *configurationChain) processPrivateShare(

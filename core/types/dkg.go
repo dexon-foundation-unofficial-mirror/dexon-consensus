@@ -51,6 +51,13 @@ type DKGMasterPublicKey struct {
 	Signature       crypto.Signature    `json:"signature"`
 }
 
+// NewDKGMasterPublicKey returns a new DKGMasterPublicKey instance.
+func NewDKGMasterPublicKey() *DKGMasterPublicKey {
+	return &DKGMasterPublicKey{
+		PublicKeyShares: *dkg.NewEmptyPublicKeyShares(),
+	}
+}
+
 // DKGComplaint describe a complaint in DKG protocol.
 type DKGComplaint struct {
 	ProposerID   NodeID           `json:"proposer_id"`

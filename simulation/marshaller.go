@@ -22,7 +22,6 @@ import (
 	"fmt"
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
-	"github.com/dexon-foundation/dexon-consensus-core/crypto/dkg"
 )
 
 // jsonMarshaller implements test.Marshaller to marshal simulation related
@@ -77,9 +76,7 @@ func (m *jsonMarshaller) Unmarshal(
 		}
 		msg = privateShare
 	case "dkg-master-public-key":
-		masterPublicKey := &types.DKGMasterPublicKey{
-			PublicKeyShares: *dkg.NewEmptyPublicKeyShares(),
-		}
+		masterPublicKey := types.NewDKGMasterPublicKey()
 		if err = json.Unmarshal(payload, masterPublicKey); err != nil {
 			break
 		}

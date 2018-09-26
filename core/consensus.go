@@ -411,7 +411,7 @@ func (con *Consensus) runDKGTSIG() {
 			panic(err)
 		}
 		con.network.BroadcastDKGPartialSignature(psig)
-		if err = con.cfgModule.runBlockTSig(round, hash); err != nil {
+		if _, err = con.cfgModule.runBlockTSig(round, hash); err != nil {
 			panic(err)
 		}
 	}()
