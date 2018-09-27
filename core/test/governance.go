@@ -37,7 +37,7 @@ var (
 type Governance struct {
 	lambdaBA           time.Duration
 	lambdaDKG          time.Duration
-	notarySet          map[types.NodeID]struct{}
+	nodeSet            map[types.NodeID]struct{}
 	privateKeys        map[types.NodeID]crypto.PrivateKey
 	tsig               map[uint64]crypto.Signature
 	DKGComplaint       map[uint64][]*types.DKGComplaint
@@ -51,7 +51,7 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 	g = &Governance{
 		lambdaBA:           lambda,
 		lambdaDKG:          lambda * 10,
-		notarySet:          make(map[types.NodeID]struct{}),
+		nodeSet:            make(map[types.NodeID]struct{}),
 		privateKeys:        make(map[types.NodeID]crypto.PrivateKey),
 		tsig:               make(map[uint64]crypto.Signature),
 		DKGComplaint:       make(map[uint64][]*types.DKGComplaint),
@@ -63,35 +63,39 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 			return nil, err
 		}
 		nID := types.NewNodeID(prv.PublicKey())
-		g.notarySet[nID] = struct{}{}
+		g.nodeSet[nID] = struct{}{}
 		g.privateKeys[nID] = prv
 	}
 	return
 }
 
-// GetNotarySet implements Governance interface to return current
+// GetNodeSet implements Governance interface to return current
 // notary set.
-func (g *Governance) GetNotarySet(blockHeight uint64) (
+func (g *Governance) GetNodeSet(round uint64) (
 	ret map[types.NodeID]struct{}) {
 	// Return a cloned map.
 	ret = make(map[types.NodeID]struct{})
-	for k := range g.notarySet {
+	for k := range g.nodeSet {
 		ret[k] = struct{}{}
 	}
 	return
 }
 
 // GetConfiguration returns the configuration at a given block height.
-func (g *Governance) GetConfiguration(blockHeight uint64) *types.Config {
+func (g *Governance) GetConfiguration(round uint64) *types.Config {
 	return &types.Config{
-		CRS:       []byte("__ DEXON"),
 		NumShards: 1,
-		NumChains: uint32(len(g.notarySet)),
+		NumChains: uint32(len(g.nodeSet)),
 		LambdaBA:  g.lambdaBA,
 		LambdaDKG: g.lambdaDKG,
 		K:         0,
 		PhiRatio:  0.667,
 	}
+}
+
+// GetCRS returns the CRS for a given round.
+func (g *Governance) GetCRS(round uint64) []byte {
+	return []byte("__ DEXON")
 }
 
 // GetPrivateKey return the private key for that node, this function

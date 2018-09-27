@@ -117,7 +117,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	)
 	s.Require().Nil(err)
 
-	for nID := range gov.GetNotarySet(0) {
+	for nID := range gov.GetNodeSet(0) {
 		nodes = append(nodes, nID)
 	}
 
@@ -333,7 +333,7 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 		nodes    []types.NodeID
 	)
 	s.Require().Nil(err)
-	for nID := range gov.GetNotarySet(0) {
+	for nID := range gov.GetNodeSet(0) {
 		nodes = append(nodes, nID)
 	}
 	// Setup core.Consensus and test.App.
@@ -380,7 +380,7 @@ func (s *ConsensusTestSuite) TestPrepareGenesisBlock() {
 		nodes    []types.NodeID
 	)
 	s.Require().Nil(err)
-	for nID := range gov.GetNotarySet(0) {
+	for nID := range gov.GetNodeSet(0) {
 		nodes = append(nodes, nID)
 	}
 	_, con := s.prepareConsensus(gov, nodes[0])

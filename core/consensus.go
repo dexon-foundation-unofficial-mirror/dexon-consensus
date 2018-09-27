@@ -211,10 +211,15 @@ func NewConsensus(
 	network Network,
 	prv crypto.PrivateKey) *Consensus {
 
-	// TODO(w): load latest blockHeight from DB, and use config at that height.
-	var blockHeight uint64
-	config := gov.GetConfiguration(blockHeight)
-	notarySet := gov.GetNotarySet(blockHeight)
+	// TODO(w): load latest round from DB.
+	var round uint64
+	config := gov.GetConfiguration(round)
+
+	// TODO(w): notarySet is different for each chain, need to write a
+	// GetNotarySetForChain(nodeSet, shardID, chainID, crs) function to get the
+	// correct notary set for a given chain.
+	notarySet := gov.GetNodeSet(round)
+	crs := gov.GetCRS(round)
 
 	ID := types.NewNodeID(prv.PublicKey())
 
@@ -290,7 +295,7 @@ func NewConsensus(
 			con.ID,
 			con.receivers[chainID],
 			nodes,
-			newGenesisLeaderSelector(config.CRS),
+			newGenesisLeaderSelector(crs),
 			blockProposer,
 		)
 	}
@@ -386,7 +391,7 @@ func (con *Consensus) runDKGTSIG() {
 			panic(err)
 		}
 		hash := HashConfigurationBlock(
-			con.gov.GetNotarySet(0),
+			con.gov.GetNodeSet(0),
 			con.gov.GetConfiguration(0),
 			common.Hash{},
 			con.cfgModule.prevHash)

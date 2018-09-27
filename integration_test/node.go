@@ -88,7 +88,7 @@ func NewNode(
 		shardID          = uint32(0)
 		chainID          = uint32(math.MaxUint32)
 		governanceConfig = gov.GetConfiguration(0)
-		broadcastTargets = gov.GetNotarySet(0)
+		broadcastTargets = gov.GetNodeSet(0)
 		nodeID           = types.NewNodeID(privateKey.PublicKey())
 	)
 	hashes := common.Hashes{}

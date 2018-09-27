@@ -70,8 +70,8 @@ func (g *simGovernance) setNetwork(network *network) {
 	g.network = network
 }
 
-// GetNotarySet returns the current notary set.
-func (g *simGovernance) GetNotarySet(
+// GetNodeSet returns the current notary set.
+func (g *simGovernance) GetNodeSet(
 	blockHeight uint64) map[types.NodeID]struct{} {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
@@ -84,17 +84,21 @@ func (g *simGovernance) GetNotarySet(
 	return ret
 }
 
-// GetConfiguration returns the configuration at a given block height.
-func (g *simGovernance) GetConfiguration(blockHeight uint64) *types.Config {
+// GetConfiguration returns the configuration at a given round.
+func (g *simGovernance) GetConfiguration(round uint64) *types.Config {
 	return &types.Config{
 		NumShards: 1,
 		NumChains: g.chainNum,
-		CRS:       g.crs,
 		LambdaBA:  g.lambdaBA,
 		LambdaDKG: g.lambdaDKG,
 		K:         g.k,
 		PhiRatio:  g.phiRatio,
 	}
+}
+
+// GetCRS returns the CRS for a given round.
+func (g *simGovernance) GetCRS(round uint64) []byte {
+	return g.crs
 }
 
 // addNode add a new node into the simulated governance contract.

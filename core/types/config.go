@@ -25,9 +25,6 @@ import (
 
 // Config stands for Current Configuration Parameters.
 type Config struct {
-	// CRS.
-	CRS []byte
-
 	// Network related.
 	NumShards uint32
 	NumChains uint32
@@ -39,9 +36,6 @@ type Config struct {
 	// Total ordering related.
 	K        int
 	PhiRatio float32
-
-	// Confiuration chain related.
-	RoundHeight uint64
 }
 
 // Bytes returns []byte representation of Config.
@@ -63,9 +57,6 @@ func (c *Config) Bytes() []byte {
 	binaryPhiRatio := make([]byte, 4)
 	binary.LittleEndian.PutUint32(binaryPhiRatio, math.Float32bits(c.PhiRatio))
 
-	binaryRoundHeight := make([]byte, 8)
-	binary.LittleEndian.PutUint64(binaryRoundHeight, c.RoundHeight)
-
 	enc := make([]byte, 0, 40)
 	enc = append(enc, binaryNumShards...)
 	enc = append(enc, binaryNumChains...)
@@ -73,7 +64,5 @@ func (c *Config) Bytes() []byte {
 	enc = append(enc, binaryLambdaDKG...)
 	enc = append(enc, binaryK...)
 	enc = append(enc, binaryPhiRatio...)
-	enc = append(enc, binaryRoundHeight...)
-
 	return enc
 }

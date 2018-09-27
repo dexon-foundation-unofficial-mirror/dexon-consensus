@@ -89,13 +89,17 @@ type Network interface {
 // Note that there are a lot more methods in the governance contract, that this
 // interface only define those that are required to run the consensus algorithm.
 type Governance interface {
-	// GetConfiguration returns the configuration at a given block height.
-	// Return the genesis configuration if blockHeight == 0.
-	GetConfiguration(blockHeight uint64) *types.Config
+	// GetConfiguration returns the configuration at a given round.
+	// Return the genesis configuration if round == 0.
+	GetConfiguration(round uint64) *types.Config
 
-	// Get the current notary set.
-	// Return the genesis notary set if blockHeight == 0.
-	GetNotarySet(blockHeight uint64) map[types.NodeID]struct{}
+	// GetCRS returns the CRS for a given round.
+	// Return the genesis CRS if round == 0.
+	GetCRS(round uint64) []byte
+
+	// GetNodeSet returns the node set at a given round.
+	// Return the genesis node set if round == 0.
+	GetNodeSet(round uint64) map[types.NodeID]struct{}
 
 	// Porpose a ThresholdSignature of round.
 	ProposeThresholdSignature(round uint64, signature crypto.Signature)
