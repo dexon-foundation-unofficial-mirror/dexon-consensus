@@ -11,6 +11,9 @@ phi_ratio = 6.66670024394989e-01
 k = 1
 chain_num = 7
 genesis_crs = "In DEXON we trust."
+lambda_ba = 250
+lambda_dkg = 1000
+round_interval = 31536000000
 
 [node.legacy]
 propose_interval_mean = 5e+02

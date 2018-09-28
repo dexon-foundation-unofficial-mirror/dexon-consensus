@@ -36,6 +36,16 @@ type Config struct {
 	// Total ordering related.
 	K        int
 	PhiRatio float32
+
+	// NodeSet related.
+	NumNotarySet  int
+	NumWitnessSet int
+	NumDKGSet     int
+
+	// Time related.
+	RoundInterval    time.Duration
+	MinBlockInterval time.Duration
+	MaxBlockInterval time.Duration
 }
 
 // Bytes returns []byte representation of Config.
@@ -57,6 +67,23 @@ func (c *Config) Bytes() []byte {
 	binaryPhiRatio := make([]byte, 4)
 	binary.LittleEndian.PutUint32(binaryPhiRatio, math.Float32bits(c.PhiRatio))
 
+	binaryNumNotarySet := make([]byte, 4)
+	binary.LittleEndian.PutUint32(binaryNumNotarySet, uint32(c.NumNotarySet))
+	binaryNumWitnessSet := make([]byte, 4)
+	binary.LittleEndian.PutUint32(binaryNumWitnessSet, uint32(c.NumWitnessSet))
+	binaryNumDKGSet := make([]byte, 4)
+	binary.LittleEndian.PutUint32(binaryNumDKGSet, uint32(c.NumDKGSet))
+
+	binaryRoundInterval := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryRoundInterval,
+		uint64(c.RoundInterval.Nanoseconds()))
+	binaryMinBlockInterval := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryMinBlockInterval,
+		uint64(c.MinBlockInterval.Nanoseconds()))
+	binaryMaxBlockInterval := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryMaxBlockInterval,
+		uint64(c.MaxBlockInterval.Nanoseconds()))
+
 	enc := make([]byte, 0, 40)
 	enc = append(enc, binaryNumShards...)
 	enc = append(enc, binaryNumChains...)
@@ -64,5 +91,11 @@ func (c *Config) Bytes() []byte {
 	enc = append(enc, binaryLambdaDKG...)
 	enc = append(enc, binaryK...)
 	enc = append(enc, binaryPhiRatio...)
+	enc = append(enc, binaryNumNotarySet...)
+	enc = append(enc, binaryNumWitnessSet...)
+	enc = append(enc, binaryNumDKGSet...)
+	enc = append(enc, binaryRoundInterval...)
+	enc = append(enc, binaryMinBlockInterval...)
+	enc = append(enc, binaryMaxBlockInterval...)
 	return enc
 }

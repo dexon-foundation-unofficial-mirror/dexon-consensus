@@ -41,6 +41,9 @@ type Governance struct {
 	tsig               map[uint64]crypto.Signature
 	DKGComplaint       map[uint64][]*types.DKGComplaint
 	DKGMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
+	RoundInterval      time.Duration
+	MinBlockInterval   time.Duration
+	MaxBlockInterval   time.Duration
 	lock               sync.RWMutex
 }
 
@@ -54,6 +57,9 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 		tsig:               make(map[uint64]crypto.Signature),
 		DKGComplaint:       make(map[uint64][]*types.DKGComplaint),
 		DKGMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
+		RoundInterval:      365 * 86400 * time.Second,
+		MinBlockInterval:   lambda * 3,
+		MaxBlockInterval:   lambda * 8,
 	}
 	for i := 0; i < nodeCount; i++ {
 		prv, err := ecdsa.NewPrivateKey()
@@ -79,12 +85,18 @@ func (g *Governance) GetNodeSet(_ uint64) (
 // GetConfiguration returns the configuration at a given block height.
 func (g *Governance) GetConfiguration(_ uint64) *types.Config {
 	return &types.Config{
-		NumShards: 1,
-		NumChains: uint32(len(g.privateKeys)),
-		LambdaBA:  g.lambdaBA,
-		LambdaDKG: g.lambdaDKG,
-		K:         0,
-		PhiRatio:  0.667,
+		NumShards:        1,
+		NumChains:        uint32(len(g.privateKeys)),
+		LambdaBA:         g.lambdaBA,
+		LambdaDKG:        g.lambdaDKG,
+		K:                0,
+		PhiRatio:         0.667,
+		NumNotarySet:     len(g.privateKeys),
+		NumWitnessSet:    len(g.privateKeys),
+		NumDKGSet:        len(g.privateKeys),
+		RoundInterval:    g.RoundInterval,
+		MinBlockInterval: g.MinBlockInterval,
+		MaxBlockInterval: g.MaxBlockInterval,
 	}
 }
 

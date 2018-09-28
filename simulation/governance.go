@@ -43,6 +43,7 @@ type simGovernance struct {
 	dkgMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
 	lambdaBA           time.Duration
 	lambdaDKG          time.Duration
+	roundInterval      time.Duration
 	network            *network
 }
 
@@ -63,6 +64,7 @@ func newSimGovernance(
 		dkgMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
 		lambdaBA:           time.Duration(consensusConfig.LambdaBA) * time.Millisecond,
 		lambdaDKG:          time.Duration(consensusConfig.LambdaDKG) * time.Millisecond,
+		roundInterval:      time.Duration(consensusConfig.RoundInterval) * time.Millisecond,
 	}
 }
 
@@ -84,12 +86,17 @@ func (g *simGovernance) GetNodeSet(round uint64) (ret []crypto.PublicKey) {
 // GetConfiguration returns the configuration at a given round.
 func (g *simGovernance) GetConfiguration(round uint64) *types.Config {
 	return &types.Config{
-		NumShards: 1,
-		NumChains: g.chainNum,
-		LambdaBA:  g.lambdaBA,
-		LambdaDKG: g.lambdaDKG,
-		K:         g.k,
-		PhiRatio:  g.phiRatio,
+		NumShards:        1,
+		NumChains:        g.chainNum,
+		LambdaBA:         g.lambdaBA,
+		LambdaDKG:        g.lambdaDKG,
+		K:                g.k,
+		PhiRatio:         g.phiRatio,
+		NumNotarySet:     len(g.nodeSet),
+		NumWitnessSet:    len(g.nodeSet),
+		NumDKGSet:        len(g.nodeSet),
+		MinBlockInterval: g.lambdaBA * 3,
+		MaxBlockInterval: g.lambdaBA * 8,
 	}
 }
 
