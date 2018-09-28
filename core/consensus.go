@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sort"
 	"sync"
 	"time"
 
@@ -43,8 +42,8 @@ func (e *ErrMissingBlockInfo) Error() string {
 
 // Errors for consensus core.
 var (
-	ErrProposerNotInNotarySet = fmt.Errorf(
-		"proposer is not in notary set")
+	ErrProposerNotInNodeSet = fmt.Errorf(
+		"proposer is not in node set")
 	ErrIncorrectHash = fmt.Errorf(
 		"hash of block is incorrect")
 	ErrIncorrectSignature = fmt.Errorf(
@@ -109,10 +108,11 @@ func (recv *consensusReceiver) ConfirmBlock(hash common.Hash) {
 
 // consensusDKGReceiver implements dkgReceiver.
 type consensusDKGReceiver struct {
-	ID      types.NodeID
-	gov     Governance
-	prvKey  crypto.PrivateKey
-	network Network
+	ID           types.NodeID
+	gov          Governance
+	prvKey       crypto.PrivateKey
+	nodeSetCache *NodeSetCache
+	network      Network
 }
 
 // ProposeDKGComplaint proposes a DKGComplaint.
@@ -148,7 +148,12 @@ func (recv *consensusDKGReceiver) ProposeDKGPrivateShare(
 		log.Println(err)
 		return
 	}
-	recv.network.SendDKGPrivateShare(prv.ReceiverID, prv)
+	receiverPubKey, exists := recv.nodeSetCache.GetPublicKey(prv.ReceiverID)
+	if !exists {
+		log.Println("public key for receiver not found")
+		return
+	}
+	recv.network.SendDKGPrivateShare(receiverPubKey, prv)
 }
 
 // ProposeDKGAntiNackComplaint propose a DKGPrivateShare as an anti complaint.
@@ -197,10 +202,10 @@ type Consensus struct {
 	tickerObj Ticker
 
 	// Misc.
-	notarySet map[types.NodeID]struct{}
-	lock      sync.RWMutex
-	ctx       context.Context
-	ctxCancel context.CancelFunc
+	nodeSetCache *NodeSetCache
+	lock         sync.RWMutex
+	ctx          context.Context
+	ctxCancel    context.CancelFunc
 }
 
 // NewConsensus construct an Consensus instance.
@@ -211,49 +216,47 @@ func NewConsensus(
 	network Network,
 	prv crypto.PrivateKey) *Consensus {
 
-	// TODO(w): load latest round from DB.
+	// TODO(w): load latest blockHeight from DB, and use config at that height.
 	var round uint64
 	config := gov.GetConfiguration(round)
-
 	// TODO(w): notarySet is different for each chain, need to write a
 	// GetNotarySetForChain(nodeSet, shardID, chainID, crs) function to get the
 	// correct notary set for a given chain.
-	notarySet := gov.GetNodeSet(round)
+	nodeSetCache := NewNodeSetCache(gov)
 	crs := gov.GetCRS(round)
-
-	ID := types.NewNodeID(prv.PublicKey())
-
 	// Setup acking by information returned from Governace.
+	nodes, err := nodeSetCache.GetNodeIDs(0)
+	if err != nil {
+		panic(err)
+	}
 	rb := newReliableBroadcast()
 	rb.setChainNum(config.NumChains)
-	for nID := range notarySet {
+	for nID := range nodes {
 		rb.addNode(nID)
 	}
 	// Setup context.
 	ctx, ctxCancel := context.WithCancel(context.Background())
 
 	// Setup sequencer by information returned from Governace.
-	var nodes types.NodeIDs
-	for nID := range notarySet {
-		nodes = append(nodes, nID)
-	}
 	to := newTotalOrdering(
 		uint64(config.K),
-		uint64(float32(len(notarySet)-1)*config.PhiRatio+1),
+		uint64(float32(len(nodes)-1)*config.PhiRatio+1),
 		config.NumChains)
 
+	ID := types.NewNodeID(prv.PublicKey())
 	cfgModule := newConfigurationChain(
 		ID,
 		&consensusDKGReceiver{
-			ID:      ID,
-			gov:     gov,
-			prvKey:  prv,
-			network: network,
+			ID:           ID,
+			gov:          gov,
+			prvKey:       prv,
+			nodeSetCache: nodeSetCache,
+			network:      network,
 		},
 		gov)
 	// Register DKG for the initial round. This is a temporary function call for
 	// simulation.
-	cfgModule.registerDKG(0, len(notarySet)/3)
+	cfgModule.registerDKG(0, len(nodes)/3)
 
 	// Check if the application implement Debug interface.
 	debug, _ := app.(Debug)
@@ -272,7 +275,7 @@ func NewConsensus(
 		prvKey:        prv,
 		dkgReady:      sync.NewCond(&sync.Mutex{}),
 		cfgModule:     cfgModule,
-		notarySet:     notarySet,
+		nodeSetCache:  nodeSetCache,
 		ctx:           ctx,
 		ctxCancel:     ctxCancel,
 	}
@@ -332,10 +335,9 @@ func (con *Consensus) Run() {
 
 func (con *Consensus) runBA(chainID uint32, tick <-chan struct{}) {
 	// TODO(jimmy-dexon): move this function inside agreement.
-
-	nodes := make(types.NodeIDs, 0, len(con.notarySet))
-	for nID := range con.notarySet {
-		nodes = append(nodes, nID)
+	nodes, err := con.nodeSetCache.GetNodeIDs(0)
+	if err != nil {
+		panic(err)
 	}
 	agreement := con.baModules[chainID]
 	recv := con.receivers[chainID]
@@ -390,8 +392,13 @@ func (con *Consensus) runDKGTSIG() {
 		if err := con.cfgModule.runDKG(round); err != nil {
 			panic(err)
 		}
+		nodes, err := con.nodeSetCache.GetNodeIDs(0)
+		if err != nil {
+			// TODO(mission): should be done in some bootstrap routine.
+			panic(err)
+		}
 		hash := HashConfigurationBlock(
-			con.gov.GetNodeSet(0),
+			nodes,
 			con.gov.GetConfiguration(0),
 			common.Hash{},
 			con.cfgModule.prevHash)
@@ -415,58 +422,6 @@ func (con *Consensus) runDKGTSIG() {
 
 // RunLegacy starts running Legacy DEXON Consensus.
 func (con *Consensus) RunLegacy() {
-	go con.processMsg(con.network.ReceiveChan(), con.processBlock)
-	go con.processWitnessData()
-
-	chainID := uint32(0)
-	hashes := make(common.Hashes, 0, len(con.notarySet))
-	for nID := range con.notarySet {
-		hashes = append(hashes, nID.Hash)
-	}
-	sort.Sort(hashes)
-	for i, hash := range hashes {
-		if hash == con.ID.Hash {
-			chainID = uint32(i)
-			break
-		}
-	}
-	con.rbModule.setChainNum(uint32(len(hashes)))
-
-	genesisBlock := &types.Block{
-		ProposerID: con.ID,
-		Position: types.Position{
-			ChainID: chainID,
-		},
-	}
-	if err := con.PrepareGenesisBlock(genesisBlock, time.Now().UTC()); err != nil {
-		log.Println(err)
-	}
-	if err := con.processBlock(genesisBlock); err != nil {
-		log.Println(err)
-	}
-	con.network.BroadcastBlock(genesisBlock)
-
-ProposingBlockLoop:
-	for {
-		select {
-		case <-con.tickerObj.Tick():
-		case <-con.ctx.Done():
-			break ProposingBlockLoop
-		}
-		block := &types.Block{
-			ProposerID: con.ID,
-			Position: types.Position{
-				ChainID: chainID,
-			},
-		}
-		if err := con.prepareBlock(block, time.Now().UTC()); err != nil {
-			log.Println(err)
-		}
-		if err := con.processBlock(block); err != nil {
-			log.Println(err)
-		}
-		con.network.BroadcastBlock(block)
-	}
 }
 
 // Stop the Consensus core.
@@ -734,8 +689,14 @@ func (con *Consensus) PrepareGenesisBlock(b *types.Block,
 // ProcessWitnessAck is the entry point to submit one witness ack.
 func (con *Consensus) ProcessWitnessAck(witnessAck *types.WitnessAck) (err error) {
 	witnessAck = witnessAck.Clone()
-	if _, exists := con.notarySet[witnessAck.ProposerID]; !exists {
-		err = ErrProposerNotInNotarySet
+	// TODO(mission): check witness set for that round.
+	var round uint64
+	exists, err := con.nodeSetCache.Exists(round, witnessAck.ProposerID)
+	if err != nil {
+		return
+	}
+	if !exists {
+		err = ErrProposerNotInNodeSet
 		return
 	}
 	err = con.ccModule.processWitnessAck(witnessAck)

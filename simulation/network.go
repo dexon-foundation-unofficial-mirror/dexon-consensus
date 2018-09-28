@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
@@ -88,7 +89,7 @@ type network struct {
 
 // newNetwork setup network stuffs for nodes, which provides an
 // implementation of core.Network based on test.TransportClient.
-func newNetwork(nID types.NodeID, cfg config.Networking) (n *network) {
+func newNetwork(pubKey crypto.PublicKey, cfg config.Networking) (n *network) {
 	// Construct latency model.
 	latency := &test.NormalLatencyModel{
 		Mean:  cfg.Mean,
@@ -105,12 +106,12 @@ func newNetwork(nID types.NodeID, cfg config.Networking) (n *network) {
 	switch cfg.Type {
 	case config.NetworkTypeTCPLocal:
 		n.trans = test.NewTCPTransportClient(
-			nID, latency, &jsonMarshaller{}, true)
+			pubKey, latency, &jsonMarshaller{}, true)
 	case config.NetworkTypeTCP:
 		n.trans = test.NewTCPTransportClient(
-			nID, latency, &jsonMarshaller{}, false)
+			pubKey, latency, &jsonMarshaller{}, false)
 	case config.NetworkTypeFake:
-		n.trans = test.NewFakeTransportClient(nID, latency)
+		n.trans = test.NewFakeTransportClient(pubKey, latency)
 	default:
 		panic(fmt.Errorf("unknown network type: %v", cfg.Type))
 	}
@@ -147,8 +148,8 @@ func (n *network) broadcast(message interface{}) {
 
 // SendDKGPrivateShare implements core.Network interface.
 func (n *network) SendDKGPrivateShare(
-	recv types.NodeID, prvShare *types.DKGPrivateShare) {
-	if err := n.trans.Send(recv, prvShare); err != nil {
+	recv crypto.PublicKey, prvShare *types.DKGPrivateShare) {
+	if err := n.trans.Send(types.NewNodeID(recv), prvShare); err != nil {
 		panic(err)
 	}
 }
@@ -249,6 +250,6 @@ func (n *network) report(msg interface{}) error {
 }
 
 // peers exports 'Peers' method of test.Transport.
-func (n *network) peers() map[types.NodeID]struct{} {
+func (n *network) peers() []crypto.PublicKey {
 	return n.trans.Peers()
 }

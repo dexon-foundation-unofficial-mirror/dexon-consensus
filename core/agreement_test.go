@@ -86,14 +86,15 @@ func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 		return s.proposeBlock(agreementIdx)
 	}
 
-	notarySet := make(types.NodeIDs, numNotarySet-1)
-	for i := range notarySet {
+	notarySet := make(map[types.NodeID]struct{})
+	for i := 0; i < numNotarySet-1; i++ {
 		prvKey, err := ecdsa.NewPrivateKey()
 		s.Require().Nil(err)
-		notarySet[i] = types.NewNodeID(prvKey.PublicKey())
-		s.prvKey[notarySet[i]] = prvKey
+		nID := types.NewNodeID(prvKey.PublicKey())
+		notarySet[nID] = struct{}{}
+		s.prvKey[nID] = prvKey
 	}
-	notarySet = append(notarySet, s.ID)
+	notarySet[s.ID] = struct{}{}
 	agreement := newAgreement(
 		s.ID,
 		&agreementTestReceiver{s},

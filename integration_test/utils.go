@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
@@ -18,11 +17,6 @@ func PrepareNodes(
 	nodes map[types.NodeID]*Node,
 	err error) {
 
-	var (
-		db  blockdb.BlockDatabase
-		key crypto.PrivateKey
-	)
-
 	apps = make(map[types.NodeID]*test.App)
 	dbs = make(map[types.NodeID]blockdb.BlockDatabase)
 	nodes = make(map[types.NodeID]*Node)
@@ -31,25 +25,21 @@ func PrepareNodes(
 	if err != nil {
 		return
 	}
-	for nID := range gov.GetNodeSet(0) {
+	for _, prvKey := range gov.GetPrivateKeys() {
+		nID := types.NewNodeID(prvKey.PublicKey())
 		apps[nID] = test.NewApp()
-
-		if db, err = blockdb.NewMemBackedBlockDB(); err != nil {
-			return
-		}
-		dbs[nID] = db
-	}
-	for nID := range gov.GetNodeSet(0) {
-		if key, err = gov.GetPrivateKey(nID); err != nil {
+		dbs[nID], err = blockdb.NewMemBackedBlockDB()
+		if err != nil {
 			return
 		}
 		nodes[nID] = NewNode(
 			apps[nID],
 			gov,
 			dbs[nID],
-			key,
+			prvKey,
 			networkLatency,
-			proposingLatency)
+			proposingLatency,
+		)
 	}
 	return
 }

@@ -32,7 +32,7 @@ import (
 type AgreementStateTestSuite struct {
 	suite.Suite
 	ID          types.NodeID
-	prvKey      map[types.NodeID]crypto.PrivateKey
+	prvKeys     map[types.NodeID]crypto.PrivateKey
 	voteChan    chan *types.Vote
 	blockChan   chan common.Hash
 	confirmChan chan common.Hash
@@ -62,7 +62,7 @@ func (s *AgreementStateTestSuite) proposeBlock(
 		Hash:       common.NewRandomHash(),
 	}
 	s.block[block.Hash] = block
-	s.Require().Nil(leader.prepareBlock(block, s.prvKey[s.ID]))
+	s.Require().Nil(leader.prepareBlock(block, s.prvKeys[s.ID]))
 	return block
 }
 
@@ -70,7 +70,7 @@ func (s *AgreementStateTestSuite) prepareVote(
 	nID types.NodeID, voteType types.VoteType, blockHash common.Hash,
 	period uint64) (
 	vote *types.Vote) {
-	prvKey, exist := s.prvKey[nID]
+	prvKey, exist := s.prvKeys[nID]
 	s.Require().True(exist)
 	vote = &types.Vote{
 		ProposerID: nID,
@@ -88,7 +88,7 @@ func (s *AgreementStateTestSuite) SetupTest() {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 	s.ID = types.NewNodeID(prvKey.PublicKey())
-	s.prvKey = map[types.NodeID]crypto.PrivateKey{
+	s.prvKeys = map[types.NodeID]crypto.PrivateKey{
 		s.ID: prvKey,
 	}
 	s.voteChan = make(chan *types.Vote, 100)
@@ -103,14 +103,15 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 		return s.proposeBlock(leader)
 	}
 
-	notarySet := make(types.NodeIDs, numNode-1)
-	for i := range notarySet {
+	notarySet := make(map[types.NodeID]struct{})
+	for i := 0; i < numNode-1; i++ {
 		prvKey, err := ecdsa.NewPrivateKey()
 		s.Require().Nil(err)
-		notarySet[i] = types.NewNodeID(prvKey.PublicKey())
-		s.prvKey[notarySet[i]] = prvKey
+		nID := types.NewNodeID(prvKey.PublicKey())
+		notarySet[nID] = struct{}{}
+		s.prvKeys[nID] = prvKey
 	}
-	notarySet = append(notarySet, s.ID)
+	notarySet[s.ID] = struct{}{}
 	agreement := newAgreement(
 		s.ID,
 		&agreementStateTestReceiver{s},

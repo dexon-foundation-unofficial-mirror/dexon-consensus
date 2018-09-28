@@ -49,8 +49,9 @@ func newNode(
 	prvKey crypto.PrivateKey,
 	config config.Config) *node {
 
-	id := types.NewNodeID(prvKey.PublicKey())
-	netModule := newNetwork(id, config.Networking)
+	pubKey := prvKey.PublicKey()
+	netModule := newNetwork(pubKey, config.Networking)
+	id := types.NewNodeID(pubKey)
 	db, err := blockdb.NewMemBackedBlockDB(
 		id.String() + ".blockdb")
 	if err != nil {
@@ -85,8 +86,9 @@ func (n *node) run(serverEndpoint interface{}, legacy bool) {
 	n.gov.setNetwork(n.netModule)
 	// Run consensus.
 	hashes := make(common.Hashes, 0, len(peers))
-	for nID := range peers {
-		n.gov.addNode(nID)
+	for _, pubKey := range peers {
+		nID := types.NewNodeID(pubKey)
+		n.gov.addNode(pubKey)
 		hashes = append(hashes, nID.Hash)
 	}
 	sort.Sort(hashes)

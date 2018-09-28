@@ -197,7 +197,7 @@ func (s *TransportTestSuite) TestFake() {
 		peerCount = 13
 		req       = s.Require()
 		peers     = make(map[types.NodeID]*testPeer)
-		nIDs      = GenerateRandomNodeIDs(peerCount)
+		prvKeys   = GenerateRandomPrivateKeys(peerCount)
 		err       error
 		wg        sync.WaitGroup
 		latency   = &FixedLatencyModel{Latency: 300}
@@ -207,11 +207,12 @@ func (s *TransportTestSuite) TestFake() {
 	server.recv, err = server.trans.Host()
 	req.Nil(err)
 	// Setup Peers
-	wg.Add(len(nIDs))
-	for _, nID := range nIDs {
+	wg.Add(len(prvKeys))
+	for _, key := range prvKeys {
+		nID := types.NewNodeID(key.PublicKey())
 		peer := &testPeer{
 			nID:   nID,
-			trans: NewFakeTransportClient(nID, latency),
+			trans: NewFakeTransportClient(key.PublicKey(), latency),
 		}
 		peers[nID] = peer
 		go func() {
@@ -233,11 +234,12 @@ func (s *TransportTestSuite) TestFake() {
 }
 
 func (s *TransportTestSuite) TestTCPLocal() {
+
 	var (
 		peerCount  = 25
 		req        = s.Require()
 		peers      = make(map[types.NodeID]*testPeer)
-		nIDs       = GenerateRandomNodeIDs(peerCount)
+		prvKeys    = GenerateRandomPrivateKeys(peerCount)
 		err        error
 		wg         sync.WaitGroup
 		latency    = &FixedLatencyModel{Latency: 300}
@@ -250,11 +252,13 @@ func (s *TransportTestSuite) TestTCPLocal() {
 	server.recv, err = server.trans.Host()
 	req.Nil(err)
 	// Setup Peers
-	wg.Add(len(nIDs))
-	for _, nID := range nIDs {
+	wg.Add(len(prvKeys))
+	for _, prvKey := range prvKeys {
+		nID := types.NewNodeID(prvKey.PublicKey())
 		peer := &testPeer{
-			nID:   nID,
-			trans: NewTCPTransportClient(nID, latency, &testMarshaller{}, true),
+			nID: nID,
+			trans: NewTCPTransportClient(
+				prvKey.PublicKey(), latency, &testMarshaller{}, true),
 		}
 		peers[nID] = peer
 		go func() {

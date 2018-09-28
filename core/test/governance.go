@@ -37,7 +37,6 @@ var (
 type Governance struct {
 	lambdaBA           time.Duration
 	lambdaDKG          time.Duration
-	nodeSet            map[types.NodeID]struct{}
 	privateKeys        map[types.NodeID]crypto.PrivateKey
 	tsig               map[uint64]crypto.Signature
 	DKGComplaint       map[uint64][]*types.DKGComplaint
@@ -51,7 +50,6 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 	g = &Governance{
 		lambdaBA:           lambda,
 		lambdaDKG:          lambda * 10,
-		nodeSet:            make(map[types.NodeID]struct{}),
 		privateKeys:        make(map[types.NodeID]crypto.PrivateKey),
 		tsig:               make(map[uint64]crypto.Signature),
 		DKGComplaint:       make(map[uint64][]*types.DKGComplaint),
@@ -63,7 +61,6 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 			return nil, err
 		}
 		nID := types.NewNodeID(prv.PublicKey())
-		g.nodeSet[nID] = struct{}{}
 		g.privateKeys[nID] = prv
 	}
 	return
@@ -71,21 +68,19 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 
 // GetNodeSet implements Governance interface to return current
 // notary set.
-func (g *Governance) GetNodeSet(round uint64) (
-	ret map[types.NodeID]struct{}) {
-	// Return a cloned map.
-	ret = make(map[types.NodeID]struct{})
-	for k := range g.nodeSet {
-		ret[k] = struct{}{}
+func (g *Governance) GetNodeSet(_ uint64) (
+	ret []crypto.PublicKey) {
+	for _, key := range g.privateKeys {
+		ret = append(ret, key.PublicKey())
 	}
 	return
 }
 
 // GetConfiguration returns the configuration at a given block height.
-func (g *Governance) GetConfiguration(round uint64) *types.Config {
+func (g *Governance) GetConfiguration(_ uint64) *types.Config {
 	return &types.Config{
 		NumShards: 1,
-		NumChains: uint32(len(g.nodeSet)),
+		NumChains: uint32(len(g.privateKeys)),
 		LambdaBA:  g.lambdaBA,
 		LambdaDKG: g.lambdaDKG,
 		K:         0,
@@ -98,15 +93,11 @@ func (g *Governance) GetCRS(round uint64) []byte {
 	return []byte("__ DEXON")
 }
 
-// GetPrivateKey return the private key for that node, this function
+// GetPrivateKeys return the private key for that node, this function
 // is a test utility and not a general Governance interface.
-func (g *Governance) GetPrivateKey(
-	nID types.NodeID) (key crypto.PrivateKey, err error) {
-
-	key, exists := g.privateKeys[nID]
-	if !exists {
-		err = ErrPrivateKeyNotExists
-		return
+func (g *Governance) GetPrivateKeys() (keys []crypto.PrivateKey) {
+	for _, k := range g.privateKeys {
+		keys = append(keys, k)
 	}
 	return
 }

@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -39,6 +41,18 @@ func GenerateRandomNodeIDs(nodeCount int) (nIDs types.NodeIDs) {
 	nIDs = types.NodeIDs{}
 	for i := 0; i < nodeCount; i++ {
 		nIDs = append(nIDs, types.NodeID{Hash: common.NewRandomHash()})
+	}
+	return
+}
+
+// GenerateRandomPrivateKeys generate a set of private keys.
+func GenerateRandomPrivateKeys(nodeCount int) (prvKeys []crypto.PrivateKey) {
+	for i := 0; i < nodeCount; i++ {
+		prvKey, err := ecdsa.NewPrivateKey()
+		if err != nil {
+			panic(err)
+		}
+		prvKeys = append(prvKeys, prvKey)
 	}
 	return
 }

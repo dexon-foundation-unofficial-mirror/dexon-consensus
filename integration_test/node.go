@@ -88,9 +88,13 @@ func NewNode(
 		shardID          = uint32(0)
 		chainID          = uint32(math.MaxUint32)
 		governanceConfig = gov.GetConfiguration(0)
-		broadcastTargets = gov.GetNodeSet(0)
+		nodeSetKeys      = gov.GetNodeSet(0)
 		nodeID           = types.NewNodeID(privateKey.PublicKey())
 	)
+	broadcastTargets := make(map[types.NodeID]struct{})
+	for _, k := range nodeSetKeys {
+		broadcastTargets[types.NewNodeID(k)] = struct{}{}
+	}
 	hashes := common.Hashes{}
 	for nID := range broadcastTargets {
 		hashes = append(hashes, nID.Hash)

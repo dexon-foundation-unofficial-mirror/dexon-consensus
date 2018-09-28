@@ -116,7 +116,7 @@ type agreement struct {
 func newAgreement(
 	ID types.NodeID,
 	recv agreementReceiver,
-	notarySet types.NodeIDs,
+	notarySet map[types.NodeID]struct{},
 	leader *leaderSelector,
 	blockProposer blockProposerFn) *agreement {
 	agreement := &agreement{
@@ -141,7 +141,9 @@ func (a *agreement) terminate() {
 }
 
 // restart the agreement
-func (a *agreement) restart(notarySet types.NodeIDs, aID types.Position) {
+func (a *agreement) restart(
+	notarySet map[types.NodeID]struct{}, aID types.Position) {
+
 	func() {
 		a.lock.Lock()
 		defer a.lock.Unlock()
@@ -158,10 +160,7 @@ func (a *agreement) restart(notarySet types.NodeIDs, aID types.Position) {
 		a.data.defaultBlock = common.Hash{}
 		a.hasOutput = false
 		a.state = newPrepareState(a.data)
-		a.notarySet = make(map[types.NodeID]struct{})
-		for _, v := range notarySet {
-			a.notarySet[v] = struct{}{}
-		}
+		a.notarySet = notarySet
 		a.candidateBlock = make(map[common.Hash]*types.Block)
 		a.aID.Store(aID)
 	}()

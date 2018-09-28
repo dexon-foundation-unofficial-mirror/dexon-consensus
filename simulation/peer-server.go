@@ -168,7 +168,9 @@ func (p *PeerServer) Run() {
 		panic(err)
 	}
 	// Cache peers' info.
-	p.peers = p.trans.Peers()
+	for _, pubKey := range p.trans.Peers() {
+		p.peers[types.NewNodeID(pubKey)] = struct{}{}
+	}
 	// Initialize total order result cache.
 	for id := range p.peers {
 		p.peerTotalOrder[id] = NewTotalOrderResult(id)

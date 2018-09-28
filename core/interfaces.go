@@ -72,7 +72,7 @@ type Network interface {
 	BroadcastWitnessAck(witnessAck *types.WitnessAck)
 
 	// SendDKGPrivateShare sends PrivateShare to a DKG participant.
-	SendDKGPrivateShare(recv types.NodeID, prvShare *types.DKGPrivateShare)
+	SendDKGPrivateShare(pub crypto.PublicKey, prvShare *types.DKGPrivateShare)
 
 	// BroadcastDKGPrivateShare broadcasts PrivateShare to all DKG participants.
 	BroadcastDKGPrivateShare(prvShare *types.DKGPrivateShare)
@@ -99,7 +99,7 @@ type Governance interface {
 
 	// GetNodeSet returns the node set at a given round.
 	// Return the genesis node set if round == 0.
-	GetNodeSet(round uint64) map[types.NodeID]struct{}
+	GetNodeSet(round uint64) []crypto.PublicKey
 
 	// Porpose a ThresholdSignature of round.
 	ProposeThresholdSignature(round uint64, signature crypto.Signature)

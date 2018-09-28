@@ -24,6 +24,7 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
@@ -46,7 +47,7 @@ func (n *network) BroadcastWitnessAck(witnessAck *types.WitnessAck) {
 
 // SendDKGPrivateShare sends PrivateShare to a DKG participant.
 func (n *network) SendDKGPrivateShare(
-	recv types.NodeID, prvShare *types.DKGPrivateShare) {
+	recv crypto.PublicKey, prvShare *types.DKGPrivateShare) {
 }
 
 // BroadcastDKGPrivateShare broadcasts PrivateShare to all DKG participants.
@@ -86,14 +87,12 @@ func (s *ConsensusTestSuite) prepareGenesisBlock(
 }
 
 func (s *ConsensusTestSuite) prepareConsensus(
-	gov *test.Governance, nID types.NodeID) (*test.App, *Consensus) {
+	gov *test.Governance, prvKey crypto.PrivateKey) (*test.App, *Consensus) {
 
 	app := test.NewApp()
 	db, err := blockdb.NewMemBackedBlockDB()
 	s.Require().Nil(err)
-	prv, exist := gov.GetPrivateKey(nID)
-	s.Require().Nil(exist)
-	con := NewConsensus(app, gov, db, &network{}, prv)
+	con := NewConsensus(app, gov, db, &network{}, prvKey)
 	return app, con
 }
 
@@ -113,25 +112,23 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		minInterval = 50 * time.Millisecond
 		gov, err    = test.NewGovernance(4, time.Second)
 		req         = s.Require()
+		prvKeys     = gov.GetPrivateKeys()
 		nodes       []types.NodeID
 	)
 	s.Require().Nil(err)
-
-	for nID := range gov.GetNodeSet(0) {
-		nodes = append(nodes, nID)
-	}
-
 	// Setup core.Consensus and test.App.
 	objs := map[types.NodeID]*struct {
 		app *test.App
 		con *Consensus
 	}{}
-	for _, nID := range nodes {
-		app, con := s.prepareConsensus(gov, nID)
+	for _, key := range prvKeys {
+		nID := types.NewNodeID(key.PublicKey())
+		app, con := s.prepareConsensus(gov, key)
 		objs[nID] = &struct {
 			app *test.App
 			con *Consensus
 		}{app, con}
+		nodes = append(nodes, nID)
 	}
 	// It's a helper function to emit one block
 	// to all core.Consensus objects.
@@ -331,16 +328,16 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 		gov, err = test.NewGovernance(4, time.Second)
 		req      = s.Require()
 		nodes    []types.NodeID
+		prvKeys  = gov.GetPrivateKeys()
 	)
 	s.Require().Nil(err)
-	for nID := range gov.GetNodeSet(0) {
-		nodes = append(nodes, nID)
-	}
 	// Setup core.Consensus and test.App.
 	cons := map[types.NodeID]*Consensus{}
-	for _, nID := range nodes {
-		_, con := s.prepareConsensus(gov, nID)
+	for _, key := range prvKeys {
+		_, con := s.prepareConsensus(gov, key)
+		nID := types.NewNodeID(key.PublicKey())
 		cons[nID] = con
+		nodes = append(nodes, nID)
 	}
 	b00 := s.prepareGenesisBlock(nodes[0], 0, cons[nodes[0]])
 	b10 := s.prepareGenesisBlock(nodes[1], 1, cons[nodes[1]])
@@ -375,17 +372,12 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 }
 
 func (s *ConsensusTestSuite) TestPrepareGenesisBlock() {
-	var (
-		gov, err = test.NewGovernance(4, time.Second)
-		nodes    []types.NodeID
-	)
+	gov, err := test.NewGovernance(4, time.Second)
 	s.Require().Nil(err)
-	for nID := range gov.GetNodeSet(0) {
-		nodes = append(nodes, nID)
-	}
-	_, con := s.prepareConsensus(gov, nodes[0])
+	prvKey := gov.GetPrivateKeys()[0]
+	_, con := s.prepareConsensus(gov, prvKey)
 	block := &types.Block{
-		ProposerID: nodes[0],
+		ProposerID: types.NewNodeID(prvKey.PublicKey()),
 	}
 	con.PrepareGenesisBlock(block, time.Now().UTC())
 	s.True(block.IsGenesis())

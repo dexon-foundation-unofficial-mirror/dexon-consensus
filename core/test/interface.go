@@ -19,6 +19,7 @@ package test
 
 import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -96,10 +97,10 @@ type Transport interface {
 	// Close would cleanup allocated resources.
 	Close() error
 
-	// Peers return IDs of all connected nodes in p2p favor.
+	// Peers return public keys of all connected nodes in p2p favor.
 	// This method should be accessed after ether 'Join' or 'WaitForPeers'
 	// returned.
-	Peers() map[types.NodeID]struct{}
+	Peers() []crypto.PublicKey
 }
 
 // Marshaller defines an interface to convert between interface{} and []byte.

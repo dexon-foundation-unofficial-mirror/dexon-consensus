@@ -32,7 +32,7 @@ import (
 type simGovernance struct {
 	id                 types.NodeID
 	lock               sync.RWMutex
-	notarySet          map[types.NodeID]struct{}
+	nodeSet            map[types.NodeID]crypto.PublicKey
 	expectedNumNodes   int
 	k                  int
 	phiRatio           float32
@@ -52,7 +52,7 @@ func newSimGovernance(
 	numNodes int, consensusConfig config.Consensus) *simGovernance {
 	return &simGovernance{
 		id:                 id,
-		notarySet:          make(map[types.NodeID]struct{}),
+		nodeSet:            make(map[types.NodeID]crypto.PublicKey),
 		expectedNumNodes:   numNodes,
 		k:                  consensusConfig.K,
 		phiRatio:           consensusConfig.PhiRatio,
@@ -71,17 +71,14 @@ func (g *simGovernance) setNetwork(network *network) {
 }
 
 // GetNodeSet returns the current notary set.
-func (g *simGovernance) GetNodeSet(
-	blockHeight uint64) map[types.NodeID]struct{} {
+func (g *simGovernance) GetNodeSet(round uint64) (ret []crypto.PublicKey) {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
-	// Return the cloned notarySet.
-	ret := make(map[types.NodeID]struct{})
-	for k := range g.notarySet {
-		ret[k] = struct{}{}
+	for _, pubKey := range g.nodeSet {
+		ret = append(ret, pubKey)
 	}
-	return ret
+	return
 }
 
 // GetConfiguration returns the configuration at a given round.
@@ -102,17 +99,19 @@ func (g *simGovernance) GetCRS(round uint64) []byte {
 }
 
 // addNode add a new node into the simulated governance contract.
-func (g *simGovernance) addNode(nID types.NodeID) {
+func (g *simGovernance) addNode(pubKey crypto.PublicKey) {
+	nID := types.NewNodeID(pubKey)
+
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	if _, exists := g.notarySet[nID]; exists {
+	if _, exists := g.nodeSet[nID]; exists {
 		return
 	}
-	if len(g.notarySet) == g.expectedNumNodes {
+	if len(g.nodeSet) == g.expectedNumNodes {
 		panic(fmt.Errorf("attempt to add node when ready"))
 	}
-	g.notarySet[nID] = struct{}{}
+	g.nodeSet[nID] = pubKey
 }
 
 // ProposeThresholdSignature porposes a ThresholdSignature of round.

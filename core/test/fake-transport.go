@@ -21,17 +21,24 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
+
+type fakePeerRecord struct {
+	sendChannel chan<- *TransportEnvelope
+	pubKey      crypto.PublicKey
+}
 
 // FakeTransport implement TransportServer and TransportClient interface
 // by using golang channel.
 type FakeTransport struct {
 	peerType      TransportPeerType
 	nID           types.NodeID
+	pubKey        crypto.PublicKey
 	recvChannel   chan *TransportEnvelope
 	serverChannel chan<- *TransportEnvelope
-	peers         map[types.NodeID]chan<- *TransportEnvelope
+	peers         map[types.NodeID]fakePeerRecord
 	latency       LatencyModel
 }
 
@@ -45,12 +52,13 @@ func NewFakeTransportServer() TransportServer {
 
 // NewFakeTransportClient constructs FakeTransport instance for peer.
 func NewFakeTransportClient(
-	nID types.NodeID, latency LatencyModel) TransportClient {
+	pubKey crypto.PublicKey, latency LatencyModel) TransportClient {
 
 	return &FakeTransport{
 		peerType:    TransportPeer,
 		recvChannel: make(chan *TransportEnvelope, 1000),
-		nID:         nID,
+		nID:         types.NewNodeID(pubKey),
+		pubKey:      pubKey,
 		latency:     latency,
 	}
 }
@@ -59,7 +67,7 @@ func NewFakeTransportClient(
 func (t *FakeTransport) Send(
 	endpoint types.NodeID, msg interface{}) (err error) {
 
-	ch, exists := t.peers[endpoint]
+	rec, exists := t.peers[endpoint]
 	if !exists {
 		err = fmt.Errorf("the endpoint does not exists: %v", endpoint)
 		return
@@ -73,7 +81,7 @@ func (t *FakeTransport) Send(
 			From:     t.nID,
 			Msg:      msg,
 		}
-	}(ch)
+	}(rec.sendChannel)
 	return
 }
 
@@ -107,10 +115,9 @@ func (t *FakeTransport) Close() (err error) {
 }
 
 // Peers implements Transport.Peers method.
-func (t *FakeTransport) Peers() (peers map[types.NodeID]struct{}) {
-	peers = make(map[types.NodeID]struct{})
-	for nID := range t.peers {
-		peers[nID] = struct{}{}
+func (t *FakeTransport) Peers() (peers []crypto.PublicKey) {
+	for _, rec := range t.peers {
+		peers = append(peers, rec.pubKey)
 	}
 	return
 }
@@ -135,7 +142,7 @@ func (t *FakeTransport) Join(
 			continue
 		}
 		if t.peers, ok =
-			envelope.Msg.(map[types.NodeID]chan<- *TransportEnvelope); !ok {
+			envelope.Msg.(map[types.NodeID]fakePeerRecord); !ok {
 
 			envelopes = append(envelopes, envelope)
 			continue
@@ -155,13 +162,16 @@ func (t *FakeTransport) Host() (chan *TransportEnvelope, error) {
 
 // WaitForPeers implements TransportServer.WaitForPeers method.
 func (t *FakeTransport) WaitForPeers(numPeers int) (err error) {
-	t.peers = make(map[types.NodeID]chan<- *TransportEnvelope)
+	t.peers = make(map[types.NodeID]fakePeerRecord)
 	for {
 		envelope := <-t.recvChannel
 		// Panic here if some peer send other stuffs before
 		// receiving peer lists.
 		newPeer := envelope.Msg.(*FakeTransport)
-		t.peers[envelope.From] = newPeer.recvChannel
+		t.peers[envelope.From] = fakePeerRecord{
+			sendChannel: newPeer.recvChannel,
+			pubKey:      newPeer.pubKey,
+		}
 		if len(t.peers) == numPeers {
 			break
 		}

@@ -64,6 +64,12 @@ func newPublicKey(prvKey *ecdsa.PrivateKey) *publicKey {
 	}
 }
 
+// NewPublicKeyFromByteSlice constructs an eth.publicKey instance from
+// a byte slice.
+func NewPublicKeyFromByteSlice(b []byte) crypto.PublicKey {
+	return publicKey{publicKey: b}
+}
+
 // decompressPubkey parses a public key in the 33-byte compressed format.
 func decompressPubkey(pubkey []byte) (publicKey, error) {
 	_, err := ethcrypto.DecompressPubkey(pubkey)
