@@ -40,15 +40,17 @@ type AgreementStateTestSuite struct {
 }
 
 type agreementStateTestReceiver struct {
-	s *AgreementStateTestSuite
+	s      *AgreementStateTestSuite
+	leader *leaderSelector
 }
 
 func (r *agreementStateTestReceiver) ProposeVote(vote *types.Vote) {
 	r.s.voteChan <- vote
 }
 
-func (r *agreementStateTestReceiver) ProposeBlock(block common.Hash) {
-	r.s.blockChan <- block
+func (r *agreementStateTestReceiver) ProposeBlock() {
+	block := r.s.proposeBlock(r.leader)
+	r.s.blockChan <- block.Hash
 }
 
 func (r *agreementStateTestReceiver) ConfirmBlock(block common.Hash) {
@@ -99,10 +101,6 @@ func (s *AgreementStateTestSuite) SetupTest() {
 
 func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 	leader := newGenesisLeaderSelector([]byte("I ❤️ DEXON"))
-	blockProposer := func() *types.Block {
-		return s.proposeBlock(leader)
-	}
-
 	notarySet := make(map[types.NodeID]struct{})
 	for i := 0; i < numNode-1; i++ {
 		prvKey, err := ecdsa.NewPrivateKey()
@@ -114,10 +112,12 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 	notarySet[s.ID] = struct{}{}
 	agreement := newAgreement(
 		s.ID,
-		&agreementStateTestReceiver{s},
+		&agreementStateTestReceiver{
+			s:      s,
+			leader: leader,
+		},
 		notarySet,
 		leader,
-		blockProposer,
 	)
 	return agreement
 }

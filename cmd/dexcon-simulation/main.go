@@ -36,7 +36,6 @@ var initialize = flag.Bool("init", false, "initialize config file")
 var configFile = flag.String("config", "", "path to simulation config file")
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
 var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
-var legacy = flag.Bool("legacy", false, "legacy consensus protocal")
 var logfile = flag.String("log", "", "write log to `file`")
 
 func main() {
@@ -81,7 +80,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	simulation.Run(cfg, *legacy)
+	simulation.Run(cfg)
 
 	if *memprofile != "" {
 		f, err := os.Create(*memprofile)

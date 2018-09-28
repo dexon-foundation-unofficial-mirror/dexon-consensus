@@ -79,14 +79,10 @@ func (recv *consensusReceiver) ProposeVote(vote *types.Vote) {
 	}()
 }
 
-func (recv *consensusReceiver) ProposeBlock(hash common.Hash) {
-	block, exist := recv.consensus.baModules[recv.chainID].findCandidateBlock(hash)
-	if !exist {
-		log.Println(ErrUnknownBlockProposed)
-		log.Println(hash)
-		return
-	}
-	if err := recv.consensus.PreProcessBlock(block); err != nil {
+func (recv *consensusReceiver) ProposeBlock() {
+	block := recv.consensus.proposeBlock(recv.chainID)
+	recv.consensus.baModules[recv.chainID].addCandidateBlock(block)
+	if err := recv.consensus.preProcessBlock(block); err != nil {
 		log.Println(err)
 		return
 	}
@@ -289,17 +285,11 @@ func NewConsensus(
 			chainID:   chainID,
 			restart:   make(chan struct{}, 1),
 		}
-		blockProposer := func() *types.Block {
-			block := con.proposeBlock(chainID)
-			con.baModules[chainID].addCandidateBlock(block)
-			return block
-		}
 		con.baModules[chainID] = newAgreement(
 			con.ID,
 			con.receivers[chainID],
 			nodes,
 			newGenesisLeaderSelector(crs),
-			blockProposer,
 		)
 	}
 	return con
@@ -307,7 +297,7 @@ func NewConsensus(
 
 // Run starts running DEXON Consensus.
 func (con *Consensus) Run() {
-	go con.processMsg(con.network.ReceiveChan(), con.PreProcessBlock)
+	go con.processMsg(con.network.ReceiveChan())
 	con.runDKGTSIG()
 	con.dkgReady.L.Lock()
 	defer con.dkgReady.L.Unlock()
@@ -420,18 +410,12 @@ func (con *Consensus) runDKGTSIG() {
 	}()
 }
 
-// RunLegacy starts running Legacy DEXON Consensus.
-func (con *Consensus) RunLegacy() {
-}
-
 // Stop the Consensus core.
 func (con *Consensus) Stop() {
 	con.ctxCancel()
 }
 
-func (con *Consensus) processMsg(
-	msgChan <-chan interface{},
-	blockProcesser func(*types.Block) error) {
+func (con *Consensus) processMsg(msgChan <-chan interface{}) {
 	for {
 		var msg interface{}
 		select {
@@ -442,7 +426,7 @@ func (con *Consensus) processMsg(
 
 		switch val := msg.(type) {
 		case *types.Block:
-			if err := blockProcesser(val); err != nil {
+			if err := con.preProcessBlock(val); err != nil {
 				log.Println(err)
 			}
 		case *types.WitnessAck:
@@ -555,8 +539,8 @@ func (con *Consensus) sanityCheck(b *types.Block) (err error) {
 	return nil
 }
 
-// PreProcessBlock performs Byzantine Agreement on the block.
-func (con *Consensus) PreProcessBlock(b *types.Block) (err error) {
+// preProcessBlock performs Byzantine Agreement on the block.
+func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
 	if err := con.sanityCheck(b); err != nil {
 		return err
 	}

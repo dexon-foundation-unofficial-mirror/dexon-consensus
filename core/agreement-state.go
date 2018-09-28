@@ -66,10 +66,8 @@ func (s *prepareState) state() agreementStateType { return statePrepare }
 func (s *prepareState) clocks() int               { return 0 }
 func (s *prepareState) terminate()                {}
 func (s *prepareState) nextState() (agreementState, error) {
-	hash := common.Hash{}
 	if s.a.period == 1 {
-		hash = s.a.blockProposer().Hash
-		s.a.recv.ProposeBlock(hash)
+		s.a.recv.ProposeBlock()
 	} else {
 		var proposed bool
 		_, proposed = s.a.countVote(s.a.period-1, types.VotePass)

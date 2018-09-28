@@ -56,8 +56,6 @@ func (e *ErrForkVote) Error() string {
 		e.nID.String(), e.old, e.new)
 }
 
-type blockProposerFn func() *types.Block
-
 func newVoteListMap() []map[types.NodeID]*types.Vote {
 	listMap := make([]map[types.NodeID]*types.Vote, types.MaxVoteType)
 	for idx := range listMap {
@@ -69,7 +67,7 @@ func newVoteListMap() []map[types.NodeID]*types.Vote {
 // agreementReceiver is the interface receiving agreement event.
 type agreementReceiver interface {
 	ProposeVote(vote *types.Vote)
-	ProposeBlock(common.Hash)
+	ProposeBlock()
 	ConfirmBlock(common.Hash)
 }
 
@@ -87,16 +85,15 @@ type pendingVote struct {
 type agreementData struct {
 	recv agreementReceiver
 
-	ID            types.NodeID
-	leader        *leaderSelector
-	defaultBlock  common.Hash
-	period        uint64
-	requiredVote  int
-	votes         map[uint64][]map[types.NodeID]*types.Vote
-	votesLock     sync.RWMutex
-	blocks        map[types.NodeID]*types.Block
-	blocksLock    sync.Mutex
-	blockProposer blockProposerFn
+	ID           types.NodeID
+	leader       *leaderSelector
+	defaultBlock common.Hash
+	period       uint64
+	requiredVote int
+	votes        map[uint64][]map[types.NodeID]*types.Vote
+	votesLock    sync.RWMutex
+	blocks       map[types.NodeID]*types.Block
+	blocksLock   sync.Mutex
 }
 
 // agreement is the agreement protocal describe in the Crypto Shuffle Algorithm.
@@ -117,14 +114,12 @@ func newAgreement(
 	ID types.NodeID,
 	recv agreementReceiver,
 	notarySet map[types.NodeID]struct{},
-	leader *leaderSelector,
-	blockProposer blockProposerFn) *agreement {
+	leader *leaderSelector) *agreement {
 	agreement := &agreement{
 		data: &agreementData{
-			recv:          recv,
-			ID:            ID,
-			leader:        leader,
-			blockProposer: blockProposer,
+			recv:   recv,
+			ID:     ID,
+			leader: leader,
 		},
 		aID:            &atomic.Value{},
 		candidateBlock: make(map[common.Hash]*types.Block),

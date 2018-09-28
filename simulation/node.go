@@ -75,7 +75,7 @@ func (n *node) GetID() types.NodeID {
 }
 
 // run starts the node.
-func (n *node) run(serverEndpoint interface{}, legacy bool) {
+func (n *node) run(serverEndpoint interface{}) {
 	// Run network.
 	if err := n.netModule.setup(serverEndpoint); err != nil {
 		panic(err)
@@ -98,13 +98,8 @@ func (n *node) run(serverEndpoint interface{}, legacy bool) {
 			break
 		}
 	}
-	n.consensus = core.NewConsensus(
-		n.app, n.gov, n.db, n.netModule, n.prvKey)
-	if legacy {
-		go n.consensus.RunLegacy()
-	} else {
-		go n.consensus.Run()
-	}
+	n.consensus = core.NewConsensus(n.app, n.gov, n.db, n.netModule, n.prvKey)
+	go n.consensus.Run()
 
 	// Blocks forever.
 MainLoop:

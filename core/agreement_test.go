@@ -29,15 +29,17 @@ import (
 
 // agreementTestReceiver implements core.agreementReceiveer
 type agreementTestReceiver struct {
-	s *AgreementTestSuite
+	s              *AgreementTestSuite
+	agreementIndex int
 }
 
 func (r *agreementTestReceiver) ProposeVote(vote *types.Vote) {
 	r.s.voteChan <- vote
 }
 
-func (r *agreementTestReceiver) ProposeBlock(block common.Hash) {
-	r.s.blockChan <- block
+func (r *agreementTestReceiver) ProposeBlock() {
+	block := r.s.proposeBlock(r.agreementIndex)
+	r.s.blockChan <- block.Hash
 }
 
 func (r *agreementTestReceiver) ConfirmBlock(block common.Hash) {
@@ -82,10 +84,6 @@ func (s *AgreementTestSuite) SetupTest() {
 func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 	leader := newGenesisLeaderSelector([]byte("🖖👽"))
 	agreementIdx := len(s.agreement)
-	blockProposer := func() *types.Block {
-		return s.proposeBlock(agreementIdx)
-	}
-
 	notarySet := make(map[types.NodeID]struct{})
 	for i := 0; i < numNotarySet-1; i++ {
 		prvKey, err := ecdsa.NewPrivateKey()
@@ -97,10 +95,12 @@ func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 	notarySet[s.ID] = struct{}{}
 	agreement := newAgreement(
 		s.ID,
-		&agreementTestReceiver{s},
+		&agreementTestReceiver{
+			s:              s,
+			agreementIndex: agreementIdx,
+		},
 		notarySet,
 		leader,
-		blockProposer,
 	)
 	s.agreement = append(s.agreement, agreement)
 	return agreement

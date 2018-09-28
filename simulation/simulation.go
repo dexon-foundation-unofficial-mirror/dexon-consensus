@@ -25,7 +25,7 @@ import (
 )
 
 // Run starts the simulation.
-func Run(cfg *config.Config, legacy bool) {
+func Run(cfg *config.Config) {
 	var (
 		networkType = cfg.Networking.Type
 		server      *PeerServer
@@ -43,7 +43,7 @@ func Run(cfg *config.Config, legacy bool) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			v.run(serverEndpoint, legacy)
+			v.run(serverEndpoint)
 		}()
 	}
 
