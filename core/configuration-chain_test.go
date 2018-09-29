@@ -155,7 +155,7 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 	recv := newTestCCReceiver(s)
 
 	for _, nID := range s.nIDs {
-		gov, err := test.NewGovernance(0, 100*time.Millisecond)
+		gov, err := test.NewGovernance(0, 200*time.Millisecond)
 		s.Require().NoError(err)
 		cfgChains[nID] = newConfigurationChain(nID, recv, gov)
 		recv.nodes[nID] = cfgChains[nID]
