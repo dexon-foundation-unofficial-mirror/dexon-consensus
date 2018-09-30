@@ -60,18 +60,20 @@ var (
 
 // consensusReceiver implements agreementReceiver.
 type consensusReceiver struct {
-	consensus *Consensus
-	chainID   uint32
-	restart   chan struct{}
+	// TODO(mission): consensus would be replaced by shard and network.
+	consensus       *Consensus
+	agreementModule *agreement
+	chainID         uint32
+	restart         chan struct{}
 }
 
 func (recv *consensusReceiver) ProposeVote(vote *types.Vote) {
-	if err := recv.consensus.prepareVote(recv.chainID, vote); err != nil {
+	if err := recv.agreementModule.prepareVote(vote); err != nil {
 		log.Println(err)
 		return
 	}
 	go func() {
-		if err := recv.consensus.ProcessVote(vote); err != nil {
+		if err := recv.agreementModule.processVote(vote); err != nil {
 			log.Println(err)
 			return
 		}
@@ -106,7 +108,7 @@ func (recv *consensusReceiver) ConfirmBlock(hash common.Hash) {
 type consensusDKGReceiver struct {
 	ID           types.NodeID
 	gov          Governance
-	prvKey       crypto.PrivateKey
+	authModule   *Authenticator
 	nodeSetCache *NodeSetCache
 	network      Network
 }
@@ -114,9 +116,7 @@ type consensusDKGReceiver struct {
 // ProposeDKGComplaint proposes a DKGComplaint.
 func (recv *consensusDKGReceiver) ProposeDKGComplaint(
 	complaint *types.DKGComplaint) {
-	var err error
-	complaint.Signature, err = recv.prvKey.Sign(hashDKGComplaint(complaint))
-	if err != nil {
+	if err := recv.authModule.SignDKGComplaint(complaint); err != nil {
 		log.Println(err)
 		return
 	}
@@ -126,9 +126,7 @@ func (recv *consensusDKGReceiver) ProposeDKGComplaint(
 // ProposeDKGMasterPublicKey propose a DKGMasterPublicKey.
 func (recv *consensusDKGReceiver) ProposeDKGMasterPublicKey(
 	mpk *types.DKGMasterPublicKey) {
-	var err error
-	mpk.Signature, err = recv.prvKey.Sign(hashDKGMasterPublicKey(mpk))
-	if err != nil {
+	if err := recv.authModule.SignDKGMasterPublicKey(mpk); err != nil {
 		log.Println(err)
 		return
 	}
@@ -138,9 +136,7 @@ func (recv *consensusDKGReceiver) ProposeDKGMasterPublicKey(
 // ProposeDKGPrivateShare propose a DKGPrivateShare.
 func (recv *consensusDKGReceiver) ProposeDKGPrivateShare(
 	prv *types.DKGPrivateShare) {
-	var err error
-	prv.Signature, err = recv.prvKey.Sign(hashDKGPrivateShare(prv))
-	if err != nil {
+	if err := recv.authModule.SignDKGPrivateShare(prv); err != nil {
 		log.Println(err)
 		return
 	}
@@ -156,9 +152,7 @@ func (recv *consensusDKGReceiver) ProposeDKGPrivateShare(
 func (recv *consensusDKGReceiver) ProposeDKGAntiNackComplaint(
 	prv *types.DKGPrivateShare) {
 	if prv.ProposerID == recv.ID {
-		var err error
-		prv.Signature, err = recv.prvKey.Sign(hashDKGPrivateShare(prv))
-		if err != nil {
+		if err := recv.authModule.SignDKGPrivateShare(prv); err != nil {
 			log.Println(err)
 			return
 		}
@@ -170,7 +164,7 @@ func (recv *consensusDKGReceiver) ProposeDKGAntiNackComplaint(
 type Consensus struct {
 	// Node Info.
 	ID            types.NodeID
-	prvKey        crypto.PrivateKey
+	authModule    *Authenticator
 	currentConfig *types.Config
 
 	// Modules.
@@ -240,12 +234,13 @@ func NewConsensus(
 		config.NumChains)
 
 	ID := types.NewNodeID(prv.PublicKey())
+	authModule := NewAuthenticator(prv)
 	cfgModule := newConfigurationChain(
 		ID,
 		&consensusDKGReceiver{
 			ID:           ID,
 			gov:          gov,
-			prvKey:       prv,
+			authModule:   authModule,
 			nodeSetCache: nodeSetCache,
 			network:      network,
 		},
@@ -268,29 +263,34 @@ func NewConsensus(
 		db:            db,
 		network:       network,
 		tickerObj:     newTicker(gov, TickerBA),
-		prvKey:        prv,
 		dkgReady:      sync.NewCond(&sync.Mutex{}),
 		cfgModule:     cfgModule,
 		nodeSetCache:  nodeSetCache,
 		ctx:           ctx,
 		ctxCancel:     ctxCancel,
+		authModule:    authModule,
 	}
 
 	con.baModules = make([]*agreement, config.NumChains)
 	con.receivers = make([]*consensusReceiver, config.NumChains)
 	for i := uint32(0); i < config.NumChains; i++ {
 		chainID := i
-		con.receivers[chainID] = &consensusReceiver{
+		recv := &consensusReceiver{
 			consensus: con,
 			chainID:   chainID,
 			restart:   make(chan struct{}, 1),
 		}
-		con.baModules[chainID] = newAgreement(
+		agreementModule := newAgreement(
 			con.ID,
 			con.receivers[chainID],
 			nodes,
 			newGenesisLeaderSelector(crs),
+			con.authModule,
 		)
+		// Hacky way to make agreement module self contained.
+		recv.agreementModule = agreementModule
+		con.baModules[chainID] = agreementModule
+		con.receivers[chainID] = recv
 	}
 	return con
 }
@@ -396,8 +396,7 @@ func (con *Consensus) runDKGTSIG() {
 		if err != nil {
 			panic(err)
 		}
-		psig.Signature, err = con.prvKey.Sign(hashDKGPartialSignature(psig))
-		if err != nil {
+		if err = con.authModule.SignDKGPartialSignature(psig); err != nil {
 			panic(err)
 		}
 		if err = con.cfgModule.processPartialSignature(psig); err != nil {
@@ -462,7 +461,10 @@ func (con *Consensus) proposeBlock(chainID uint32) *types.Block {
 		log.Println(err)
 		return nil
 	}
-	if err := con.baModules[chainID].prepareBlock(block, con.prvKey); err != nil {
+	// TODO(mission): decide CRS by block's round, which could be determined by
+	//                block's info (ex. position, timestamp).
+	if err := con.authModule.SignCRS(
+		block, crypto.Keccak256Hash(con.gov.GetCRS(0))); err != nil {
 		log.Println(err)
 		return nil
 	}
@@ -497,8 +499,7 @@ func (con *Consensus) processWitnessData() {
 			if block.Witness.Height%5 != 0 {
 				continue
 			}
-
-			witnessAck, err := con.ccModule.prepareWitnessAck(&block, con.prvKey)
+			witnessAck, err := con.authModule.SignAsWitnessAck(&block)
 			if err != nil {
 				panic(err)
 			}
@@ -509,11 +510,6 @@ func (con *Consensus) processWitnessData() {
 			con.nbModule.WitnessAckDelivered(witnessAck)
 		}
 	}
-}
-
-// prepareVote prepares a vote.
-func (con *Consensus) prepareVote(chainID uint32, vote *types.Vote) error {
-	return con.baModules[chainID].prepareVote(vote, con.prvKey)
 }
 
 // sanityCheck checks if the block is a valid block
@@ -635,12 +631,7 @@ func (con *Consensus) prepareBlock(b *types.Block,
 	con.rbModule.prepareBlock(b)
 	b.Timestamp = proposeTime
 	b.Payload = con.nbModule.PreparePayload(b.Position)
-	b.Hash, err = hashBlock(b)
-	if err != nil {
-		return
-	}
-	b.Signature, err = con.prvKey.Sign(b.Hash)
-	if err != nil {
+	if err = con.authModule.SignBlock(b); err != nil {
 		return
 	}
 	return
@@ -659,12 +650,7 @@ func (con *Consensus) PrepareGenesisBlock(b *types.Block,
 	b.Position.Height = 0
 	b.ParentHash = common.Hash{}
 	b.Timestamp = proposeTime
-	b.Hash, err = hashBlock(b)
-	if err != nil {
-		return
-	}
-	b.Signature, err = con.prvKey.Sign(b.Hash)
-	if err != nil {
+	if err = con.authModule.SignBlock(b); err != nil {
 		return
 	}
 	return

@@ -104,27 +104,6 @@ func (cc *compactionChain) processBlock(block *types.Block) error {
 	return nil
 }
 
-func (cc *compactionChain) prepareWitnessAck(
-	block *types.Block, prvKey crypto.PrivateKey) (
-	witnessAck *types.WitnessAck, err error) {
-
-	hash, err := hashWitness(block)
-	if err != nil {
-		return
-	}
-	sig, err := prvKey.Sign(hash)
-	if err != nil {
-		return
-	}
-	witnessAck = &types.WitnessAck{
-		ProposerID:       types.NewNodeID(prvKey.PublicKey()),
-		WitnessBlockHash: block.Hash,
-		Signature:        sig,
-		Hash:             hash,
-	}
-	return
-}
-
 func (cc *compactionChain) processWitnessAck(witnessAck *types.WitnessAck) (
 	err error) {
 	// Before getting the Block from witnessAck.WitnessBlockHash, we can still

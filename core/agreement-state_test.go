@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
@@ -32,7 +31,7 @@ import (
 type AgreementStateTestSuite struct {
 	suite.Suite
 	ID          types.NodeID
-	prvKeys     map[types.NodeID]crypto.PrivateKey
+	auths       map[types.NodeID]*Authenticator
 	voteChan    chan *types.Vote
 	blockChan   chan common.Hash
 	confirmChan chan common.Hash
@@ -63,8 +62,8 @@ func (s *AgreementStateTestSuite) proposeBlock(
 		ProposerID: s.ID,
 		Hash:       common.NewRandomHash(),
 	}
+	s.Require().NoError(s.auths[s.ID].SignCRS(block, leader.hashCRS))
 	s.block[block.Hash] = block
-	s.Require().Nil(leader.prepareBlock(block, s.prvKeys[s.ID]))
 	return block
 }
 
@@ -72,17 +71,12 @@ func (s *AgreementStateTestSuite) prepareVote(
 	nID types.NodeID, voteType types.VoteType, blockHash common.Hash,
 	period uint64) (
 	vote *types.Vote) {
-	prvKey, exist := s.prvKeys[nID]
-	s.Require().True(exist)
 	vote = &types.Vote{
-		ProposerID: nID,
-		Type:       voteType,
-		BlockHash:  blockHash,
-		Period:     period,
+		Type:      voteType,
+		BlockHash: blockHash,
+		Period:    period,
 	}
-	var err error
-	vote.Signature, err = prvKey.Sign(hashVote(vote))
-	s.Require().Nil(err)
+	s.Require().NoError(s.auths[nID].SignVote(vote))
 	return
 }
 
@@ -90,8 +84,8 @@ func (s *AgreementStateTestSuite) SetupTest() {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 	s.ID = types.NewNodeID(prvKey.PublicKey())
-	s.prvKeys = map[types.NodeID]crypto.PrivateKey{
-		s.ID: prvKey,
+	s.auths = map[types.NodeID]*Authenticator{
+		s.ID: NewAuthenticator(prvKey),
 	}
 	s.voteChan = make(chan *types.Vote, 100)
 	s.blockChan = make(chan common.Hash, 100)
@@ -107,7 +101,7 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 		s.Require().Nil(err)
 		nID := types.NewNodeID(prvKey.PublicKey())
 		notarySet[nID] = struct{}{}
-		s.prvKeys[nID] = prvKey
+		s.auths[nID] = NewAuthenticator(prvKey)
 	}
 	notarySet[s.ID] = struct{}{}
 	agreement := newAgreement(
@@ -118,6 +112,7 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 		},
 		notarySet,
 		leader,
+		s.auths[s.ID],
 	)
 	return agreement
 }
@@ -160,7 +155,8 @@ func (s *AgreementStateTestSuite) TestPrepareState() {
 	prv, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 	block.ProposerID = types.NewNodeID(prv.PublicKey())
-	s.Require().Nil(a.data.leader.prepareBlock(block, prv))
+	s.Require().NoError(
+		NewAuthenticator(prv).SignCRS(block, a.data.leader.hashCRS))
 	s.Require().Nil(a.processBlock(block))
 	for nID := range a.notarySet {
 		vote := s.prepareVote(nID, types.VotePass, block.Hash, 2)
@@ -184,7 +180,8 @@ func (s *AgreementStateTestSuite) TestAckState() {
 		prv, err := ecdsa.NewPrivateKey()
 		s.Require().Nil(err)
 		blocks[i].ProposerID = types.NewNodeID(prv.PublicKey())
-		s.Require().Nil(a.data.leader.prepareBlock(blocks[i], prv))
+		s.Require().Nil(NewAuthenticator(prv).SignCRS(
+			blocks[i], a.data.leader.hashCRS))
 		s.Require().Nil(a.processBlock(blocks[i]))
 	}
 

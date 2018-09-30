@@ -29,39 +29,37 @@ import (
 
 // Shard represents a unit to produce a global ordering from multiple chains.
 type Shard struct {
-	lock     sync.RWMutex
-	ID       uint32
-	nodeID   types.NodeID
-	prvKey   crypto.PrivateKey
-	chainNum uint32
-	app      Application
-	debug    Debug
-	db       blockdb.BlockDatabase
-	pool     blockPool
-	lattice  *blockLattice
-	toModule *totalOrdering
-	ctModule *consensusTimestamp
+	lock       sync.RWMutex
+	ID         uint32
+	authModule *Authenticator
+	chainNum   uint32
+	app        Application
+	debug      Debug
+	db         blockdb.BlockDatabase
+	pool       blockPool
+	lattice    *blockLattice
+	toModule   *totalOrdering
+	ctModule   *consensusTimestamp
 }
 
 // NewShard constructs an Shard instance.
 func NewShard(
 	ID uint32,
 	cfg *types.Config,
-	prvKey crypto.PrivateKey,
+	authModule *Authenticator,
 	app Application,
 	debug Debug,
 	db blockdb.BlockDatabase) (s *Shard) {
 
 	s = &Shard{
-		ID:       ID,
-		nodeID:   types.NewNodeID(prvKey.PublicKey()),
-		prvKey:   prvKey,
-		chainNum: cfg.NumChains,
-		app:      app,
-		debug:    debug,
-		db:       db,
-		pool:     newBlockPool(cfg.NumChains),
-		lattice:  newBlockLattice(ID, cfg.NumChains),
+		ID:         ID,
+		authModule: authModule,
+		chainNum:   cfg.NumChains,
+		app:        app,
+		debug:      debug,
+		db:         db,
+		pool:       newBlockPool(cfg.NumChains),
+		lattice:    newBlockLattice(ID, cfg.NumChains),
 		toModule: newTotalOrdering(
 			uint64(cfg.K),
 			uint64(float32(cfg.NumChains-1)*cfg.PhiRatio+1),
@@ -81,13 +79,9 @@ func (s *Shard) PrepareBlock(
 	s.lattice.prepareBlock(b)
 	// TODO(mission): the proposeTime might be earlier than tip block of
 	//                that chain. We should let blockLattice suggest the time.
-	b.ProposerID = s.nodeID
 	b.Timestamp = proposeTime
 	b.Payload = s.app.PreparePayload(b.Position)
-	if b.Hash, err = hashBlock(b); err != nil {
-		return
-	}
-	if b.Signature, err = s.prvKey.Sign(b.Hash); err != nil {
+	if err = s.authModule.SignBlock(b); err != nil {
 		return
 	}
 	return

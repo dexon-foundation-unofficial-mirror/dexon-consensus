@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
@@ -53,14 +52,15 @@ func (s *AgreementTestSuite) proposeBlock(
 		Hash:       common.NewRandomHash(),
 	}
 	s.block[block.Hash] = block
-	s.Require().Nil(s.agreement[agreementIdx].prepareBlock(block, s.prvKey[s.ID]))
+	s.Require().NoError(s.auths[s.ID].SignCRS(
+		block, s.agreement[agreementIdx].data.leader.hashCRS))
 	return block
 }
 
 type AgreementTestSuite struct {
 	suite.Suite
 	ID          types.NodeID
-	prvKey      map[types.NodeID]crypto.PrivateKey
+	auths       map[types.NodeID]*Authenticator
 	voteChan    chan *types.Vote
 	blockChan   chan common.Hash
 	confirmChan chan common.Hash
@@ -72,8 +72,8 @@ func (s *AgreementTestSuite) SetupTest() {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().Nil(err)
 	s.ID = types.NewNodeID(prvKey.PublicKey())
-	s.prvKey = map[types.NodeID]crypto.PrivateKey{
-		s.ID: prvKey,
+	s.auths = map[types.NodeID]*Authenticator{
+		s.ID: NewAuthenticator(prvKey),
 	}
 	s.voteChan = make(chan *types.Vote, 100)
 	s.blockChan = make(chan common.Hash, 100)
@@ -90,7 +90,7 @@ func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 		s.Require().Nil(err)
 		nID := types.NewNodeID(prvKey.PublicKey())
 		notarySet[nID] = struct{}{}
-		s.prvKey[nID] = prvKey
+		s.auths[nID] = NewAuthenticator(prvKey)
 	}
 	notarySet[s.ID] = struct{}{}
 	agreement := newAgreement(
@@ -101,25 +101,16 @@ func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 		},
 		notarySet,
 		leader,
+		s.auths[s.ID],
 	)
 	s.agreement = append(s.agreement, agreement)
 	return agreement
 }
 
-func (s *AgreementTestSuite) prepareVote(vote *types.Vote) {
-	prvKey, exist := s.prvKey[vote.ProposerID]
-	s.Require().True(exist)
-	hash := hashVote(vote)
-	var err error
-	vote.Signature, err = prvKey.Sign(hash)
-	s.Require().NoError(err)
-}
-
 func (s *AgreementTestSuite) copyVote(
 	vote *types.Vote, proposer types.NodeID) *types.Vote {
 	v := vote.Clone()
-	v.ProposerID = proposer
-	s.prepareVote(v)
+	s.auths[proposer].SignVote(v)
 	return v
 }
 
@@ -138,7 +129,7 @@ func (s *AgreementTestSuite) TestSimpleConfirm() {
 	s.Require().Len(s.voteChan, 1)
 	vote := <-s.voteChan
 	s.Equal(types.VoteAck, vote.Type)
-	for nID := range s.prvKey {
+	for nID := range s.auths {
 		v := s.copyVote(vote, nID)
 		s.Require().NoError(a.processVote(v))
 	}
@@ -147,7 +138,7 @@ func (s *AgreementTestSuite) TestSimpleConfirm() {
 	s.Require().Len(s.voteChan, 1)
 	vote = <-s.voteChan
 	s.Equal(types.VoteConfirm, vote.Type)
-	for nID := range s.prvKey {
+	for nID := range s.auths {
 		v := s.copyVote(vote, nID)
 		s.Require().NoError(a.processVote(v))
 	}

@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -107,6 +106,7 @@ type agreement struct {
 	pendingBlock   []pendingBlock
 	pendingVote    []pendingVote
 	candidateBlock map[common.Hash]*types.Block
+	authModule     *Authenticator
 }
 
 // newAgreement creates a agreement instance.
@@ -114,7 +114,8 @@ func newAgreement(
 	ID types.NodeID,
 	recv agreementReceiver,
 	notarySet map[types.NodeID]struct{},
-	leader *leaderSelector) *agreement {
+	leader *leaderSelector,
+	authModule *Authenticator) *agreement {
 	agreement := &agreement{
 		data: &agreementData{
 			recv:   recv,
@@ -123,6 +124,7 @@ func newAgreement(
 		},
 		aID:            &atomic.Value{},
 		candidateBlock: make(map[common.Hash]*types.Block),
+		authModule:     authModule,
 	}
 	agreement.restart(notarySet, types.Position{})
 	return agreement
@@ -257,12 +259,9 @@ func (a *agreement) checkForkVote(vote *types.Vote) error {
 }
 
 // prepareVote prepares a vote.
-func (a *agreement) prepareVote(vote *types.Vote, prv crypto.PrivateKey) (
-	err error) {
-	vote.ProposerID = a.data.ID
+func (a *agreement) prepareVote(vote *types.Vote) (err error) {
 	vote.Position = a.agreementID()
-	hash := hashVote(vote)
-	vote.Signature, err = prv.Sign(hash)
+	err = a.authModule.SignVote(vote)
 	return
 }
 
@@ -303,12 +302,6 @@ func (a *agreement) processVote(vote *types.Vote) error {
 		return a.state.receiveVote()
 	}
 	return nil
-}
-
-// prepareBlok prepares a block.
-func (a *agreement) prepareBlock(
-	block *types.Block, prv crypto.PrivateKey) error {
-	return a.data.leader.prepareBlock(block, prv)
 }
 
 // processBlock is the entry point for processing Block.

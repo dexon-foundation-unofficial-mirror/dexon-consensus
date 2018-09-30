@@ -88,7 +88,8 @@ func (s *LeaderSelectorTestSuite) TestLeaderBlockHash() {
 			ProposerID: types.NewNodeID(prv.PublicKey()),
 			Hash:       common.NewRandomHash(),
 		}
-		s.Require().Nil(leader.prepareBlock(block, prv))
+		s.Require().NoError(
+			NewAuthenticator(prv).SignCRS(block, leader.hashCRS))
 		s.Require().Nil(leader.processBlock(block))
 		blocks[block.Hash] = block
 	}
@@ -103,19 +104,6 @@ func (s *LeaderSelectorTestSuite) TestLeaderBlockHash() {
 		dist := leader.distance(block.CRSSignature)
 		s.True(leaderDist.Cmp(dist) == -1)
 	}
-}
-
-func (s *LeaderSelectorTestSuite) TestPrepareBlock() {
-	leader := s.newLeader()
-	prv, err := ecdsa.NewPrivateKey()
-	s.Require().Nil(err)
-	block := &types.Block{
-		ProposerID: types.NewNodeID(prv.PublicKey()),
-	}
-	s.Require().Nil(leader.prepareBlock(block, prv))
-	s.Nil(leader.processBlock(block))
-	block.Position.Height++
-	s.Error(ErrIncorrectCRSSignature, leader.processBlock(block))
 }
 
 func TestLeaderSelector(t *testing.T) {

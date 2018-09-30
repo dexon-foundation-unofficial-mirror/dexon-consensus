@@ -118,7 +118,7 @@ func NewNode(
 		shard: core.NewShard(
 			shardID,
 			governanceConfig,
-			privateKey,
+			core.NewAuthenticator(privateKey),
 			app,
 			app,
 			db),

@@ -107,7 +107,7 @@ func (s *ShardTestSuite) newTestShardMgr(cfg *types.Config) *testShardMgr {
 		shard: NewShard(
 			uint32(0),
 			cfg,
-			prvKey,
+			NewAuthenticator(prvKey),
 			app,
 			app,
 			db)}

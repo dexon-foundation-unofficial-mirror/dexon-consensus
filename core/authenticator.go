@@ -25,21 +25,24 @@ import (
 
 // Authenticator verify data owner.
 type Authenticator struct {
-	prvKey crypto.PrivateKey
-	pubKey crypto.PublicKey
+	prvKey     crypto.PrivateKey
+	pubKey     crypto.PublicKey
+	proposerID types.NodeID
 }
 
 // NewAuthenticator constructs an Authenticator instance.
-func NewAuthenticator(prvKey crypto.PrivateKey) *Authenticator {
-	return &Authenticator{
+func NewAuthenticator(prvKey crypto.PrivateKey) (auth *Authenticator) {
+	auth = &Authenticator{
 		prvKey: prvKey,
 		pubKey: prvKey.PublicKey(),
 	}
+	auth.proposerID = types.NewNodeID(auth.pubKey)
+	return
 }
 
 // SignBlock signs a types.Block.
 func (au *Authenticator) SignBlock(b *types.Block) (err error) {
-	b.ProposerID = types.NewNodeID(au.pubKey)
+	b.ProposerID = au.proposerID
 	if b.Hash, err = hashBlock(b); err != nil {
 		return
 	}
@@ -51,18 +54,71 @@ func (au *Authenticator) SignBlock(b *types.Block) (err error) {
 
 // SignVote signs a types.Vote.
 func (au *Authenticator) SignVote(v *types.Vote) (err error) {
-	v.ProposerID = types.NewNodeID(au.pubKey)
+	v.ProposerID = au.proposerID
 	v.Signature, err = au.prvKey.Sign(hashVote(v))
 	return
 }
 
 // SignCRS signs CRS signature of types.Block.
 func (au *Authenticator) SignCRS(b *types.Block, crs common.Hash) (err error) {
-	if b.ProposerID != types.NewNodeID(au.pubKey) {
+	if b.ProposerID != au.proposerID {
 		err = ErrInvalidProposerID
 		return
 	}
 	b.CRSSignature, err = au.prvKey.Sign(hashCRS(b, crs))
+	return
+}
+
+// SignAsWitnessAck create a witness ack from a confirmed block.
+func (au *Authenticator) SignAsWitnessAck(
+	b *types.Block) (wAck *types.WitnessAck, err error) {
+
+	hash, err := hashWitness(b)
+	if err != nil {
+		return
+	}
+	sig, err := au.prvKey.Sign(hash)
+	if err != nil {
+		return
+	}
+	wAck = &types.WitnessAck{
+		ProposerID:       au.proposerID,
+		WitnessBlockHash: b.Hash,
+		Signature:        sig,
+		Hash:             hash,
+	}
+	return
+}
+
+// SignDKGComplaint signs a DKG complaint.
+func (au *Authenticator) SignDKGComplaint(
+	complaint *types.DKGComplaint) (err error) {
+	complaint.ProposerID = au.proposerID
+	complaint.Signature, err = au.prvKey.Sign(hashDKGComplaint(complaint))
+	return
+}
+
+// SignDKGMasterPublicKey signs a DKG master public key.
+func (au *Authenticator) SignDKGMasterPublicKey(
+	mpk *types.DKGMasterPublicKey) (err error) {
+	mpk.ProposerID = au.proposerID
+	mpk.Signature, err = au.prvKey.Sign(hashDKGMasterPublicKey(mpk))
+	return
+}
+
+// SignDKGPrivateShare signs a DKG private share.
+func (au *Authenticator) SignDKGPrivateShare(
+	prvShare *types.DKGPrivateShare) (err error) {
+	prvShare.ProposerID = au.proposerID
+	prvShare.Signature, err = au.prvKey.Sign(hashDKGPrivateShare(prvShare))
+	return
+}
+
+// SignDKGPartialSignature signs a DKG partial signature.
+func (au *Authenticator) SignDKGPartialSignature(
+	pSig *types.DKGPartialSignature) (err error) {
+	pSig.ProposerID = au.proposerID
+	pSig.Signature, err = au.prvKey.Sign(hashDKGPartialSignature(pSig))
 	return
 }
 

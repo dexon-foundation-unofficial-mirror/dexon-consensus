@@ -91,25 +91,6 @@ func (s *CompactionChainTestSuite) TestProcessBlock() {
 	}
 }
 
-func (s *CompactionChainTestSuite) TestPrepareWitnessAck() {
-	cc := s.newCompactionChain()
-	blocks := s.generateBlocks(2, cc)
-	prv, err := ecdsa.NewPrivateKey()
-	s.Require().Nil(err)
-
-	block := blocks[1]
-	witnessAck, err := cc.prepareWitnessAck(block, prv)
-	s.Require().Nil(err)
-	if cc.prevBlock != nil {
-		verified, _ := verifyWitnessSignature(
-			prv.PublicKey(),
-			cc.prevBlock,
-			witnessAck.Signature)
-		s.True(verified)
-		s.Equal(witnessAck.WitnessBlockHash, block.Hash)
-	}
-}
-
 func (s *CompactionChainTestSuite) TestProcessWitnessAck() {
 	cc := s.newCompactionChain()
 	blocks := s.generateBlocks(10, cc)
@@ -119,13 +100,15 @@ func (s *CompactionChainTestSuite) TestProcessWitnessAck() {
 	s.Require().Nil(err)
 	nID1 := types.NewNodeID(prv1.PublicKey())
 	nID2 := types.NewNodeID(prv2.PublicKey())
+	auth1 := NewAuthenticator(prv1)
+	auth2 := NewAuthenticator(prv2)
 	witnessAcks1 := []*types.WitnessAck{}
 	witnessAcks2 := []*types.WitnessAck{}
 	for _, block := range blocks {
 		cc.prevBlock = block
-		witnessAck1, err := cc.prepareWitnessAck(block, prv1)
+		witnessAck1, err := auth1.SignAsWitnessAck(block)
 		s.Require().Nil(err)
-		witnessAck2, err := cc.prepareWitnessAck(block, prv2)
+		witnessAck2, err := auth2.SignAsWitnessAck(block)
 		s.Require().Nil(err)
 		witnessAcks1 = append(witnessAcks1, witnessAck1)
 		witnessAcks2 = append(witnessAcks2, witnessAck2)

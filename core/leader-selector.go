@@ -94,12 +94,6 @@ func (l *leaderSelector) leaderBlockHash() common.Hash {
 	return l.minBlockHash
 }
 
-func (l *leaderSelector) prepareBlock(
-	block *types.Block, prv crypto.PrivateKey) (err error) {
-	block.CRSSignature, err = prv.Sign(hashCRS(block, l.hashCRS))
-	return
-}
-
 func (l *leaderSelector) processBlock(block *types.Block) error {
 	ok, err := verifyCRSSignature(block, l.hashCRS)
 	if err != nil {
