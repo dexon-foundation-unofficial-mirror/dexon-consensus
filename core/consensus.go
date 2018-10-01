@@ -58,16 +58,16 @@ var (
 		"position of block is incorrect")
 )
 
-// consensusReceiver implements agreementReceiver.
-type consensusReceiver struct {
+// consensusBAReceiver implements agreementReceiver.
+type consensusBAReceiver struct {
 	// TODO(mission): consensus would be replaced by shard and network.
 	consensus       *Consensus
 	agreementModule *agreement
 	chainID         uint32
-	restart         chan struct{}
+	restartNotary   chan bool
 }
 
-func (recv *consensusReceiver) ProposeVote(vote *types.Vote) {
+func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {
 	if err := recv.agreementModule.prepareVote(vote); err != nil {
 		log.Println(err)
 		return
@@ -81,7 +81,7 @@ func (recv *consensusReceiver) ProposeVote(vote *types.Vote) {
 	}()
 }
 
-func (recv *consensusReceiver) ProposeBlock() {
+func (recv *consensusBAReceiver) ProposeBlock() {
 	block := recv.consensus.proposeBlock(recv.chainID)
 	recv.consensus.baModules[recv.chainID].addCandidateBlock(block)
 	if err := recv.consensus.preProcessBlock(block); err != nil {
@@ -91,7 +91,7 @@ func (recv *consensusReceiver) ProposeBlock() {
 	recv.consensus.network.BroadcastBlock(block)
 }
 
-func (recv *consensusReceiver) ConfirmBlock(hash common.Hash) {
+func (recv *consensusBAReceiver) ConfirmBlock(hash common.Hash) {
 	block, exist := recv.consensus.baModules[recv.chainID].findCandidateBlock(hash)
 	if !exist {
 		log.Println(ErrUnknownBlockConfirmed, hash)
@@ -101,7 +101,7 @@ func (recv *consensusReceiver) ConfirmBlock(hash common.Hash) {
 		log.Println(err)
 		return
 	}
-	recv.restart <- struct{}{}
+	recv.restartNotary <- false
 }
 
 // consensusDKGReceiver implements dkgReceiver.
@@ -172,7 +172,7 @@ type Consensus struct {
 
 	// BA.
 	baModules []*agreement
-	receivers []*consensusReceiver
+	receivers []*consensusBAReceiver
 
 	// DKG.
 	dkgRunning int32
@@ -193,6 +193,7 @@ type Consensus struct {
 
 	// Misc.
 	nodeSetCache *NodeSetCache
+	round        uint64
 	lock         sync.RWMutex
 	ctx          context.Context
 	ctxCancel    context.CancelFunc
@@ -215,13 +216,13 @@ func NewConsensus(
 	nodeSetCache := NewNodeSetCache(gov)
 	crs := gov.GetCRS(round)
 	// Setup acking by information returned from Governace.
-	nodes, err := nodeSetCache.GetNodeIDs(0)
+	nodes, err := nodeSetCache.GetNodeSet(0)
 	if err != nil {
 		panic(err)
 	}
 	rb := newReliableBroadcast()
 	rb.setChainNum(config.NumChains)
-	for nID := range nodes {
+	for nID := range nodes.IDs {
 		rb.addNode(nID)
 	}
 	// Setup context.
@@ -230,7 +231,7 @@ func NewConsensus(
 	// Setup sequencer by information returned from Governace.
 	to := newTotalOrdering(
 		uint64(config.K),
-		uint64(float32(len(nodes)-1)*config.PhiRatio+1),
+		uint64(float32(len(nodes.IDs)-1)*config.PhiRatio+1),
 		config.NumChains)
 
 	ID := types.NewNodeID(prv.PublicKey())
@@ -247,7 +248,7 @@ func NewConsensus(
 		gov)
 	// Register DKG for the initial round. This is a temporary function call for
 	// simulation.
-	cfgModule.registerDKG(0, len(nodes)/3)
+	cfgModule.registerDKG(0, len(nodes.IDs)/3)
 
 	// Check if the application implement Debug interface.
 	debug, _ := app.(Debug)
@@ -272,18 +273,18 @@ func NewConsensus(
 	}
 
 	con.baModules = make([]*agreement, config.NumChains)
-	con.receivers = make([]*consensusReceiver, config.NumChains)
+	con.receivers = make([]*consensusBAReceiver, config.NumChains)
 	for i := uint32(0); i < config.NumChains; i++ {
 		chainID := i
-		recv := &consensusReceiver{
-			consensus: con,
-			chainID:   chainID,
-			restart:   make(chan struct{}, 1),
+		recv := &consensusBAReceiver{
+			consensus:     con,
+			chainID:       chainID,
+			restartNotary: make(chan bool, 1),
 		}
 		agreementModule := newAgreement(
 			con.ID,
-			con.receivers[chainID],
-			nodes,
+			recv,
+			nodes.IDs,
 			newGenesisLeaderSelector(crs),
 			con.authModule,
 		)
@@ -325,13 +326,10 @@ func (con *Consensus) Run() {
 
 func (con *Consensus) runBA(chainID uint32, tick <-chan struct{}) {
 	// TODO(jimmy-dexon): move this function inside agreement.
-	nodes, err := con.nodeSetCache.GetNodeIDs(0)
-	if err != nil {
-		panic(err)
-	}
 	agreement := con.baModules[chainID]
 	recv := con.receivers[chainID]
-	recv.restart <- struct{}{}
+	recv.restartNotary <- true
+	nIDs := make(map[types.NodeID]struct{})
 	// Reset ticker
 	<-tick
 BALoop:
@@ -345,14 +343,21 @@ BALoop:
 			<-tick
 		}
 		select {
-		case <-recv.restart:
-			// TODO(jimmy-dexon): handling change of notary set.
+		case newNotary := <-recv.restartNotary:
+			if newNotary {
+				nodes, err := con.nodeSetCache.GetNodeSet(con.round)
+				if err != nil {
+					panic(err)
+				}
+				nIDs = nodes.GetSubSet(con.gov.GetConfiguration(con.round).NumNotarySet,
+					types.NewNotarySetTarget(con.gov.GetCRS(con.round), 0, chainID))
+			}
 			aID := types.Position{
 				ShardID: 0,
 				ChainID: chainID,
 				Height:  con.rbModule.nextHeight(chainID),
 			}
-			agreement.restart(nodes, aID)
+			agreement.restart(nIDs, aID)
 		default:
 		}
 		err := agreement.nextState()
@@ -378,18 +383,17 @@ func (con *Consensus) runDKGTSIG() {
 			con.dkgReady.Broadcast()
 			con.dkgRunning = 2
 		}()
-		round := con.cfgModule.dkg.round
+		round := con.round
 		if err := con.cfgModule.runDKG(round); err != nil {
 			panic(err)
 		}
-		nodes, err := con.nodeSetCache.GetNodeIDs(0)
+		nodes, err := con.nodeSetCache.GetNodeSet(round)
 		if err != nil {
-			// TODO(mission): should be done in some bootstrap routine.
 			panic(err)
 		}
 		hash := HashConfigurationBlock(
-			nodes,
-			con.gov.GetConfiguration(0),
+			nodes.IDs,
+			con.gov.GetConfiguration(round),
 			common.Hash{},
 			con.cfgModule.prevHash)
 		psig, err := con.cfgModule.preparePartialSignature(round, hash)

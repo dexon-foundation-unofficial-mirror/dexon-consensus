@@ -34,7 +34,7 @@ var (
 type NodeSetCache struct {
 	lock    sync.RWMutex
 	gov     Governance
-	rounds  map[uint64]map[types.NodeID]struct{}
+	rounds  map[uint64]*types.NodeSet
 	keyPool map[types.NodeID]*struct {
 		pubKey crypto.PublicKey
 		refCnt int
@@ -45,7 +45,7 @@ type NodeSetCache struct {
 func NewNodeSetCache(gov Governance) *NodeSetCache {
 	return &NodeSetCache{
 		gov:    gov,
-		rounds: make(map[uint64]map[types.NodeID]struct{}),
+		rounds: make(map[uint64]*types.NodeSet),
 		keyPool: make(map[types.NodeID]*struct {
 			pubKey crypto.PublicKey
 			refCnt int
@@ -63,7 +63,7 @@ func (cache *NodeSetCache) Exists(
 			return
 		}
 	}
-	_, exists = nIDs[nodeID]
+	_, exists = nIDs.IDs[nodeID]
 	return
 }
 
@@ -81,9 +81,9 @@ func (cache *NodeSetCache) GetPublicKey(
 	return
 }
 
-// GetNodeIDs returns IDs of nodes set of this round as map.
-func (cache *NodeSetCache) GetNodeIDs(
-	round uint64) (nIDs map[types.NodeID]struct{}, err error) {
+// GetNodeSet returns IDs of nodes set of this round as map.
+func (cache *NodeSetCache) GetNodeSet(
+	round uint64) (nIDs *types.NodeSet, err error) {
 
 	IDs, exists := cache.get(round)
 	if !exists {
@@ -91,11 +91,7 @@ func (cache *NodeSetCache) GetNodeIDs(
 			return
 		}
 	}
-	// Clone the map.
-	nIDs = make(map[types.NodeID]struct{})
-	for ID := range IDs {
-		nIDs[ID] = struct{}{}
-	}
+	nIDs = IDs.Clone()
 	return
 }
 
@@ -104,7 +100,7 @@ func (cache *NodeSetCache) GetNodeIDs(
 // This cache would maintain 10 rounds before the updated round and purge
 // rounds not in this range.
 func (cache *NodeSetCache) update(
-	round uint64) (nIDs map[types.NodeID]struct{}, err error) {
+	round uint64) (nIDs *types.NodeSet, err error) {
 
 	cache.lock.Lock()
 	defer cache.lock.Unlock()
@@ -117,10 +113,10 @@ func (cache *NodeSetCache) update(
 		return
 	}
 	// Cache new round.
-	nIDs = make(map[types.NodeID]struct{})
+	nIDs = types.NewNodeSet()
 	for _, key := range keySet {
 		nID := types.NewNodeID(key)
-		nIDs[nID] = struct{}{}
+		nIDs.Add(nID)
 		if rec, exists := cache.keyPool[nID]; exists {
 			rec.refCnt++
 		} else {
@@ -136,7 +132,7 @@ func (cache *NodeSetCache) update(
 		if round-rID <= 5 {
 			continue
 		}
-		for nID := range nIDs {
+		for nID := range nIDs.IDs {
 			rec := cache.keyPool[nID]
 			if rec.refCnt--; rec.refCnt == 0 {
 				delete(cache.keyPool, nID)
@@ -148,7 +144,7 @@ func (cache *NodeSetCache) update(
 }
 
 func (cache *NodeSetCache) get(
-	round uint64) (nIDs map[types.NodeID]struct{}, exists bool) {
+	round uint64) (nIDs *types.NodeSet, exists bool) {
 
 	cache.lock.RLock()
 	defer cache.lock.RUnlock()

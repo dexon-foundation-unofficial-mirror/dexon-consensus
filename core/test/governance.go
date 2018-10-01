@@ -38,6 +38,7 @@ type Governance struct {
 	lambdaBA           time.Duration
 	lambdaDKG          time.Duration
 	privateKeys        map[types.NodeID]crypto.PrivateKey
+	crs                map[uint64][]byte
 	tsig               map[uint64]crypto.Signature
 	DKGComplaint       map[uint64][]*types.DKGComplaint
 	DKGMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
@@ -54,6 +55,7 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 		lambdaBA:           lambda,
 		lambdaDKG:          lambda * 10,
 		privateKeys:        make(map[types.NodeID]crypto.PrivateKey),
+		crs:                map[uint64][]byte{0: []byte("__ DEXON")},
 		tsig:               make(map[uint64]crypto.Signature),
 		DKGComplaint:       make(map[uint64][]*types.DKGComplaint),
 		DKGMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
@@ -102,7 +104,12 @@ func (g *Governance) GetConfiguration(_ uint64) *types.Config {
 
 // GetCRS returns the CRS for a given round.
 func (g *Governance) GetCRS(round uint64) []byte {
-	return []byte("__ DEXON")
+	return g.crs[round]
+}
+
+// ProposeCRS propose a CRS.
+func (g *Governance) ProposeCRS(round uint64, crs []byte) {
+	g.crs[round] = crs
 }
 
 // GetPrivateKeys return the private key for that node, this function

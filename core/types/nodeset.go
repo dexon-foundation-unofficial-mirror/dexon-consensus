@@ -27,7 +27,7 @@ import (
 
 // NodeSet is the node set structure as defined in DEXON consensus core.
 type NodeSet struct {
-	Nodes map[NodeID]struct{}
+	IDs map[NodeID]struct{}
 }
 
 // SubSetTarget is the sub set target for GetSubSet().
@@ -66,7 +66,7 @@ func (h *rankHeap) Pop() interface{} {
 // NewNodeSet creates a new NodeSet instance.
 func NewNodeSet() *NodeSet {
 	return &NodeSet{
-		Nodes: make(map[NodeID]struct{}),
+		IDs: make(map[NodeID]struct{}),
 	}
 }
 
@@ -97,11 +97,26 @@ func NewDKGSetTarget(crs []byte, round uint64) SubSetTarget {
 	return newTarget(targetDKGSet, crs, binaryRound)
 }
 
+// Add a NodeID to the set.
+func (ns *NodeSet) Add(ID NodeID) {
+	ns.IDs[ID] = struct{}{}
+}
+
+// Clone the NodeSet.
+func (ns *NodeSet) Clone() *NodeSet {
+	nsCopy := NewNodeSet()
+	for ID := range ns.IDs {
+		nsCopy.Add(ID)
+	}
+	return nsCopy
+}
+
 // GetSubSet returns the subset of given target.
-func (ns *NodeSet) GetSubSet(size int, target SubSetTarget) NodeIDs {
+func (ns *NodeSet) GetSubSet(
+	size int, target SubSetTarget) map[NodeID]struct{} {
 	h := rankHeap{}
 	idx := 0
-	for nID := range ns.Nodes {
+	for nID := range ns.IDs {
 		if idx < size {
 			h = append(h, newNodeRank(nID, target))
 		} else if idx == size {
@@ -117,9 +132,9 @@ func (ns *NodeSet) GetSubSet(size int, target SubSetTarget) NodeIDs {
 		idx++
 	}
 
-	nIDs := make(NodeIDs, 0, size)
+	nIDs := make(map[NodeID]struct{}, size)
 	for _, rank := range h {
-		nIDs = append(nIDs, rank.ID)
+		nIDs[rank.ID] = struct{}{}
 	}
 
 	return nIDs

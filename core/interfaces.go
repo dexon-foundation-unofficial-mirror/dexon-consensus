@@ -97,6 +97,9 @@ type Governance interface {
 	// Return the genesis CRS if round == 0.
 	GetCRS(round uint64) []byte
 
+	// Propose a CRS of round.
+	ProposeCRS(round uint64, crs []byte)
+
 	// GetNodeSet returns the node set at a given round.
 	// Return the genesis node set if round == 0.
 	GetNodeSet(round uint64) []crypto.PublicKey

@@ -32,20 +32,20 @@ func (s *NodeSetTestSuite) TestGetSubSet() {
 	total := 10
 	crs := common.NewRandomHash()
 	nodes := NewNodeSet()
-	for len(nodes.Nodes) < total {
-		nodes.Nodes[NodeID{common.NewRandomHash()}] = struct{}{}
+	for len(nodes.IDs) < total {
+		nodes.IDs[NodeID{common.NewRandomHash()}] = struct{}{}
 	}
 	target := NewNotarySetTarget(crs[:], 0, 0)
-	ranks := make(map[NodeID]*nodeRank, len(nodes.Nodes))
-	for nID := range nodes.Nodes {
+	ranks := make(map[NodeID]*nodeRank, len(nodes.IDs))
+	for nID := range nodes.IDs {
 		ranks[nID] = newNodeRank(nID, target)
 	}
 	size := 4
 	notarySet := nodes.GetSubSet(size, target)
-	for _, notary := range notarySet {
+	for notary := range notarySet {
 		win := 0
 		rank := ranks[notary].rank
-		for node := range nodes.Nodes {
+		for node := range nodes.IDs {
 			if rank.Cmp(ranks[node].rank) < 0 {
 				win++
 			}

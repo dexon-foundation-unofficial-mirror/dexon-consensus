@@ -33,6 +33,7 @@ type testGov struct {
 
 func (g *testGov) GetConfiguration(round uint64) (cfg *types.Config) { return }
 func (g *testGov) GetCRS(round uint64) (b []byte)                    { return }
+func (g *testGov) ProposeCRS(uint64, []byte)                         {}
 func (g *testGov) GetNodeSet(round uint64) []crypto.PublicKey {
 	// Randomly generating keys, and check them for verification.
 	g.curKeys = []crypto.PublicKey{}
@@ -90,20 +91,20 @@ func (s *NodeSetCacheTestSuite) TestBasicUsage() {
 	}
 
 	// Try to get round 0.
-	nodeSet0, err := cache.GetNodeIDs(0)
+	nodeSet0, err := cache.GetNodeSet(0)
 	req.NoError(err)
-	chk(cache, 0, nodeSet0)
+	chk(cache, 0, nodeSet0.IDs)
 	// Try to get round 1.
-	nodeSet1, err := cache.GetNodeIDs(1)
+	nodeSet1, err := cache.GetNodeSet(1)
 	req.NoError(err)
-	chk(cache, 0, nodeSet0)
-	chk(cache, 1, nodeSet1)
+	chk(cache, 0, nodeSet0.IDs)
+	chk(cache, 1, nodeSet1.IDs)
 	// Try to get round 6, round 0 should be purged.
-	nodeSet6, err := cache.GetNodeIDs(6)
+	nodeSet6, err := cache.GetNodeSet(6)
 	req.NoError(err)
-	chk(cache, 1, nodeSet1)
-	chk(cache, 6, nodeSet6)
-	for nID := range nodeSet0 {
+	chk(cache, 1, nodeSet1.IDs)
+	chk(cache, 6, nodeSet6.IDs)
+	for nID := range nodeSet0.IDs {
 		_, exists := cache.GetPublicKey(nID)
 		req.False(exists)
 	}
