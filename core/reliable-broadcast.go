@@ -68,6 +68,9 @@ type rbcNodeStatus struct {
 
 	// nextHeight is the next height of block to be prepared.
 	nextHeight uint64
+
+	// timestamp of the chain.
+	timestamp time.Time
 }
 
 type rbcBlockInfo struct {
@@ -190,6 +193,7 @@ func (rb *reliableBroadcast) processBlock(block *types.Block) (err error) {
 	if rb.lattice[block.Position.ChainID].nextHeight <= block.Position.Height {
 		rb.lattice[block.Position.ChainID].nextHeight = block.Position.Height + 1
 	}
+	rb.lattice[block.Position.ChainID].timestamp = block.Timestamp
 
 	// Check blocks in receivedBlocks if its acks are all in lattice. If a block's
 	// acking blocks are all in lattice, execute sanity check and add the block
@@ -424,4 +428,9 @@ func (rb *reliableBroadcast) chainNum() uint32 {
 // nextHeight returns the next height for the chain.
 func (rb *reliableBroadcast) nextHeight(chainID uint32) uint64 {
 	return rb.lattice[chainID].nextHeight
+}
+
+// chainTime returnes the latest time for the chain.
+func (rb *reliableBroadcast) chainTime(chainID uint32) time.Time {
+	return rb.lattice[chainID].timestamp
 }

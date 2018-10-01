@@ -56,6 +56,8 @@ var (
 		"unknown block is confirmed")
 	ErrIncorrectBlockPosition = fmt.Errorf(
 		"position of block is incorrect")
+	ErrIncorrectBlockTime = fmt.Errorf(
+		"block timestampe is incorrect")
 )
 
 // consensusBAReceiver implements agreementReceiver.
@@ -521,6 +523,14 @@ func (con *Consensus) sanityCheck(b *types.Block) (err error) {
 	// Check block.Position.
 	if b.Position.ShardID != 0 || b.Position.ChainID >= con.rbModule.chainNum() {
 		return ErrIncorrectBlockPosition
+	}
+	// Check the timestamp of block.
+	if !b.IsGenesis() {
+		chainTime := con.rbModule.chainTime(b.Position.ChainID)
+		if b.Timestamp.Before(chainTime.Add(con.currentConfig.MinBlockInterval)) ||
+			b.Timestamp.After(chainTime.Add(con.currentConfig.MaxBlockInterval)) {
+			return ErrIncorrectBlockTime
+		}
 	}
 	// Check the hash of block.
 	hash, err := hashBlock(b)
