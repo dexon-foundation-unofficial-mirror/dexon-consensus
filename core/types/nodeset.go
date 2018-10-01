@@ -72,13 +72,10 @@ func NewNodeSet() *NodeSet {
 
 // NewNotarySetTarget is the target for getting Notary Set.
 func NewNotarySetTarget(crs []byte, shardID, chainID uint32) SubSetTarget {
-	binaryShardID := make([]byte, 4)
-	binary.LittleEndian.PutUint32(binaryShardID, shardID)
-
 	binaryChainID := make([]byte, 4)
 	binary.LittleEndian.PutUint32(binaryChainID, chainID)
 
-	return newTarget(targetNotarySet, crs, binaryShardID, binaryChainID)
+	return newTarget(targetNotarySet, crs, binaryChainID)
 }
 
 // NewWitnessSetTarget  is the target for getting DKG Set.

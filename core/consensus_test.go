@@ -41,10 +41,6 @@ func (n *network) BroadcastVote(vote *types.Vote) {}
 func (n *network) BroadcastBlock(block *types.Block) {
 }
 
-// BroadcastWitnessAck broadcasts witnessAck to all nodes in DEXON network.
-func (n *network) BroadcastWitnessAck(witnessAck *types.WitnessAck) {
-}
-
 // SendDKGPrivateShare sends PrivateShare to a DKG participant.
 func (n *network) SendDKGPrivateShare(
 	recv crypto.PublicKey, prvShare *types.DKGPrivateShare) {

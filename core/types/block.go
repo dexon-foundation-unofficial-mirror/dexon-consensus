@@ -39,6 +39,13 @@ var (
 	}
 )
 
+// Witness represents the consensus information on the compaction chain.
+type Witness struct {
+	Timestamp time.Time `json:"timestamp"`
+	Height    uint64    `json:"height"`
+	Data      []byte    `json:"data"`
+}
+
 // RecycleBlock put unused block into cache, which might be reused if
 // not garbage collected.
 func RecycleBlock(b *Block) {
@@ -61,11 +68,10 @@ type Block struct {
 	Timestamp  time.Time           `json:"timestamps"`
 	Acks       common.SortedHashes `json:"acks"`
 	Payload    []byte              `json:"payload"`
+	Witness    Witness             `json:"witness"`
 	Signature  crypto.Signature    `json:"signature"`
 
 	CRSSignature crypto.Signature `json:"crs_signature"`
-
-	Witness Witness `json:"witness"`
 }
 
 func (b *Block) String() string {
@@ -79,7 +85,6 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.ProposerID = b.ProposerID
 	bcopy.ParentHash = b.ParentHash
 	bcopy.Hash = b.Hash
-	bcopy.Position.ShardID = b.Position.ShardID
 	bcopy.Position.ChainID = b.Position.ChainID
 	bcopy.Position.Height = b.Position.Height
 	bcopy.Signature = b.Signature.Clone()

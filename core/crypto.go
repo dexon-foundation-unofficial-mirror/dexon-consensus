@@ -25,30 +25,6 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-func hashWitness(block *types.Block) (common.Hash, error) {
-	binaryTime, err := block.Witness.Timestamp.MarshalBinary()
-	if err != nil {
-		return common.Hash{}, err
-	}
-	binaryHeight := make([]byte, 8)
-	binary.LittleEndian.PutUint64(binaryHeight, block.Witness.Height)
-	hash := crypto.Keccak256Hash(
-		block.Witness.ParentHash[:],
-		binaryTime,
-		binaryHeight,
-		block.Witness.Data[:])
-	return hash, nil
-}
-
-func verifyWitnessSignature(pubkey crypto.PublicKey,
-	witnessBlock *types.Block, sig crypto.Signature) (bool, error) {
-	hash, err := hashWitness(witnessBlock)
-	if err != nil {
-		return false, err
-	}
-	return pubkey.VerifySignature(hash, sig), nil
-}
-
 func hashBlock(block *types.Block) (common.Hash, error) {
 	hashPosition := hashPosition(block.Position)
 	// Handling Block.Acks.
@@ -129,9 +105,6 @@ func verifyCRSSignature(block *types.Block, crs common.Hash) (
 }
 
 func hashPosition(position types.Position) common.Hash {
-	binaryShardID := make([]byte, 4)
-	binary.LittleEndian.PutUint32(binaryShardID, position.ShardID)
-
 	binaryChainID := make([]byte, 4)
 	binary.LittleEndian.PutUint32(binaryChainID, position.ChainID)
 
@@ -139,7 +112,6 @@ func hashPosition(position types.Position) common.Hash {
 	binary.LittleEndian.PutUint64(binaryHeight, position.Height)
 
 	return crypto.Keccak256Hash(
-		binaryShardID,
 		binaryChainID,
 		binaryHeight,
 	)

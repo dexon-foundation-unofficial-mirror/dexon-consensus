@@ -48,10 +48,7 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 			},
 		}
 	}
-	parentHash, err := hashWitness(prevBlock)
-	s.Require().Nil(err)
 	s.Require().NotEqual(prevBlock.Hash, common.Hash{})
-	acks = append(acks, parentHash)
 	return &types.Block{
 		ParentHash: prevBlock.Hash,
 		Acks:       common.NewSortedHashes(acks),
@@ -60,9 +57,8 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 			Height: prevBlock.Position.Height + 1,
 		},
 		Witness: types.Witness{
-			ParentHash: parentHash,
-			Timestamp:  time.Now(),
-			Height:     prevBlock.Witness.Height + 1,
+			Timestamp: time.Now(),
+			Height:    prevBlock.Witness.Height + 1,
 		},
 	}
 }
@@ -76,63 +72,15 @@ func (s *CryptoTestSuite) newBlock(prevBlock *types.Block) *types.Block {
 }
 
 func (s *CryptoTestSuite) generateCompactionChain(
-	length int, prv crypto.PrivateKey) (
-	[]*types.Block, []types.WitnessAck) {
+	length int, prv crypto.PrivateKey) []*types.Block {
 	blocks := make([]*types.Block, length)
-	witnessAcks := make([]types.WitnessAck, length)
 	var prevBlock *types.Block
 	for idx := range blocks {
 		block := s.newBlock(prevBlock)
 		prevBlock = block
 		blocks[idx] = block
-		var err error
-		witnessAcks[idx].Hash, err = hashWitness(blocks[idx])
-		s.Require().Nil(err)
-		witnessAcks[idx].WitnessBlockHash = blocks[idx].Hash
-		witnessAcks[idx].Signature, err = prv.Sign(witnessAcks[idx].Hash)
-		s.Require().Nil(err)
-		if idx > 0 {
-			block.Witness.ParentHash = witnessAcks[idx-1].Hash
-		}
 	}
-	return blocks, witnessAcks
-}
-
-func (s *CryptoTestSuite) TestWitnessAckSignature() {
-	prv, err := ecdsa.NewPrivateKey()
-	pub := prv.PublicKey()
-	s.Require().Nil(err)
-	blocks, witnessAcks := s.generateCompactionChain(10, prv)
-	blockMap := make(map[common.Hash]*types.Block)
-	for _, block := range blocks {
-		blockMap[block.Hash] = block
-	}
-	parentBlock := blocks[0]
-	for _, witnessAck := range witnessAcks {
-		witnessBlock, exist := blockMap[witnessAck.WitnessBlockHash]
-		s.Require().True(exist)
-		if witnessBlock.Witness.Height == 0 {
-			continue
-		}
-		s.True(parentBlock.Witness.Height == witnessBlock.Witness.Height-1)
-		hash, err := hashWitness(parentBlock)
-		s.Require().Nil(err)
-		s.Equal(hash, witnessBlock.Witness.ParentHash)
-		s.True(verifyWitnessSignature(
-			pub, witnessBlock, witnessAck.Signature))
-		parentBlock = witnessBlock
-
-	}
-	// Modify Block.Witness.Timestamp and verify signature again.
-	for _, witnessAck := range witnessAcks {
-		block, exist := blockMap[witnessAck.WitnessBlockHash]
-		s.Require().True(exist)
-		block.Witness.Timestamp = time.Time{}
-		ackingBlock, exist := blockMap[witnessAck.WitnessBlockHash]
-		s.Require().True(exist)
-		s.False(verifyWitnessSignature(
-			pub, ackingBlock, witnessAck.Signature))
-	}
+	return blocks
 }
 
 func (s *CryptoTestSuite) generateBlockChain(

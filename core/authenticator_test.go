@@ -42,7 +42,6 @@ func (s *AuthenticatorTestSuite) TestBlock() {
 	b := &types.Block{
 		ParentHash: common.NewRandomHash(),
 		Position: types.Position{
-			ShardID: 1,
 			ChainID: 2,
 			Height:  3,
 		},
@@ -60,7 +59,6 @@ func (s *AuthenticatorTestSuite) TestVote() {
 		BlockHash:  common.NewRandomHash(),
 		Period:     123,
 		Position: types.Position{
-			ShardID: 2,
 			ChainID: 4,
 			Height:  6,
 		}}
@@ -75,7 +73,6 @@ func (s *AuthenticatorTestSuite) TestCRS() {
 	b := &types.Block{
 		ParentHash: common.NewRandomHash(),
 		Position: types.Position{
-			ShardID: 7,
 			ChainID: 8,
 			Height:  9,
 		},

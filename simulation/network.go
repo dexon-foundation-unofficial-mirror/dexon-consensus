@@ -132,13 +132,6 @@ func (n *network) BroadcastBlock(block *types.Block) {
 	}
 }
 
-// BroadcastWitnessAck implements core.Network interface.
-func (n *network) BroadcastWitnessAck(witnessAck *types.WitnessAck) {
-	if err := n.trans.Broadcast(witnessAck); err != nil {
-		panic(err)
-	}
-}
-
 // broadcast message to all other nodes in the network.
 func (n *network) broadcast(message interface{}) {
 	if err := n.trans.Broadcast(message); err != nil {
@@ -205,7 +198,7 @@ func (n *network) run() {
 	// to consensus or node, that's the question.
 	disp := func(e *test.TransportEnvelope) {
 		switch e.Msg.(type) {
-		case *types.Block, *types.Vote, *types.WitnessAck,
+		case *types.Block, *types.Vote,
 			*types.DKGPrivateShare, *types.DKGPartialSignature:
 			n.toConsensus <- e.Msg
 		default:

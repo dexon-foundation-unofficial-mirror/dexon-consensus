@@ -313,7 +313,6 @@ func (con *Consensus) Run() {
 		ticks = append(ticks, tick)
 		go con.runBA(i, tick)
 	}
-	go con.processWitnessData()
 
 	// Reset ticker.
 	<-con.tickerObj.Tick()
@@ -355,7 +354,6 @@ BALoop:
 					types.NewNotarySetTarget(con.gov.GetCRS(con.round), 0, chainID))
 			}
 			aID := types.Position{
-				ShardID: 0,
 				ChainID: chainID,
 				Height:  con.rbModule.nextHeight(chainID),
 			}
@@ -434,10 +432,6 @@ func (con *Consensus) processMsg(msgChan <-chan interface{}) {
 			if err := con.preProcessBlock(val); err != nil {
 				log.Println(err)
 			}
-		case *types.WitnessAck:
-			if err := con.ProcessWitnessAck(val); err != nil {
-				log.Println(err)
-			}
 		case *types.Vote:
 			if err := con.ProcessVote(val); err != nil {
 				log.Println(err)
@@ -484,44 +478,10 @@ func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
 	return err
 }
 
-// processWitnessData process witness acks.
-func (con *Consensus) processWitnessData() {
-	ch := con.nbModule.BlockProcessedChan()
-
-	for {
-		select {
-		case <-con.ctx.Done():
-			return
-		case result := <-ch:
-			block, err := con.db.Get(result.BlockHash)
-			if err != nil {
-				panic(err)
-			}
-			block.Witness.Data = result.Data
-			if err := con.db.Update(block); err != nil {
-				panic(err)
-			}
-			// TODO(w): move the acking interval into governance.
-			if block.Witness.Height%5 != 0 {
-				continue
-			}
-			witnessAck, err := con.authModule.SignAsWitnessAck(&block)
-			if err != nil {
-				panic(err)
-			}
-			err = con.ProcessWitnessAck(witnessAck)
-			if err != nil {
-				panic(err)
-			}
-			con.nbModule.WitnessAckDelivered(witnessAck)
-		}
-	}
-}
-
 // sanityCheck checks if the block is a valid block
 func (con *Consensus) sanityCheck(b *types.Block) (err error) {
 	// Check block.Position.
-	if b.Position.ShardID != 0 || b.Position.ChainID >= con.rbModule.chainNum() {
+	if b.Position.ChainID >= con.rbModule.chainNum() {
 		return ErrIncorrectBlockPosition
 	}
 	// Check the timestamp of block.
@@ -644,7 +604,7 @@ func (con *Consensus) prepareBlock(b *types.Block,
 
 	con.rbModule.prepareBlock(b)
 	b.Timestamp = proposeTime
-	b.Payload = con.nbModule.PreparePayload(b.Position)
+	b.Payload, b.Witness.Data = con.nbModule.PrepareBlock(b.Position)
 	if err = con.authModule.SignBlock(b); err != nil {
 		return
 	}
@@ -668,26 +628,4 @@ func (con *Consensus) PrepareGenesisBlock(b *types.Block,
 		return
 	}
 	return
-}
-
-// ProcessWitnessAck is the entry point to submit one witness ack.
-func (con *Consensus) ProcessWitnessAck(witnessAck *types.WitnessAck) (err error) {
-	witnessAck = witnessAck.Clone()
-	// TODO(mission): check witness set for that round.
-	var round uint64
-	exists, err := con.nodeSetCache.Exists(round, witnessAck.ProposerID)
-	if err != nil {
-		return
-	}
-	if !exists {
-		err = ErrProposerNotInNodeSet
-		return
-	}
-	err = con.ccModule.processWitnessAck(witnessAck)
-	return
-}
-
-// WitnessAcks returns the latest WitnessAck received from all other nodes.
-func (con *Consensus) WitnessAcks() map[types.NodeID]*types.WitnessAck {
-	return con.ccModule.witnessAcks()
 }

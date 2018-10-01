@@ -165,11 +165,6 @@ func (s *AppTestSuite) TestVerify() {
 	// Witness ack on unknown block.
 	app5 := NewApp()
 	s.setupAppByTotalOrderDeliver(app5, s.to1)
-	app5.WitnessAckDelivered(&types.WitnessAck{
-		Hash:             common.NewRandomHash(),
-		WitnessBlockHash: common.NewRandomHash(),
-	})
-	req.Equal(ErrWitnessAckUnknownBlock, app5.Verify())
 }
 
 func TestApp(t *testing.T) {

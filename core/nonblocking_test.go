@@ -33,8 +33,6 @@ type slowApp struct {
 	stronglyAcked          map[common.Hash]struct{}
 	totalOrderingDelivered map[common.Hash]struct{}
 	blockDelivered         map[common.Hash]struct{}
-	witnessAck             map[common.Hash]struct{}
-	witnessResultChan      chan types.WitnessResult
 }
 
 func newSlowApp(sleep time.Duration) *slowApp {
@@ -44,16 +42,14 @@ func newSlowApp(sleep time.Duration) *slowApp {
 		stronglyAcked:          make(map[common.Hash]struct{}),
 		totalOrderingDelivered: make(map[common.Hash]struct{}),
 		blockDelivered:         make(map[common.Hash]struct{}),
-		witnessAck:             make(map[common.Hash]struct{}),
-		witnessResultChan:      make(chan types.WitnessResult),
 	}
 }
 
-func (app *slowApp) PreparePayload(_ types.Position) []byte {
-	return []byte{}
+func (app *slowApp) PrepareBlock(_ types.Position) ([]byte, []byte) {
+	return []byte{}, []byte{}
 }
 
-func (app *slowApp) VerifyPayload(_ []byte) bool {
+func (app *slowApp) VerifyBlock(_ *types.Block) bool {
 	return true
 }
 
@@ -79,15 +75,6 @@ func (app *slowApp) BlockDelivered(block types.Block) {
 	app.blockDelivered[block.Hash] = struct{}{}
 }
 
-func (app *slowApp) BlockProcessedChan() <-chan types.WitnessResult {
-	return app.witnessResultChan
-}
-
-func (app *slowApp) WitnessAckDelivered(witnessAck *types.WitnessAck) {
-	time.Sleep(app.sleep)
-	app.witnessAck[witnessAck.Hash] = struct{}{}
-}
-
 type NonBlockingTestSuite struct {
 	suite.Suite
 }
@@ -111,7 +98,6 @@ func (s *NonBlockingTestSuite) TestNonBlocking() {
 			Hash:    hash,
 			Witness: types.Witness{Timestamp: time.Now().UTC()},
 		})
-		nbModule.WitnessAckDelivered(&types.WitnessAck{Hash: hash})
 	}
 	nbModule.TotalOrderingDelivered(hashes, true)
 
@@ -124,7 +110,6 @@ func (s *NonBlockingTestSuite) TestNonBlocking() {
 		s.Contains(app.stronglyAcked, hash)
 		s.Contains(app.totalOrderingDelivered, hash)
 		s.Contains(app.blockDelivered, hash)
-		s.Contains(app.witnessAck, hash)
 	}
 }
 

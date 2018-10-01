@@ -134,7 +134,6 @@ func (s *chainStatus) purge() (purged common.Hashes) {
 // nextPosition returns a valid position for new block in this chain.
 func (s *chainStatus) nextPosition(shardID uint32) types.Position {
 	return types.Position{
-		ShardID: shardID,
 		ChainID: s.ID,
 		Height:  s.minHeight + uint64(len(s.blocks)),
 	}

@@ -19,7 +19,7 @@ package types
 
 // Position describes the position in the block lattice of an entity.
 type Position struct {
-	ShardID uint32 `json:"shard_id"`
 	ChainID uint32 `json:"chain_id"`
+	Round   uint64 `json:"round"`
 	Height  uint64 `json:"height"`
 }

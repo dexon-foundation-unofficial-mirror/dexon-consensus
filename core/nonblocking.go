@@ -42,10 +42,6 @@ type blockDeliveredEvent struct {
 	block *types.Block
 }
 
-type witnessAckEvent struct {
-	witnessAck *types.WitnessAck
-}
-
 // nonBlocking implements these interfaces and is a decorator for
 // them that makes the methods to be non-blocking.
 //  - Application
@@ -103,8 +99,6 @@ func (nb *nonBlocking) run() {
 			nb.debug.TotalOrderingDelivered(e.blockHashes, e.early)
 		case blockDeliveredEvent:
 			nb.app.BlockDelivered(*e.block)
-		case witnessAckEvent:
-			nb.app.WitnessAckDelivered(e.witnessAck)
 		default:
 			fmt.Printf("Unknown event %v.", e)
 		}
@@ -123,15 +117,14 @@ func (nb *nonBlocking) wait() {
 	nb.running.Wait()
 }
 
-// PreparePayload cannot be non-blocking.
-func (nb *nonBlocking) PreparePayload(
-	position types.Position) []byte {
-	return nb.app.PreparePayload(position)
+// PrepareBlock cannot be non-blocking.
+func (nb *nonBlocking) PrepareBlock(position types.Position) ([]byte, []byte) {
+	return nb.app.PrepareBlock(position)
 }
 
-// VerifyPayload cannot be non-blocking.
-func (nb *nonBlocking) VerifyPayload(payload []byte) bool {
-	return nb.app.VerifyPayload(payload)
+// VerifyBlock cannot be non-blocking.
+func (nb *nonBlocking) VerifyBlock(block *types.Block) bool {
+	return nb.app.VerifyBlock(block)
 }
 
 // BlockConfirmed is called when a block is confirmed and added to lattice.
@@ -160,15 +153,4 @@ func (nb *nonBlocking) TotalOrderingDelivered(
 // BlockDelivered is called when a block is add to the compaction chain.
 func (nb *nonBlocking) BlockDelivered(block types.Block) {
 	nb.addEvent(blockDeliveredEvent{&block})
-}
-
-// BlockProcessedChan returns a channel to receive the block hashes that have
-// finished processing by the application.
-func (nb *nonBlocking) BlockProcessedChan() <-chan types.WitnessResult {
-	return nb.app.BlockProcessedChan()
-}
-
-// WitnessAckDelivered is called when a witness ack is created.
-func (nb *nonBlocking) WitnessAckDelivered(witnessAck *types.WitnessAck) {
-	nb.addEvent(witnessAckEvent{witnessAck})
 }

@@ -40,7 +40,6 @@ type simApp struct {
 	unconfirmedBlocks map[types.NodeID]common.Hashes
 	blockByHash       map[common.Hash]*types.Block
 	blockByHashMutex  sync.RWMutex
-	witnessResultChan chan types.WitnessResult
 }
 
 // newSimApp returns point to a new instance of simApp.
@@ -52,7 +51,6 @@ func newSimApp(id types.NodeID, netModule *network) *simApp {
 		blockSeen:         make(map[common.Hash]time.Time),
 		unconfirmedBlocks: make(map[types.NodeID]common.Hashes),
 		blockByHash:       make(map[common.Hash]*types.Block),
-		witnessResultChan: make(chan types.WitnessResult),
 	}
 }
 
@@ -60,8 +58,8 @@ func newSimApp(id types.NodeID, netModule *network) *simApp {
 func (a *simApp) BlockConfirmed(_ common.Hash) {
 }
 
-// VerifyPayload implements core.Application.
-func (a *simApp) VerifyPayload(payload []byte) bool {
+// VerifyBlock implements core.Application.
+func (a *simApp) VerifyBlock(block *types.Block) bool {
 	return true
 }
 
@@ -91,9 +89,9 @@ func (a *simApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
 	return
 }
 
-// PreparePayload implements core.Application.
-func (a *simApp) PreparePayload(position types.Position) []byte {
-	return []byte{}
+// PrepareBlock implements core.Application.
+func (a *simApp) PrepareBlock(position types.Position) ([]byte, []byte) {
+	return []byte{}, []byte{}
 }
 
 // StronglyAcked is called when a block is strongly acked by DEXON
@@ -150,21 +148,4 @@ func (a *simApp) BlockDelivered(block types.Block) {
 		Payload: jsonPayload,
 	}
 	a.netModule.report(msg)
-
-	go func() {
-		a.witnessResultChan <- types.WitnessResult{
-			BlockHash: block.Hash,
-			Data:      []byte(fmt.Sprintf("Block %s", block.Hash)),
-		}
-	}()
-}
-
-// BlockProcessedChan returns a channel to receive the block hashes that have
-// finished processing by the application.
-func (a *simApp) BlockProcessedChan() <-chan types.WitnessResult {
-	return a.witnessResultChan
-}
-
-// WitnessAckDelivered is called when a witness ack is created.
-func (a *simApp) WitnessAckDelivered(witnessAck *types.WitnessAck) {
 }

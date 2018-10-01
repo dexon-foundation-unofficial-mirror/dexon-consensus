@@ -50,10 +50,6 @@ var (
 	// and delivered are different.
 	ErrMismatchTotalOrderingAndDelivered = fmt.Errorf(
 		"mismatch total ordering and delivered sequence")
-	// ErrWitnessAckUnknownBlock means the witness ack is acking on the unknown
-	// block.
-	ErrWitnessAckUnknownBlock = fmt.Errorf(
-		"witness ack on unknown block")
 )
 
 // AppAckedRecord caches information when this application received
@@ -87,9 +83,6 @@ type App struct {
 	Delivered          map[common.Hash]*AppDeliveredRecord
 	DeliverSequence    common.Hashes
 	deliveredLock      sync.RWMutex
-	WitnessAckSequence []*types.WitnessAck
-	witnessAckLock     sync.RWMutex
-	witnessResultChan  chan types.WitnessResult
 }
 
 // NewApp constructs a TestApp instance.
@@ -100,17 +93,16 @@ func NewApp() *App {
 		TotalOrderedByHash: make(map[common.Hash]*AppTotalOrderRecord),
 		Delivered:          make(map[common.Hash]*AppDeliveredRecord),
 		DeliverSequence:    common.Hashes{},
-		witnessResultChan:  make(chan types.WitnessResult),
 	}
 }
 
-// PreparePayload implements Application interface.
-func (app *App) PreparePayload(position types.Position) []byte {
-	return []byte{}
+// PrepareBlock implements Application interface.
+func (app *App) PrepareBlock(position types.Position) ([]byte, []byte) {
+	return []byte{}, []byte{}
 }
 
-// VerifyPayload implements Application.
-func (app *App) VerifyPayload(payload []byte) bool {
+// VerifyBlock implements Application.
+func (app *App) VerifyBlock(block *types.Block) bool {
 	return true
 }
 
@@ -155,20 +147,6 @@ func (app *App) BlockDelivered(block types.Block) {
 		When:          time.Now().UTC(),
 	}
 	app.DeliverSequence = append(app.DeliverSequence, block.Hash)
-}
-
-// BlockProcessedChan returns a channel to receive the block hashes that have
-// finished processing by the application.
-func (app *App) BlockProcessedChan() <-chan types.WitnessResult {
-	return app.witnessResultChan
-}
-
-// WitnessAckDelivered implements Application interface.
-func (app *App) WitnessAckDelivered(witnessAck *types.WitnessAck) {
-	app.witnessAckLock.Lock()
-	defer app.witnessAckLock.Unlock()
-
-	app.WitnessAckSequence = append(app.WitnessAckSequence, witnessAck)
 }
 
 // Compare performs these checks against another App instance
@@ -255,15 +233,6 @@ Loop:
 		// The count of delivered blocks should be larger than those delivered
 		// by total ordering.
 		return ErrMismatchTotalOrderingAndDelivered
-	}
-
-	// Make sure that witnessAck is acking the correct block.
-	app.witnessAckLock.RLock()
-	defer app.witnessAckLock.RUnlock()
-	for _, witnessAck := range app.WitnessAckSequence {
-		if _, exists := app.Delivered[witnessAck.WitnessBlockHash]; !exists {
-			return ErrWitnessAckUnknownBlock
-		}
 	}
 	return nil
 }

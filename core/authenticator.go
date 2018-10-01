@@ -69,27 +69,6 @@ func (au *Authenticator) SignCRS(b *types.Block, crs common.Hash) (err error) {
 	return
 }
 
-// SignAsWitnessAck create a witness ack from a confirmed block.
-func (au *Authenticator) SignAsWitnessAck(
-	b *types.Block) (wAck *types.WitnessAck, err error) {
-
-	hash, err := hashWitness(b)
-	if err != nil {
-		return
-	}
-	sig, err := au.prvKey.Sign(hash)
-	if err != nil {
-		return
-	}
-	wAck = &types.WitnessAck{
-		ProposerID:       au.proposerID,
-		WitnessBlockHash: b.Hash,
-		Signature:        sig,
-		Hash:             hash,
-	}
-	return
-}
-
 // SignDKGComplaint signs a DKG complaint.
 func (au *Authenticator) SignDKGComplaint(
 	complaint *types.DKGComplaint) (err error) {

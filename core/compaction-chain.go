@@ -20,197 +20,51 @@
 package core
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
-)
-
-// Errors for compaction chain.
-var (
-	ErrNoWitnessToAck = fmt.Errorf(
-		"no witness to ack")
-	ErrIncorrectWitnessHash = fmt.Errorf(
-		"hash of witness ack is incorrect")
-	ErrIncorrectWitnessSignature = fmt.Errorf(
-		"signature of witness ack is incorrect")
 )
 
 type pendingAck struct {
 	receivedTime time.Time
-	witnessAck   *types.WitnessAck
 }
 
 type compactionChain struct {
-	db                blockdb.Reader
-	pendingAckLock    sync.RWMutex
-	pendingAck        map[common.Hash]*pendingAck
-	prevBlockLock     sync.RWMutex
-	prevBlock         *types.Block
-	witnessAcksLock   sync.RWMutex
-	latestWitnessAcks map[types.NodeID]*types.WitnessAck
+	db              blockdb.Reader
+	pendingAckLock  sync.RWMutex
+	pendingAck      map[common.Hash]*pendingAck
+	prevBlockLock   sync.RWMutex
+	prevBlock       *types.Block
+	witnessAcksLock sync.RWMutex
 }
 
 func newCompactionChain(
 	db blockdb.Reader,
 ) *compactionChain {
 	return &compactionChain{
-		db:                db,
-		pendingAck:        make(map[common.Hash]*pendingAck),
-		latestWitnessAcks: make(map[types.NodeID]*types.WitnessAck),
+		db:         db,
+		pendingAck: make(map[common.Hash]*pendingAck),
 	}
 }
 
-func (cc *compactionChain) sanityCheck(
-	witnessAck *types.WitnessAck, witnessBlock *types.Block) error {
-	if witnessBlock != nil {
-		hash, err := hashWitness(witnessBlock)
-		if err != nil {
-			return err
-		}
-		if hash != witnessAck.Hash {
-			return ErrIncorrectWitnessHash
-		}
-	}
-	pubKey, err := crypto.SigToPub(witnessAck.Hash, witnessAck.Signature)
-	if err != nil {
-		return err
-	}
-	if witnessAck.ProposerID != types.NewNodeID(pubKey) {
-		return ErrIncorrectWitnessSignature
-	}
+func (cc *compactionChain) sanityCheck(witnessBlock *types.Block) error {
 	return nil
 }
 
-// TODO(jimmy-dexon): processBlock and prepareWitnessAck can be extraced to
+// TODO(jimmy-dexon): processBlock can be extraced to
 // another struct.
 func (cc *compactionChain) processBlock(block *types.Block) error {
 	prevBlock := cc.lastBlock()
 	if prevBlock != nil {
-		hash, err := hashWitness(prevBlock)
-		if err != nil {
-			return err
-		}
 		block.Witness.Height = prevBlock.Witness.Height + 1
-		block.Witness.ParentHash = hash
 	}
 	cc.prevBlockLock.Lock()
 	defer cc.prevBlockLock.Unlock()
 	cc.prevBlock = block
 	return nil
-}
-
-func (cc *compactionChain) processWitnessAck(witnessAck *types.WitnessAck) (
-	err error) {
-	// Before getting the Block from witnessAck.WitnessBlockHash, we can still
-	// do some sanityCheck to prevent invalid ack appending to pendingAck.
-	if err = cc.sanityCheck(witnessAck, nil); err != nil {
-		return
-	}
-	pendingFinished := make(chan struct{})
-	go func() {
-		cc.processPendingWitnessAcks()
-		pendingFinished <- struct{}{}
-	}()
-	defer func() {
-		<-pendingFinished
-	}()
-	witnessBlock, err := cc.db.Get(witnessAck.WitnessBlockHash)
-	if err != nil {
-		if err == blockdb.ErrBlockDoesNotExist {
-			cc.pendingAckLock.Lock()
-			defer cc.pendingAckLock.Unlock()
-			cc.pendingAck[witnessAck.Hash] = &pendingAck{
-				receivedTime: time.Now().UTC(),
-				witnessAck:   witnessAck,
-			}
-			err = nil
-		}
-		return
-	}
-	return cc.processOneWitnessAck(witnessAck, &witnessBlock)
-}
-
-func (cc *compactionChain) processOneWitnessAck(
-	witnessAck *types.WitnessAck, witnessBlock *types.Block) (
-	err error) {
-	if err = cc.sanityCheck(witnessAck, witnessBlock); err != nil {
-		return
-	}
-	lastWitnessAck, exist := func() (ack *types.WitnessAck, exist bool) {
-		cc.witnessAcksLock.RLock()
-		defer cc.witnessAcksLock.RUnlock()
-		ack, exist = cc.latestWitnessAcks[witnessAck.ProposerID]
-		return
-	}()
-	if exist {
-		lastWitnessBlock, err2 := cc.db.Get(lastWitnessAck.WitnessBlockHash)
-		err = err2
-		if err != nil {
-			return
-		}
-		if lastWitnessBlock.Witness.Height > witnessBlock.Witness.Height {
-			return
-		}
-	}
-	cc.witnessAcksLock.Lock()
-	defer cc.witnessAcksLock.Unlock()
-	cc.latestWitnessAcks[witnessAck.ProposerID] = witnessAck
-	return
-}
-
-func (cc *compactionChain) processPendingWitnessAcks() {
-	pendingAck := func() map[common.Hash]*pendingAck {
-		pendingAck := make(map[common.Hash]*pendingAck)
-		cc.pendingAckLock.RLock()
-		defer cc.pendingAckLock.RUnlock()
-		for k, v := range cc.pendingAck {
-			pendingAck[k] = v
-		}
-		return pendingAck
-	}()
-
-	for hash, ack := range pendingAck {
-		// TODO(jimmy-dexon): customizable timeout.
-		if ack.receivedTime.Add(30 * time.Second).Before(time.Now().UTC()) {
-			delete(pendingAck, hash)
-			continue
-		}
-	}
-	for hash, ack := range pendingAck {
-		witnessBlock, err := cc.db.Get(ack.witnessAck.WitnessBlockHash)
-		if err != nil {
-			if err == blockdb.ErrBlockDoesNotExist {
-				continue
-			}
-			// TODO(jimmy-dexon): this error needs to be handled properly.
-			fmt.Println(err)
-			delete(pendingAck, hash)
-		}
-		delete(pendingAck, hash)
-		cc.processOneWitnessAck(ack.witnessAck, &witnessBlock)
-	}
-
-	cc.pendingAckLock.Lock()
-	defer cc.pendingAckLock.Unlock()
-	for k, v := range cc.pendingAck {
-		pendingAck[k] = v
-	}
-	cc.pendingAck = pendingAck
-}
-
-func (cc *compactionChain) witnessAcks() map[types.NodeID]*types.WitnessAck {
-	cc.witnessAcksLock.RLock()
-	defer cc.witnessAcksLock.RUnlock()
-	acks := make(map[types.NodeID]*types.WitnessAck)
-	for k, v := range cc.latestWitnessAcks {
-		acks[k] = v.Clone()
-	}
-	return acks
 }
 
 func (cc *compactionChain) lastBlock() *types.Block {

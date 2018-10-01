@@ -60,7 +60,6 @@ func (v *Vote) Clone() *Vote {
 		BlockHash:  v.BlockHash,
 		Period:     v.Period,
 		Position: Position{
-			ShardID: v.Position.ShardID,
 			ChainID: v.Position.ChainID,
 			Height:  v.Position.Height,
 		},

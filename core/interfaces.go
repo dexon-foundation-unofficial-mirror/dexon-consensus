@@ -28,21 +28,14 @@ import (
 // Application describes the application interface that interacts with DEXON
 // consensus core.
 type Application interface {
-	// PreparePayload is called when consensus core is preparing a block.
-	PreparePayload(position types.Position) []byte
+	// PrepareBlock is called when consensus core is preparing a block.
+	PrepareBlock(position types.Position) (payload []byte, witnessData []byte)
 
-	// VerifyPayload verifies if the payload is valid.
-	VerifyPayload(payload []byte) bool
+	// VerifyBlock verifies if the block is valid.
+	VerifyBlock(block *types.Block) bool
 
 	// BlockDelivered is called when a block is add to the compaction chain.
 	BlockDelivered(block types.Block)
-
-	// BlockProcessedChan returns a channel to receive the block hashes that have
-	// finished processing by the application.
-	BlockProcessedChan() <-chan types.WitnessResult
-
-	// WitnessAckDelivered is called when a witness ack is created.
-	WitnessAckDelivered(witnessAck *types.WitnessAck)
 }
 
 // Debug describes the application interface that requires
@@ -67,9 +60,6 @@ type Network interface {
 
 	// BroadcastBlock broadcasts block to all nodes in DEXON network.
 	BroadcastBlock(block *types.Block)
-
-	// BroadcastWitnessAck broadcasts witnessAck to all nodes in DEXON network.
-	BroadcastWitnessAck(witnessAck *types.WitnessAck)
 
 	// SendDKGPrivateShare sends PrivateShare to a DKG participant.
 	SendDKGPrivateShare(pub crypto.PublicKey, prvShare *types.DKGPrivateShare)

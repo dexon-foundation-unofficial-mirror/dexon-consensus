@@ -57,12 +57,6 @@ func (m *jsonMarshaller) Unmarshal(
 			break
 		}
 		msg = block
-	case "witness-ack":
-		nAck := &types.WitnessAck{}
-		if err = json.Unmarshal(payload, nAck); err != nil {
-			break
-		}
-		msg = nAck
 	case "vote":
 		vote := &types.Vote{}
 		if err = json.Unmarshal(payload, vote); err != nil {
@@ -115,8 +109,6 @@ func (m *jsonMarshaller) Marshal(msg interface{}) (
 		msgType = "info-status"
 	case *types.Block:
 		msgType = "block"
-	case *types.WitnessAck:
-		msgType = "witness-ack"
 	case *types.Vote:
 		msgType = "vote"
 	case *types.DKGPrivateShare:

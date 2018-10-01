@@ -80,7 +80,7 @@ func (s *Shard) PrepareBlock(
 	// TODO(mission): the proposeTime might be earlier than tip block of
 	//                that chain. We should let blockLattice suggest the time.
 	b.Timestamp = proposeTime
-	b.Payload = s.app.PreparePayload(b.Position)
+	b.Payload, b.Witness.Data = s.app.PrepareBlock(b.Position)
 	if err = s.authModule.SignBlock(b); err != nil {
 		return
 	}
@@ -92,11 +92,6 @@ func (s *Shard) PrepareBlock(
 // If some acking blocks don't exists, Shard would help to cache this block
 // and retry when lattice updated in Shard.ProcessBlock.
 func (s *Shard) SanityCheck(b *types.Block) (err error) {
-	// Check block.Position.
-	if b.Position.ShardID != s.ID {
-		err = ErrIncorrectBlockPosition
-		return
-	}
 	// Check the hash of block.
 	hash, err := hashBlock(b)
 	if err != nil || hash != b.Hash {
