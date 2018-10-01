@@ -192,7 +192,7 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 		qualifyIDs[id] = struct{}{}
 	}
 
-	for _, nID := range gpk.qualifyNodeIDs {
+	for nID := range gpk.qualifyNodeIDs {
 		id, exist := gpk.idMap[nID]
 		s.Require().True(exist)
 		_, exist = qualifyIDs[id]

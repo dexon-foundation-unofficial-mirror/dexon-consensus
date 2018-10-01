@@ -84,7 +84,7 @@ type dkgShareSecret struct {
 type dkgGroupPublicKey struct {
 	round          uint64
 	qualifyIDs     dkg.IDs
-	qualifyNodeIDs types.NodeIDs
+	qualifyNodeIDs map[types.NodeID]struct{}
 	idMap          map[types.NodeID]dkg.ID
 	publicKeys     map[types.NodeID]*dkg.PublicKey
 	groupPublicKey *dkg.PublicKey
@@ -332,7 +332,7 @@ func newDKGGroupPublicKey(
 		}
 	}
 	qualifyIDs := make(dkg.IDs, 0, len(mpks)-len(disqualifyIDs))
-	qualifyNodeIDs := make(types.NodeIDs, 0, cap(qualifyIDs))
+	qualifyNodeIDs := make(map[types.NodeID]struct{})
 	mpkMap := make(map[dkg.ID]*types.DKGMasterPublicKey, cap(qualifyIDs))
 	idMap := make(map[types.NodeID]dkg.ID)
 	for _, mpk := range mpks {
@@ -342,7 +342,7 @@ func newDKGGroupPublicKey(
 		mpkMap[mpk.DKGID] = mpk
 		idMap[mpk.ProposerID] = mpk.DKGID
 		qualifyIDs = append(qualifyIDs, mpk.DKGID)
-		qualifyNodeIDs = append(qualifyNodeIDs, mpk.ProposerID)
+		qualifyNodeIDs[mpk.ProposerID] = struct{}{}
 	}
 	// Recover qualify members' public key.
 	pubKeys := make(map[types.NodeID]*dkg.PublicKey, len(qualifyIDs))

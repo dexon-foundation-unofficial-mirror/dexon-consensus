@@ -133,7 +133,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 		return err
 	}
 	qualifies := ""
-	for _, nID := range gpk.qualifyNodeIDs {
+	for nID := range gpk.qualifyNodeIDs {
 		qualifies += fmt.Sprintf("%s ", nID.String()[:6])
 	}
 	log.Printf("[%s] Qualify Nodes(%d): %s\n",

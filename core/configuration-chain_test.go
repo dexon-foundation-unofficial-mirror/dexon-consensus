@@ -155,7 +155,7 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 	recv := newTestCCReceiver(s)
 
 	for _, nID := range s.nIDs {
-		gov, err := test.NewGovernance(0, 200*time.Millisecond)
+		gov, err := test.NewGovernance(0, 50*time.Millisecond)
 		s.Require().NoError(err)
 		cfgChains[nID] = newConfigurationChain(nID, recv, gov)
 		recv.nodes[nID] = cfgChains[nID]
@@ -170,19 +170,26 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 		s.Require().Len(gov.DKGMasterPublicKeys(round), n)
 	}
 
+	errs := make(chan error, n)
 	wg := sync.WaitGroup{}
 	wg.Add(n)
 	for _, cc := range cfgChains {
 		go func(cc *configurationChain) {
 			defer wg.Done()
-			s.Require().NoError(cc.runDKG(round))
+			errs <- cc.runDKG(round)
 		}(cc)
 	}
 	wg.Wait()
+	for range cfgChains {
+		s.Require().NoError(<-errs)
+	}
 
 	psigs := make([]*types.DKGPartialSignature, 0, n)
 	hash := crypto.Keccak256Hash([]byte("🌚🌝"))
-	for _, cc := range cfgChains {
+	for nID, cc := range cfgChains {
+		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+			continue
+		}
 		psig, err := cc.preparePartialSignature(round, hash)
 		s.Require().NoError(err)
 		prvKey, exist := s.prvKeys[cc.ID]
@@ -193,12 +200,15 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 	}
 
 	tsigs := make([]crypto.Signature, 0, n)
-	errs := make(chan error, n)
+	errs = make(chan error, n)
 	tsigChan := make(chan crypto.Signature, n)
-	for _, cc := range cfgChains {
+	for nID, cc := range cfgChains {
+		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+			continue
+		}
 		go func(cc *configurationChain) {
 			tsig, err := cc.runBlockTSig(round, hash)
-			// Prevent racing by collecting errors and check ing main thread.
+			// Prevent racing by collecting errors and check in main thread.
 			errs <- err
 			tsigChan <- tsig
 		}(cc)
@@ -207,7 +217,10 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 			s.Require().NoError(err)
 		}
 	}
-	for range cfgChains {
+	for nID, cc := range cfgChains {
+		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+			continue
+		}
 		s.Require().NoError(<-errs)
 		tsig := <-tsigChan
 		for _, prevTsig := range tsigs {
