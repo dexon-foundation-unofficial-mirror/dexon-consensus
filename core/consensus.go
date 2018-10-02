@@ -48,7 +48,7 @@ var (
 
 // consensusBAReceiver implements agreementReceiver.
 type consensusBAReceiver struct {
-	// TODO(mission): consensus would be replaced by shard and network.
+	// TODO(mission): consensus would be replaced by lattice and network.
 	consensus        *Consensus
 	agreementModule  *agreement
 	chainID          uint32
@@ -169,8 +169,8 @@ type Consensus struct {
 	cfgModule  *configurationChain
 
 	// Dexon consensus v1's modules.
-	shardModule *Shard
-	ccModule    *compactionChain
+	lattice  *Lattice
+	ccModule *compactionChain
 
 	// Interfaces.
 	db        blockdb.BlockDatabase
@@ -198,7 +198,7 @@ func NewConsensus(
 	var round uint64
 	config := gov.Configuration(round)
 	// TODO(w): notarySet is different for each chain, need to write a
-	// GetNotarySetForChain(nodeSet, shardID, chainID, crs) function to get the
+	// GetNotarySetForChain(nodeSet, chainID, crs) function to get the
 	// correct notary set for a given chain.
 	nodeSetCache := NewNodeSetCache(gov)
 	crs := gov.CRS(round)
@@ -215,8 +215,8 @@ func NewConsensus(
 	debugApp, _ := app.(Debug)
 	// Setup nonblocking module.
 	nbModule := newNonBlocking(app, debugApp)
-	// Init shard.
-	shardModule := NewShard(config, authModule, nbModule, nbModule, db)
+	// Init lattice.
+	lattice := NewLattice(config, authModule, nbModule, nbModule, db)
 	// Init configuration chain.
 	ID := types.NewNodeID(prv.PublicKey())
 	cfgModule := newConfigurationChain(
@@ -237,7 +237,7 @@ func NewConsensus(
 		ID:            ID,
 		currentConfig: config,
 		ccModule:      newCompactionChain(db),
-		shardModule:   shardModule,
+		lattice:       lattice,
 		nbModule:      nbModule,
 		gov:           gov,
 		db:            db,
@@ -335,7 +335,7 @@ BALoop:
 				nIDs = nodes.GetSubSet(con.gov.Configuration(con.round).NumNotarySet,
 					types.NewNotarySetTarget(con.gov.CRS(con.round), chainID))
 			}
-			agreement.restart(nIDs, con.shardModule.NextPosition(chainID))
+			agreement.restart(nIDs, con.lattice.NextPosition(chainID))
 		default:
 		}
 		err := agreement.nextState()
@@ -498,7 +498,7 @@ func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
 
 // preProcessBlock performs Byzantine Agreement on the block.
 func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
-	if err = con.shardModule.SanityCheck(b); err != nil {
+	if err = con.lattice.SanityCheck(b); err != nil {
 		return
 	}
 	if err = con.baModules[b.Position.ChainID].processBlock(b); err != nil {
@@ -509,7 +509,7 @@ func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
 
 // processBlock is the entry point to submit one block to a Consensus instance.
 func (con *Consensus) processBlock(block *types.Block) (err error) {
-	verifiedBlocks, deliveredBlocks, err := con.shardModule.ProcessBlock(block)
+	verifiedBlocks, deliveredBlocks, err := con.lattice.ProcessBlock(block)
 	if err != nil {
 		return
 	}
@@ -540,7 +540,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 // PrepareBlock would setup header fields of block based on its ProposerID.
 func (con *Consensus) prepareBlock(b *types.Block,
 	proposeTime time.Time) (err error) {
-	if err = con.shardModule.PrepareBlock(b, proposeTime); err != nil {
+	if err = con.lattice.PrepareBlock(b, proposeTime); err != nil {
 		return
 	}
 	// TODO(mission): decide CRS by block's round, which could be determined by

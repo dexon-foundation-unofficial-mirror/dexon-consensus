@@ -23,26 +23,106 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
-
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/stretchr/testify/suite"
 )
 
-type BlockLatticeTest struct {
+// testLatticeMgr wraps compaction chain and lattice.
+type testLatticeMgr struct {
+	lattice  *Lattice
+	ccModule *compactionChain
+	app      *test.App
+	db       blockdb.BlockDatabase
+}
+
+func (mgr *testLatticeMgr) prepareBlock(
+	chainID uint32) (b *types.Block, err error) {
+
+	b = &types.Block{
+		Position: types.Position{
+			ChainID: chainID,
+		}}
+	err = mgr.lattice.PrepareBlock(b, time.Now().UTC())
+	return
+}
+
+// Process describes the usage of Lattice.ProcessBlock.
+func (mgr *testLatticeMgr) processBlock(b *types.Block) (err error) {
+	var (
+		delivered []*types.Block
+		verified  []*types.Block
+		pendings  = []*types.Block{b}
+	)
+	if err = mgr.lattice.SanityCheck(b); err != nil {
+		if err == ErrAckingBlockNotExists {
+			err = nil
+		}
+		return
+	}
+	for {
+		if len(pendings) == 0 {
+			break
+		}
+		b, pendings = pendings[0], pendings[1:]
+		if verified, delivered, err = mgr.lattice.ProcessBlock(b); err != nil {
+			return
+		}
+		// Deliver blocks.
+		for _, b = range delivered {
+			if err = mgr.ccModule.processBlock(b); err != nil {
+				return
+			}
+			if err = mgr.db.Update(*b); err != nil {
+				return
+			}
+			mgr.app.BlockDelivered(*b)
+		}
+		// Update pending blocks for verified block (pass sanity check).
+		pendings = append(pendings, verified...)
+	}
+	return
+}
+
+type LatticeTestSuite struct {
 	suite.Suite
 }
 
+func (s *LatticeTestSuite) newTestLatticeMgr(
+	cfg *types.Config) *testLatticeMgr {
+	var req = s.Require()
+	// Setup private key.
+	prvKey, err := ecdsa.NewPrivateKey()
+	req.Nil(err)
+	// Setup blockdb.
+	db, err := blockdb.NewMemBackedBlockDB()
+	req.Nil(err)
+	// Setup application.
+	app := test.NewApp()
+	// Setup lattice.
+	return &testLatticeMgr{
+		ccModule: newCompactionChain(db),
+		app:      app,
+		db:       db,
+		lattice: NewLattice(
+			cfg,
+			NewAuthenticator(prvKey),
+			app,
+			app,
+			db)}
+}
+
 // hashBlock is a helper to hash a block and check if any error.
-func (s *BlockLatticeTest) hashBlock(b *types.Block) {
+func (s *LatticeTestSuite) hashBlock(b *types.Block) {
 	var err error
 	b.Hash, err = hashBlock(b)
 	s.Require().Nil(err)
 }
 
-func (s *BlockLatticeTest) prepareGenesisBlock(
+func (s *LatticeTestSuite) prepareGenesisBlock(
 	chainID uint32) (b *types.Block) {
 
 	b = &types.Block{
@@ -67,7 +147,7 @@ func (s *BlockLatticeTest) prepareGenesisBlock(
 //  |  |     |
 //  0  0  0  0 (block height)
 //  0  1  2  3 (validator)
-func (s *BlockLatticeTest) genTestCase1() (bl *blockLattice) {
+func (s *LatticeTestSuite) genTestCase1() (data *latticeData) {
 	// Create new reliableBroadcast instance with 4 validators
 	var (
 		b         *types.Block
@@ -78,18 +158,18 @@ func (s *BlockLatticeTest) genTestCase1() (bl *blockLattice) {
 		err       error
 	)
 
-	bl = newBlockLattice(chainNum, 2*time.Nanosecond, 1000*time.Second)
+	data = newLatticeData(chainNum, 2*time.Nanosecond, 1000*time.Second)
 	// Add genesis blocks.
 	for i := uint32(0); i < chainNum; i++ {
 		b = s.prepareGenesisBlock(i)
-		delivered, err = bl.addBlock(b)
+		delivered, err = data.addBlock(b)
 		// Genesis blocks are safe to be added to DAG, they acks no one.
 		req.Len(delivered, 1)
 		req.Nil(err)
 	}
 
 	// Add block 0-1 which acks 0-0.
-	h = bl.chains[0].getBlockByHeight(0).Hash
+	h = data.chains[0].getBlockByHeight(0).Hash
 	b = &types.Block{
 		ParentHash: h,
 		Hash:       common.NewRandomHash(),
@@ -101,14 +181,14 @@ func (s *BlockLatticeTest) genTestCase1() (bl *blockLattice) {
 		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	s.hashBlock(b)
-	delivered, err = bl.addBlock(b)
+	delivered, err = data.addBlock(b)
 	req.Len(delivered, 1)
 	req.Equal(delivered[0].Hash, b.Hash)
 	req.Nil(err)
-	req.NotNil(bl.chains[0].getBlockByHeight(1))
+	req.NotNil(data.chains[0].getBlockByHeight(1))
 
 	// Add block 0-2 which acks 0-1 and 1-0.
-	h = bl.chains[0].getBlockByHeight(1).Hash
+	h = data.chains[0].getBlockByHeight(1).Hash
 	b = &types.Block{
 		ParentHash: h,
 		Position: types.Position{
@@ -118,18 +198,18 @@ func (s *BlockLatticeTest) genTestCase1() (bl *blockLattice) {
 		Timestamp: time.Now().UTC(),
 		Acks: common.NewSortedHashes(common.Hashes{
 			h,
-			bl.chains[1].getBlockByHeight(0).Hash,
+			data.chains[1].getBlockByHeight(0).Hash,
 		}),
 	}
 	s.hashBlock(b)
-	delivered, err = bl.addBlock(b)
+	delivered, err = data.addBlock(b)
 	req.Len(delivered, 1)
 	req.Equal(delivered[0].Hash, b.Hash)
 	req.Nil(err)
-	req.NotNil(bl.chains[0].getBlockByHeight(2))
+	req.NotNil(data.chains[0].getBlockByHeight(2))
 
 	// Add block 0-3 which acks 0-2.
-	h = bl.chains[0].getBlockByHeight(2).Hash
+	h = data.chains[0].getBlockByHeight(2).Hash
 	b = &types.Block{
 		ParentHash: h,
 		Hash:       common.NewRandomHash(),
@@ -141,14 +221,14 @@ func (s *BlockLatticeTest) genTestCase1() (bl *blockLattice) {
 		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	s.hashBlock(b)
-	delivered, err = bl.addBlock(b)
+	delivered, err = data.addBlock(b)
 	req.Len(delivered, 1)
 	req.Equal(delivered[0].Hash, b.Hash)
 	req.Nil(err)
-	req.NotNil(bl.chains[0].getBlockByHeight(3))
+	req.NotNil(data.chains[0].getBlockByHeight(3))
 
 	// Add block 3-1 which acks 3-0.
-	h = bl.chains[3].getBlockByHeight(0).Hash
+	h = data.chains[3].getBlockByHeight(0).Hash
 	b = &types.Block{
 		ParentHash: h,
 		Hash:       common.NewRandomHash(),
@@ -160,21 +240,21 @@ func (s *BlockLatticeTest) genTestCase1() (bl *blockLattice) {
 		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	s.hashBlock(b)
-	delivered, err = bl.addBlock(b)
+	delivered, err = data.addBlock(b)
 	req.Len(delivered, 1)
 	req.Equal(delivered[0].Hash, b.Hash)
 	req.Nil(err)
-	req.NotNil(bl.chains[3].getBlockByHeight(0))
+	req.NotNil(data.chains[3].getBlockByHeight(0))
 	return
 }
 
-func (s *BlockLatticeTest) TestSanityCheck() {
+func (s *LatticeTestSuite) TestSanityCheckInDataLayer() {
 	var (
-		b   *types.Block
-		h   common.Hash
-		bl  = s.genTestCase1()
-		req = s.Require()
-		err error
+		b    *types.Block
+		h    common.Hash
+		data = s.genTestCase1()
+		req  = s.Require()
+		err  error
 	)
 
 	// Non-genesis block with no ack, should get error.
@@ -187,12 +267,12 @@ func (s *BlockLatticeTest) TestSanityCheck() {
 		Acks: common.NewSortedHashes(common.Hashes{}),
 	}
 	s.hashBlock(b)
-	err = bl.sanityCheck(b)
+	err = data.sanityCheck(b)
 	req.NotNil(err)
 	req.Equal(ErrNotAckParent.Error(), err.Error())
 
 	// Non-genesis block which acks its parent but the height is invalid.
-	h = bl.chains[1].getBlockByHeight(0).Hash
+	h = data.chains[1].getBlockByHeight(0).Hash
 	b = &types.Block{
 		ParentHash: h,
 		Position: types.Position{
@@ -202,12 +282,12 @@ func (s *BlockLatticeTest) TestSanityCheck() {
 		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	s.hashBlock(b)
-	err = bl.sanityCheck(b)
+	err = data.sanityCheck(b)
 	req.NotNil(err)
 	req.Equal(ErrInvalidBlockHeight.Error(), err.Error())
 
 	// Invalid chain ID.
-	h = bl.chains[1].getBlockByHeight(0).Hash
+	h = data.chains[1].getBlockByHeight(0).Hash
 	b = &types.Block{
 		ParentHash: h,
 		Position: types.Position{
@@ -217,12 +297,12 @@ func (s *BlockLatticeTest) TestSanityCheck() {
 		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	s.hashBlock(b)
-	err = bl.sanityCheck(b)
+	err = data.sanityCheck(b)
 	req.NotNil(err)
 	req.Equal(ErrInvalidChainID.Error(), err.Error())
 
 	// Fork block.
-	h = bl.chains[0].getBlockByHeight(0).Hash
+	h = data.chains[0].getBlockByHeight(0).Hash
 	b = &types.Block{
 		ParentHash: h,
 		Position: types.Position{
@@ -233,12 +313,12 @@ func (s *BlockLatticeTest) TestSanityCheck() {
 		Timestamp: time.Now().UTC(),
 	}
 	s.hashBlock(b)
-	err = bl.sanityCheck(b)
+	err = data.sanityCheck(b)
 	req.NotNil(err)
 	req.Equal(ErrForkBlock.Error(), err.Error())
 
 	// Replicated ack.
-	h = bl.chains[0].getBlockByHeight(3).Hash
+	h = data.chains[0].getBlockByHeight(3).Hash
 	b = &types.Block{
 		ParentHash: h,
 		Position: types.Position{
@@ -247,17 +327,17 @@ func (s *BlockLatticeTest) TestSanityCheck() {
 		},
 		Acks: common.NewSortedHashes(common.Hashes{
 			h,
-			bl.chains[1].getBlockByHeight(0).Hash,
+			data.chains[1].getBlockByHeight(0).Hash,
 		}),
 		Timestamp: time.Now().UTC(),
 	}
 	s.hashBlock(b)
-	err = bl.sanityCheck(b)
+	err = data.sanityCheck(b)
 	req.NotNil(err)
 	req.Equal(ErrDoubleAck.Error(), err.Error())
 
 	// Acking block doesn't exists.
-	h = bl.chains[1].getBlockByHeight(0).Hash
+	h = data.chains[1].getBlockByHeight(0).Hash
 	b = &types.Block{
 		ParentHash: h,
 		Position: types.Position{
@@ -271,12 +351,12 @@ func (s *BlockLatticeTest) TestSanityCheck() {
 		Timestamp: time.Now().UTC(),
 	}
 	s.hashBlock(b)
-	err = bl.sanityCheck(b)
+	err = data.sanityCheck(b)
 	req.NotNil(err)
 	req.Equal(err.Error(), ErrAckingBlockNotExists.Error())
 
 	// Parent block on different chain.
-	h = bl.chains[1].getBlockByHeight(0).Hash
+	h = data.chains[1].getBlockByHeight(0).Hash
 	b = &types.Block{
 		ParentHash: h,
 		Position: types.Position{
@@ -285,17 +365,17 @@ func (s *BlockLatticeTest) TestSanityCheck() {
 		},
 		Acks: common.NewSortedHashes(common.Hashes{
 			h,
-			bl.chains[2].getBlockByHeight(0).Hash,
+			data.chains[2].getBlockByHeight(0).Hash,
 		}),
 		Timestamp: time.Now().UTC(),
 	}
 	s.hashBlock(b)
-	err = bl.sanityCheck(b)
+	err = data.sanityCheck(b)
 	req.NotNil(err)
 	req.Equal(err.Error(), ErrInvalidParentChain.Error())
 
 	// Ack two blocks on the same chain.
-	h = bl.chains[2].getBlockByHeight(0).Hash
+	h = data.chains[2].getBlockByHeight(0).Hash
 	b = &types.Block{
 		ParentHash: h,
 		Position: types.Position{
@@ -304,22 +384,22 @@ func (s *BlockLatticeTest) TestSanityCheck() {
 		},
 		Acks: common.NewSortedHashes(common.Hashes{
 			h,
-			bl.chains[0].getBlockByHeight(0).Hash,
-			bl.chains[0].getBlockByHeight(1).Hash,
+			data.chains[0].getBlockByHeight(0).Hash,
+			data.chains[0].getBlockByHeight(1).Hash,
 		}),
 		Timestamp: time.Now().UTC(),
 	}
 	s.hashBlock(b)
-	err = bl.sanityCheck(b)
+	err = data.sanityCheck(b)
 	req.NotNil(err)
 	req.Equal(err.Error(), ErrDuplicatedAckOnOneChain.Error())
 
 	// Add block 3-1 which acks 3-0, and violet reasonable block time interval.
-	h = bl.chains[2].getBlockByHeight(0).Hash
+	h = data.chains[2].getBlockByHeight(0).Hash
 	b = &types.Block{
 		ParentHash: h,
 		Hash:       common.NewRandomHash(),
-		Timestamp:  time.Now().UTC().Add(bl.maxBlockTimeInterval),
+		Timestamp:  time.Now().UTC().Add(data.maxBlockTimeInterval),
 		Position: types.Position{
 			ChainID: 2,
 			Height:  1,
@@ -327,19 +407,19 @@ func (s *BlockLatticeTest) TestSanityCheck() {
 		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
 	s.hashBlock(b)
-	err = bl.sanityCheck(b)
+	err = data.sanityCheck(b)
 	req.NotNil(err)
 	req.Equal(err, ErrIncorrectBlockTime)
 	// Violet minimum block time interval.
 	b.Timestamp =
-		bl.chains[2].getBlockByHeight(0).Timestamp.Add(1 * time.Nanosecond)
+		data.chains[2].getBlockByHeight(0).Timestamp.Add(1 * time.Nanosecond)
 	s.hashBlock(b)
-	err = bl.sanityCheck(b)
+	err = data.sanityCheck(b)
 	req.NotNil(err)
 	req.Equal(err, ErrIncorrectBlockTime)
 
 	// Normal block.
-	h = bl.chains[1].getBlockByHeight(0).Hash
+	h = data.chains[1].getBlockByHeight(0).Hash
 	b = &types.Block{
 		ParentHash: h,
 		Position: types.Position{
@@ -350,42 +430,42 @@ func (s *BlockLatticeTest) TestSanityCheck() {
 		Timestamp: time.Now().UTC(),
 	}
 	s.hashBlock(b)
-	req.Nil(bl.sanityCheck(b))
+	req.Nil(data.sanityCheck(b))
 }
 
-func (s *BlockLatticeTest) TestAreAllAcksInLattice() {
+func (s *LatticeTestSuite) TestAreAllAcksInLattice() {
 	var (
-		b   *types.Block
-		bl  = s.genTestCase1()
-		req = s.Require()
+		b    *types.Block
+		data = s.genTestCase1()
+		req  = s.Require()
 	)
 
 	// Empty ack should get true, although won't pass sanity check.
 	b = &types.Block{
 		Acks: common.NewSortedHashes(common.Hashes{}),
 	}
-	req.True(bl.areAllAcksInLattice(b))
+	req.True(data.areAllAcksInLattice(b))
 
 	// Acks blocks in lattice
 	b = &types.Block{
 		Acks: common.NewSortedHashes(common.Hashes{
-			bl.chains[0].getBlockByHeight(0).Hash,
-			bl.chains[0].getBlockByHeight(1).Hash,
+			data.chains[0].getBlockByHeight(0).Hash,
+			data.chains[0].getBlockByHeight(1).Hash,
 		}),
 	}
-	req.True(bl.areAllAcksInLattice(b))
+	req.True(data.areAllAcksInLattice(b))
 
 	// Acks random block hash.
 	b = &types.Block{
 		Acks: common.NewSortedHashes(common.Hashes{common.NewRandomHash()}),
 	}
-	req.False(bl.areAllAcksInLattice(b))
+	req.False(data.areAllAcksInLattice(b))
 }
 
-func (s *BlockLatticeTest) TestRandomIntensiveAcking() {
+func (s *LatticeTestSuite) TestRandomIntensiveAcking() {
 	var (
 		chainNum  uint32 = 19
-		bl               = newBlockLattice(chainNum, 0, 1000*time.Second)
+		data             = newLatticeData(chainNum, 0, 1000*time.Second)
 		req              = s.Require()
 		delivered []*types.Block
 		extracted []*types.Block
@@ -396,7 +476,7 @@ func (s *BlockLatticeTest) TestRandomIntensiveAcking() {
 	// Generate genesis blocks.
 	for i := uint32(0); i < chainNum; i++ {
 		b = s.prepareGenesisBlock(i)
-		delivered, err = bl.addBlock(b)
+		delivered, err = data.addBlock(b)
 		req.Len(delivered, 1)
 		req.Nil(err)
 	}
@@ -408,28 +488,28 @@ func (s *BlockLatticeTest) TestRandomIntensiveAcking() {
 			},
 			Timestamp: time.Now().UTC(),
 		}
-		bl.prepareBlock(b)
+		data.prepareBlock(b)
 		s.hashBlock(b)
-		delivered, err = bl.addBlock(b)
+		delivered, err = data.addBlock(b)
 		req.Nil(err)
 		extracted = append(extracted, delivered...)
 	}
 
 	// The len of array extractedBlocks should be about 5000.
 	req.True(len(extracted) > 4500)
-	// The len of bl.blockInfos should be small if deleting mechanism works.
-	req.True(len(bl.blockByHash) < 500)
+	// The len of data.blockInfos should be small if deleting mechanism works.
+	req.True(len(data.blockByHash) < 500)
 }
 
-func (s *BlockLatticeTest) TestRandomlyGeneratedBlocks() {
+func (s *LatticeTestSuite) TestRandomlyGeneratedBlocks() {
 	var (
-		chainNum      uint32 = 19
-		blockNum             = 50
-		repeat               = 20
-		delivered     []*types.Block
-		err           error
-		req           = s.Require()
-		blocklattices []*blockLattice
+		chainNum  uint32 = 19
+		blockNum         = 50
+		repeat           = 20
+		delivered []*types.Block
+		err       error
+		req       = s.Require()
+		datum     []*latticeData
 	)
 
 	// Prepare a randomly generated blocks.
@@ -448,7 +528,7 @@ func (s *BlockLatticeTest) TestRandomlyGeneratedBlocks() {
 	revealedHashesAsString := map[string]struct{}{}
 	deliveredHashesAsString := map[string]struct{}{}
 	for i := 0; i < repeat; i++ {
-		bl := newBlockLattice(chainNum, 0, 1000*time.Second)
+		data := newLatticeData(chainNum, 0, 1000*time.Second)
 		deliveredHashes := common.Hashes{}
 		revealedHashes := common.Hashes{}
 		revealer.Reset()
@@ -464,8 +544,8 @@ func (s *BlockLatticeTest) TestRandomlyGeneratedBlocks() {
 			s.Require().Nil(err)
 			revealedHashes = append(revealedHashes, b.Hash)
 
-			// Pass blocks to blocklattice.
-			delivered, err = bl.addBlock(&b)
+			// Pass blocks to lattice.
+			delivered, err = data.addBlock(&b)
 			req.Nil(err)
 			for _, b := range delivered {
 				deliveredHashes = append(deliveredHashes, b.Hash)
@@ -486,7 +566,7 @@ func (s *BlockLatticeTest) TestRandomlyGeneratedBlocks() {
 			asString += h.String() + ","
 		}
 		revealedHashesAsString[asString] = struct{}{}
-		blocklattices = append(blocklattices, bl)
+		datum = append(datum, data)
 	}
 	// Make sure concatenated hashes of strongly acked blocks are identical.
 	req.Len(deliveredHashesAsString, 1)
@@ -496,10 +576,10 @@ func (s *BlockLatticeTest) TestRandomlyGeneratedBlocks() {
 	}
 	// Make sure we test for more than 1 revealing sequence.
 	req.True(len(revealedHashesAsString) > 1)
-	// Make sure each blocklattice instance have identical working set.
-	req.True(len(blocklattices) >= repeat)
-	for i, bI := range blocklattices {
-		for j, bJ := range blocklattices {
+	// Make sure each latticeData instance have identical working set.
+	req.True(len(datum) >= repeat)
+	for i, bI := range datum {
+		for j, bJ := range datum {
 			if i == j {
 				continue
 			}
@@ -522,11 +602,11 @@ func (s *BlockLatticeTest) TestRandomlyGeneratedBlocks() {
 	}
 }
 
-func (s *BlockLatticeTest) TestPrepareBlock() {
+func (s *LatticeTestSuite) TestPrepareBlock() {
 	var (
 		chainNum    uint32 = 4
 		req                = s.Require()
-		bl                 = newBlockLattice(chainNum, 0, 3000*time.Second)
+		data               = newLatticeData(chainNum, 0, 3000*time.Second)
 		minInterval        = 50 * time.Millisecond
 		delivered   []*types.Block
 		err         error
@@ -539,17 +619,17 @@ func (s *BlockLatticeTest) TestPrepareBlock() {
 	b20 := s.prepareGenesisBlock(2)
 	time.Sleep(minInterval)
 	b30 := s.prepareGenesisBlock(3)
-	// Submit these blocks to blocklattice.
-	delivered, err = bl.addBlock(b00)
+	// Submit these blocks to lattice.
+	delivered, err = data.addBlock(b00)
 	req.Len(delivered, 1)
 	req.Nil(err)
-	delivered, err = bl.addBlock(b10)
+	delivered, err = data.addBlock(b10)
 	req.Len(delivered, 1)
 	req.Nil(err)
-	delivered, err = bl.addBlock(b20)
+	delivered, err = data.addBlock(b20)
 	req.Len(delivered, 1)
 	req.Nil(err)
-	delivered, err = bl.addBlock(b30)
+	delivered, err = data.addBlock(b30)
 	req.Len(delivered, 1)
 	req.Nil(err)
 	// We should be able to collect all 4 genesis blocks by calling
@@ -560,7 +640,7 @@ func (s *BlockLatticeTest) TestPrepareBlock() {
 		},
 		Timestamp: time.Now().UTC(),
 	}
-	bl.prepareBlock(b11)
+	data.prepareBlock(b11)
 	s.hashBlock(b11)
 	req.Contains(b11.Acks, b00.Hash)
 	req.Contains(b11.Acks, b10.Hash)
@@ -568,7 +648,7 @@ func (s *BlockLatticeTest) TestPrepareBlock() {
 	req.Contains(b11.Acks, b30.Hash)
 	req.Equal(b11.ParentHash, b10.Hash)
 	req.Equal(b11.Position.Height, uint64(1))
-	delivered, err = bl.addBlock(b11)
+	delivered, err = data.addBlock(b11)
 	req.Len(delivered, 1)
 	req.Nil(err)
 	// Propose/Process a block based on collected info.
@@ -578,7 +658,7 @@ func (s *BlockLatticeTest) TestPrepareBlock() {
 		},
 		Timestamp: time.Now().UTC(),
 	}
-	bl.prepareBlock(b12)
+	data.prepareBlock(b12)
 	s.hashBlock(b12)
 	// This time we only need to ack b11.
 	req.Len(b12.Acks, 1)
@@ -592,7 +672,7 @@ func (s *BlockLatticeTest) TestPrepareBlock() {
 			ChainID: 0,
 		},
 	}
-	bl.prepareBlock(b01)
+	data.prepareBlock(b01)
 	s.hashBlock(b01)
 	req.Len(b01.Acks, 4)
 	req.Contains(b01.Acks, b00.Hash)
@@ -603,7 +683,7 @@ func (s *BlockLatticeTest) TestPrepareBlock() {
 	req.Equal(b01.Position.Height, uint64(1))
 }
 
-func (s *BlockLatticeTest) TestCalcPurgeHeight() {
+func (s *LatticeTestSuite) TestCalcPurgeHeight() {
 	// Test chainStatus.calcPurgeHeight, we don't have
 	// to prepare blocks to test it.
 	var req = s.Require()
@@ -632,7 +712,7 @@ func (s *BlockLatticeTest) TestCalcPurgeHeight() {
 	req.False(ok)
 }
 
-func (s *BlockLatticeTest) TestPurge() {
+func (s *LatticeTestSuite) TestPurge() {
 	// Make a simplest test case to test chainStatus.purge.
 	// Make sure status after purge 1 block expected.
 	b00 := &types.Block{Hash: common.NewRandomHash()}
@@ -651,16 +731,123 @@ func (s *BlockLatticeTest) TestPurge() {
 	s.Equal(chain.blocks[1].Hash, b02.Hash)
 }
 
-func (s *BlockLatticeTest) TestNextPosition() {
+func (s *LatticeTestSuite) TestNextPosition() {
 	// Test 'NextPosition' method when lattice is ready.
-	bl := s.genTestCase1()
-	s.Equal(bl.nextPosition(0), types.Position{ChainID: 0, Height: 4})
+	data := s.genTestCase1()
+	s.Equal(data.nextPosition(0), types.Position{ChainID: 0, Height: 4})
 
 	// Test 'NextPosition' method when lattice is empty.
-	bl = newBlockLattice(4, 0, 1000*time.Second)
-	s.Equal(bl.nextPosition(0), types.Position{ChainID: 0, Height: 0})
+	data = newLatticeData(4, 0, 1000*time.Second)
+	s.Equal(data.nextPosition(0), types.Position{ChainID: 0, Height: 0})
 }
 
-func TestBlockLattice(t *testing.T) {
-	suite.Run(t, new(BlockLatticeTest))
+func (s *LatticeTestSuite) TestBasicUsage() {
+	// One Lattice prepare blocks on chains randomly selected each time
+	// and process it. Those generated blocks and kept into a buffer, and
+	// process by other Lattice instances with random order.
+	var (
+		blockNum        = 100
+		chainNum        = uint32(19)
+		otherLatticeNum = 20
+		req             = s.Require()
+		err             error
+		cfg             = types.Config{
+			NumChains:        chainNum,
+			PhiRatio:         float32(2) / float32(3),
+			K:                0,
+			MinBlockInterval: 0,
+			MaxBlockInterval: 3000 * time.Second,
+		}
+		master    = s.newTestLatticeMgr(&cfg)
+		apps      = []*test.App{master.app}
+		revealSeq = map[string]struct{}{}
+	)
+	// Master-lattice generates blocks.
+	for i := uint32(0); i < chainNum; i++ {
+		// Produce genesis blocks should be delivered before all other blocks,
+		// or the consensus time would be wrong.
+		b, err := master.prepareBlock(i)
+		req.NotNil(b)
+		req.Nil(err)
+		// We've ignored the error for "acking blocks don't exist".
+		req.Nil(master.processBlock(b))
+	}
+	for i := 0; i < (blockNum - int(chainNum)); i++ {
+		b, err := master.prepareBlock(uint32(rand.Intn(int(chainNum))))
+		req.NotNil(b)
+		req.Nil(err)
+		// We've ignored the error for "acking blocks don't exist".
+		req.Nil(master.processBlock(b))
+	}
+	// Now we have some blocks, replay them on different lattices.
+	iter, err := master.db.GetAll()
+	req.Nil(err)
+	revealer, err := test.NewRandomRevealer(iter)
+	req.Nil(err)
+	for i := 0; i < otherLatticeNum; i++ {
+		revealer.Reset()
+		revealed := ""
+		other := s.newTestLatticeMgr(&cfg)
+		for {
+			b, err := revealer.Next()
+			if err != nil {
+				if err == blockdb.ErrIterationFinished {
+					err = nil
+					break
+				}
+			}
+			req.Nil(err)
+			req.Nil(other.processBlock(&b))
+			revealed += b.Hash.String() + ","
+			revealSeq[revealed] = struct{}{}
+		}
+		apps = append(apps, other.app)
+	}
+	// Make sure not only one revealing sequence.
+	req.True(len(revealSeq) > 1)
+	// Make sure nothing goes wrong.
+	for i, app := range apps {
+		req.Nil(app.Verify())
+		for j, otherApp := range apps {
+			if i >= j {
+				continue
+			}
+			req.Nil(app.Compare(otherApp))
+		}
+	}
+}
+
+func (s *LatticeTestSuite) TestSanityCheck() {
+	// This sanity check focuses on hash/signature part.
+	var (
+		chainNum = uint32(19)
+		cfg      = types.Config{
+			NumChains:        chainNum,
+			PhiRatio:         float32(2) / float32(3),
+			K:                0,
+			MinBlockInterval: 0,
+			MaxBlockInterval: 3000 * time.Second,
+		}
+		lattice = s.newTestLatticeMgr(&cfg).lattice
+		auth    = lattice.authModule // Steal auth module from lattice, :(
+		req     = s.Require()
+		err     error
+	)
+	// A block properly signed should pass sanity check.
+	b := &types.Block{
+		Position: types.Position{ChainID: 0},
+	}
+	req.NoError(auth.SignBlock(b))
+	req.NoError(lattice.SanityCheck(b))
+	// A block with incorrect signature should not pass sanity check.
+	b.Signature, err = auth.prvKey.Sign(common.NewRandomHash())
+	req.NoError(err)
+	req.Equal(lattice.SanityCheck(b), ErrIncorrectSignature)
+	// A block with incorrect hash should not pass sanity check.
+	b.Hash = common.NewRandomHash()
+	req.Equal(lattice.SanityCheck(b), ErrIncorrectHash)
+}
+
+func TestLattice(t *testing.T) {
+	suite.Run(t, new(LatticeTestSuite))
 }

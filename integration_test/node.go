@@ -67,7 +67,7 @@ type Node struct {
 	ID               types.NodeID
 	chainNum         uint32
 	chainID          uint32
-	shard            *core.Shard
+	lattice          *core.Lattice
 	app              *test.App
 	db               blockdb.BlockDatabase
 	broadcastTargets map[types.NodeID]struct{}
@@ -114,7 +114,7 @@ func NewNode(
 		proposingLatency: proposingLatency,
 		app:              app,
 		db:               db,
-		shard: core.NewShard(
+		lattice: core.NewLattice(
 			governanceConfig,
 			core.NewAuthenticator(privateKey),
 			app,
@@ -173,19 +173,19 @@ func (n *Node) prepareBlock(when time.Time) (b *types.Block, err error) {
 		Position: types.Position{
 			ChainID: n.chainID,
 		}}
-	err = n.shard.PrepareBlock(b, when)
+	err = n.lattice.PrepareBlock(b, when)
 	return
 }
 
 func (n *Node) processBlock(b *types.Block) (err error) {
-	// TODO(mission): this segment of code is identical to testShardMgr in
-	//                core/shard_test.go, except the compaction-chain part.
+	// TODO(mission): this segment of code is identical to testLatticeMgr in
+	//                core/lattice_test.go, except the compaction-chain part.
 	var (
 		delivered []*types.Block
 		verified  []*types.Block
 		pendings  = []*types.Block{b}
 	)
-	if err = n.shard.SanityCheck(b); err != nil {
+	if err = n.lattice.SanityCheck(b); err != nil {
 		if err == core.ErrAckingBlockNotExists {
 			err = nil
 		}
@@ -196,7 +196,7 @@ func (n *Node) processBlock(b *types.Block) (err error) {
 			break
 		}
 		b, pendings = pendings[0], pendings[1:]
-		if verified, delivered, err = n.shard.ProcessBlock(b); err != nil {
+		if verified, delivered, err = n.lattice.ProcessBlock(b); err != nil {
 			return
 		}
 		// Deliver blocks.

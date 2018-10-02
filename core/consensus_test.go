@@ -103,7 +103,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	//
 	// - This test case only works for Total Ordering with K=0.
 	// - Byzantine Agreement layer is not taken into consideration, every
-	//   block is passed to shard module directly.
+	//   block is passed to lattice module directly.
 	var (
 		gov, err    = test.NewGovernance(4, time.Second)
 		minInterval = gov.Configuration(0).MinBlockInterval
