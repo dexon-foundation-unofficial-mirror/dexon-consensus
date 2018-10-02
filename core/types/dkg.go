@@ -73,6 +73,7 @@ type DKGPartialSignatureType uint32
 const (
 	TSigConfigurationBlock DKGPartialSignatureType = iota
 	TSigNotaryAck
+	TSigCRS
 )
 
 // DKGPartialSignature describe a partial signature in DKG protocol.

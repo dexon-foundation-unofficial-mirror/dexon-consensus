@@ -32,7 +32,7 @@ type LeaderSelectorTestSuite struct {
 }
 
 func (s *LeaderSelectorTestSuite) newLeader() *leaderSelector {
-	return newGenesisLeaderSelector([]byte("DEXON 🚀"))
+	return newLeaderSelector(common.NewRandomHash())
 }
 
 func (s *LeaderSelectorTestSuite) TestDistance() {

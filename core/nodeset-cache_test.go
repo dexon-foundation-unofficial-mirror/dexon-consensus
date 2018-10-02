@@ -20,6 +20,7 @@ package core
 import (
 	"testing"
 
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -32,7 +33,7 @@ type testGov struct {
 }
 
 func (g *testGov) GetConfiguration(round uint64) (cfg *types.Config) { return }
-func (g *testGov) GetCRS(round uint64) (b []byte)                    { return }
+func (g *testGov) GetCRS(round uint64) (b common.Hash)               { return }
 func (g *testGov) ProposeCRS(uint64, []byte)                         {}
 func (g *testGov) GetNodeSet(round uint64) []crypto.PublicKey {
 	// Randomly generating keys, and check them for verification.

@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -38,7 +39,7 @@ type Governance struct {
 	lambdaBA           time.Duration
 	lambdaDKG          time.Duration
 	privateKeys        map[types.NodeID]crypto.PrivateKey
-	crs                map[uint64][]byte
+	crs                map[uint64]common.Hash
 	tsig               map[uint64]crypto.Signature
 	DKGComplaint       map[uint64][]*types.DKGComplaint
 	DKGMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
@@ -51,11 +52,12 @@ type Governance struct {
 // NewGovernance constructs a Governance instance.
 func NewGovernance(nodeCount int, lambda time.Duration) (
 	g *Governance, err error) {
+	hashCRS := crypto.Keccak256Hash([]byte("__ DEXON"))
 	g = &Governance{
 		lambdaBA:           lambda,
 		lambdaDKG:          lambda * 10,
 		privateKeys:        make(map[types.NodeID]crypto.PrivateKey),
-		crs:                map[uint64][]byte{0: []byte("__ DEXON")},
+		crs:                map[uint64]common.Hash{0: hashCRS},
 		tsig:               make(map[uint64]crypto.Signature),
 		DKGComplaint:       make(map[uint64][]*types.DKGComplaint),
 		DKGMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
@@ -103,13 +105,13 @@ func (g *Governance) GetConfiguration(_ uint64) *types.Config {
 }
 
 // GetCRS returns the CRS for a given round.
-func (g *Governance) GetCRS(round uint64) []byte {
+func (g *Governance) GetCRS(round uint64) common.Hash {
 	return g.crs[round]
 }
 
 // ProposeCRS propose a CRS.
 func (g *Governance) ProposeCRS(round uint64, crs []byte) {
-	g.crs[round] = crs
+	g.crs[round] = crypto.Keccak256Hash(crs)
 }
 
 // GetPrivateKeys return the private key for that node, this function

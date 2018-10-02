@@ -22,6 +22,7 @@ import (
 	"encoding/binary"
 	"math/big"
 
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 )
 
@@ -71,27 +72,27 @@ func NewNodeSet() *NodeSet {
 }
 
 // NewNotarySetTarget is the target for getting Notary Set.
-func NewNotarySetTarget(crs []byte, shardID, chainID uint32) SubSetTarget {
+func NewNotarySetTarget(crs common.Hash, chainID uint32) SubSetTarget {
 	binaryChainID := make([]byte, 4)
 	binary.LittleEndian.PutUint32(binaryChainID, chainID)
 
-	return newTarget(targetNotarySet, crs, binaryChainID)
+	return newTarget(targetNotarySet, crs[:], binaryChainID)
 }
 
 // NewWitnessSetTarget  is the target for getting DKG Set.
-func NewWitnessSetTarget(crs []byte, round uint64) SubSetTarget {
+func NewWitnessSetTarget(crs common.Hash, round uint64) SubSetTarget {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, round)
 
-	return newTarget(targetWitnessSet, crs, binaryRound)
+	return newTarget(targetWitnessSet, crs[:], binaryRound)
 }
 
 // NewDKGSetTarget  is the target for getting DKG Set.
-func NewDKGSetTarget(crs []byte, round uint64) SubSetTarget {
+func NewDKGSetTarget(crs common.Hash, round uint64) SubSetTarget {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, round)
 
-	return newTarget(targetDKGSet, crs, binaryRound)
+	return newTarget(targetDKGSet, crs[:], binaryRound)
 }
 
 // Add a NodeID to the set.

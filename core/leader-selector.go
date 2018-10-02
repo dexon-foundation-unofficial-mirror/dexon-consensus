@@ -53,12 +53,6 @@ type leaderSelector struct {
 	minBlockHash common.Hash
 }
 
-func newGenesisLeaderSelector(
-	crs []byte) *leaderSelector {
-	hash := crypto.Keccak256Hash(crs)
-	return newLeaderSelector(hash)
-}
-
 func newLeaderSelector(
 	crs common.Hash) *leaderSelector {
 	numCRS := big.NewInt(0)

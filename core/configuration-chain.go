@@ -66,6 +66,8 @@ func newConfigurationChain(
 }
 
 func (cc *configurationChain) registerDKG(round uint64, threshold int) {
+	cc.dkgLock.Lock()
+	defer cc.dkgLock.Unlock()
 	cc.dkg = newDKGProtocol(
 		cc.ID,
 		cc.recv,
@@ -88,7 +90,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 		return nil
 	}
 
-	ticker := newTicker(cc.gov, TickerDKG)
+	ticker := newTicker(cc.gov, round, TickerDKG)
 	cc.dkgLock.Unlock()
 	<-ticker.Tick()
 	cc.dkgLock.Lock()
@@ -136,8 +138,8 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	for nID := range gpk.qualifyNodeIDs {
 		qualifies += fmt.Sprintf("%s ", nID.String()[:6])
 	}
-	log.Printf("[%s] Qualify Nodes(%d): %s\n",
-		cc.ID, len(gpk.qualifyIDs), qualifies)
+	log.Printf("[%s] Qualify Nodes(%d): (%d) %s\n",
+		cc.ID, round, len(gpk.qualifyIDs), qualifies)
 	cc.dkgResult.Lock()
 	defer cc.dkgResult.Unlock()
 	cc.dkgSigner[round] = signer
@@ -146,7 +148,8 @@ func (cc *configurationChain) runDKG(round uint64) error {
 }
 
 func (cc *configurationChain) preparePartialSignature(
-	round uint64, hash common.Hash) (*types.DKGPartialSignature, error) {
+	round uint64, hash common.Hash, psigType types.DKGPartialSignatureType) (
+	*types.DKGPartialSignature, error) {
 	signer, exist := func() (*dkgShareSecret, bool) {
 		cc.dkgResult.RLock()
 		defer cc.dkgResult.RUnlock()
@@ -159,12 +162,14 @@ func (cc *configurationChain) preparePartialSignature(
 	return &types.DKGPartialSignature{
 		ProposerID:       cc.ID,
 		Round:            round,
+		Type:             psigType,
 		PartialSignature: signer.sign(hash),
 	}, nil
 }
 
-func (cc *configurationChain) runBlockTSig(
-	round uint64, hash common.Hash) (crypto.Signature, error) {
+func (cc *configurationChain) runTSig(
+	round uint64, hash common.Hash, psigType types.DKGPartialSignatureType) (
+	crypto.Signature, error) {
 	gpk, exist := func() (*dkgGroupPublicKey, bool) {
 		cc.dkgResult.RLock()
 		defer cc.dkgResult.RUnlock()
@@ -176,7 +181,10 @@ func (cc *configurationChain) runBlockTSig(
 	}
 	cc.tsigReady.L.Lock()
 	defer cc.tsigReady.L.Unlock()
-	cc.tsig = newTSigProtocol(gpk, hash, types.TSigConfigurationBlock)
+	for cc.tsig != nil {
+		cc.tsigReady.Wait()
+	}
+	cc.tsig = newTSigProtocol(gpk, hash, psigType)
 	pendingPsig := cc.pendingPsig
 	cc.pendingPsig = []*types.DKGPartialSignature{}
 	go func() {
@@ -195,11 +203,28 @@ func (cc *configurationChain) runBlockTSig(
 		cc.tsigReady.Wait()
 	}
 	cc.tsig = nil
+	cc.tsigReady.Broadcast()
 	if err != nil {
 		return crypto.Signature{}, err
 	}
-	log.Printf("[%s] TSIG: %s\n", cc.ID, signature)
 	return signature, nil
+}
+
+func (cc *configurationChain) runBlockTSig(
+	round uint64, hash common.Hash) (crypto.Signature, error) {
+	sig, err := cc.runTSig(round, hash, types.TSigConfigurationBlock)
+	if err != nil {
+		return crypto.Signature{}, err
+	}
+	log.Printf("[%s] Block TSIG(%d): %s\n", cc.ID, round, sig)
+	return sig, nil
+}
+
+func (cc *configurationChain) runCRSTSig(
+	round uint64, crs common.Hash) ([]byte, error) {
+	sig, err := cc.runTSig(round, crs, types.TSigCRS)
+	log.Printf("[%s] CRS(%d): %s\n", cc.ID, round+1, sig)
+	return sig.Signature[:], err
 }
 
 func (cc *configurationChain) processPrivateShare(
@@ -216,7 +241,7 @@ func (cc *configurationChain) processPartialSignature(
 	psig *types.DKGPartialSignature) error {
 	cc.tsigReady.L.Lock()
 	defer cc.tsigReady.L.Unlock()
-	if cc.tsig == nil {
+	if cc.tsig == nil || psig.Type != cc.tsig.psigType {
 		ok, err := verifyDKGPartialSignatureSignature(psig)
 		if err != nil {
 			return err

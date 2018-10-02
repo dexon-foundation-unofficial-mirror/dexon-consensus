@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
@@ -37,7 +38,7 @@ type simGovernance struct {
 	k                  int
 	phiRatio           float32
 	chainNum           uint32
-	crs                map[uint64][]byte
+	crs                map[uint64]common.Hash
 	tsig               map[uint64]crypto.Signature
 	dkgComplaint       map[uint64][]*types.DKGComplaint
 	dkgMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
@@ -51,6 +52,7 @@ type simGovernance struct {
 func newSimGovernance(
 	id types.NodeID,
 	numNodes int, consensusConfig config.Consensus) *simGovernance {
+	hashCRS := crypto.Keccak256Hash([]byte(consensusConfig.GenesisCRS))
 	return &simGovernance{
 		id:               id,
 		nodeSet:          make(map[types.NodeID]crypto.PublicKey),
@@ -58,8 +60,8 @@ func newSimGovernance(
 		k:                consensusConfig.K,
 		phiRatio:         consensusConfig.PhiRatio,
 		chainNum:         consensusConfig.ChainNum,
-		crs: map[uint64][]byte{
-			0: []byte(consensusConfig.GenesisCRS)},
+		crs: map[uint64]common.Hash{
+			0: hashCRS},
 		tsig:               make(map[uint64]crypto.Signature),
 		dkgComplaint:       make(map[uint64][]*types.DKGComplaint),
 		dkgMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
@@ -101,17 +103,18 @@ func (g *simGovernance) GetConfiguration(round uint64) *types.Config {
 		NumDKGSet:        len(g.nodeSet),
 		MinBlockInterval: g.lambdaBA * 3,
 		MaxBlockInterval: g.lambdaBA * 8,
+		RoundInterval:    g.roundInterval,
 	}
 }
 
 // GetCRS returns the CRS for a given round.
-func (g *simGovernance) GetCRS(round uint64) []byte {
+func (g *simGovernance) GetCRS(round uint64) common.Hash {
 	return g.crs[round]
 }
 
 // ProposeCRS proposes a CRS of round.
 func (g *simGovernance) ProposeCRS(round uint64, crs []byte) {
-	g.crs[round] = crs
+	g.crs[round] = crypto.Keccak256Hash(crs)
 }
 
 // addNode add a new node into the simulated governance contract.

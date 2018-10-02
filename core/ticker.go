@@ -26,6 +26,7 @@ type TickerType int
 const (
 	TickerBA TickerType = iota
 	TickerDKG
+	TickerCRS
 )
 
 // defaultTicker is a wrapper to implement ticker interface based on
@@ -52,7 +53,7 @@ func (t *defaultTicker) Stop() {
 // newTicker is a helper to setup a ticker by giving an Governance. If
 // the governace object implements a ticker generator, a ticker from that
 // generator would be returned, else constructs a default one.
-func newTicker(gov Governance, tickerType TickerType) (t Ticker) {
+func newTicker(gov Governance, round uint64, tickerType TickerType) (t Ticker) {
 	type tickerGenerator interface {
 		NewTicker(TickerType) Ticker
 	}
@@ -64,9 +65,11 @@ func newTicker(gov Governance, tickerType TickerType) (t Ticker) {
 		var duration time.Duration
 		switch tickerType {
 		case TickerBA:
-			duration = gov.GetConfiguration(0).LambdaBA
+			duration = gov.GetConfiguration(round).LambdaBA
 		case TickerDKG:
-			duration = gov.GetConfiguration(0).LambdaDKG
+			duration = gov.GetConfiguration(round).LambdaDKG
+		case TickerCRS:
+			duration = gov.GetConfiguration(round).RoundInterval / 2
 		}
 		t = newDefaultTicker(duration)
 	}

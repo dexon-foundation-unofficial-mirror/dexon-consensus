@@ -85,7 +85,7 @@ type Governance interface {
 
 	// GetCRS returns the CRS for a given round.
 	// Return the genesis CRS if round == 0.
-	GetCRS(round uint64) []byte
+	GetCRS(round uint64) common.Hash
 
 	// Propose a CRS of round.
 	ProposeCRS(round uint64, crs []byte)

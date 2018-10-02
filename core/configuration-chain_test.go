@@ -190,7 +190,7 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
 			continue
 		}
-		psig, err := cc.preparePartialSignature(round, hash)
+		psig, err := cc.preparePartialSignature(round, hash, types.TSigCRS)
 		s.Require().NoError(err)
 		prvKey, exist := s.prvKeys[cc.ID]
 		s.Require().True(exist)
@@ -207,7 +207,7 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 			continue
 		}
 		go func(cc *configurationChain) {
-			tsig, err := cc.runBlockTSig(round, hash)
+			tsig, err := cc.runTSig(round, hash, types.TSigCRS)
 			// Prevent racing by collecting errors and check in main thread.
 			errs <- err
 			tsigChan <- tsig

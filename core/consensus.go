@@ -63,10 +63,11 @@ var (
 // consensusBAReceiver implements agreementReceiver.
 type consensusBAReceiver struct {
 	// TODO(mission): consensus would be replaced by shard and network.
-	consensus       *Consensus
-	agreementModule *agreement
-	chainID         uint32
-	restartNotary   chan bool
+	consensus        *Consensus
+	agreementModule  *agreement
+	chainID          uint32
+	changeNotaryTime time.Time
+	restartNotary    chan bool
 }
 
 func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {
@@ -103,7 +104,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(hash common.Hash) {
 		log.Println(err)
 		return
 	}
-	recv.restartNotary <- false
+	recv.restartNotary <- block.Timestamp.After(recv.changeNotaryTime)
 }
 
 // consensusDKGReceiver implements dkgReceiver.
@@ -250,7 +251,7 @@ func NewConsensus(
 		gov)
 	// Register DKG for the initial round. This is a temporary function call for
 	// simulation.
-	cfgModule.registerDKG(0, len(nodes.IDs)/3)
+	cfgModule.registerDKG(0, config.NumDKGSet/3)
 
 	// Check if the application implement Debug interface.
 	debug, _ := app.(Debug)
@@ -265,7 +266,7 @@ func NewConsensus(
 		gov:           gov,
 		db:            db,
 		network:       network,
-		tickerObj:     newTicker(gov, TickerBA),
+		tickerObj:     newTicker(gov, 0, TickerBA),
 		dkgReady:      sync.NewCond(&sync.Mutex{}),
 		cfgModule:     cfgModule,
 		nodeSetCache:  nodeSetCache,
@@ -287,7 +288,7 @@ func NewConsensus(
 			con.ID,
 			recv,
 			nodes.IDs,
-			newGenesisLeaderSelector(crs),
+			newLeaderSelector(crs),
 			con.authModule,
 		)
 		// Hacky way to make agreement module self contained.
@@ -302,17 +303,20 @@ func NewConsensus(
 func (con *Consensus) Run() {
 	go con.processMsg(con.network.ReceiveChan())
 	con.runDKGTSIG()
-	con.dkgReady.L.Lock()
-	defer con.dkgReady.L.Unlock()
-	for con.dkgRunning != 2 {
-		con.dkgReady.Wait()
-	}
+	func() {
+		con.dkgReady.L.Lock()
+		defer con.dkgReady.L.Unlock()
+		for con.dkgRunning != 2 {
+			con.dkgReady.Wait()
+		}
+	}()
 	ticks := make([]chan struct{}, 0, con.currentConfig.NumChains)
 	for i := uint32(0); i < con.currentConfig.NumChains; i++ {
 		tick := make(chan struct{})
 		ticks = append(ticks, tick)
 		go con.runBA(i, tick)
 	}
+	go con.runCRS()
 
 	// Reset ticker.
 	<-con.tickerObj.Tick()
@@ -329,6 +333,7 @@ func (con *Consensus) runBA(chainID uint32, tick <-chan struct{}) {
 	// TODO(jimmy-dexon): move this function inside agreement.
 	agreement := con.baModules[chainID]
 	recv := con.receivers[chainID]
+	recv.changeNotaryTime = time.Now().UTC()
 	recv.restartNotary <- true
 	nIDs := make(map[types.NodeID]struct{})
 	// Reset ticker
@@ -346,12 +351,13 @@ BALoop:
 		select {
 		case newNotary := <-recv.restartNotary:
 			if newNotary {
+				recv.changeNotaryTime.Add(con.currentConfig.RoundInterval)
 				nodes, err := con.nodeSetCache.GetNodeSet(con.round)
 				if err != nil {
 					panic(err)
 				}
 				nIDs = nodes.GetSubSet(con.gov.GetConfiguration(con.round).NumNotarySet,
-					types.NewNotarySetTarget(con.gov.GetCRS(con.round), 0, chainID))
+					types.NewNotarySetTarget(con.gov.GetCRS(con.round), chainID))
 			}
 			aID := types.Position{
 				ChainID: chainID,
@@ -377,11 +383,18 @@ func (con *Consensus) runDKGTSIG() {
 	}
 	con.dkgRunning = 1
 	go func() {
+		startTime := time.Now().UTC()
 		defer func() {
 			con.dkgReady.L.Lock()
 			defer con.dkgReady.L.Unlock()
 			con.dkgReady.Broadcast()
 			con.dkgRunning = 2
+			DKGTime := time.Now().Sub(startTime)
+			if DKGTime.Nanoseconds() >=
+				con.currentConfig.RoundInterval.Nanoseconds()/2 {
+				log.Printf("[%s] WARNING!!! Your computer cannot finish DKG on time!\n",
+					con.ID)
+			}
 		}()
 		round := con.round
 		if err := con.cfgModule.runDKG(round); err != nil {
@@ -396,7 +409,8 @@ func (con *Consensus) runDKGTSIG() {
 			con.gov.GetConfiguration(round),
 			common.Hash{},
 			con.cfgModule.prevHash)
-		psig, err := con.cfgModule.preparePartialSignature(round, hash)
+		psig, err := con.cfgModule.preparePartialSignature(
+			round, hash, types.TSigConfigurationBlock)
 		if err != nil {
 			panic(err)
 		}
@@ -411,6 +425,47 @@ func (con *Consensus) runDKGTSIG() {
 			panic(err)
 		}
 	}()
+}
+
+func (con *Consensus) runCRS() {
+	for {
+		ticker := newTicker(con.gov, con.round, TickerCRS)
+		select {
+		case <-con.ctx.Done():
+			return
+		default:
+		}
+		<-ticker.Tick()
+		// Start running next round CRS.
+		psig, err := con.cfgModule.preparePartialSignature(
+			con.round, con.gov.GetCRS(con.round), types.TSigCRS)
+		if err != nil {
+			log.Println(err)
+		} else if err = con.authModule.SignDKGPartialSignature(psig); err != nil {
+			log.Println(err)
+		} else if err = con.cfgModule.processPartialSignature(psig); err != nil {
+			log.Println(err)
+		} else {
+			con.network.BroadcastDKGPartialSignature(psig)
+			crs, err := con.cfgModule.runCRSTSig(con.round, con.gov.GetCRS(con.round))
+			if err != nil {
+				log.Println(err)
+			} else {
+				con.gov.ProposeCRS(con.round+1, crs)
+			}
+		}
+		con.cfgModule.registerDKG(con.round+1, con.currentConfig.NumDKGSet/3)
+		<-ticker.Tick()
+		// Change round.
+		con.round++
+		con.currentConfig = con.gov.GetConfiguration(con.round)
+		func() {
+			con.dkgReady.L.Lock()
+			defer con.dkgReady.L.Unlock()
+			con.dkgRunning = 0
+		}()
+		con.runDKGTSIG()
+	}
 }
 
 // Stop the Consensus core.
@@ -464,7 +519,7 @@ func (con *Consensus) proposeBlock(chainID uint32) *types.Block {
 	// TODO(mission): decide CRS by block's round, which could be determined by
 	//                block's info (ex. position, timestamp).
 	if err := con.authModule.SignCRS(
-		block, crypto.Keccak256Hash(con.gov.GetCRS(0))); err != nil {
+		block, con.gov.GetCRS(0)); err != nil {
 		log.Println(err)
 		return nil
 	}
