@@ -88,17 +88,11 @@ type Governance interface {
 	GetCRS(round uint64) common.Hash
 
 	// Propose a CRS of round.
-	ProposeCRS(round uint64, crs []byte)
+	ProposeCRS(round uint64, signedCRS []byte)
 
 	// GetNodeSet returns the node set at a given round.
 	// Return the genesis node set if round == 0.
 	GetNodeSet(round uint64) []crypto.PublicKey
-
-	// Porpose a ThresholdSignature of round.
-	ProposeThresholdSignature(round uint64, signature crypto.Signature)
-
-	// Get a ThresholdSignature of round.
-	GetThresholdSignature(round uint64) (crypto.Signature, bool)
 
 	//// DKG-related methods.
 

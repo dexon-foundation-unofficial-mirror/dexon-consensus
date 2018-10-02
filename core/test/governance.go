@@ -110,8 +110,8 @@ func (g *Governance) GetCRS(round uint64) common.Hash {
 }
 
 // ProposeCRS propose a CRS.
-func (g *Governance) ProposeCRS(round uint64, crs []byte) {
-	g.crs[round] = crypto.Keccak256Hash(crs)
+func (g *Governance) ProposeCRS(round uint64, signedCRS []byte) {
+	g.crs[round] = crypto.Keccak256Hash(signedCRS)
 }
 
 // GetPrivateKeys return the private key for that node, this function
@@ -120,23 +120,6 @@ func (g *Governance) GetPrivateKeys() (keys []crypto.PrivateKey) {
 	for _, k := range g.privateKeys {
 		keys = append(keys, k)
 	}
-	return
-}
-
-// ProposeThresholdSignature porposes a ThresholdSignature of round.
-func (g *Governance) ProposeThresholdSignature(
-	round uint64, signature crypto.Signature) {
-	g.lock.Lock()
-	defer g.lock.Unlock()
-	g.tsig[round] = signature
-}
-
-// GetThresholdSignature gets a ThresholdSignature of round.
-func (g *Governance) GetThresholdSignature(round uint64) (
-	sig crypto.Signature, exist bool) {
-	g.lock.RLock()
-	defer g.lock.RUnlock()
-	sig, exist = g.tsig[round]
 	return
 }
 

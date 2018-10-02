@@ -45,13 +45,6 @@ func (g *testGov) GetNodeSet(round uint64) []crypto.PublicKey {
 	}
 	return g.curKeys
 }
-func (g *testGov) ProposeThresholdSignature(
-	round uint64, signature crypto.Signature) {
-}
-func (g *testGov) GetThresholdSignature(
-	round uint64) (sig crypto.Signature, exists bool) {
-	return
-}
 func (g *testGov) AddDKGComplaint(complaint *types.DKGComplaint) {}
 func (g *testGov) DKGComplaints(
 	round uint64) (cs []*types.DKGComplaint) {

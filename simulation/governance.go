@@ -113,8 +113,8 @@ func (g *simGovernance) GetCRS(round uint64) common.Hash {
 }
 
 // ProposeCRS proposes a CRS of round.
-func (g *simGovernance) ProposeCRS(round uint64, crs []byte) {
-	g.crs[round] = crypto.Keccak256Hash(crs)
+func (g *simGovernance) ProposeCRS(round uint64, signedCRS []byte) {
+	g.crs[round] = crypto.Keccak256Hash(signedCRS)
 }
 
 // addNode add a new node into the simulated governance contract.
@@ -131,19 +131,6 @@ func (g *simGovernance) addNode(pubKey crypto.PublicKey) {
 		panic(fmt.Errorf("attempt to add node when ready"))
 	}
 	g.nodeSet[nID] = pubKey
-}
-
-// ProposeThresholdSignature porposes a ThresholdSignature of round.
-func (g *simGovernance) ProposeThresholdSignature(
-	round uint64, signature crypto.Signature) {
-	g.tsig[round] = signature
-}
-
-// GetThresholdSignature gets a ThresholdSignature of round.
-func (g *simGovernance) GetThresholdSignature(round uint64) (
-	sig crypto.Signature, exist bool) {
-	sig, exist = g.tsig[round]
-	return
 }
 
 // AddDKGComplaint adds a DKGComplaint.
