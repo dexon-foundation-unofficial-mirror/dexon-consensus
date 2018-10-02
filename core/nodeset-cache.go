@@ -106,7 +106,7 @@ func (cache *NodeSetCache) update(
 	defer cache.lock.Unlock()
 
 	// Get the requested round from governance contract.
-	keySet := cache.gov.GetNodeSet(round)
+	keySet := cache.gov.NodeSet(round)
 	if keySet == nil {
 		// That round is not ready yet.
 		err = ErrRoundNotReady

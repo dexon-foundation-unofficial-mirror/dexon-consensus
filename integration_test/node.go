@@ -85,10 +85,9 @@ func NewNode(
 	proposingLatency test.LatencyModel) *Node {
 
 	var (
-		shardID          = uint32(0)
 		chainID          = uint32(math.MaxUint32)
-		governanceConfig = gov.GetConfiguration(0)
-		nodeSetKeys      = gov.GetNodeSet(0)
+		governanceConfig = gov.Configuration(0)
+		nodeSetKeys      = gov.NodeSet(0)
 		nodeID           = types.NewNodeID(privateKey.PublicKey())
 	)
 	broadcastTargets := make(map[types.NodeID]struct{})
@@ -116,7 +115,6 @@ func NewNode(
 		app:              app,
 		db:               db,
 		shard: core.NewShard(
-			shardID,
 			governanceConfig,
 			core.NewAuthenticator(privateKey),
 			app,

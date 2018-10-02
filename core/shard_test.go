@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
@@ -105,7 +106,6 @@ func (s *ShardTestSuite) newTestShardMgr(cfg *types.Config) *testShardMgr {
 		app:      app,
 		db:       db,
 		shard: NewShard(
-			uint32(0),
 			cfg,
 			NewAuthenticator(prvKey),
 			app,
@@ -124,9 +124,11 @@ func (s *ShardTestSuite) TestBasicUsage() {
 		req           = s.Require()
 		err           error
 		cfg           = types.Config{
-			NumChains: chainNum,
-			PhiRatio:  float32(2) / float32(3),
-			K:         0,
+			NumChains:        chainNum,
+			PhiRatio:         float32(2) / float32(3),
+			K:                0,
+			MinBlockInterval: 0,
+			MaxBlockInterval: 3000 * time.Second,
 		}
 		master    = s.newTestShardMgr(&cfg)
 		apps      = []*test.App{master.app}
@@ -185,6 +187,37 @@ func (s *ShardTestSuite) TestBasicUsage() {
 			req.Nil(app.Compare(otherApp))
 		}
 	}
+}
+
+func (s *ShardTestSuite) TestSanityCheck() {
+	// This sanity check focuses on hash/signature part.
+	var (
+		chainNum = uint32(19)
+		cfg      = types.Config{
+			NumChains:        chainNum,
+			PhiRatio:         float32(2) / float32(3),
+			K:                0,
+			MinBlockInterval: 0,
+			MaxBlockInterval: 3000 * time.Second,
+		}
+		shard = s.newTestShardMgr(&cfg).shard
+		auth  = shard.authModule // Steal auth module from shard, :(
+		req   = s.Require()
+		err   error
+	)
+	// A block properly signed should pass sanity check.
+	b := &types.Block{
+		Position: types.Position{ChainID: 0},
+	}
+	req.NoError(auth.SignBlock(b))
+	req.NoError(shard.SanityCheck(b))
+	// A block with incorrect signature should not pass sanity check.
+	b.Signature, err = auth.prvKey.Sign(common.NewRandomHash())
+	req.NoError(err)
+	req.Equal(shard.SanityCheck(b), ErrIncorrectSignature)
+	// A block with incorrect hash should not pass sanity check.
+	b.Hash = common.NewRandomHash()
+	req.Equal(shard.SanityCheck(b), ErrIncorrectHash)
 }
 
 func TestShard(t *testing.T) {

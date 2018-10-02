@@ -62,7 +62,7 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 		DKGComplaint:       make(map[uint64][]*types.DKGComplaint),
 		DKGMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
 		RoundInterval:      365 * 86400 * time.Second,
-		MinBlockInterval:   lambda * 3,
+		MinBlockInterval:   1 * time.Millisecond,
 		MaxBlockInterval:   lambda * 8,
 	}
 	for i := 0; i < nodeCount; i++ {
@@ -76,9 +76,9 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 	return
 }
 
-// GetNodeSet implements Governance interface to return current
+// NodeSet implements Governance interface to return current
 // notary set.
-func (g *Governance) GetNodeSet(_ uint64) (
+func (g *Governance) NodeSet(_ uint64) (
 	ret []crypto.PublicKey) {
 	for _, key := range g.privateKeys {
 		ret = append(ret, key.PublicKey())
@@ -86,8 +86,8 @@ func (g *Governance) GetNodeSet(_ uint64) (
 	return
 }
 
-// GetConfiguration returns the configuration at a given block height.
-func (g *Governance) GetConfiguration(_ uint64) *types.Config {
+// Configuration returns the configuration at a given block height.
+func (g *Governance) Configuration(_ uint64) *types.Config {
 	return &types.Config{
 		NumShards:        1,
 		NumChains:        uint32(len(g.privateKeys)),
@@ -104,8 +104,8 @@ func (g *Governance) GetConfiguration(_ uint64) *types.Config {
 	}
 }
 
-// GetCRS returns the CRS for a given round.
-func (g *Governance) GetCRS(round uint64) common.Hash {
+// CRS returns the CRS for a given round.
+func (g *Governance) CRS(round uint64) common.Hash {
 	return g.crs[round]
 }
 
@@ -114,9 +114,9 @@ func (g *Governance) ProposeCRS(round uint64, signedCRS []byte) {
 	g.crs[round] = crypto.Keccak256Hash(signedCRS)
 }
 
-// GetPrivateKeys return the private key for that node, this function
+// PrivateKeys return the private key for that node, this function
 // is a test utility and not a general Governance interface.
-func (g *Governance) GetPrivateKeys() (keys []crypto.PrivateKey) {
+func (g *Governance) PrivateKeys() (keys []crypto.PrivateKey) {
 	for _, k := range g.privateKeys {
 		keys = append(keys, k)
 	}

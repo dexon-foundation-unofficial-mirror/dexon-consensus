@@ -30,7 +30,6 @@ import (
 // Shard represents a unit to produce a global ordering from multiple chains.
 type Shard struct {
 	lock       sync.RWMutex
-	ID         uint32
 	authModule *Authenticator
 	chainNum   uint32
 	app        Application
@@ -44,22 +43,23 @@ type Shard struct {
 
 // NewShard constructs an Shard instance.
 func NewShard(
-	ID uint32,
 	cfg *types.Config,
 	authModule *Authenticator,
 	app Application,
 	debug Debug,
 	db blockdb.BlockDatabase) (s *Shard) {
-
+	lattice := newBlockLattice(
+		cfg.NumChains,
+		cfg.MinBlockInterval,
+		cfg.MaxBlockInterval)
 	s = &Shard{
-		ID:         ID,
 		authModule: authModule,
 		chainNum:   cfg.NumChains,
 		app:        app,
 		debug:      debug,
 		db:         db,
 		pool:       newBlockPool(cfg.NumChains),
-		lattice:    newBlockLattice(ID, cfg.NumChains),
+		lattice:    lattice,
 		toModule: newTotalOrdering(
 			uint64(cfg.K),
 			uint64(float32(cfg.NumChains-1)*cfg.PhiRatio+1),
@@ -187,4 +187,12 @@ func (s *Shard) ProcessBlock(
 		delivered = append(delivered, toDelivered...)
 	}
 	return
+}
+
+// NextPosition returns expected position of incoming block for that chain.
+func (s *Shard) NextPosition(chainID uint32) types.Position {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	return s.lattice.nextPosition(chainID)
 }

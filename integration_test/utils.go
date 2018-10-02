@@ -25,7 +25,7 @@ func PrepareNodes(
 	if err != nil {
 		return
 	}
-	for _, prvKey := range gov.GetPrivateKeys() {
+	for _, prvKey := range gov.PrivateKeys() {
 		nID := types.NewNodeID(prvKey.PublicKey())
 		apps[nID] = test.NewApp()
 		dbs[nID], err = blockdb.NewMemBackedBlockDB()

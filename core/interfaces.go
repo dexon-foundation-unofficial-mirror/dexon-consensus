@@ -79,27 +79,27 @@ type Network interface {
 // Note that there are a lot more methods in the governance contract, that this
 // interface only define those that are required to run the consensus algorithm.
 type Governance interface {
-	// GetConfiguration returns the configuration at a given round.
+	// Configuration returns the configuration at a given round.
 	// Return the genesis configuration if round == 0.
-	GetConfiguration(round uint64) *types.Config
+	Configuration(round uint64) *types.Config
 
-	// GetCRS returns the CRS for a given round.
+	// CRS returns the CRS for a given round.
 	// Return the genesis CRS if round == 0.
-	GetCRS(round uint64) common.Hash
+	CRS(round uint64) common.Hash
 
 	// Propose a CRS of round.
 	ProposeCRS(round uint64, signedCRS []byte)
 
-	// GetNodeSet returns the node set at a given round.
+	// NodeSet returns the node set at a given round.
 	// Return the genesis node set if round == 0.
-	GetNodeSet(round uint64) []crypto.PublicKey
+	NodeSet(round uint64) []crypto.PublicKey
 
 	//// DKG-related methods.
 
 	// AddDKGComplaint adds a DKGComplaint.
 	AddDKGComplaint(complaint *types.DKGComplaint)
 
-	// GetDKGComplaints gets all the DKGComplaints of round.
+	// DKGComplaints gets all the DKGComplaints of round.
 	DKGComplaints(round uint64) []*types.DKGComplaint
 
 	// AddDKGMasterPublicKey adds a DKGMasterPublicKey.

@@ -19,6 +19,7 @@ package core
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -30,6 +31,15 @@ var (
 	ErrInvalidParentChain      = fmt.Errorf("invalid parent chain")
 	ErrDuplicatedAckOnOneChain = fmt.Errorf("duplicated ack on one chain")
 	ErrChainStatusCorrupt      = fmt.Errorf("chain status corrupt")
+	ErrInvalidChainID          = fmt.Errorf("invalid chain id")
+	ErrInvalidProposerID       = fmt.Errorf("invalid proposer id")
+	ErrInvalidTimestamp        = fmt.Errorf("invalid timestamp")
+	ErrForkBlock               = fmt.Errorf("fork block")
+	ErrNotAckParent            = fmt.Errorf("not ack parent")
+	ErrDoubleAck               = fmt.Errorf("double ack")
+	ErrInvalidBlockHeight      = fmt.Errorf("invalid block height")
+	ErrAlreadyInLattice        = fmt.Errorf("block already in lattice")
+	ErrIncorrectBlockTime      = fmt.Errorf("block timestampe is incorrect")
 )
 
 // blockLattice is a module for storing blocklattice.
@@ -40,8 +50,10 @@ type blockLattice struct {
 	// blockByHash stores blocks, indexed by block hash.
 	blockByHash map[common.Hash]*types.Block
 
-	// shardID caches which shard I belongs to.
-	shardID uint32
+	// Block interval specifies reasonable time difference between
+	// parent/child blocks.
+	minBlockTimeInterval time.Duration
+	maxBlockTimeInterval time.Duration
 }
 
 type chainStatus struct {
@@ -132,7 +144,7 @@ func (s *chainStatus) purge() (purged common.Hashes) {
 }
 
 // nextPosition returns a valid position for new block in this chain.
-func (s *chainStatus) nextPosition(shardID uint32) types.Position {
+func (s *chainStatus) nextPosition() types.Position {
 	return types.Position{
 		ChainID: s.ID,
 		Height:  s.minHeight + uint64(len(s.blocks)),
@@ -140,11 +152,15 @@ func (s *chainStatus) nextPosition(shardID uint32) types.Position {
 }
 
 // newBlockLattice creates a new blockLattice struct.
-func newBlockLattice(shardID, chainNum uint32) (bl *blockLattice) {
+func newBlockLattice(
+	chainNum uint32,
+	minBlockTimeInterval time.Duration,
+	maxBlockTimeInterval time.Duration) (bl *blockLattice) {
 	bl = &blockLattice{
-		shardID:     shardID,
-		chains:      make([]*chainStatus, chainNum),
-		blockByHash: make(map[common.Hash]*types.Block),
+		chains:               make([]*chainStatus, chainNum),
+		blockByHash:          make(map[common.Hash]*types.Block),
+		minBlockTimeInterval: minBlockTimeInterval,
+		maxBlockTimeInterval: maxBlockTimeInterval,
 	}
 	for i := range bl.chains {
 		bl.chains[i] = &chainStatus{
@@ -213,6 +229,12 @@ func (bl *blockLattice) sanityCheck(b *types.Block) error {
 		if !b.Timestamp.After(bParent.Timestamp) {
 			return ErrInvalidTimestamp
 		}
+		// Check if its timestamp is in expected range.
+		if b.Timestamp.Before(bParent.Timestamp.Add(bl.minBlockTimeInterval)) ||
+			b.Timestamp.After(bParent.Timestamp.Add(bl.maxBlockTimeInterval)) {
+
+			return ErrIncorrectBlockTime
+		}
 	}
 	return nil
 }
@@ -248,6 +270,7 @@ func (bl *blockLattice) addBlock(
 		bAck    *types.Block
 		updated bool
 	)
+	// TODO(mission): sanity check twice, might hurt performance.
 	// If a block does not pass sanity check, report error.
 	if err = bl.sanityCheck(block); err != nil {
 		return
@@ -355,5 +378,5 @@ func (bl *blockLattice) prepareBlock(block *types.Block) {
 // TODO(mission): make more abstraction for this method.
 // nextHeight returns the next height for the chain.
 func (bl *blockLattice) nextPosition(chainID uint32) types.Position {
-	return bl.chains[chainID].nextPosition(bl.shardID)
+	return bl.chains[chainID].nextPosition()
 }

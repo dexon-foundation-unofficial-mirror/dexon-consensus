@@ -65,11 +65,11 @@ func newTicker(gov Governance, round uint64, tickerType TickerType) (t Ticker) {
 		var duration time.Duration
 		switch tickerType {
 		case TickerBA:
-			duration = gov.GetConfiguration(round).LambdaBA
+			duration = gov.Configuration(round).LambdaBA
 		case TickerDKG:
-			duration = gov.GetConfiguration(round).LambdaDKG
+			duration = gov.Configuration(round).LambdaDKG
 		case TickerCRS:
-			duration = gov.GetConfiguration(round).RoundInterval / 2
+			duration = gov.Configuration(round).RoundInterval / 2
 		}
 		t = newDefaultTicker(duration)
 	}

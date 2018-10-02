@@ -78,7 +78,7 @@ func (s *BlockLatticeTest) genTestCase1() (bl *blockLattice) {
 		err       error
 	)
 
-	bl = newBlockLattice(0, chainNum)
+	bl = newBlockLattice(chainNum, 2*time.Nanosecond, 1000*time.Second)
 	// Add genesis blocks.
 	for i := uint32(0); i < chainNum; i++ {
 		b = s.prepareGenesisBlock(i)
@@ -314,6 +314,30 @@ func (s *BlockLatticeTest) TestSanityCheck() {
 	req.NotNil(err)
 	req.Equal(err.Error(), ErrDuplicatedAckOnOneChain.Error())
 
+	// Add block 3-1 which acks 3-0, and violet reasonable block time interval.
+	h = bl.chains[2].getBlockByHeight(0).Hash
+	b = &types.Block{
+		ParentHash: h,
+		Hash:       common.NewRandomHash(),
+		Timestamp:  time.Now().UTC().Add(bl.maxBlockTimeInterval),
+		Position: types.Position{
+			ChainID: 2,
+			Height:  1,
+		},
+		Acks: common.NewSortedHashes(common.Hashes{h}),
+	}
+	s.hashBlock(b)
+	err = bl.sanityCheck(b)
+	req.NotNil(err)
+	req.Equal(err, ErrIncorrectBlockTime)
+	// Violet minimum block time interval.
+	b.Timestamp =
+		bl.chains[2].getBlockByHeight(0).Timestamp.Add(1 * time.Nanosecond)
+	s.hashBlock(b)
+	err = bl.sanityCheck(b)
+	req.NotNil(err)
+	req.Equal(err, ErrIncorrectBlockTime)
+
 	// Normal block.
 	h = bl.chains[1].getBlockByHeight(0).Hash
 	b = &types.Block{
@@ -361,7 +385,7 @@ func (s *BlockLatticeTest) TestAreAllAcksInLattice() {
 func (s *BlockLatticeTest) TestRandomIntensiveAcking() {
 	var (
 		chainNum  uint32 = 19
-		bl               = newBlockLattice(0, chainNum)
+		bl               = newBlockLattice(chainNum, 0, 1000*time.Second)
 		req              = s.Require()
 		delivered []*types.Block
 		extracted []*types.Block
@@ -424,7 +448,7 @@ func (s *BlockLatticeTest) TestRandomlyGeneratedBlocks() {
 	revealedHashesAsString := map[string]struct{}{}
 	deliveredHashesAsString := map[string]struct{}{}
 	for i := 0; i < repeat; i++ {
-		bl := newBlockLattice(0, chainNum)
+		bl := newBlockLattice(chainNum, 0, 1000*time.Second)
 		deliveredHashes := common.Hashes{}
 		revealedHashes := common.Hashes{}
 		revealer.Reset()
@@ -502,7 +526,7 @@ func (s *BlockLatticeTest) TestPrepareBlock() {
 	var (
 		chainNum    uint32 = 4
 		req                = s.Require()
-		bl                 = newBlockLattice(0, chainNum)
+		bl                 = newBlockLattice(chainNum, 0, 3000*time.Second)
 		minInterval        = 50 * time.Millisecond
 		delivered   []*types.Block
 		err         error
@@ -625,6 +649,16 @@ func (s *BlockLatticeTest) TestPurge() {
 	s.Require().Len(chain.blocks, 2)
 	s.Equal(chain.blocks[0].Hash, b01.Hash)
 	s.Equal(chain.blocks[1].Hash, b02.Hash)
+}
+
+func (s *BlockLatticeTest) TestNextPosition() {
+	// Test 'NextPosition' method when lattice is ready.
+	bl := s.genTestCase1()
+	s.Equal(bl.nextPosition(0), types.Position{ChainID: 0, Height: 4})
+
+	// Test 'NextPosition' method when lattice is empty.
+	bl = newBlockLattice(4, 0, 1000*time.Second)
+	s.Equal(bl.nextPosition(0), types.Position{ChainID: 0, Height: 0})
 }
 
 func TestBlockLattice(t *testing.T) {

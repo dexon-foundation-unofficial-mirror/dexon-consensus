@@ -32,10 +32,10 @@ type testGov struct {
 	curKeys []crypto.PublicKey
 }
 
-func (g *testGov) GetConfiguration(round uint64) (cfg *types.Config) { return }
-func (g *testGov) GetCRS(round uint64) (b common.Hash)               { return }
-func (g *testGov) ProposeCRS(uint64, []byte)                         {}
-func (g *testGov) GetNodeSet(round uint64) []crypto.PublicKey {
+func (g *testGov) Configuration(round uint64) (cfg *types.Config) { return }
+func (g *testGov) CRS(round uint64) (b common.Hash)               { return }
+func (g *testGov) ProposeCRS(uint64, []byte)                      {}
+func (g *testGov) NodeSet(round uint64) []crypto.PublicKey {
 	// Randomly generating keys, and check them for verification.
 	g.curKeys = []crypto.PublicKey{}
 	for i := 0; i < 10; i++ {

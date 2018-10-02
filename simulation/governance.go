@@ -78,8 +78,8 @@ func (g *simGovernance) setNetwork(network *network) {
 	g.network = network
 }
 
-// GetNodeSet returns the current notary set.
-func (g *simGovernance) GetNodeSet(round uint64) (ret []crypto.PublicKey) {
+// NodeSet returns the current notary set.
+func (g *simGovernance) NodeSet(round uint64) (ret []crypto.PublicKey) {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
@@ -89,8 +89,8 @@ func (g *simGovernance) GetNodeSet(round uint64) (ret []crypto.PublicKey) {
 	return
 }
 
-// GetConfiguration returns the configuration at a given round.
-func (g *simGovernance) GetConfiguration(round uint64) *types.Config {
+// Configuration returns the configuration at a given round.
+func (g *simGovernance) Configuration(round uint64) *types.Config {
 	return &types.Config{
 		NumShards:        1,
 		NumChains:        g.chainNum,
@@ -107,8 +107,8 @@ func (g *simGovernance) GetConfiguration(round uint64) *types.Config {
 	}
 }
 
-// GetCRS returns the CRS for a given round.
-func (g *simGovernance) GetCRS(round uint64) common.Hash {
+// CRS returns the CRS for a given round.
+func (g *simGovernance) CRS(round uint64) common.Hash {
 	return g.crs[round]
 }
 
