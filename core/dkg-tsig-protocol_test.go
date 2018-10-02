@@ -181,7 +181,7 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 	}
 
 	// DKG is fininished.
-	gpk, err := newDKGGroupPublicKey(round,
+	gpk, err := NewDKGGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round),
 		k,
 	)
@@ -230,7 +230,7 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 
 	sig, err := tsig.signature()
 	s.Require().NoError(err)
-	s.True(gpk.verifySignature(msgHash, sig))
+	s.True(gpk.VerifySignature(msgHash, sig))
 }
 
 func (s *DKGTSIGProtocolTestSuite) TestNackComplaint() {
@@ -477,7 +477,7 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 		s.Require().True(complaints[i].IsNack())
 	}
 
-	gpk, err := newDKGGroupPublicKey(round,
+	gpk, err := NewDKGGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), complaints,
 		k,
 	)
@@ -487,7 +487,7 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 		s.NotEqual(id, byzantineID)
 	}
 
-	gpk2, err := newDKGGroupPublicKey(round,
+	gpk2, err := NewDKGGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), complaints[:k],
 		k,
 	)
@@ -497,7 +497,7 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 	// Test for complaint.
 	complaints[0].PrivateShare.Signature = crypto.Signature{Signature: []byte{0}}
 	s.Require().False(complaints[0].IsNack())
-	gpk3, err := newDKGGroupPublicKey(round,
+	gpk3, err := NewDKGGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), complaints[:1],
 		k,
 	)
@@ -552,7 +552,7 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 	}
 
 	// DKG is fininished.
-	gpk, err := newDKGGroupPublicKey(round,
+	gpk, err := NewDKGGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round),
 		k,
 	)
@@ -613,7 +613,7 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 
 	sig, err := tsig.signature()
 	s.Require().NoError(err)
-	s.True(gpk.verifySignature(msgHash, sig))
+	s.True(gpk.VerifySignature(msgHash, sig))
 }
 
 func TestDKGTSIGProtocol(t *testing.T) {

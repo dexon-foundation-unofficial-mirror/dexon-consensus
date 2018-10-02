@@ -81,7 +81,8 @@ type dkgShareSecret struct {
 	privateKey *dkg.PrivateKey
 }
 
-type dkgGroupPublicKey struct {
+// DKGGroupPublicKey is the result of DKG protocol.
+type DKGGroupPublicKey struct {
 	round          uint64
 	qualifyIDs     dkg.IDs
 	qualifyNodeIDs map[types.NodeID]struct{}
@@ -92,7 +93,7 @@ type dkgGroupPublicKey struct {
 }
 
 type tsigProtocol struct {
-	groupPublicKey *dkgGroupPublicKey
+	groupPublicKey *DKGGroupPublicKey
 	hash           common.Hash
 	psigType       types.DKGPartialSignatureType
 	sigs           map[dkg.ID]dkg.PartialSignature
@@ -311,11 +312,12 @@ func (ss *dkgShareSecret) sign(hash common.Hash) dkg.PartialSignature {
 	return dkg.PartialSignature(sig)
 }
 
-func newDKGGroupPublicKey(
+// NewDKGGroupPublicKey creats a DKGGroupPublicKey instance.
+func NewDKGGroupPublicKey(
 	round uint64,
 	mpks []*types.DKGMasterPublicKey, complaints []*types.DKGComplaint,
 	threshold int) (
-	*dkgGroupPublicKey, error) {
+	*DKGGroupPublicKey, error) {
 	// Calculate qualify members.
 	disqualifyIDs := map[types.NodeID]struct{}{}
 	complaintsByID := map[types.NodeID]int{}
@@ -369,7 +371,7 @@ func newDKGGroupPublicKey(
 		pubShares = append(pubShares, &mpkMap[id].PublicKeyShares)
 	}
 	groupPK := dkg.RecoverGroupPublicKey(pubShares)
-	return &dkgGroupPublicKey{
+	return &DKGGroupPublicKey{
 		round:          round,
 		qualifyIDs:     qualifyIDs,
 		qualifyNodeIDs: qualifyNodeIDs,
@@ -380,13 +382,14 @@ func newDKGGroupPublicKey(
 	}, nil
 }
 
-func (gpk *dkgGroupPublicKey) verifySignature(
+// VerifySignature verifies if the signature is correct.
+func (gpk *DKGGroupPublicKey) VerifySignature(
 	hash common.Hash, sig crypto.Signature) bool {
 	return gpk.groupPublicKey.VerifySignature(hash, sig)
 }
 
 func newTSigProtocol(
-	gpk *dkgGroupPublicKey,
+	gpk *DKGGroupPublicKey,
 	hash common.Hash,
 	psigType types.DKGPartialSignatureType) *tsigProtocol {
 	return &tsigProtocol{

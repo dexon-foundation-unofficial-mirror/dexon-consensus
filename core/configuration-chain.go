@@ -42,7 +42,7 @@ type configurationChain struct {
 	dkg       *dkgProtocol
 	dkgLock   sync.RWMutex
 	dkgSigner map[uint64]*dkgShareSecret
-	gpk       map[uint64]*dkgGroupPublicKey
+	gpk       map[uint64]*DKGGroupPublicKey
 	dkgResult sync.RWMutex
 	tsig      *tsigProtocol
 	tsigReady *sync.Cond
@@ -60,7 +60,7 @@ func newConfigurationChain(
 		recv:      recv,
 		gov:       gov,
 		dkgSigner: make(map[uint64]*dkgShareSecret),
-		gpk:       make(map[uint64]*dkgGroupPublicKey),
+		gpk:       make(map[uint64]*DKGGroupPublicKey),
 		tsigReady: sync.NewCond(&sync.Mutex{}),
 	}
 }
@@ -123,7 +123,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	cc.dkgLock.Unlock()
 	<-ticker.Tick()
 	cc.dkgLock.Lock()
-	gpk, err := newDKGGroupPublicKey(round,
+	gpk, err := NewDKGGroupPublicKey(round,
 		cc.gov.DKGMasterPublicKeys(round),
 		cc.gov.DKGComplaints(round),
 		cc.dkg.threshold)
@@ -170,7 +170,7 @@ func (cc *configurationChain) preparePartialSignature(
 func (cc *configurationChain) runTSig(
 	round uint64, hash common.Hash, psigType types.DKGPartialSignatureType) (
 	crypto.Signature, error) {
-	gpk, exist := func() (*dkgGroupPublicKey, bool) {
+	gpk, exist := func() (*DKGGroupPublicKey, bool) {
 		cc.dkgResult.RLock()
 		defer cc.dkgResult.RUnlock()
 		gpk, exist := cc.gpk[round]
