@@ -68,6 +68,14 @@ lint:
 vet:
 	@go vet `go list ./... | grep -v 'vendor'`
 
+test-short:
+	@for pkg in `go list ./... | grep -v 'vendor'`; do \
+		if ! go test -race -short $$pkg; then \
+			echo 'Some test failed, abort'; \
+			exit 1; \
+		fi; \
+	done
+
 test:
 	@for pkg in `go list ./... | grep -v 'vendor'`; do \
 		if ! go test -race $$pkg; then \

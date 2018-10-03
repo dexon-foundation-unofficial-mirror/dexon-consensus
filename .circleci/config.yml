@@ -35,5 +35,12 @@ jobs:
       - run: make dep
       - run: make lint
       - run: make vet
-      - run: make test
+      - run:
+          name: Unit Test
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "master" ]; then
+              make test
+            else
+              make test-short
+            fi
       - run: make
