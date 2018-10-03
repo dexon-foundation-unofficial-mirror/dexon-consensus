@@ -184,9 +184,9 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	}
 	mpk.Signature, err = prv.Sign(hashDKGMasterPublicKey(mpk))
 	s.Require().Nil(err)
-	s.True(verifyDKGMasterPublicKeySignature(mpk))
+	s.True(VerifyDKGMasterPublicKeySignature(mpk))
 	mpk.Round++
-	s.False(verifyDKGMasterPublicKeySignature(mpk))
+	s.False(VerifyDKGMasterPublicKeySignature(mpk))
 
 	complaint := &types.DKGComplaint{
 		ProposerID:   nID,
@@ -195,9 +195,9 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	}
 	complaint.Signature, err = prv.Sign(hashDKGComplaint(complaint))
 	s.Require().Nil(err)
-	s.True(verifyDKGComplaintSignature(complaint))
+	s.True(VerifyDKGComplaintSignature(complaint))
 	complaint.Round++
-	s.False(verifyDKGComplaintSignature(complaint))
+	s.False(VerifyDKGComplaintSignature(complaint))
 
 	sig := &types.DKGPartialSignature{
 		ProposerID:       nID,

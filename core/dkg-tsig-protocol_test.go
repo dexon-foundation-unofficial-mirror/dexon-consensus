@@ -271,7 +271,7 @@ func (s *DKGTSIGProtocolTestSuite) TestNackComplaint() {
 		complaint, exist := recv.complaints[byzantineID]
 		s.True(complaint.IsNack())
 		s.Require().True(exist)
-		s.True(verifyDKGComplaintSignature(complaint))
+		s.True(VerifyDKGComplaintSignature(complaint))
 	}
 }
 

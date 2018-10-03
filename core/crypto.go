@@ -154,7 +154,8 @@ func hashDKGMasterPublicKey(mpk *types.DKGMasterPublicKey) common.Hash {
 	)
 }
 
-func verifyDKGMasterPublicKeySignature(
+// VerifyDKGMasterPublicKeySignature verifies DKGMasterPublicKey signature.
+func VerifyDKGMasterPublicKeySignature(
 	mpk *types.DKGMasterPublicKey) (bool, error) {
 	hash := hashDKGMasterPublicKey(mpk)
 	pubKey, err := crypto.SigToPub(hash, mpk.Signature)
@@ -180,7 +181,8 @@ func hashDKGComplaint(complaint *types.DKGComplaint) common.Hash {
 	)
 }
 
-func verifyDKGComplaintSignature(
+// VerifyDKGComplaintSignature verifies DKGCompliant signature.
+func VerifyDKGComplaintSignature(
 	complaint *types.DKGComplaint) (bool, error) {
 	hash := hashDKGComplaint(complaint)
 	pubKey, err := crypto.SigToPub(hash, complaint.Signature)
