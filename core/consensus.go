@@ -428,6 +428,11 @@ func (con *Consensus) runCRS() {
 		}
 		con.cfgModule.registerDKG(con.round+1, con.currentConfig.NumDKGSet/3)
 		<-ticker.Tick()
+		select {
+		case <-con.ctx.Done():
+			return
+		default:
+		}
 		// Change round.
 		con.round++
 		con.currentConfig = con.gov.Configuration(con.round)

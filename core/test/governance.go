@@ -18,6 +18,7 @@
 package test
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -106,11 +107,15 @@ func (g *Governance) Configuration(_ uint64) *types.Config {
 
 // CRS returns the CRS for a given round.
 func (g *Governance) CRS(round uint64) common.Hash {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
 	return g.crs[round]
 }
 
 // ProposeCRS propose a CRS.
 func (g *Governance) ProposeCRS(round uint64, signedCRS []byte) {
+	g.lock.Lock()
+	defer g.lock.Unlock()
 	g.crs[round] = crypto.Keccak256Hash(signedCRS)
 }
 
@@ -165,5 +170,12 @@ func (g *Governance) DKGMasterPublicKeys(
 	if !exist {
 		return []*types.DKGMasterPublicKey{}
 	}
-	return masterPublicKeys
+	mpks := make([]*types.DKGMasterPublicKey, 0, len(masterPublicKeys))
+	for _, mpk := range masterPublicKeys {
+		bytes, _ := json.Marshal(mpk)
+		mpkCopy := types.NewDKGMasterPublicKey()
+		json.Unmarshal(bytes, mpkCopy)
+		mpks = append(mpks, mpkCopy)
+	}
+	return mpks
 }

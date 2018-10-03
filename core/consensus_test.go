@@ -32,38 +32,90 @@ import (
 
 // network implements core.Network.
 type network struct {
+	ch   <-chan interface{}
+	nID  types.NodeID
+	conn *networkConnection
 }
 
 // BroadcastVote broadcasts vote to all nodes in DEXON network.
-func (n *network) BroadcastVote(vote *types.Vote) {}
+func (n *network) BroadcastVote(vote *types.Vote) {
+	n.conn.broadcast(n.nID, vote)
+}
 
 // BroadcastBlock broadcasts block to all nodes in DEXON network.
 func (n *network) BroadcastBlock(block *types.Block) {
+	n.conn.broadcast(n.nID, block)
 }
 
 // SendDKGPrivateShare sends PrivateShare to a DKG participant.
 func (n *network) SendDKGPrivateShare(
 	recv crypto.PublicKey, prvShare *types.DKGPrivateShare) {
+	n.conn.send(types.NewNodeID(recv), prvShare)
 }
 
 // BroadcastDKGPrivateShare broadcasts PrivateShare to all DKG participants.
 func (n *network) BroadcastDKGPrivateShare(
 	prvShare *types.DKGPrivateShare) {
+	n.conn.broadcast(n.nID, prvShare)
 }
 
 // BroadcastDKGPartialSignature broadcasts partialSignature to all
 // DKG participants.
 func (n *network) BroadcastDKGPartialSignature(
 	psig *types.DKGPartialSignature) {
+	n.conn.broadcast(n.nID, psig)
 }
 
 // ReceiveChan returns a channel to receive messages from DEXON network.
 func (n *network) ReceiveChan() <-chan interface{} {
-	return make(chan interface{})
+	return n.ch
+}
+
+type networkConnection struct {
+	channels map[types.NodeID]chan interface{}
+}
+
+func (nc *networkConnection) broadcast(from types.NodeID, msg interface{}) {
+	for pk, ch := range nc.channels {
+		if pk == from {
+			continue
+		}
+		go func(ch chan interface{}) {
+			ch <- msg
+		}(ch)
+	}
+}
+
+func (nc *networkConnection) send(to types.NodeID, msg interface{}) {
+	ch, exist := nc.channels[to]
+	if !exist {
+		return
+	}
+	go func() {
+		ch <- msg
+	}()
+}
+
+func (nc *networkConnection) join(pk crypto.PublicKey) *network {
+	ch := make(chan interface{}, 300)
+	nID := types.NewNodeID(pk)
+	nc.channels[nID] = ch
+	return &network{
+		ch:   ch,
+		nID:  nID,
+		conn: nc,
+	}
 }
 
 type ConsensusTestSuite struct {
 	suite.Suite
+	conn *networkConnection
+}
+
+func (s *ConsensusTestSuite) SetupTest() {
+	s.conn = &networkConnection{
+		channels: make(map[types.NodeID]chan interface{}),
+	}
 }
 
 func (s *ConsensusTestSuite) prepareGenesisBlock(
@@ -86,7 +138,7 @@ func (s *ConsensusTestSuite) prepareConsensus(
 	app := test.NewApp()
 	db, err := blockdb.NewMemBackedBlockDB()
 	s.Require().Nil(err)
-	con := NewConsensus(app, gov, db, &network{}, prvKey)
+	con := NewConsensus(app, gov, db, s.conn.join(prvKey.PublicKey()), prvKey)
 	return app, con
 }
 
@@ -374,6 +426,53 @@ func (s *ConsensusTestSuite) TestPrepareGenesisBlock() {
 	s.NoError(con.preProcessBlock(block))
 }
 
+func (s *ConsensusTestSuite) TestDKGCRS() {
+	n := 21
+	lambda := time.Duration(200)
+	if testing.Short() {
+		n = 7
+		lambda = 100
+	}
+	gov, err := test.NewGovernance(n, lambda*time.Millisecond)
+	s.Require().Nil(err)
+	gov.RoundInterval = 200 * lambda * time.Millisecond
+	config := gov.Configuration(0)
+	prvKeys := gov.PrivateKeys()
+	cons := map[types.NodeID]*Consensus{}
+	for _, key := range prvKeys {
+		_, con := s.prepareConsensus(gov, key)
+		nID := types.NewNodeID(key.PublicKey())
+		cons[nID] = con
+		go con.processMsg(con.network.ReceiveChan())
+	}
+	for _, con := range cons {
+		con.runDKGTSIG()
+	}
+	for _, con := range cons {
+		func() {
+			con.dkgReady.L.Lock()
+			defer con.dkgReady.L.Unlock()
+			for con.dkgRunning != 2 {
+				con.dkgReady.Wait()
+			}
+		}()
+	}
+	crsFinish := make(chan struct{})
+	for _, con := range cons {
+		go func(con *Consensus) {
+			con.runCRS()
+			crsFinish <- struct{}{}
+		}(con)
+	}
+	time.Sleep(config.RoundInterval * 3 / 4)
+	for _, con := range cons {
+		con.Stop()
+	}
+	for range cons {
+		<-crsFinish
+	}
+	s.NotNil(gov.CRS(1))
+}
 func TestConsensus(t *testing.T) {
 	suite.Run(t, new(ConsensusTestSuite))
 }
