@@ -18,6 +18,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -45,6 +46,11 @@ var (
 	ErrIncorrectBlockTime      = fmt.Errorf("block timestampe is incorrect")
 )
 
+// Errors for method usage
+var (
+	ErrRoundNotIncreasing = errors.New("round not increasing")
+)
+
 // latticeData is a module for storing lattice.
 type latticeData struct {
 	// chains stores chains' blocks and other info.
@@ -57,10 +63,15 @@ type latticeData struct {
 	// parent/child blocks.
 	minBlockTimeInterval time.Duration
 	maxBlockTimeInterval time.Duration
+
+	// This stores configuration for each round.
+	numChainsForRounds []uint32
+	minRound           uint64
 }
 
 // newLatticeData creates a new latticeData struct.
 func newLatticeData(
+	round uint64,
 	chainNum uint32,
 	minBlockTimeInterval time.Duration,
 	maxBlockTimeInterval time.Duration) (data *latticeData) {
@@ -69,6 +80,8 @@ func newLatticeData(
 		blockByHash:          make(map[common.Hash]*types.Block),
 		minBlockTimeInterval: minBlockTimeInterval,
 		maxBlockTimeInterval: maxBlockTimeInterval,
+		numChainsForRounds:   []uint32{chainNum},
+		minRound:             round,
 	}
 	for i := range data.chains {
 		data.chains[i] = &chainStatus{
@@ -289,6 +302,18 @@ func (data *latticeData) nextPosition(chainID uint32) types.Position {
 	return data.chains[chainID].nextPosition()
 }
 
+// appendConfig appends a configuration for upcoming round. When you append
+// a config for round R, next time you can only append the config for round R+1.
+func (data *latticeData) appendConfig(
+	round uint64, config *types.Config) (err error) {
+
+	if round != data.minRound+uint64(len(data.numChainsForRounds)) {
+		return ErrRoundNotIncreasing
+	}
+	data.numChainsForRounds = append(data.numChainsForRounds, config.NumChains)
+	return nil
+}
+
 type chainStatus struct {
 	// ID keeps the chainID of this chain status.
 	ID uint32
@@ -400,12 +425,14 @@ type Lattice struct {
 
 // NewLattice constructs an Lattice instance.
 func NewLattice(
+	round uint64,
 	cfg *types.Config,
 	authModule *Authenticator,
 	app Application,
 	debug Debug,
 	db blockdb.BlockDatabase) (s *Lattice) {
 	data := newLatticeData(
+		round,
 		cfg.NumChains,
 		cfg.MinBlockInterval,
 		cfg.MaxBlockInterval)
@@ -418,10 +445,11 @@ func NewLattice(
 		pool:       newBlockPool(cfg.NumChains),
 		data:       data,
 		toModule: newTotalOrdering(
+			round,
 			uint64(cfg.K),
 			uint64(float32(cfg.NumChains-1)*cfg.PhiRatio+1),
 			cfg.NumChains),
-		ctModule: newConsensusTimestamp(),
+		ctModule: newConsensusTimestamp(round, cfg.NumChains),
 	}
 	return
 }
@@ -552,4 +580,22 @@ func (s *Lattice) NextPosition(chainID uint32) types.Position {
 	defer s.lock.RUnlock()
 
 	return s.data.nextPosition(chainID)
+}
+
+// AppendConfig add new configs for upcoming rounds. If you add a config for
+// round R, next time you can only add the config for round R+1.
+func (s *Lattice) AppendConfig(round uint64, config *types.Config) (err error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if err = s.data.appendConfig(round, config); err != nil {
+		return
+	}
+	if err = s.toModule.appendConfig(round, config); err != nil {
+		return
+	}
+	if err = s.ctModule.appendConfig(round, config); err != nil {
+		return
+	}
+	return
 }

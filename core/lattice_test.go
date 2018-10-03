@@ -93,7 +93,10 @@ type LatticeTestSuite struct {
 
 func (s *LatticeTestSuite) newTestLatticeMgr(
 	cfg *types.Config) *testLatticeMgr {
-	var req = s.Require()
+	var (
+		req   = s.Require()
+		round uint64
+	)
 	// Setup private key.
 	prvKey, err := ecdsa.NewPrivateKey()
 	req.Nil(err)
@@ -108,6 +111,7 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 		app:      app,
 		db:       db,
 		lattice: NewLattice(
+			round,
 			cfg,
 			NewAuthenticator(prvKey),
 			app,
@@ -150,6 +154,7 @@ func (s *LatticeTestSuite) prepareGenesisBlock(
 func (s *LatticeTestSuite) genTestCase1() (data *latticeData) {
 	// Create new reliableBroadcast instance with 4 validators
 	var (
+		round     uint64
 		b         *types.Block
 		delivered []*types.Block
 		h         common.Hash
@@ -158,7 +163,7 @@ func (s *LatticeTestSuite) genTestCase1() (data *latticeData) {
 		err       error
 	)
 
-	data = newLatticeData(chainNum, 2*time.Nanosecond, 1000*time.Second)
+	data = newLatticeData(round, chainNum, 2*time.Nanosecond, 1000*time.Second)
 	// Add genesis blocks.
 	for i := uint32(0); i < chainNum; i++ {
 		b = s.prepareGenesisBlock(i)
@@ -464,8 +469,9 @@ func (s *LatticeTestSuite) TestAreAllAcksInLattice() {
 
 func (s *LatticeTestSuite) TestRandomIntensiveAcking() {
 	var (
+		round     uint64
 		chainNum  uint32 = 19
-		data             = newLatticeData(chainNum, 0, 1000*time.Second)
+		data             = newLatticeData(round, chainNum, 0, 1000*time.Second)
 		req              = s.Require()
 		delivered []*types.Block
 		extracted []*types.Block
@@ -503,6 +509,7 @@ func (s *LatticeTestSuite) TestRandomIntensiveAcking() {
 
 func (s *LatticeTestSuite) TestRandomlyGeneratedBlocks() {
 	var (
+		round     uint64
 		chainNum  uint32 = 19
 		blockNum         = 50
 		repeat           = 20
@@ -528,7 +535,7 @@ func (s *LatticeTestSuite) TestRandomlyGeneratedBlocks() {
 	revealedHashesAsString := map[string]struct{}{}
 	deliveredHashesAsString := map[string]struct{}{}
 	for i := 0; i < repeat; i++ {
-		data := newLatticeData(chainNum, 0, 1000*time.Second)
+		data := newLatticeData(round, chainNum, 0, 1000*time.Second)
 		deliveredHashes := common.Hashes{}
 		revealedHashes := common.Hashes{}
 		revealer.Reset()
@@ -604,12 +611,14 @@ func (s *LatticeTestSuite) TestRandomlyGeneratedBlocks() {
 
 func (s *LatticeTestSuite) TestPrepareBlock() {
 	var (
+		round       uint64
 		chainNum    uint32 = 4
 		req                = s.Require()
-		data               = newLatticeData(chainNum, 0, 3000*time.Second)
 		minInterval        = 50 * time.Millisecond
 		delivered   []*types.Block
 		err         error
+		data        = newLatticeData(
+			round, chainNum, 0, 3000*time.Second)
 	)
 	// Setup genesis blocks.
 	b00 := s.prepareGenesisBlock(0)
@@ -737,7 +746,7 @@ func (s *LatticeTestSuite) TestNextPosition() {
 	s.Equal(data.nextPosition(0), types.Position{ChainID: 0, Height: 4})
 
 	// Test 'NextPosition' method when lattice is empty.
-	data = newLatticeData(4, 0, 1000*time.Second)
+	data = newLatticeData(0, 4, 0, 1000*time.Second)
 	s.Equal(data.nextPosition(0), types.Position{ChainID: 0, Height: 0})
 }
 

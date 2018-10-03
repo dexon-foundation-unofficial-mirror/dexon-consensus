@@ -216,7 +216,7 @@ func NewConsensus(
 	// Setup nonblocking module.
 	nbModule := newNonBlocking(app, debugApp)
 	// Init lattice.
-	lattice := NewLattice(config, authModule, nbModule, nbModule, db)
+	lattice := NewLattice(round, config, authModule, nbModule, nbModule, db)
 	// Init configuration chain.
 	ID := types.NewNodeID(prv.PublicKey())
 	cfgModule := newConfigurationChain(

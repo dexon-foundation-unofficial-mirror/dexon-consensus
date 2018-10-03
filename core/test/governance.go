@@ -90,7 +90,6 @@ func (g *Governance) NodeSet(_ uint64) (
 // Configuration returns the configuration at a given block height.
 func (g *Governance) Configuration(_ uint64) *types.Config {
 	return &types.Config{
-		NumShards:        1,
 		NumChains:        uint32(len(g.privateKeys)),
 		LambdaBA:         g.lambdaBA,
 		LambdaDKG:        g.lambdaDKG,

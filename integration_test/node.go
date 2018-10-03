@@ -85,6 +85,7 @@ func NewNode(
 	proposingLatency test.LatencyModel) *Node {
 
 	var (
+		round            uint64
 		chainID          = uint32(math.MaxUint32)
 		governanceConfig = gov.Configuration(0)
 		nodeSetKeys      = gov.NodeSet(0)
@@ -115,6 +116,7 @@ func NewNode(
 		app:              app,
 		db:               db,
 		lattice: core.NewLattice(
+			round,
 			governanceConfig,
 			core.NewAuthenticator(privateKey),
 			app,

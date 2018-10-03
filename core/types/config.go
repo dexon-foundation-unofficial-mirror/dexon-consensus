@@ -26,7 +26,6 @@ import (
 // Config stands for Current Configuration Parameters.
 type Config struct {
 	// Network related.
-	NumShards uint32
 	NumChains uint32
 
 	// Lambda related.
@@ -50,8 +49,6 @@ type Config struct {
 
 // Bytes returns []byte representation of Config.
 func (c *Config) Bytes() []byte {
-	binaryNumShards := make([]byte, 4)
-	binary.LittleEndian.PutUint32(binaryNumShards, c.NumShards)
 	binaryNumChains := make([]byte, 4)
 	binary.LittleEndian.PutUint32(binaryNumChains, c.NumChains)
 
@@ -85,7 +82,6 @@ func (c *Config) Bytes() []byte {
 		uint64(c.MaxBlockInterval.Nanoseconds()))
 
 	enc := make([]byte, 0, 40)
-	enc = append(enc, binaryNumShards...)
 	enc = append(enc, binaryNumChains...)
 	enc = append(enc, binaryLambdaBA...)
 	enc = append(enc, binaryLambdaDKG...)

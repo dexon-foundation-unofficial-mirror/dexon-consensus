@@ -92,7 +92,6 @@ func (g *simGovernance) NodeSet(round uint64) (ret []crypto.PublicKey) {
 // Configuration returns the configuration at a given round.
 func (g *simGovernance) Configuration(round uint64) *types.Config {
 	return &types.Config{
-		NumShards:        1,
 		NumChains:        g.chainNum,
 		LambdaBA:         g.lambdaBA,
 		LambdaDKG:        g.lambdaDKG,

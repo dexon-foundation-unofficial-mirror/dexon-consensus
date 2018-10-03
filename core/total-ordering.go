@@ -39,7 +39,14 @@ var (
 	ErrChainIDNotRecognized = fmt.Errorf("chain ID not recognized")
 )
 
-// totalOrderinWinRecord caches which chains this candidate
+// totalOrderingConfig is the configuration for total ordering.
+type totalOrderingConfig struct {
+	k         uint64
+	phi       uint64
+	numChains uint32
+}
+
+// totalOrderingWinRecord caches which chains this candidate
 // wins another one based on their height vector.
 type totalOrderingWinRecord struct {
 	wins  []int8
@@ -579,10 +586,14 @@ type totalOrdering struct {
 
 	// candidateChainIDs records chain ID of all candidates.
 	candidateChainIDs []uint32
+
+	// configs keeps configuration for each round in continuous way.
+	configs  []*totalOrderingConfig
+	minRound uint64
 }
 
-func newTotalOrdering(k, phi uint64, chainNum uint32) *totalOrdering {
-	return &totalOrdering{
+func newTotalOrdering(round, k, phi uint64, chainNum uint32) *totalOrdering {
+	to := &totalOrdering{
 		pendings:              make(map[common.Hash]*types.Block),
 		k:                     k,
 		phi:                   phi,
@@ -595,6 +606,30 @@ func newTotalOrdering(k, phi uint64, chainNum uint32) *totalOrdering {
 		candidates:            make([]*totalOrderingCandidateInfo, chainNum),
 		candidateChainIDs:     make([]uint32, 0, chainNum),
 	}
+	to.configs = []*totalOrderingConfig{
+		&totalOrderingConfig{
+			k:         k,
+			phi:       phi,
+			numChains: chainNum,
+		}}
+	to.minRound = round
+	return to
+}
+
+// appendConfig add new configs for upcoming rounds. If you add a config for
+// round R, next time you can only add the config for round R+1.
+func (to *totalOrdering) appendConfig(
+	round uint64, config *types.Config) error {
+
+	if round != to.minRound+uint64(len(to.configs)) {
+		return ErrRoundNotIncreasing
+	}
+	to.configs = append(to.configs, &totalOrderingConfig{
+		numChains: config.NumChains,
+		k:         uint64(config.K),
+		phi:       uint64(float32(config.NumChains-1)*config.PhiRatio + 1),
+	})
+	return nil
 }
 
 // buildBlockRelation populates the acked according their acking relationships.

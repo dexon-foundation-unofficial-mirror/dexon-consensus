@@ -27,6 +27,10 @@ import (
 // consensusTimestamp is for Concensus Timestamp Algorithm.
 type consensusTimestamp struct {
 	chainTimestamps []time.Time
+
+	// This part keeps configs for each round.
+	numChainsForRounds []uint32
+	minRound           uint64
 }
 
 var (
@@ -36,8 +40,23 @@ var (
 )
 
 // newConsensusTimestamp create timestamper object.
-func newConsensusTimestamp() *consensusTimestamp {
-	return &consensusTimestamp{}
+func newConsensusTimestamp(round uint64, numChains uint32) *consensusTimestamp {
+	return &consensusTimestamp{
+		numChainsForRounds: []uint32{numChains},
+		minRound:           round,
+	}
+}
+
+// appendConfig appends a configuration for upcoming round. When you append
+// a config for round R, next time you can only append the config for round R+1.
+func (ct *consensusTimestamp) appendConfig(
+	round uint64, config *types.Config) error {
+
+	if round != ct.minRound+uint64(len(ct.numChainsForRounds)) {
+		return ErrRoundNotIncreasing
+	}
+	ct.numChainsForRounds = append(ct.numChainsForRounds, config.NumChains)
+	return nil
 }
 
 // ProcessBlocks is the entry function.
