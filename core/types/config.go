@@ -36,10 +36,9 @@ type Config struct {
 	K        int
 	PhiRatio float32
 
-	// NodeSet related.
-	NumNotarySet  int
-	NumWitnessSet int
-	NumDKGSet     int
+	// Set related.
+	NumNotarySet int
+	NumDKGSet    int
 
 	// Time related.
 	RoundInterval    time.Duration
@@ -66,8 +65,6 @@ func (c *Config) Bytes() []byte {
 
 	binaryNumNotarySet := make([]byte, 4)
 	binary.LittleEndian.PutUint32(binaryNumNotarySet, uint32(c.NumNotarySet))
-	binaryNumWitnessSet := make([]byte, 4)
-	binary.LittleEndian.PutUint32(binaryNumWitnessSet, uint32(c.NumWitnessSet))
 	binaryNumDKGSet := make([]byte, 4)
 	binary.LittleEndian.PutUint32(binaryNumDKGSet, uint32(c.NumDKGSet))
 
@@ -88,7 +85,6 @@ func (c *Config) Bytes() []byte {
 	enc = append(enc, binaryK...)
 	enc = append(enc, binaryPhiRatio...)
 	enc = append(enc, binaryNumNotarySet...)
-	enc = append(enc, binaryNumWitnessSet...)
 	enc = append(enc, binaryNumDKGSet...)
 	enc = append(enc, binaryRoundInterval...)
 	enc = append(enc, binaryMinBlockInterval...)

@@ -98,7 +98,6 @@ func (g *simGovernance) Configuration(round uint64) *types.Config {
 		K:                g.k,
 		PhiRatio:         g.phiRatio,
 		NumNotarySet:     len(g.nodeSet),
-		NumWitnessSet:    len(g.nodeSet),
 		NumDKGSet:        len(g.nodeSet),
 		MinBlockInterval: g.lambdaBA * 3,
 		MaxBlockInterval: g.lambdaBA * 8,

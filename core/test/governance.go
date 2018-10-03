@@ -96,7 +96,6 @@ func (g *Governance) Configuration(_ uint64) *types.Config {
 		K:                0,
 		PhiRatio:         0.667,
 		NumNotarySet:     len(g.privateKeys),
-		NumWitnessSet:    len(g.privateKeys),
 		NumDKGSet:        len(g.privateKeys),
 		RoundInterval:    g.RoundInterval,
 		MinBlockInterval: g.MinBlockInterval,
