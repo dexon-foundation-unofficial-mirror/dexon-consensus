@@ -212,8 +212,16 @@ func (d *dkgProtocol) enforceNackComplaints(complaints []*types.DKGComplaint) {
 		if !complaint.IsNack() {
 			continue
 		}
-		from := complaint.ProposerID
 		to := complaint.PrivateShare.ProposerID
+		// Do not propose nack complaint to itself.
+		if to == d.ID {
+			continue
+		}
+		from := complaint.ProposerID
+		// Nack complaint is already proposed.
+		if from == d.ID {
+			continue
+		}
 		if _, exist :=
 			d.antiComplaintReceived[from][to]; !exist {
 			d.recv.ProposeDKGComplaint(&types.DKGComplaint{

@@ -127,6 +127,11 @@ func (g *Governance) PrivateKeys() (keys []crypto.PrivateKey) {
 func (g *Governance) AddDKGComplaint(complaint *types.DKGComplaint) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
+	for _, comp := range g.DKGComplaint[complaint.Round] {
+		if comp == complaint {
+			return
+		}
+	}
 	g.DKGComplaint[complaint.Round] = append(g.DKGComplaint[complaint.Round],
 		complaint)
 }
