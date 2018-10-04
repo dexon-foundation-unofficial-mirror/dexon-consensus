@@ -436,7 +436,6 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 	gov, err := test.NewGovernance(n, lambda*time.Millisecond)
 	s.Require().Nil(err)
 	gov.RoundInterval = 200 * lambda * time.Millisecond
-	config := gov.Configuration(0)
 	prvKeys := gov.PrivateKeys()
 	cons := map[types.NodeID]*Consensus{}
 	for _, key := range prvKeys {
@@ -463,10 +462,6 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 			con.runCRS()
 			crsFinish <- struct{}{}
 		}(con)
-	}
-	time.Sleep(config.RoundInterval * 3 / 4)
-	for _, con := range cons {
-		con.Stop()
 	}
 	for range cons {
 		<-crsFinish

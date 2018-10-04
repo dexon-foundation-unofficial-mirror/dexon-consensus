@@ -184,6 +184,7 @@ type Consensus struct {
 	lock         sync.RWMutex
 	ctx          context.Context
 	ctxCancel    context.CancelFunc
+	event        *common.Event
 }
 
 // NewConsensus construct an Consensus instance.
@@ -249,6 +250,7 @@ func NewConsensus(
 		ctx:           ctx,
 		ctxCancel:     ctxCancel,
 		authModule:    authModule,
+		event:         common.NewEvent(),
 	}
 
 	con.baModules = make([]*agreement, config.NumChains)
@@ -278,7 +280,8 @@ func NewConsensus(
 // Run starts running DEXON Consensus.
 func (con *Consensus) Run() {
 	go con.processMsg(con.network.ReceiveChan())
-	con.runDKGTSIG()
+	startTime := time.Now().UTC().Add(con.currentConfig.RoundInterval / 2)
+	con.initialRound(startTime)
 	func() {
 		con.dkgReady.L.Lock()
 		defer con.dkgReady.L.Unlock()
@@ -286,13 +289,13 @@ func (con *Consensus) Run() {
 			con.dkgReady.Wait()
 		}
 	}()
+	time.Sleep(startTime.Sub(time.Now().UTC()))
 	ticks := make([]chan struct{}, 0, con.currentConfig.NumChains)
 	for i := uint32(0); i < con.currentConfig.NumChains; i++ {
 		tick := make(chan struct{})
 		ticks = append(ticks, tick)
 		go con.runBA(i, tick)
 	}
-	go con.runCRS()
 
 	// Reset ticker.
 	<-con.tickerObj.Tick()
@@ -400,49 +403,49 @@ func (con *Consensus) runDKGTSIG() {
 }
 
 func (con *Consensus) runCRS() {
-	for {
-		ticker := newTicker(con.gov, con.round, TickerCRS)
-		select {
-		case <-con.ctx.Done():
-			return
-		default:
-		}
-		<-ticker.Tick()
-		// Start running next round CRS.
-		psig, err := con.cfgModule.preparePartialSignature(
-			con.round, con.gov.CRS(con.round), types.TSigCRS)
+	// Start running next round CRS.
+	psig, err := con.cfgModule.preparePartialSignature(
+		con.round, con.gov.CRS(con.round), types.TSigCRS)
+	if err != nil {
+		log.Println(err)
+	} else if err = con.authModule.SignDKGPartialSignature(psig); err != nil {
+		log.Println(err)
+	} else if err = con.cfgModule.processPartialSignature(psig); err != nil {
+		log.Println(err)
+	} else {
+		con.network.BroadcastDKGPartialSignature(psig)
+		crs, err := con.cfgModule.runCRSTSig(con.round, con.gov.CRS(con.round))
 		if err != nil {
 			log.Println(err)
-		} else if err = con.authModule.SignDKGPartialSignature(psig); err != nil {
-			log.Println(err)
-		} else if err = con.cfgModule.processPartialSignature(psig); err != nil {
-			log.Println(err)
 		} else {
-			con.network.BroadcastDKGPartialSignature(psig)
-			crs, err := con.cfgModule.runCRSTSig(con.round, con.gov.CRS(con.round))
-			if err != nil {
-				log.Println(err)
-			} else {
-				con.gov.ProposeCRS(con.round+1, crs)
-			}
+			con.gov.ProposeCRS(con.round+1, crs)
 		}
-		con.cfgModule.registerDKG(con.round+1, con.currentConfig.NumDKGSet/3)
-		<-ticker.Tick()
-		select {
-		case <-con.ctx.Done():
-			return
-		default:
-		}
-		// Change round.
-		con.round++
-		con.currentConfig = con.gov.Configuration(con.round)
-		func() {
-			con.dkgReady.L.Lock()
-			defer con.dkgReady.L.Unlock()
-			con.dkgRunning = 0
-		}()
-		con.runDKGTSIG()
 	}
+}
+
+func (con *Consensus) initialRound(startTime time.Time) {
+	con.currentConfig = con.gov.Configuration(con.round)
+	func() {
+		con.dkgReady.L.Lock()
+		defer con.dkgReady.L.Unlock()
+		con.dkgRunning = 0
+	}()
+	con.runDKGTSIG()
+
+	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval/2),
+		func(time.Time) {
+			go con.runCRS()
+		})
+	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval/2),
+		func(time.Time) {
+			con.cfgModule.registerDKG(con.round+1, con.currentConfig.NumDKGSet/3)
+		})
+	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval),
+		func(time.Time) {
+			// Change round.
+			con.round++
+			con.initialRound(startTime.Add(con.currentConfig.RoundInterval))
+		})
 }
 
 // Stop the Consensus core.
@@ -533,6 +536,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		if err = con.db.Update(*b); err != nil {
 			return
 		}
+		go con.event.NotifyTime(b.ConsensusTimestamp)
 		con.nbModule.BlockDelivered(*b)
 		// TODO(mission): Find a way to safely recycle the block.
 		//                We should deliver block directly to

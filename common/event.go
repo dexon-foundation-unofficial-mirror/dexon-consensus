@@ -19,6 +19,7 @@ package common
 
 import (
 	"container/heap"
+	"sync"
 	"time"
 )
 
@@ -48,7 +49,8 @@ func (h *timeEvents) Pop() interface{} {
 
 // Event implements the Observer pattern.
 type Event struct {
-	timeEvents timeEvents
+	timeEvents     timeEvents
+	timeEventsLock sync.Mutex
 }
 
 // NewEvent creates a new event instance.
@@ -62,6 +64,8 @@ func NewEvent() *Event {
 
 // RegisterTime to get notified on and after specific time.
 func (e *Event) RegisterTime(t time.Time, fn timeEventFn) {
+	e.timeEventsLock.Lock()
+	defer e.timeEventsLock.Unlock()
 	heap.Push(&e.timeEvents, timeEvent{
 		t:  t,
 		fn: fn,
@@ -70,14 +74,22 @@ func (e *Event) RegisterTime(t time.Time, fn timeEventFn) {
 
 // NotifyTime and trigger function callback.
 func (e *Event) NotifyTime(t time.Time) {
-	if len(e.timeEvents) == 0 {
-		return
-	}
-	for !t.Before(e.timeEvents[0].t) {
-		te := heap.Pop(&e.timeEvents).(timeEvent)
-		te.fn(t)
+	fns := func() (fns []timeEventFn) {
+		e.timeEventsLock.Lock()
+		defer e.timeEventsLock.Unlock()
 		if len(e.timeEvents) == 0 {
 			return
 		}
+		for !t.Before(e.timeEvents[0].t) {
+			te := heap.Pop(&e.timeEvents).(timeEvent)
+			fns = append(fns, te.fn)
+			if len(e.timeEvents) == 0 {
+				return
+			}
+		}
+		return
+	}()
+	for _, fn := range fns {
+		fn(t)
 	}
 }

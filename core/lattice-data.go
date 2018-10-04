@@ -43,7 +43,7 @@ var (
 	ErrAcksNotSorted           = fmt.Errorf("acks not sorted")
 	ErrInvalidBlockHeight      = fmt.Errorf("invalid block height")
 	ErrAlreadyInLattice        = fmt.Errorf("block already in lattice")
-	ErrIncorrectBlockTime      = fmt.Errorf("block timestampe is incorrect")
+	ErrIncorrectBlockTime      = fmt.Errorf("block timestamp is incorrect")
 )
 
 // Errors for method usage
@@ -271,6 +271,13 @@ func (data *latticeData) prepareBlock(block *types.Block) {
 			block.ParentHash = curBlock.Hash
 			block.Position.Height = curBlock.Position.Height + 1
 			block.Witness.Height = curBlock.Witness.Height
+			minTimestamp := curBlock.Timestamp.Add(data.minBlockTimeInterval)
+			maxTimestamp := curBlock.Timestamp.Add(data.maxBlockTimeInterval)
+			if block.Timestamp.Before(minTimestamp) {
+				block.Timestamp = minTimestamp
+			} else if block.Timestamp.After(maxTimestamp) {
+				block.Timestamp = maxTimestamp
+			}
 		}
 	}
 	block.Acks = common.NewSortedHashes(acks)
