@@ -25,6 +25,19 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
+func hashWitness(witness *types.Witness) (common.Hash, error) {
+	binaryTimestamp, err := witness.Timestamp.MarshalBinary()
+	if err != nil {
+		return common.Hash{}, err
+	}
+	binaryHeight := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryHeight, witness.Height)
+	return crypto.Keccak256Hash(
+		binaryHeight,
+		binaryTimestamp,
+		witness.Data), nil
+}
+
 func hashBlock(block *types.Block) (common.Hash, error) {
 	hashPosition := hashPosition(block.Position)
 	// Handling Block.Acks.
@@ -37,6 +50,10 @@ func hashBlock(block *types.Block) (common.Hash, error) {
 	if err != nil {
 		return common.Hash{}, err
 	}
+	binaryWitness, err := hashWitness(&block.Witness)
+	if err != nil {
+		return common.Hash{}, err
+	}
 	payloadHash := crypto.Keccak256Hash(block.Payload)
 
 	hash := crypto.Keccak256Hash(
@@ -45,7 +62,8 @@ func hashBlock(block *types.Block) (common.Hash, error) {
 		hashPosition[:],
 		hashAcks[:],
 		binaryTimestamp[:],
-		payloadHash[:])
+		payloadHash[:],
+		binaryWitness[:])
 	return hash, nil
 }
 

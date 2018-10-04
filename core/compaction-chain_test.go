@@ -48,10 +48,8 @@ func (s *CompactionChainTestSuite) generateBlocks(
 	blocks := make([]*types.Block, size)
 	for idx := range blocks {
 		blocks[idx] = &types.Block{
-			Hash: common.NewRandomHash(),
-			Witness: types.Witness{
-				Timestamp: now,
-			},
+			Hash:               common.NewRandomHash(),
+			ConsensusTimestamp: now,
 		}
 		now = now.Add(100 * time.Millisecond)
 	}
@@ -68,10 +66,8 @@ func (s *CompactionChainTestSuite) TestProcessBlock() {
 	blocks := make([]*types.Block, 10)
 	for idx := range blocks {
 		blocks[idx] = &types.Block{
-			Hash: common.NewRandomHash(),
-			Witness: types.Witness{
-				Timestamp: now,
-			},
+			Hash:               common.NewRandomHash(),
+			ConsensusTimestamp: now,
 		}
 		now = now.Add(100 * time.Millisecond)
 	}

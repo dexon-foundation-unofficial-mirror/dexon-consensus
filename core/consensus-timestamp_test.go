@@ -82,7 +82,7 @@ func (s *ConsensusTimestampTest) extractTimestamps(
 		if block.IsGenesis() {
 			continue
 		}
-		timestamps = append(timestamps, block.Witness.Timestamp)
+		timestamps = append(timestamps, block.ConsensusTimestamp)
 	}
 	return timestamps
 }

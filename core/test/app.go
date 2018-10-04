@@ -96,9 +96,16 @@ func NewApp() *App {
 	}
 }
 
-// PrepareBlock implements Application interface.
-func (app *App) PrepareBlock(position types.Position) ([]byte, []byte) {
-	return []byte{}, []byte{}
+// PreparePayload implements Application interface.
+func (app *App) PreparePayload(position types.Position) []byte {
+	return []byte{}
+}
+
+// PrepareWitness implements Application interface.
+func (app *App) PrepareWitness(height uint64) types.Witness {
+	return types.Witness{
+		Height: height,
+	}
 }
 
 // VerifyBlock implements Application.
@@ -143,7 +150,7 @@ func (app *App) BlockDelivered(block types.Block) {
 	defer app.deliveredLock.Unlock()
 
 	app.Delivered[block.Hash] = &AppDeliveredRecord{
-		ConsensusTime: block.Witness.Timestamp,
+		ConsensusTime: block.ConsensusTimestamp,
 		When:          time.Now().UTC(),
 	}
 	app.DeliverSequence = append(app.DeliverSequence, block.Hash)

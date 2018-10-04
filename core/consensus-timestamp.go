@@ -63,7 +63,7 @@ func (ct *consensusTimestamp) appendConfig(
 func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (err error) {
 	for _, block := range blocks {
 		if !block.IsGenesis() {
-			block.Witness.Timestamp, err = getMedianTime(ct.chainTimestamps)
+			block.ConsensusTimestamp, err = getMedianTime(ct.chainTimestamps)
 			if err != nil {
 				return
 			}

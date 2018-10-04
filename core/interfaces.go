@@ -28,8 +28,11 @@ import (
 // Application describes the application interface that interacts with DEXON
 // consensus core.
 type Application interface {
-	// PrepareBlock is called when consensus core is preparing a block.
-	PrepareBlock(position types.Position) (payload []byte, witnessData []byte)
+	// PreparePayload is called when consensus core is preparing a block.
+	PreparePayload(position types.Position) (payload []byte)
+
+	// PrepareWitness will return the witness data no lower than consensusHeight.
+	PrepareWitness(consensusHeight uint64) (witness types.Witness)
 
 	// VerifyBlock verifies if the block is valid.
 	VerifyBlock(block *types.Block) bool

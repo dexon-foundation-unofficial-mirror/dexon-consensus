@@ -59,7 +59,7 @@ func (cc *compactionChain) sanityCheck(witnessBlock *types.Block) error {
 func (cc *compactionChain) processBlock(block *types.Block) error {
 	prevBlock := cc.lastBlock()
 	if prevBlock != nil {
-		block.Witness.Height = prevBlock.Witness.Height + 1
+		block.ConsensusHeight = prevBlock.ConsensusHeight + 1
 	}
 	cc.prevBlockLock.Lock()
 	defer cc.prevBlockLock.Unlock()

@@ -81,10 +81,9 @@ func (s *AppTestSuite) deliverBlock(
 	app *App, hash common.Hash, timestamp time.Time) {
 
 	app.BlockDelivered(types.Block{
-		Hash: hash,
-		Witness: types.Witness{
-			Timestamp: timestamp,
-		}})
+		Hash:               hash,
+		ConsensusTimestamp: timestamp,
+	})
 }
 
 func (s *AppTestSuite) TestCompare() {

@@ -38,6 +38,8 @@ var (
 	ErrInvalidChainID          = fmt.Errorf("invalid chain id")
 	ErrInvalidProposerID       = fmt.Errorf("invalid proposer id")
 	ErrInvalidTimestamp        = fmt.Errorf("invalid timestamp")
+	ErrInvalidWitness          = fmt.Errorf("invalid witness data")
+	ErrInvalidBlock            = fmt.Errorf("invalid block")
 	ErrForkBlock               = fmt.Errorf("fork block")
 	ErrNotAckParent            = fmt.Errorf("not ack parent")
 	ErrDoubleAck               = fmt.Errorf("double ack")
@@ -145,6 +147,9 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 		}
 		if bParent.Position.Height != b.Position.Height-1 {
 			return ErrInvalidBlockHeight
+		}
+		if bParent.Witness.Height > b.Witness.Height {
+			return ErrInvalidWitness
 		}
 		// Check if its timestamp is valid.
 		if !b.Timestamp.After(bParent.Timestamp) {
@@ -290,6 +295,7 @@ func (data *latticeData) prepareBlock(block *types.Block) {
 		if uint32(chainID) == block.Position.ChainID {
 			block.ParentHash = curBlock.Hash
 			block.Position.Height = curBlock.Position.Height + 1
+			block.Witness.Height = curBlock.Witness.Height
 		}
 	}
 	block.Acks = common.NewSortedHashes(acks)
@@ -465,7 +471,8 @@ func (s *Lattice) PrepareBlock(
 	// TODO(mission): the proposeTime might be earlier than tip block of
 	//                that chain. We should let latticeData suggest the time.
 	b.Timestamp = proposeTime
-	b.Payload, b.Witness.Data = s.app.PrepareBlock(b.Position)
+	b.Payload = s.app.PreparePayload(b.Position)
+	b.Witness = s.app.PrepareWitness(b.Witness.Height)
 	if err = s.authModule.SignBlock(b); err != nil {
 		return
 	}
@@ -491,6 +498,10 @@ func (s *Lattice) SanityCheck(b *types.Block) (err error) {
 	if !b.ProposerID.Equal(crypto.Keccak256Hash(pubKey.Bytes())) {
 		err = ErrIncorrectSignature
 		return
+	}
+	if !s.app.VerifyBlock(b) {
+		err = ErrInvalidBlock
+		return err
 	}
 	s.lock.RLock()
 	defer s.lock.RUnlock()

@@ -117,9 +117,14 @@ func (nb *nonBlocking) wait() {
 	nb.running.Wait()
 }
 
-// PrepareBlock cannot be non-blocking.
-func (nb *nonBlocking) PrepareBlock(position types.Position) ([]byte, []byte) {
-	return nb.app.PrepareBlock(position)
+// PreparePayload cannot be non-blocking.
+func (nb *nonBlocking) PreparePayload(position types.Position) []byte {
+	return nb.app.PreparePayload(position)
+}
+
+// PrepareWitness cannot be non-blocking.
+func (nb *nonBlocking) PrepareWitness(height uint64) types.Witness {
+	return nb.app.PrepareWitness(height)
 }
 
 // VerifyBlock cannot be non-blocking.

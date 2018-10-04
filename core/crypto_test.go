@@ -40,12 +40,10 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 	now := time.Now().UTC()
 	if prevBlock == nil {
 		return &types.Block{
-			Acks:      common.NewSortedHashes(acks),
-			Timestamp: now,
-			Witness: types.Witness{
-				Timestamp: time.Now(),
-				Height:    0,
-			},
+			Acks:               common.NewSortedHashes(acks),
+			Timestamp:          now,
+			ConsensusTimestamp: time.Now(),
+			ConsensusHeight:    0,
 		}
 	}
 	s.Require().NotEqual(prevBlock.Hash, common.Hash{})
@@ -56,10 +54,8 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 		Position: types.Position{
 			Height: prevBlock.Position.Height + 1,
 		},
-		Witness: types.Witness{
-			Timestamp: time.Now(),
-			Height:    prevBlock.Witness.Height + 1,
-		},
+		ConsensusTimestamp: time.Now(),
+		ConsensusHeight:    prevBlock.ConsensusHeight + 1,
 	}
 }
 

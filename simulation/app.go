@@ -37,20 +37,23 @@ type simApp struct {
 	// blockSeen stores the time when block is delivered by Total Ordering.
 	blockSeen map[common.Hash]time.Time
 	// uncofirmBlocks stores the blocks whose timestamps are not ready.
-	unconfirmedBlocks map[types.NodeID]common.Hashes
-	blockByHash       map[common.Hash]*types.Block
-	blockByHashMutex  sync.RWMutex
+	unconfirmedBlocks  map[types.NodeID]common.Hashes
+	blockByHash        map[common.Hash]*types.Block
+	blockByHashMutex   sync.RWMutex
+	latestWitness      types.Witness
+	latestWitnessReady *sync.Cond
 }
 
 // newSimApp returns point to a new instance of simApp.
 func newSimApp(id types.NodeID, netModule *network) *simApp {
 	return &simApp{
-		NodeID:            id,
-		netModule:         netModule,
-		DeliverID:         0,
-		blockSeen:         make(map[common.Hash]time.Time),
-		unconfirmedBlocks: make(map[types.NodeID]common.Hashes),
-		blockByHash:       make(map[common.Hash]*types.Block),
+		NodeID:             id,
+		netModule:          netModule,
+		DeliverID:          0,
+		blockSeen:          make(map[common.Hash]time.Time),
+		unconfirmedBlocks:  make(map[types.NodeID]common.Hashes),
+		blockByHash:        make(map[common.Hash]*types.Block),
+		latestWitnessReady: sync.NewCond(&sync.Mutex{}),
 	}
 }
 
@@ -89,9 +92,19 @@ func (a *simApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
 	return
 }
 
-// PrepareBlock implements core.Application.
-func (a *simApp) PrepareBlock(position types.Position) ([]byte, []byte) {
-	return []byte{}, []byte{}
+// PreparePayload implements core.Application.
+func (a *simApp) PreparePayload(position types.Position) []byte {
+	return []byte{}
+}
+
+// PrepareWitness implements core.Application.
+func (a *simApp) PrepareWitness(height uint64) types.Witness {
+	a.latestWitnessReady.L.Lock()
+	defer a.latestWitnessReady.L.Unlock()
+	for a.latestWitness.Height < height {
+		a.latestWitnessReady.Wait()
+	}
+	return a.latestWitness
 }
 
 // StronglyAcked is called when a block is strongly acked by DEXON
@@ -119,6 +132,15 @@ func (a *simApp) BlockDelivered(block types.Block) {
 
 		// TODO(jimmy-dexon) : Remove block in this hash if it's no longer needed.
 		a.blockByHash[block.Hash] = &block
+	}()
+	func() {
+		a.latestWitnessReady.L.Lock()
+		defer a.latestWitnessReady.L.Unlock()
+		a.latestWitness = types.Witness{
+			Timestamp: block.ConsensusTimestamp,
+			Height:    block.ConsensusHeight,
+		}
+		a.latestWitnessReady.Broadcast()
 	}()
 
 	seenTime, exist := a.blockSeen[block.Hash]

@@ -184,6 +184,9 @@ func (s *LatticeTestSuite) genTestCase1() (data *latticeData) {
 			Height:  1,
 		},
 		Acks: common.NewSortedHashes(common.Hashes{h}),
+		Witness: types.Witness{
+			Height: 1,
+		},
 	}
 	s.hashBlock(b)
 	delivered, err = data.addBlock(b)
@@ -205,6 +208,9 @@ func (s *LatticeTestSuite) genTestCase1() (data *latticeData) {
 			h,
 			data.chains[1].getBlockByHeight(0).Hash,
 		}),
+		Witness: types.Witness{
+			Height: 2,
+		},
 	}
 	s.hashBlock(b)
 	delivered, err = data.addBlock(b)
@@ -224,6 +230,9 @@ func (s *LatticeTestSuite) genTestCase1() (data *latticeData) {
 			Height:  3,
 		},
 		Acks: common.NewSortedHashes(common.Hashes{h}),
+		Witness: types.Witness{
+			Height: 3,
+		},
 	}
 	s.hashBlock(b)
 	delivered, err = data.addBlock(b)
@@ -243,6 +252,9 @@ func (s *LatticeTestSuite) genTestCase1() (data *latticeData) {
 			Height:  1,
 		},
 		Acks: common.NewSortedHashes(common.Hashes{h}),
+		Witness: types.Witness{
+			Height: 1,
+		},
 	}
 	s.hashBlock(b)
 	delivered, err = data.addBlock(b)
@@ -398,6 +410,27 @@ func (s *LatticeTestSuite) TestSanityCheckInDataLayer() {
 	err = data.sanityCheck(b)
 	req.NotNil(err)
 	req.Equal(err.Error(), ErrDuplicatedAckOnOneChain.Error())
+
+	// Witness height decreases.
+	h = data.chains[0].getBlockByHeight(3).Hash
+	b = &types.Block{
+		ParentHash: h,
+		Position: types.Position{
+			ChainID: 0,
+			Height:  4,
+		},
+		Timestamp: time.Now().UTC(),
+		Acks: common.NewSortedHashes(common.Hashes{
+			h,
+		}),
+		Witness: types.Witness{
+			Height: 2,
+		},
+	}
+	s.hashBlock(b)
+	err = data.sanityCheck(b)
+	req.NotNil(err)
+	req.Equal(err.Error(), ErrInvalidWitness.Error())
 
 	// Add block 3-1 which acks 3-0, and violet reasonable block time interval.
 	h = data.chains[2].getBlockByHeight(0).Hash

@@ -61,15 +61,17 @@ func NewBlock() (b *Block) {
 
 // Block represents a single event broadcasted on the network.
 type Block struct {
-	ProposerID NodeID              `json:"proposer_id"`
-	ParentHash common.Hash         `json:"parent_hash"`
-	Hash       common.Hash         `json:"hash"`
-	Position   Position            `json:"position"`
-	Timestamp  time.Time           `json:"timestamps"`
-	Acks       common.SortedHashes `json:"acks"`
-	Payload    []byte              `json:"payload"`
-	Witness    Witness             `json:"witness"`
-	Signature  crypto.Signature    `json:"signature"`
+	ProposerID         NodeID              `json:"proposer_id"`
+	ParentHash         common.Hash         `json:"parent_hash"`
+	Hash               common.Hash         `json:"hash"`
+	Position           Position            `json:"position"`
+	Timestamp          time.Time           `json:"timestamps"`
+	Acks               common.SortedHashes `json:"acks"`
+	Payload            []byte              `json:"payload"`
+	ConsensusTimestamp time.Time           `json:"consensus_timestamp"`
+	ConsensusHeight    uint64              `json:"consensus_height"`
+	Witness            Witness             `json:"witness"`
+	Signature          crypto.Signature    `json:"signature"`
 
 	CRSSignature crypto.Signature `json:"crs_signature"`
 }
@@ -89,6 +91,8 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.Position.Height = b.Position.Height
 	bcopy.Signature = b.Signature.Clone()
 	bcopy.CRSSignature = b.CRSSignature.Clone()
+	bcopy.ConsensusTimestamp = b.ConsensusTimestamp
+	bcopy.ConsensusHeight = b.ConsensusHeight
 	bcopy.Witness.Timestamp = b.Witness.Timestamp
 	bcopy.Witness.Height = b.Witness.Height
 	bcopy.Timestamp = b.Timestamp
