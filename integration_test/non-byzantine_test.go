@@ -32,6 +32,10 @@ type NonByzantineTestSuite struct {
 }
 
 func (s *NonByzantineTestSuite) TestNonByzantine() {
+	numNodes := 25
+	if testing.Short() {
+		numNodes = 7
+	}
 	var (
 		networkLatency = &test.NormalLatencyModel{
 			Sigma: 20,
@@ -47,7 +51,7 @@ func (s *NonByzantineTestSuite) TestNonByzantine() {
 	)
 
 	apps, dbs, nodes, err := PrepareNodes(
-		25, networkLatency, proposingLatency)
+		numNodes, networkLatency, proposingLatency)
 	req.Nil(err)
 	now := time.Now().UTC()
 	sch := test.NewScheduler(test.NewStopByConfirmedBlocks(50, apps, dbs))

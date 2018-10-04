@@ -519,6 +519,11 @@ func (s *LatticeTestSuite) TestRandomlyGeneratedBlocks() {
 		datum     []*latticeData
 	)
 
+	if testing.Short() {
+		chainNum = 7
+		repeat = 3
+	}
+
 	// Prepare a randomly generated blocks.
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.Nil(err)

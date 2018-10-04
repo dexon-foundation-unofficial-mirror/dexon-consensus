@@ -945,11 +945,15 @@ func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 	var (
 		round    uint64
-		chainNum        = uint32(13)
+		chainNum        = uint32(23)
 		blockNum        = 50
 		phi      uint64 = 10
-		repeat          = 8
+		repeat          = 15
 	)
+	if testing.Short() {
+		chainNum = 7
+		repeat = 3
+	}
 
 	ackingCountGenerators := []func() int{
 		nil, // Acking frequency with normal distribution.
