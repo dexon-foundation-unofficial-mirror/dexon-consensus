@@ -102,6 +102,15 @@ func (s *Lattice) SanityCheck(b *types.Block) (err error) {
 		err = ErrIncorrectHash
 		return
 	}
+	for i := range b.Acks {
+		if i == 0 {
+			continue
+		}
+		if !b.Acks[i-1].Less(b.Acks[i]) {
+			err = ErrAcksNotSorted
+			return
+		}
+	}
 	// Check the signer.
 	pubKey, err := crypto.SigToPub(b.Hash, b.Signature)
 	if err != nil {

@@ -40,6 +40,7 @@ var (
 	ErrForkBlock               = fmt.Errorf("fork block")
 	ErrNotAckParent            = fmt.Errorf("not ack parent")
 	ErrDoubleAck               = fmt.Errorf("double ack")
+	ErrAcksNotSorted           = fmt.Errorf("acks not sorted")
 	ErrInvalidBlockHeight      = fmt.Errorf("invalid block height")
 	ErrAlreadyInLattice        = fmt.Errorf("block already in lattice")
 	ErrIncorrectBlockTime      = fmt.Errorf("block timestampe is incorrect")

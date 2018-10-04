@@ -1,6 +1,23 @@
 // Copyright 2018 The dexon-consensus-core Authors
 // This file is part of the dexon-consensus-core library.
 //
+// The dexon-consensus-core library is free software: you can redistribute it
+// and/or modify it under the terms of the GNU Lesser General Public License as
+// published by the Free Software Foundation, either version 3 of the License,
+// or (at your option) any later version.
+//
+// The dexon-consensus-core library is distributed in the hope that it will be
+// useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser
+// General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the dexon-consensus-core library. If not, see
+// <http://www.gnu.org/licenses/>.
+
+// Copyright 2018 The dexon-consensus-core Authors
+// This file is part of the dexon-consensus-core library.
+//
 // The dexon-consensus-core library is free software: you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public License as
 // published by the Free Software Foundation, either version 3 of the License,
@@ -41,6 +58,11 @@ func (h Hash) Equal(hp Hash) bool {
 	return h == hp
 }
 
+// Less compares if current hash is lesser.
+func (h Hash) Less(hp Hash) bool {
+	return bytes.Compare(h[:], hp[:]) < 0
+}
+
 // MarshalText implements the encoding.TextMarhsaler interface.
 func (h Hash) MarshalText() ([]byte, error) {
 	result := make([]byte, hex.EncodedLen(HashLength))
@@ -58,7 +80,7 @@ func (h *Hash) UnmarshalText(text []byte) error {
 type Hashes []Hash
 
 func (hs Hashes) Len() int           { return len(hs) }
-func (hs Hashes) Less(i, j int) bool { return bytes.Compare(hs[i][:], hs[j][:]) < 0 }
+func (hs Hashes) Less(i, j int) bool { return hs[i].Less(hs[j]) }
 func (hs Hashes) Swap(i, j int)      { hs[i], hs[j] = hs[j], hs[i] }
 
 // SortedHashes is a slice of hashes sorted in ascending order.

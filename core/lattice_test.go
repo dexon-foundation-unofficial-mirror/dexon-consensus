@@ -220,6 +220,17 @@ func (s *LatticeTestSuite) TestSanityCheck() {
 	b.Signature, err = auth.prvKey.Sign(common.NewRandomHash())
 	req.NoError(err)
 	req.Equal(lattice.SanityCheck(b), ErrIncorrectSignature)
+	// A block with un-sorted acks should not pass sanity check.
+	b.Acks = common.NewSortedHashes(common.Hashes{
+		common.NewRandomHash(),
+		common.NewRandomHash(),
+		common.NewRandomHash(),
+		common.NewRandomHash(),
+		common.NewRandomHash(),
+	})
+	b.Acks[0], b.Acks[1] = b.Acks[1], b.Acks[0]
+	req.NoError(auth.SignBlock(b))
+	req.Equal(lattice.SanityCheck(b), ErrAcksNotSorted)
 	// A block with incorrect hash should not pass sanity check.
 	b.Hash = common.NewRandomHash()
 	req.Equal(lattice.SanityCheck(b), ErrIncorrectHash)
