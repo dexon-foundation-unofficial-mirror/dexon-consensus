@@ -95,6 +95,8 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.ConsensusHeight = b.ConsensusHeight
 	bcopy.Witness.Timestamp = b.Witness.Timestamp
 	bcopy.Witness.Height = b.Witness.Height
+	bcopy.Witness.Data = make([]byte, len(b.Witness.Data))
+	copy(bcopy.Witness.Data, b.Witness.Data)
 	bcopy.Timestamp = b.Timestamp
 	bcopy.Acks = make(common.SortedHashes, len(b.Acks))
 	copy(bcopy.Acks, b.Acks)
