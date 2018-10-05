@@ -533,7 +533,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		if err = con.ccModule.processBlock(b); err != nil {
 			return
 		}
-		if err = con.db.Update(*b); err != nil {
+		if err = con.db.Put(*b); err != nil {
 			return
 		}
 		go con.event.NotifyTime(b.ConsensusTimestamp)
@@ -542,6 +542,9 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		//                We should deliver block directly to
 		//                nonBlocking and let them recycle the
 		//                block.
+	}
+	if err = con.lattice.PurgeBlocks(deliveredBlocks); err != nil {
+		return
 	}
 	return
 }

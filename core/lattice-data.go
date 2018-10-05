@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -44,58 +45,87 @@ var (
 	ErrInvalidBlockHeight      = fmt.Errorf("invalid block height")
 	ErrAlreadyInLattice        = fmt.Errorf("block already in lattice")
 	ErrIncorrectBlockTime      = fmt.Errorf("block timestamp is incorrect")
+	ErrUnknownRoundID          = fmt.Errorf("unknown round id")
 )
 
 // Errors for method usage
 var (
-	ErrRoundNotIncreasing = errors.New("round not increasing")
+	ErrRoundNotIncreasing  = errors.New("round not increasing")
+	ErrPurgedBlockNotFound = errors.New("purged block not found")
 )
 
-// latticeData is a module for storing lattice.
-type latticeData struct {
-	// chains stores chains' blocks and other info.
-	chains []*chainStatus
-
-	// blockByHash stores blocks, indexed by block hash.
-	blockByHash map[common.Hash]*types.Block
-
+// latticeDataConfig is the configuration for latticeData for each round.
+type latticeDataConfig struct {
+	// Number of chains between runs
+	prevNumChains uint32
+	numChains     uint32
 	// Block interval specifies reasonable time difference between
 	// parent/child blocks.
 	minBlockTimeInterval time.Duration
 	maxBlockTimeInterval time.Duration
+	// the range of clean cut at the beginning of this round.
+	cleanCutRange int
+}
 
+// newLatticeDataConfig constructs a latticeDataConfig instance.
+func newLatticeDataConfig(prev, cur *types.Config) *latticeDataConfig {
+	config := &latticeDataConfig{
+		numChains:            cur.NumChains,
+		minBlockTimeInterval: cur.MinBlockInterval,
+		maxBlockTimeInterval: cur.MaxBlockInterval,
+	}
+	if prev != nil {
+		config.prevNumChains = prev.NumChains
+		if prev.K != cur.K ||
+			prev.PhiRatio != cur.PhiRatio ||
+			prev.NumChains != cur.NumChains {
+			// K plus 2 is a magic from GOD.
+			config.cleanCutRange = prev.K + 2
+		}
+	}
+	return config
+}
+
+// latticeData is a module for storing lattice.
+type latticeData struct {
+	// we need blockdb to read blocks purged from cache in memory.
+	db blockdb.Reader
+	// chains stores chains' blocks and other info.
+	chains []*chainStatus
+	// blockByHash stores blocks, indexed by block hash.
+	blockByHash map[common.Hash]*types.Block
 	// This stores configuration for each round.
-	numChainsForRounds []uint32
-	minRound           uint64
+	configs  []*latticeDataConfig
+	minRound uint64
 }
 
 // newLatticeData creates a new latticeData struct.
-func newLatticeData(
-	round uint64,
-	chainNum uint32,
-	minBlockTimeInterval time.Duration,
-	maxBlockTimeInterval time.Duration) (data *latticeData) {
+func newLatticeData(db blockdb.Reader,
+	round uint64, config *latticeDataConfig) (data *latticeData) {
 	data = &latticeData{
-		chains:               make([]*chainStatus, chainNum),
-		blockByHash:          make(map[common.Hash]*types.Block),
-		minBlockTimeInterval: minBlockTimeInterval,
-		maxBlockTimeInterval: maxBlockTimeInterval,
-		numChainsForRounds:   []uint32{chainNum},
-		minRound:             round,
+		db:          db,
+		chains:      make([]*chainStatus, config.numChains),
+		blockByHash: make(map[common.Hash]*types.Block),
+		configs:     []*latticeDataConfig{config},
+		minRound:    round,
 	}
 	for i := range data.chains {
 		data.chains[i] = &chainStatus{
 			ID:      uint32(i),
 			blocks:  []*types.Block{},
-			nextAck: make([]uint64, chainNum),
+			nextAck: make([]uint64, config.numChains),
 		}
 	}
 	return
 }
 
 func (data *latticeData) sanityCheck(b *types.Block) error {
+	config := data.getConfig(b.Position.Round)
+	if config == nil {
+		return ErrUnknownRoundID
+	}
 	// Check if the chain id is valid.
-	if b.Position.ChainID >= uint32(len(data.chains)) {
+	if b.Position.ChainID >= config.numChains {
 		return ErrInvalidChainID
 	}
 
@@ -117,20 +147,23 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 	// Check if it acks older blocks.
 	acksByChainID := make(map[uint32]struct{}, len(data.chains))
 	for _, hash := range b.Acks {
-		if bAck, exist := data.blockByHash[hash]; exist {
-			if bAck.Position.Height <
-				data.chains[bAck.Position.ChainID].nextAck[b.Position.ChainID] {
-				return ErrDoubleAck
+		bAck, err := data.findBlock(hash)
+		if err != nil {
+			if err == blockdb.ErrBlockDoesNotExist {
+				return ErrAckingBlockNotExists
 			}
-			// Check if ack two blocks on the same chain. This would need
-			// to check after we replace map with slice for acks.
-			if _, acked := acksByChainID[bAck.Position.ChainID]; acked {
-				return ErrDuplicatedAckOnOneChain
-			}
-			acksByChainID[bAck.Position.ChainID] = struct{}{}
-		} else {
-			return ErrAckingBlockNotExists
+			return err
 		}
+		if bAck.Position.Height <
+			data.chains[bAck.Position.ChainID].nextAck[b.Position.ChainID] {
+			return ErrDoubleAck
+		}
+		// Check if ack two blocks on the same chain. This would need
+		// to check after we replace map with slice for acks.
+		if _, acked := acksByChainID[bAck.Position.ChainID]; acked {
+			return ErrDuplicatedAckOnOneChain
+		}
+		acksByChainID[bAck.Position.ChainID] = struct{}{}
 	}
 
 	// Check non-genesis blocks if it acks its parent.
@@ -138,7 +171,12 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 		if !b.IsAcking(b.ParentHash) {
 			return ErrNotAckParent
 		}
-		bParent := data.blockByHash[b.ParentHash]
+		bParent, err := data.findBlock(b.ParentHash)
+		if err != nil {
+			// This error should never happened, a parent block is always
+			// an acked block.
+			panic(err)
+		}
 		if bParent.Position.ChainID != b.Position.ChainID {
 			return ErrInvalidParentChain
 		}
@@ -153,8 +191,10 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 			return ErrInvalidTimestamp
 		}
 		// Check if its timestamp is in expected range.
-		if b.Timestamp.Before(bParent.Timestamp.Add(data.minBlockTimeInterval)) ||
-			b.Timestamp.After(bParent.Timestamp.Add(data.maxBlockTimeInterval)) {
+		if b.Timestamp.Before(
+			bParent.Timestamp.Add(config.minBlockTimeInterval)) ||
+			b.Timestamp.After(
+				bParent.Timestamp.Add(config.maxBlockTimeInterval)) {
 
 			return ErrIncorrectBlockTime
 		}
@@ -182,7 +222,9 @@ func (data *latticeData) addBlock(
 	data.blockByHash[block.Hash] = block
 	// Update nextAcks.
 	for _, ack := range block.Acks {
-		bAck = data.blockByHash[ack]
+		if bAck, err = data.findBlock(ack); err != nil {
+			return
+		}
 		data.chains[bAck.Position.ChainID].nextAck[block.Position.ChainID] =
 			bAck.Position.Height + 1
 	}
@@ -198,9 +240,8 @@ func (data *latticeData) addBlock(
 			}
 			allAckingBlockDelivered := true
 			for _, ack := range tip.Acks {
-				bAck, exists := data.blockByHash[ack]
-				if !exists {
-					continue
+				if bAck, err = data.findBlock(ack); err != nil {
+					return
 				}
 				if data.chains[bAck.Position.ChainID].nextOutput >
 					bAck.Position.Height {
@@ -231,9 +272,7 @@ func (data *latticeData) addBlock(
 	// This works because blocks of height below this minimum are not going to be
 	// acked anymore, the ackings of these blocks are illegal.
 	for _, status := range data.chains {
-		for _, h := range status.purge() {
-			delete(data.blockByHash, h)
-		}
+		status.purge()
 	}
 	return
 }
@@ -245,6 +284,7 @@ func (data *latticeData) addBlock(
 //  - Set 'ParentHash' and 'Height' from parent block, if we can't find a
 //    parent, these fields would be setup like a genesis block.
 func (data *latticeData) prepareBlock(block *types.Block) {
+	config := data.getConfig(block.Position.Round)
 	// Reset fields to make sure we got these information from parent block.
 	block.Position.Height = 0
 	block.ParentHash = common.Hash{}
@@ -271,8 +311,8 @@ func (data *latticeData) prepareBlock(block *types.Block) {
 			block.ParentHash = curBlock.Hash
 			block.Position.Height = curBlock.Position.Height + 1
 			block.Witness.Height = curBlock.Witness.Height
-			minTimestamp := curBlock.Timestamp.Add(data.minBlockTimeInterval)
-			maxTimestamp := curBlock.Timestamp.Add(data.maxBlockTimeInterval)
+			minTimestamp := curBlock.Timestamp.Add(config.minBlockTimeInterval)
+			maxTimestamp := curBlock.Timestamp.Add(config.maxBlockTimeInterval)
 			if block.Timestamp.Before(minTimestamp) {
 				block.Timestamp = minTimestamp
 			} else if block.Timestamp.After(maxTimestamp) {
@@ -290,15 +330,51 @@ func (data *latticeData) nextPosition(chainID uint32) types.Position {
 	return data.chains[chainID].nextPosition()
 }
 
+// findBlock seeks blocks in memory or db.
+func (data *latticeData) findBlock(h common.Hash) (b *types.Block, err error) {
+	if b = data.blockByHash[h]; b != nil {
+		return
+	}
+	var tmpB types.Block
+	if tmpB, err = data.db.Get(h); err != nil {
+		return
+	}
+	b = &tmpB
+	return
+}
+
+// purgeBlocks purges blocks from cache.
+func (data *latticeData) purgeBlocks(blocks []*types.Block) error {
+	for _, b := range blocks {
+		if _, exists := data.blockByHash[b.Hash]; !exists {
+			return ErrPurgedBlockNotFound
+		}
+		delete(data.blockByHash, b.Hash)
+	}
+	return nil
+}
+
+// getConfig get configuration for lattice-data by round ID.
+func (data *latticeData) getConfig(round uint64) (config *latticeDataConfig) {
+	if round < data.minRound {
+		return
+	}
+	diff := round - data.minRound
+	if diff >= uint64(len(data.configs)) {
+		return
+	}
+	return data.configs[diff]
+}
+
 // appendConfig appends a configuration for upcoming round. When you append
 // a config for round R, next time you can only append the config for round R+1.
 func (data *latticeData) appendConfig(
-	round uint64, config *types.Config) (err error) {
+	round uint64, config *latticeDataConfig) (err error) {
 
-	if round != data.minRound+uint64(len(data.numChainsForRounds)) {
+	if round != data.minRound+uint64(len(data.configs)) {
 		return ErrRoundNotIncreasing
 	}
-	data.numChainsForRounds = append(data.numChainsForRounds, config.NumChains)
+	data.configs = append(data.configs, config)
 	return nil
 }
 
@@ -375,15 +451,12 @@ func (s *chainStatus) calcPurgeHeight() (safe uint64, ok bool) {
 }
 
 // purge blocks if they are safe to be deleted from working set.
-func (s *chainStatus) purge() (purged common.Hashes) {
+func (s *chainStatus) purge() {
 	safe, ok := s.calcPurgeHeight()
 	if !ok {
 		return
 	}
 	newMinIndex := safe - s.minHeight + 1
-	for _, b := range s.blocks[:newMinIndex] {
-		purged = append(purged, b.Hash)
-	}
 	s.blocks = s.blocks[newMinIndex:]
 	s.minHeight = safe + 1
 	return

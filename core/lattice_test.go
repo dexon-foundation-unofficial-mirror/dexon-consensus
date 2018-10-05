@@ -75,10 +75,13 @@ func (mgr *testLatticeMgr) processBlock(b *types.Block) (err error) {
 			if err = mgr.ccModule.processBlock(b); err != nil {
 				return
 			}
-			if err = mgr.db.Update(*b); err != nil {
+			if err = mgr.db.Put(*b); err != nil {
 				return
 			}
 			mgr.app.BlockDelivered(*b)
+		}
+		if err = mgr.lattice.PurgeBlocks(delivered); err != nil {
+			return
 		}
 		// Update pending blocks for verified block (pass sanity check).
 		pendings = append(pendings, verified...)

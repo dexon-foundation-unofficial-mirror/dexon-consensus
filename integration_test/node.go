@@ -203,10 +203,13 @@ func (n *Node) processBlock(b *types.Block) (err error) {
 		}
 		// Deliver blocks.
 		for _, b = range delivered {
-			if err = n.db.Update(*b); err != nil {
+			if err = n.db.Put(*b); err != nil {
 				return
 			}
 			n.app.BlockDelivered(*b)
+		}
+		if err = n.lattice.PurgeBlocks(delivered); err != nil {
+			return
 		}
 		// Update pending blocks for verified block (pass sanity check).
 		pendings = append(pendings, verified...)

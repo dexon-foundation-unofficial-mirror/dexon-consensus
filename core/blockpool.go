@@ -36,6 +36,21 @@ func newBlockPool(chainNum uint32) (pool blockPool) {
 	return
 }
 
+// resize the pool if new chain is added.
+func (p *blockPool) resize(num uint32) {
+	if uint32(len(*p)) < num {
+		return
+	}
+	newPool := make([]types.ByHeight, num)
+	copy(newPool, *p)
+	for i := uint32(len(*p)); i < num; i++ {
+		newChain := types.ByHeight{}
+		heap.Init(&newChain)
+		newPool[i] = newChain
+	}
+	*p = newPool
+}
+
 // addBlock adds a block into pending set and make sure these
 // blocks are sorted by height.
 func (p blockPool) addBlock(b *types.Block) {

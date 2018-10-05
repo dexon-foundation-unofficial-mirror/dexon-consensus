@@ -54,8 +54,10 @@ func (s *LatticeDataTestSuite) genTestCase1() (data *latticeData) {
 		req              = s.Require()
 		err       error
 	)
-
-	data = newLatticeData(round, chainNum, 2*time.Nanosecond, 1000*time.Second)
+	db, err := blockdb.NewMemBackedBlockDB()
+	req.NoError(err)
+	data = newLatticeData(
+		db, round, s.newConfig(chainNum, 2*time.Nanosecond, 1000*time.Second))
 	// Add genesis blocks.
 	for i := uint32(0); i < chainNum; i++ {
 		b = s.prepareGenesisBlock(i)
@@ -155,6 +157,16 @@ func (s *LatticeDataTestSuite) genTestCase1() (data *latticeData) {
 	req.Nil(err)
 	req.NotNil(data.chains[3].getBlockByHeight(0))
 	return
+}
+
+func (s *LatticeDataTestSuite) newConfig(numChains uint32,
+	minBlockInterval, maxBlockInterval time.Duration) *latticeDataConfig {
+
+	return &latticeDataConfig{
+		numChains:            numChains,
+		minBlockTimeInterval: minBlockInterval,
+		maxBlockTimeInterval: maxBlockInterval,
+	}
 }
 
 // hashBlock is a helper to hash a block and check if any error.
@@ -352,13 +364,14 @@ func (s *LatticeDataTestSuite) TestSanityCheckInDataLayer() {
 	b = &types.Block{
 		ParentHash: h,
 		Hash:       common.NewRandomHash(),
-		Timestamp:  time.Now().UTC().Add(data.maxBlockTimeInterval),
 		Position: types.Position{
 			ChainID: 2,
 			Height:  1,
 		},
 		Acks: common.NewSortedHashes(common.Hashes{h}),
 	}
+	b.Timestamp = data.chains[2].getBlockByHeight(0).Timestamp.Add(
+		data.getConfig(0).maxBlockTimeInterval + time.Nanosecond)
 	s.hashBlock(b)
 	err = data.sanityCheck(b)
 	req.NotNil(err)
@@ -390,14 +403,16 @@ func (s *LatticeDataTestSuite) TestRandomIntensiveAcking() {
 	var (
 		round     uint64
 		chainNum  uint32 = 19
-		data             = newLatticeData(round, chainNum, 0, 1000*time.Second)
 		req              = s.Require()
 		delivered []*types.Block
 		extracted []*types.Block
 		b         *types.Block
 		err       error
 	)
-
+	db, err := blockdb.NewMemBackedBlockDB()
+	req.NoError(err)
+	data := newLatticeData(
+		db, round, s.newConfig(chainNum, 0, 1000*time.Second))
 	// Generate genesis blocks.
 	for i := uint32(0); i < chainNum; i++ {
 		b = s.prepareGenesisBlock(i)
@@ -417,6 +432,10 @@ func (s *LatticeDataTestSuite) TestRandomIntensiveAcking() {
 		s.hashBlock(b)
 		delivered, err = data.addBlock(b)
 		req.Nil(err)
+		for _, b := range delivered {
+			req.NoError(db.Put(*b))
+		}
+		req.NoError(data.purgeBlocks(delivered))
 		extracted = append(extracted, delivered...)
 	}
 
@@ -459,7 +478,8 @@ func (s *LatticeDataTestSuite) TestRandomlyGeneratedBlocks() {
 	revealedHashesAsString := map[string]struct{}{}
 	deliveredHashesAsString := map[string]struct{}{}
 	for i := 0; i < repeat; i++ {
-		data := newLatticeData(round, chainNum, 0, 1000*time.Second)
+		data := newLatticeData(
+			nil, round, s.newConfig(chainNum, 0, 1000*time.Second))
 		deliveredHashes := common.Hashes{}
 		revealedHashes := common.Hashes{}
 		revealer.Reset()
@@ -542,7 +562,7 @@ func (s *LatticeDataTestSuite) TestPrepareBlock() {
 		delivered   []*types.Block
 		err         error
 		data        = newLatticeData(
-			round, chainNum, 0, 3000*time.Second)
+			nil, round, s.newConfig(chainNum, 0, 3000*time.Second))
 	)
 	// Setup genesis blocks.
 	b00 := s.prepareGenesisBlock(0)
@@ -656,8 +676,7 @@ func (s *LatticeDataTestSuite) TestPurge() {
 		nextAck:    []uint64{1, 1, 1, 1},
 		nextOutput: 1,
 	}
-	hashes := chain.purge()
-	s.Equal(hashes, common.Hashes{b00.Hash})
+	chain.purge()
 	s.Equal(chain.minHeight, uint64(1))
 	s.Require().Len(chain.blocks, 2)
 	s.Equal(chain.blocks[0].Hash, b01.Hash)
@@ -670,7 +689,7 @@ func (s *LatticeDataTestSuite) TestNextPosition() {
 	s.Equal(data.nextPosition(0), types.Position{ChainID: 0, Height: 4})
 
 	// Test 'NextPosition' method when lattice is empty.
-	data = newLatticeData(0, 4, 0, 1000*time.Second)
+	data = newLatticeData(nil, 0, s.newConfig(4, 0, 1000*time.Second))
 	s.Equal(data.nextPosition(0), types.Position{ChainID: 0, Height: 0})
 }
 

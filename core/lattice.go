@@ -34,7 +34,7 @@ type Lattice struct {
 	chainNum   uint32
 	app        Application
 	debug      Debug
-	db         blockdb.BlockDatabase
+	lastConfig *types.Config
 	pool       blockPool
 	data       *latticeData
 	toModule   *totalOrdering
@@ -49,19 +49,14 @@ func NewLattice(
 	app Application,
 	debug Debug,
 	db blockdb.BlockDatabase) (s *Lattice) {
-	data := newLatticeData(
-		round,
-		cfg.NumChains,
-		cfg.MinBlockInterval,
-		cfg.MaxBlockInterval)
 	s = &Lattice{
 		authModule: authModule,
 		chainNum:   cfg.NumChains,
 		app:        app,
 		debug:      debug,
-		db:         db,
+		lastConfig: cfg,
 		pool:       newBlockPool(cfg.NumChains),
-		data:       data,
+		data:       newLatticeData(db, round, newLatticeDataConfig(nil, cfg)),
 		toModule: newTotalOrdering(
 			round,
 			uint64(cfg.K),
@@ -156,9 +151,6 @@ func (s *Lattice) ProcessBlock(
 	if inLattice, err = s.data.addBlock(input); err != nil {
 		return
 	}
-	if err = s.db.Put(*input); err != nil {
-		return
-	}
 	// TODO(mission): remove this hack, BA related stuffs should not
 	//                be done here.
 	if s.debug != nil {
@@ -214,13 +206,24 @@ func (s *Lattice) NextPosition(chainID uint32) types.Position {
 	return s.data.nextPosition(chainID)
 }
 
+// PurgeBlocks from cache of blocks in memory, this is called when the caller
+// make sure those blocks are saved to db.
+func (s *Lattice) PurgeBlocks(blocks []*types.Block) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.data.purgeBlocks(blocks)
+}
+
 // AppendConfig add new configs for upcoming rounds. If you add a config for
 // round R, next time you can only add the config for round R+1.
 func (s *Lattice) AppendConfig(round uint64, config *types.Config) (err error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if err = s.data.appendConfig(round, config); err != nil {
+	s.pool.resize(config.NumChains)
+	if err = s.data.appendConfig(
+		round, newLatticeDataConfig(s.lastConfig, config)); err != nil {
 		return
 	}
 	if err = s.toModule.appendConfig(round, config); err != nil {
@@ -229,5 +232,6 @@ func (s *Lattice) AppendConfig(round uint64, config *types.Config) (err error) {
 	if err = s.ctModule.appendConfig(round, config); err != nil {
 		return
 	}
+	s.lastConfig = config
 	return
 }
