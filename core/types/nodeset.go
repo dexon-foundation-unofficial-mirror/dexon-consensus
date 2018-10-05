@@ -38,7 +38,6 @@ type subSetTargetType byte
 
 const (
 	targetNotarySet subSetTargetType = iota
-	targetWitnessSet
 	targetDKGSet
 )
 
@@ -79,20 +78,9 @@ func NewNotarySetTarget(crs common.Hash, chainID uint32) SubSetTarget {
 	return newTarget(targetNotarySet, crs[:], binaryChainID)
 }
 
-// NewWitnessSetTarget  is the target for getting DKG Set.
-func NewWitnessSetTarget(crs common.Hash, round uint64) SubSetTarget {
-	binaryRound := make([]byte, 8)
-	binary.LittleEndian.PutUint64(binaryRound, round)
-
-	return newTarget(targetWitnessSet, crs[:], binaryRound)
-}
-
 // NewDKGSetTarget  is the target for getting DKG Set.
-func NewDKGSetTarget(crs common.Hash, round uint64) SubSetTarget {
-	binaryRound := make([]byte, 8)
-	binary.LittleEndian.PutUint64(binaryRound, round)
-
-	return newTarget(targetDKGSet, crs[:], binaryRound)
+func NewDKGSetTarget(crs common.Hash) SubSetTarget {
+	return newTarget(targetDKGSet, crs[:])
 }
 
 // Add a NodeID to the set.

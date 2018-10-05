@@ -29,12 +29,19 @@ import (
 
 type testGov struct {
 	s       *NodeSetCacheTestSuite
+	crs     common.Hash
 	curKeys []crypto.PublicKey
 }
 
-func (g *testGov) Configuration(round uint64) (cfg *types.Config) { return }
-func (g *testGov) CRS(round uint64) (b common.Hash)               { return }
-func (g *testGov) ProposeCRS(uint64, []byte)                      {}
+func (g *testGov) Configuration(round uint64) (cfg *types.Config) {
+	return &types.Config{
+		NumNotarySet: 7,
+		NumDKGSet:    7,
+		NumChains:    4,
+	}
+}
+func (g *testGov) CRS(round uint64) (b common.Hash) { return g.crs }
+func (g *testGov) ProposeCRS(uint64, []byte)        {}
 func (g *testGov) NodeSet(round uint64) []crypto.PublicKey {
 	// Randomly generating keys, and check them for verification.
 	g.curKeys = []crypto.PublicKey{}
@@ -64,7 +71,10 @@ type NodeSetCacheTestSuite struct {
 
 func (s *NodeSetCacheTestSuite) TestBasicUsage() {
 	var (
-		gov   = &testGov{s: s}
+		gov = &testGov{
+			s:   s,
+			crs: common.NewRandomHash(),
+		}
 		cache = NewNodeSetCache(gov)
 		req   = s.Require()
 	)
@@ -88,6 +98,12 @@ func (s *NodeSetCacheTestSuite) TestBasicUsage() {
 	nodeSet0, err := cache.GetNodeSet(0)
 	req.NoError(err)
 	chk(cache, 0, nodeSet0.IDs)
+	notarySet, err := cache.GetNotarySet(0, 0)
+	req.NoError(err)
+	chk(cache, 0, notarySet)
+	dkgSet, err := cache.GetDKGSet(0)
+	req.NoError(err)
+	chk(cache, 0, dkgSet)
 	// Try to get round 1.
 	nodeSet1, err := cache.GetNodeSet(1)
 	req.NoError(err)
