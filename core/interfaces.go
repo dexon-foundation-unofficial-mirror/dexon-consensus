@@ -64,6 +64,12 @@ type Network interface {
 	// BroadcastBlock broadcasts block to all nodes in DEXON network.
 	BroadcastBlock(block *types.Block)
 
+	// BroadcastRandomnessRequest broadcasts rand request to DKG set.
+	BroadcastRandomnessRequest(randRequest *types.AgreementResult)
+
+	// BroadcastRandomnessResult broadcasts rand request to Notary set.
+	BroadcastRandomnessResult(randResult *types.BlockRandomnessResult)
+
 	// SendDKGPrivateShare sends PrivateShare to a DKG participant.
 	SendDKGPrivateShare(pub crypto.PublicKey, prvShare *types.DKGPrivateShare)
 

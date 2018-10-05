@@ -25,6 +25,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/dkg"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
@@ -141,14 +142,8 @@ func (s *ConfigurationChainTestSuite) setupNodes(n int) {
 	}
 }
 
-// TestConfigurationChain will test the entire DKG+TISG protocol including
-// exchanging private shares, recovering share secret, creating partial sign and
-// recovering threshold signature.
-// All participants are good people in this test.
-func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
-	k := 3
-	n := 10
-	round := uint64(1)
+func (s *ConfigurationChainTestSuite) runDKG(
+	k, n int, round uint64) map[types.NodeID]*configurationChain {
 	s.setupNodes(n)
 
 	cfgChains := make(map[types.NodeID]*configurationChain)
@@ -183,14 +178,20 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 	for range cfgChains {
 		s.Require().NoError(<-errs)
 	}
+	return cfgChains
+}
 
-	psigs := make([]*types.DKGPartialSignature, 0, n)
-	hash := crypto.Keccak256Hash([]byte("🌚🌝"))
+func (s *ConfigurationChainTestSuite) preparePartialSignature(
+	hash common.Hash,
+	round uint64,
+	cfgChains map[types.NodeID]*configurationChain) (
+	psigs []*types.DKGPartialSignature) {
+	psigs = make([]*types.DKGPartialSignature, 0, len(cfgChains))
 	for nID, cc := range cfgChains {
 		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
 			continue
 		}
-		psig, err := cc.preparePartialSignature(round, hash, types.TSigCRS)
+		psig, err := cc.preparePartialSignature(round, hash)
 		s.Require().NoError(err)
 		prvKey, exist := s.prvKeys[cc.ID]
 		s.Require().True(exist)
@@ -198,16 +199,31 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 		s.Require().NoError(err)
 		psigs = append(psigs, psig)
 	}
+	return
+}
+
+// TestConfigurationChain will test the entire DKG+TISG protocol including
+// exchanging private shares, recovering share secret, creating partial sign and
+// recovering threshold signature.
+// All participants are good people in this test.
+func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
+	k := 3
+	n := 10
+	round := uint64(1)
+	cfgChains := s.runDKG(k, n, round)
+
+	hash := crypto.Keccak256Hash([]byte("🌚🌝"))
+	psigs := s.preparePartialSignature(hash, round, cfgChains)
 
 	tsigs := make([]crypto.Signature, 0, n)
-	errs = make(chan error, n)
+	errs := make(chan error, n)
 	tsigChan := make(chan crypto.Signature, n)
 	for nID, cc := range cfgChains {
 		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
 			continue
 		}
 		go func(cc *configurationChain) {
-			tsig, err := cc.runTSig(round, hash, types.TSigCRS)
+			tsig, err := cc.runTSig(round, hash)
 			// Prevent racing by collecting errors and check in main thread.
 			errs <- err
 			tsigChan <- tsig
@@ -225,6 +241,66 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 		tsig := <-tsigChan
 		for _, prevTsig := range tsigs {
 			s.Equal(prevTsig, tsig)
+		}
+	}
+}
+
+func (s *ConfigurationChainTestSuite) TestMultipleTSig() {
+	k := 2
+	n := 7
+	round := uint64(1)
+	cfgChains := s.runDKG(k, n, round)
+
+	hash1 := crypto.Keccak256Hash([]byte("Hash1"))
+	hash2 := crypto.Keccak256Hash([]byte("Hash2"))
+
+	psigs1 := s.preparePartialSignature(hash1, round, cfgChains)
+	psigs2 := s.preparePartialSignature(hash2, round, cfgChains)
+
+	tsigs1 := make([]crypto.Signature, 0, n)
+	tsigs2 := make([]crypto.Signature, 0, n)
+
+	errs := make(chan error, n*2)
+	tsigChan1 := make(chan crypto.Signature, n)
+	tsigChan2 := make(chan crypto.Signature, n)
+	for nID, cc := range cfgChains {
+		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+			continue
+		}
+		go func(cc *configurationChain) {
+			tsig1, err := cc.runTSig(round, hash1)
+			// Prevent racing by collecting errors and check in main thread.
+			errs <- err
+			tsigChan1 <- tsig1
+		}(cc)
+		go func(cc *configurationChain) {
+			tsig2, err := cc.runTSig(round, hash2)
+			// Prevent racing by collecting errors and check in main thread.
+			errs <- err
+			tsigChan2 <- tsig2
+		}(cc)
+		for _, psig := range psigs1 {
+			err := cc.processPartialSignature(psig)
+			s.Require().NoError(err)
+		}
+		for _, psig := range psigs2 {
+			err := cc.processPartialSignature(psig)
+			s.Require().NoError(err)
+		}
+	}
+	for nID, cc := range cfgChains {
+		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+			continue
+		}
+		s.Require().NoError(<-errs)
+		tsig1 := <-tsigChan1
+		for _, prevTsig := range tsigs1 {
+			s.Equal(prevTsig, tsig1)
+		}
+		s.Require().NoError(<-errs)
+		tsig2 := <-tsigChan2
+		for _, prevTsig := range tsigs2 {
+			s.Equal(prevTsig, tsig2)
 		}
 	}
 }

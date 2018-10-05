@@ -211,12 +211,12 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 	}
 
 	msgHash := crypto.Keccak256Hash([]byte("🏖🍹"))
-	tsig := newTSigProtocol(gpk, msgHash, types.TSigConfigurationBlock)
+	tsig := newTSigProtocol(gpk, msgHash)
 	for nID, shareSecret := range shareSecrets {
 		psig := &types.DKGPartialSignature{
 			ProposerID:       nID,
 			Round:            round,
-			Type:             types.TSigConfigurationBlock,
+			Hash:             msgHash,
 			PartialSignature: shareSecret.sign(msgHash),
 		}
 		var err error
@@ -578,14 +578,14 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 	}
 
 	msgHash := crypto.Keccak256Hash([]byte("🏖🍹"))
-	tsig := newTSigProtocol(gpk, msgHash, types.TSigConfigurationBlock)
+	tsig := newTSigProtocol(gpk, msgHash)
 	byzantineID2 := s.nIDs[1]
 	byzantineID3 := s.nIDs[2]
 	for nID, shareSecret := range shareSecrets {
 		psig := &types.DKGPartialSignature{
 			ProposerID:       nID,
 			Round:            round,
-			Type:             types.TSigConfigurationBlock,
+			Hash:             msgHash,
 			PartialSignature: shareSecret.sign(msgHash),
 		}
 		switch nID {
@@ -593,7 +593,7 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 			psig.PartialSignature = shareSecret.sign(
 				crypto.Keccak256Hash([]byte("💣")))
 		case byzantineID3:
-			psig.Type = types.TSigNotaryAck
+			psig.Hash = common.NewRandomHash()
 		}
 		var err error
 		psig.Signature, err = s.prvKeys[nID].Sign(hashDKGPartialSignature(psig))
@@ -605,7 +605,7 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 		case byzantineID2:
 			s.Require().Equal(ErrIncorrectPartialSignature, err)
 		case byzantineID3:
-			s.Require().Equal(ErrMismatchPartialSignatureType, err)
+			s.Require().Equal(ErrMismatchPartialSignatureHash, err)
 		default:
 			s.Require().NoError(err)
 		}

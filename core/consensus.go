@@ -44,6 +44,12 @@ var (
 		"unknown block is proposed")
 	ErrUnknownBlockConfirmed = fmt.Errorf(
 		"unknown block is confirmed")
+	ErrIncorrectAgreementResultPosition = fmt.Errorf(
+		"incorrect agreement result position")
+	ErrNotEnoughVotes = fmt.Errorf(
+		"not enought votes")
+	ErrIncorrectVoteProposer = fmt.Errorf(
+		"incorrect vote proposer")
 )
 
 // consensusBAReceiver implements agreementReceiver.
@@ -385,7 +391,7 @@ func (con *Consensus) runDKGTSIG() {
 			common.Hash{},
 			con.cfgModule.prevHash)
 		psig, err := con.cfgModule.preparePartialSignature(
-			round, hash, types.TSigConfigurationBlock)
+			round, hash)
 		if err != nil {
 			panic(err)
 		}
@@ -405,7 +411,7 @@ func (con *Consensus) runDKGTSIG() {
 func (con *Consensus) runCRS() {
 	// Start running next round CRS.
 	psig, err := con.cfgModule.preparePartialSignature(
-		con.round, con.gov.CRS(con.round), types.TSigCRS)
+		con.round, con.gov.CRS(con.round))
 	if err != nil {
 		log.Println(err)
 	} else if err = con.authModule.SignDKGPartialSignature(psig); err != nil {
@@ -471,6 +477,14 @@ func (con *Consensus) processMsg(msgChan <-chan interface{}) {
 			if err := con.ProcessVote(val); err != nil {
 				log.Println(err)
 			}
+		case *types.AgreementResult:
+			if err := con.ProcessAgreementResult(val); err != nil {
+				log.Println(err)
+			}
+		case *types.BlockRandomnessResult:
+			if err := con.ProcessBlockRandomnessResult(val); err != nil {
+				log.Println(err)
+			}
 		case *types.DKGPrivateShare:
 			if err := con.cfgModule.processPrivateShare(val); err != nil {
 				log.Println(err)
@@ -502,6 +516,51 @@ func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
 	v := vote.Clone()
 	err = con.baModules[v.Position.ChainID].processVote(v)
 	return err
+}
+
+// ProcessAgreementResult processes the randomness request.
+func (con *Consensus) ProcessAgreementResult(
+	rand *types.AgreementResult) error {
+	if con.round != rand.Round {
+		return nil
+	}
+	dkgSet, err := con.nodeSetCache.GetDKGSet(rand.Round)
+	if err != nil {
+		return err
+	}
+	if _, exist := dkgSet[con.ID]; !exist {
+		return nil
+	}
+	if len(rand.Votes) <= con.currentConfig.NumNotarySet/3*2 {
+		return ErrNotEnoughVotes
+	}
+	if rand.Position.ChainID >= con.currentConfig.NumChains {
+		return ErrIncorrectAgreementResultPosition
+	}
+	notarySet, err := con.nodeSetCache.GetNotarySet(
+		rand.Round, rand.Position.ChainID)
+	if err != nil {
+		return err
+	}
+	for _, vote := range rand.Votes {
+		if _, exist := notarySet[vote.ProposerID]; !exist {
+			return ErrIncorrectVoteProposer
+		}
+		ok, err := verifyVoteSignature(&vote)
+		if err != nil {
+			return nil
+		}
+		if !ok {
+			return ErrIncorrectVoteSignature
+		}
+	}
+	return nil
+}
+
+// ProcessBlockRandomnessResult processes the randomness result.
+func (con *Consensus) ProcessBlockRandomnessResult(
+	rand *types.BlockRandomnessResult) error {
+	return nil
 }
 
 // preProcessBlock performs Byzantine Agreement on the block.

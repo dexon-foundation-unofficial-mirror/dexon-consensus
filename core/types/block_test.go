@@ -60,6 +60,7 @@ func (s *BlockTestSuite) createRandomBlock() *Block {
 		ConsensusHeight:    rand.Uint64(),
 		ConsensusTimestamp: time.Now().Add(time.Duration(rand.Int())),
 		Payload:            s.randomBytes(),
+		Randomness:         s.randomBytes(),
 		Signature:          crypto.Signature{Signature: s.randomBytes()},
 		CRSSignature:       crypto.Signature{Signature: s.randomBytes()},
 	}

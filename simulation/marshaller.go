@@ -63,6 +63,18 @@ func (m *jsonMarshaller) Unmarshal(
 			break
 		}
 		msg = vote
+	case "block-randomness-request":
+		request := &types.AgreementResult{}
+		if err = json.Unmarshal(payload, request); err != nil {
+			break
+		}
+		msg = request
+	case "block-randomness-result":
+		result := &types.BlockRandomnessResult{}
+		if err = json.Unmarshal(payload, result); err != nil {
+			break
+		}
+		msg = result
 	case "dkg-private-share":
 		privateShare := &types.DKGPrivateShare{}
 		if err = json.Unmarshal(payload, privateShare); err != nil {
@@ -111,6 +123,10 @@ func (m *jsonMarshaller) Marshal(msg interface{}) (
 		msgType = "block"
 	case *types.Vote:
 		msgType = "vote"
+	case *types.AgreementResult:
+		msgType = "block-randomness-request"
+	case *types.BlockRandomnessResult:
+		msgType = "block-randomness-result"
 	case *types.DKGPrivateShare:
 		msgType = "dkg-private-share"
 	case *types.DKGMasterPublicKey:

@@ -68,6 +68,7 @@ type Block struct {
 	Timestamp          time.Time           `json:"timestamps"`
 	Acks               common.SortedHashes `json:"acks"`
 	Payload            []byte              `json:"payload"`
+	Randomness         []byte              `json:"randomness"`
 	ConsensusTimestamp time.Time           `json:"consensus_timestamp"`
 	ConsensusHeight    uint64              `json:"consensus_height"`
 	Witness            Witness             `json:"witness"`
@@ -102,6 +103,8 @@ func (b *Block) Clone() (bcopy *Block) {
 	copy(bcopy.Acks, b.Acks)
 	bcopy.Payload = make([]byte, len(b.Payload))
 	copy(bcopy.Payload, b.Payload)
+	bcopy.Randomness = make([]byte, len(b.Randomness))
+	copy(bcopy.Randomness, b.Randomness)
 	return
 }
 

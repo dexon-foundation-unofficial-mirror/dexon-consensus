@@ -47,6 +47,18 @@ func (n *network) BroadcastBlock(block *types.Block) {
 	n.conn.broadcast(n.nID, block)
 }
 
+// BroadcastRandomnessRequest broadcasts rand request to DKG set.
+func (n *network) BroadcastRandomnessRequest(
+	randRequest *types.AgreementResult) {
+	n.conn.broadcast(n.nID, randRequest)
+}
+
+// BroadcastRandomnessResult broadcasts rand request to Notary set.
+func (n *network) BroadcastRandomnessResult(
+	randResult *types.BlockRandomnessResult) {
+	n.conn.broadcast(n.nID, randResult)
+}
+
 // SendDKGPrivateShare sends PrivateShare to a DKG participant.
 func (n *network) SendDKGPrivateShare(
 	recv crypto.PublicKey, prvShare *types.DKGPrivateShare) {

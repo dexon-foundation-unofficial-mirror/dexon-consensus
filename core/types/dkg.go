@@ -20,6 +20,7 @@ package types
 import (
 	"fmt"
 
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/dkg"
 )
@@ -66,23 +67,13 @@ type DKGComplaint struct {
 	Signature    crypto.Signature `json:"signature"`
 }
 
-// DKGPartialSignatureType specifies ths threshold signature type.
-type DKGPartialSignatureType uint32
-
-// TSig enums.
-const (
-	TSigConfigurationBlock DKGPartialSignatureType = iota
-	TSigNotaryAck
-	TSigCRS
-)
-
 // DKGPartialSignature describe a partial signature in DKG protocol.
 type DKGPartialSignature struct {
-	ProposerID       NodeID                  `json:"proposerID"`
-	Round            uint64                  `json:"round"`
-	Type             DKGPartialSignatureType `json:"type"`
-	PartialSignature dkg.PartialSignature    `json:"partial_signature"`
-	Signature        crypto.Signature        `json:"signature"`
+	ProposerID       NodeID               `json:"proposerID"`
+	Round            uint64               `json:"round"`
+	Hash             common.Hash          `json:"hash"`
+	PartialSignature dkg.PartialSignature `json:"partial_signature"`
+	Signature        crypto.Signature     `json:"signature"`
 }
 
 // IsNack returns true if it's a nack complaint in DKG protocol.

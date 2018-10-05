@@ -132,6 +132,22 @@ func (n *network) BroadcastBlock(block *types.Block) {
 	}
 }
 
+// BroadcastRandomnessRequest implements core.Network interface.
+func (n *network) BroadcastRandomnessRequest(
+	randRequest *types.AgreementResult) {
+	if err := n.trans.Broadcast(randRequest); err != nil {
+		panic(err)
+	}
+}
+
+// BroadcastRandomnessResult implements core.Network interface.
+func (n *network) BroadcastRandomnessResult(
+	randResult *types.BlockRandomnessResult) {
+	if err := n.trans.Broadcast(randResult); err != nil {
+		panic(err)
+	}
+}
+
 // broadcast message to all other nodes in the network.
 func (n *network) broadcast(message interface{}) {
 	if err := n.trans.Broadcast(message); err != nil {
@@ -199,6 +215,7 @@ func (n *network) run() {
 	disp := func(e *test.TransportEnvelope) {
 		switch e.Msg.(type) {
 		case *types.Block, *types.Vote,
+			*types.AgreementResult, *types.BlockRandomnessResult,
 			*types.DKGPrivateShare, *types.DKGPartialSignature:
 			n.toConsensus <- e.Msg
 		default:

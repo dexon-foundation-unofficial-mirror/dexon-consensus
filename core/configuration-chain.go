@@ -31,6 +31,8 @@ import (
 var (
 	ErrDKGNotRegistered = fmt.Errorf(
 		"not yet registered in DKG protocol")
+	ErrTSigAlreadyRunning = fmt.Errorf(
+		"tsig is already running")
 	ErrDKGNotReady = fmt.Errorf(
 		"DKG is not ready")
 )
@@ -44,10 +46,10 @@ type configurationChain struct {
 	dkgSigner map[uint64]*dkgShareSecret
 	gpk       map[uint64]*DKGGroupPublicKey
 	dkgResult sync.RWMutex
-	tsig      *tsigProtocol
+	tsig      map[common.Hash]*tsigProtocol
 	tsigReady *sync.Cond
 	// TODO(jimmy-dexon): add timeout to pending psig.
-	pendingPsig []*types.DKGPartialSignature
+	pendingPsig map[common.Hash][]*types.DKGPartialSignature
 	prevHash    common.Hash
 }
 
@@ -56,12 +58,14 @@ func newConfigurationChain(
 	recv dkgReceiver,
 	gov Governance) *configurationChain {
 	return &configurationChain{
-		ID:        ID,
-		recv:      recv,
-		gov:       gov,
-		dkgSigner: make(map[uint64]*dkgShareSecret),
-		gpk:       make(map[uint64]*DKGGroupPublicKey),
-		tsigReady: sync.NewCond(&sync.Mutex{}),
+		ID:          ID,
+		recv:        recv,
+		gov:         gov,
+		dkgSigner:   make(map[uint64]*dkgShareSecret),
+		gpk:         make(map[uint64]*DKGGroupPublicKey),
+		tsig:        make(map[common.Hash]*tsigProtocol),
+		tsigReady:   sync.NewCond(&sync.Mutex{}),
+		pendingPsig: make(map[common.Hash][]*types.DKGPartialSignature),
 	}
 }
 
@@ -148,8 +152,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 }
 
 func (cc *configurationChain) preparePartialSignature(
-	round uint64, hash common.Hash, psigType types.DKGPartialSignatureType) (
-	*types.DKGPartialSignature, error) {
+	round uint64, hash common.Hash) (*types.DKGPartialSignature, error) {
 	signer, exist := func() (*dkgShareSecret, bool) {
 		cc.dkgResult.RLock()
 		defer cc.dkgResult.RUnlock()
@@ -162,13 +165,13 @@ func (cc *configurationChain) preparePartialSignature(
 	return &types.DKGPartialSignature{
 		ProposerID:       cc.ID,
 		Round:            round,
-		Type:             psigType,
+		Hash:             hash,
 		PartialSignature: signer.sign(hash),
 	}, nil
 }
 
 func (cc *configurationChain) runTSig(
-	round uint64, hash common.Hash, psigType types.DKGPartialSignatureType) (
+	round uint64, hash common.Hash) (
 	crypto.Signature, error) {
 	gpk, exist := func() (*DKGGroupPublicKey, bool) {
 		cc.dkgResult.RLock()
@@ -181,12 +184,12 @@ func (cc *configurationChain) runTSig(
 	}
 	cc.tsigReady.L.Lock()
 	defer cc.tsigReady.L.Unlock()
-	for cc.tsig != nil {
-		cc.tsigReady.Wait()
+	if _, exist := cc.tsig[hash]; exist {
+		return crypto.Signature{}, ErrTSigAlreadyRunning
 	}
-	cc.tsig = newTSigProtocol(gpk, hash, psigType)
-	pendingPsig := cc.pendingPsig
-	cc.pendingPsig = []*types.DKGPartialSignature{}
+	cc.tsig[hash] = newTSigProtocol(gpk, hash)
+	pendingPsig := cc.pendingPsig[hash]
+	delete(cc.pendingPsig, hash)
 	go func() {
 		for _, psig := range pendingPsig {
 			if err := cc.processPartialSignature(psig); err != nil {
@@ -197,13 +200,12 @@ func (cc *configurationChain) runTSig(
 	var signature crypto.Signature
 	var err error
 	for func() bool {
-		signature, err = cc.tsig.signature()
+		signature, err = cc.tsig[hash].signature()
 		return err == ErrNotEnoughtPartialSignatures
 	}() {
 		cc.tsigReady.Wait()
 	}
-	cc.tsig = nil
-	cc.tsigReady.Broadcast()
+	delete(cc.tsig, hash)
 	if err != nil {
 		return crypto.Signature{}, err
 	}
@@ -212,7 +214,7 @@ func (cc *configurationChain) runTSig(
 
 func (cc *configurationChain) runBlockTSig(
 	round uint64, hash common.Hash) (crypto.Signature, error) {
-	sig, err := cc.runTSig(round, hash, types.TSigConfigurationBlock)
+	sig, err := cc.runTSig(round, hash)
 	if err != nil {
 		return crypto.Signature{}, err
 	}
@@ -222,7 +224,7 @@ func (cc *configurationChain) runBlockTSig(
 
 func (cc *configurationChain) runCRSTSig(
 	round uint64, crs common.Hash) ([]byte, error) {
-	sig, err := cc.runTSig(round, crs, types.TSigCRS)
+	sig, err := cc.runTSig(round, crs)
 	log.Printf("[%s] CRS(%d): %s\n", cc.ID, round+1, sig)
 	return sig.Signature[:], err
 }
@@ -241,7 +243,7 @@ func (cc *configurationChain) processPartialSignature(
 	psig *types.DKGPartialSignature) error {
 	cc.tsigReady.L.Lock()
 	defer cc.tsigReady.L.Unlock()
-	if cc.tsig == nil || psig.Type != cc.tsig.psigType {
+	if _, exist := cc.tsig[psig.Hash]; !exist {
 		ok, err := verifyDKGPartialSignatureSignature(psig)
 		if err != nil {
 			return err
@@ -249,10 +251,10 @@ func (cc *configurationChain) processPartialSignature(
 		if !ok {
 			return ErrIncorrectPartialSignatureSignature
 		}
-		cc.pendingPsig = append(cc.pendingPsig, psig)
+		cc.pendingPsig[psig.Hash] = append(cc.pendingPsig[psig.Hash], psig)
 		return nil
 	}
-	if err := cc.tsig.processPartialSignature(psig); err != nil {
+	if err := cc.tsig[psig.Hash].processPartialSignature(psig); err != nil {
 		return err
 	}
 	cc.tsigReady.Broadcast()
