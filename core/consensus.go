@@ -50,6 +50,8 @@ var (
 		"not enought votes")
 	ErrIncorrectVoteProposer = fmt.Errorf(
 		"incorrect vote proposer")
+	ErrIncorrectBlockRandomnessResult = fmt.Errorf(
+		"incorrect block randomness result")
 )
 
 // consensusBAReceiver implements agreementReceiver.
@@ -59,6 +61,7 @@ type consensusBAReceiver struct {
 	agreementModule  *agreement
 	chainID          uint32
 	changeNotaryTime time.Time
+	round            uint64
 	restartNotary    chan bool
 }
 
@@ -86,17 +89,34 @@ func (recv *consensusBAReceiver) ProposeBlock() {
 	recv.consensus.network.BroadcastBlock(block)
 }
 
-func (recv *consensusBAReceiver) ConfirmBlock(hash common.Hash) {
-	block, exist := recv.consensus.baModules[recv.chainID].findCandidateBlock(hash)
+func (recv *consensusBAReceiver) ConfirmBlock(
+	hash common.Hash, votes map[types.NodeID]*types.Vote) {
+	block, exist := recv.consensus.baModules[recv.chainID].
+		findCandidateBlock(hash)
 	if !exist {
 		log.Println(ErrUnknownBlockConfirmed, hash)
 		return
 	}
+	voteList := make([]types.Vote, 0, len(votes))
+	for _, vote := range votes {
+		voteList = append(voteList, *vote)
+	}
+	recv.consensus.network.BroadcastRandomnessRequest(&types.AgreementResult{
+		BlockHash: hash,
+		Round:     recv.round,
+		Position:  block.Position,
+		Votes:     voteList,
+	})
 	if err := recv.consensus.processBlock(block); err != nil {
 		log.Println(err)
 		return
 	}
-	recv.restartNotary <- block.Timestamp.After(recv.changeNotaryTime)
+	if block.Timestamp.After(recv.changeNotaryTime) {
+		recv.round++
+		recv.restartNotary <- true
+	} else {
+		recv.restartNotary <- false
+	}
 }
 
 // consensusDKGReceiver implements dkgReceiver.
@@ -554,12 +574,55 @@ func (con *Consensus) ProcessAgreementResult(
 			return ErrIncorrectVoteSignature
 		}
 	}
+	psig, err := con.cfgModule.preparePartialSignature(rand.Round, rand.BlockHash)
+	if err != nil {
+		return err
+	}
+	if err = con.authModule.SignDKGPartialSignature(psig); err != nil {
+		return err
+	}
+	if err = con.cfgModule.processPartialSignature(psig); err != nil {
+		return err
+	}
+	con.network.BroadcastDKGPartialSignature(psig)
+	go func() {
+		tsig, err := con.cfgModule.runTSig(rand.Round, rand.BlockHash)
+		if err != nil {
+			if err != ErrTSigAlreadyRunning {
+				log.Println(err)
+			}
+			return
+		}
+		result := &types.BlockRandomnessResult{
+			BlockHash:  rand.BlockHash,
+			Round:      rand.Round,
+			Randomness: tsig.Signature,
+		}
+		if err := con.ProcessBlockRandomnessResult(result); err != nil {
+			log.Println(err)
+			return
+		}
+		con.network.BroadcastRandomnessResult(result)
+	}()
 	return nil
 }
 
 // ProcessBlockRandomnessResult processes the randomness result.
 func (con *Consensus) ProcessBlockRandomnessResult(
 	rand *types.BlockRandomnessResult) error {
+	// TODO(jimmy-dexon): reuse the GPK.
+	round := rand.Round
+	gpk, err := NewDKGGroupPublicKey(round,
+		con.gov.DKGMasterPublicKeys(round),
+		con.gov.DKGComplaints(round),
+		con.gov.Configuration(round).NumDKGSet/3)
+	if err != nil {
+		return err
+	}
+	if !gpk.VerifySignature(
+		rand.BlockHash, crypto.Signature{Signature: rand.Randomness}) {
+		return ErrIncorrectBlockRandomnessResult
+	}
 	return nil
 }
 

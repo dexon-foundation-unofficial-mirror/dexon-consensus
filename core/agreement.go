@@ -67,7 +67,7 @@ func newVoteListMap() []map[types.NodeID]*types.Vote {
 type agreementReceiver interface {
 	ProposeVote(vote *types.Vote)
 	ProposeBlock()
-	ConfirmBlock(common.Hash)
+	ConfirmBlock(common.Hash, map[types.NodeID]*types.Vote)
 }
 
 type pendingBlock struct {
@@ -294,7 +294,8 @@ func (a *agreement) processVote(vote *types.Vote) error {
 			if len(a.data.votes[vote.Period][types.VoteConfirm]) >=
 				a.data.requiredVote {
 				a.hasOutput = true
-				a.data.recv.ConfirmBlock(vote.BlockHash)
+				a.data.recv.ConfirmBlock(vote.BlockHash,
+					a.data.votes[vote.Period][types.VoteConfirm])
 			}
 		}
 		return true
