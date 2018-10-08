@@ -126,6 +126,9 @@ func (a *simApp) TotalOrderingDelivered(blockHashes common.Hashes, early bool) {
 
 // BlockDelivered is called when a block in compaction chain is delivered.
 func (a *simApp) BlockDelivered(block types.Block) {
+	if len(block.Randomness) == 0 {
+		panic(fmt.Errorf("Block %s randomness is empty", block.Hash))
+	}
 	func() {
 		a.blockByHashMutex.Lock()
 		defer a.blockByHashMutex.Unlock()

@@ -20,42 +20,49 @@
 package core
 
 import (
+	"fmt"
 	"sync"
-	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-type pendingAck struct {
-	receivedTime time.Time
-}
+// Errors for compaction chain module.
+var (
+	ErrBlockNotRegistered = fmt.Errorf(
+		"block not registered")
+)
 
 type compactionChain struct {
-	db              blockdb.Reader
-	pendingAckLock  sync.RWMutex
-	pendingAck      map[common.Hash]*pendingAck
-	prevBlockLock   sync.RWMutex
-	prevBlock       *types.Block
-	witnessAcksLock sync.RWMutex
+	blocks        map[common.Hash]*types.Block
+	pendingBlocks []*types.Block
+	blocksLock    sync.RWMutex
+	prevBlockLock sync.RWMutex
+	prevBlock     *types.Block
 }
 
-func newCompactionChain(
-	db blockdb.Reader,
-) *compactionChain {
+func newCompactionChain() *compactionChain {
 	return &compactionChain{
-		db:         db,
-		pendingAck: make(map[common.Hash]*pendingAck),
+		blocks: make(map[common.Hash]*types.Block),
 	}
 }
 
-func (cc *compactionChain) sanityCheck(witnessBlock *types.Block) error {
-	return nil
+func (cc *compactionChain) registerBlock(block *types.Block) {
+	if cc.blockRegistered(block.Hash) {
+		return
+	}
+	cc.blocksLock.Lock()
+	defer cc.blocksLock.Unlock()
+	cc.blocks[block.Hash] = block
 }
 
-// TODO(jimmy-dexon): processBlock can be extraced to
-// another struct.
+func (cc *compactionChain) blockRegistered(hash common.Hash) (exist bool) {
+	cc.blocksLock.RLock()
+	defer cc.blocksLock.RUnlock()
+	_, exist = cc.blocks[hash]
+	return
+}
+
 func (cc *compactionChain) processBlock(block *types.Block) error {
 	prevBlock := cc.lastBlock()
 	if prevBlock != nil {
@@ -64,6 +71,33 @@ func (cc *compactionChain) processBlock(block *types.Block) error {
 	cc.prevBlockLock.Lock()
 	defer cc.prevBlockLock.Unlock()
 	cc.prevBlock = block
+	cc.blocksLock.Lock()
+	defer cc.blocksLock.Unlock()
+	cc.pendingBlocks = append(cc.pendingBlocks, block)
+	return nil
+}
+
+func (cc *compactionChain) extractBlocks() []*types.Block {
+	deliveringBlocks := make([]*types.Block, 0)
+	cc.blocksLock.Lock()
+	defer cc.blocksLock.Unlock()
+	for len(cc.pendingBlocks) != 0 && len(cc.pendingBlocks[0].Randomness) != 0 {
+		var block *types.Block
+		block, cc.pendingBlocks = cc.pendingBlocks[0], cc.pendingBlocks[1:]
+		delete(cc.blocks, block.Hash)
+		deliveringBlocks = append(deliveringBlocks, block)
+	}
+	return deliveringBlocks
+}
+
+func (cc *compactionChain) processBlockRandomnessResult(
+	rand *types.BlockRandomnessResult) error {
+	if !cc.blockRegistered(rand.BlockHash) {
+		return ErrBlockNotRegistered
+	}
+	cc.blocksLock.Lock()
+	defer cc.blocksLock.Unlock()
+	cc.blocks[rand.BlockHash].Randomness = rand.Randomness
 	return nil
 }
 

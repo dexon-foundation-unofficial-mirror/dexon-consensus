@@ -109,7 +109,7 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 	app := test.NewApp()
 	// Setup lattice.
 	return &testLatticeMgr{
-		ccModule: newCompactionChain(db),
+		ccModule: newCompactionChain(),
 		app:      app,
 		db:       db,
 		lattice: NewLattice(

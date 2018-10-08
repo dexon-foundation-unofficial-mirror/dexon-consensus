@@ -22,24 +22,19 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
-	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
 )
 
 type CompactionChainTestSuite struct {
 	suite.Suite
-	db blockdb.BlockDatabase
 }
 
 func (s *CompactionChainTestSuite) SetupTest() {
-	var err error
-	s.db, err = blockdb.NewMemBackedBlockDB()
-	s.Require().Nil(err)
 }
 
 func (s *CompactionChainTestSuite) newCompactionChain() *compactionChain {
-	return newCompactionChain(s.db)
+	return newCompactionChain()
 }
 
 func (s *CompactionChainTestSuite) generateBlocks(
@@ -74,9 +69,85 @@ func (s *CompactionChainTestSuite) TestProcessBlock() {
 	var prevBlock *types.Block
 	for _, block := range blocks {
 		s.Equal(cc.prevBlock, prevBlock)
-		err := cc.processBlock(block)
-		s.Require().Nil(err)
+		s.Require().NoError(cc.processBlock(block))
 		prevBlock = block
+	}
+}
+
+func (s *CompactionChainTestSuite) TestExtractBlocks() {
+	cc := s.newCompactionChain()
+	blocks := make([]*types.Block, 10)
+	for idx := range blocks {
+		blocks[idx] = &types.Block{
+			Hash: common.NewRandomHash(),
+		}
+		s.Require().False(cc.blockRegistered(blocks[idx].Hash))
+		cc.registerBlock(blocks[idx])
+		s.Require().True(cc.blockRegistered(blocks[idx].Hash))
+	}
+	// Randomness is ready for extract.
+	for i := 0; i < 3; i++ {
+		s.Require().NoError(cc.processBlock(blocks[i]))
+		h := common.NewRandomHash()
+		s.Require().NoError(cc.processBlockRandomnessResult(
+			&types.BlockRandomnessResult{
+				BlockHash:  blocks[i].Hash,
+				Randomness: h[:],
+			}))
+	}
+	delivered := cc.extractBlocks()
+	s.Require().Len(delivered, 3)
+
+	// Randomness is not yet ready for extract.
+	for i := 3; i < 6; i++ {
+		s.Require().NoError(cc.processBlock(blocks[i]))
+	}
+	delivered = append(delivered, cc.extractBlocks()...)
+	s.Require().Len(delivered, 3)
+
+	// Make some randomness ready.
+	for i := 3; i < 6; i++ {
+		h := common.NewRandomHash()
+		s.Require().NoError(cc.processBlockRandomnessResult(
+			&types.BlockRandomnessResult{
+				BlockHash:  blocks[i].Hash,
+				Randomness: h[:],
+			}))
+	}
+	delivered = append(delivered, cc.extractBlocks()...)
+	s.Require().Len(delivered, 6)
+
+	// Later block's randomness is ready.
+	for i := 6; i < 10; i++ {
+		s.Require().NoError(cc.processBlock(blocks[i]))
+		if i < 8 {
+			continue
+		}
+		h := common.NewRandomHash()
+		s.Require().NoError(cc.processBlockRandomnessResult(
+			&types.BlockRandomnessResult{
+				BlockHash:  blocks[i].Hash,
+				Randomness: h[:],
+			}))
+	}
+	delivered = append(delivered, cc.extractBlocks()...)
+	s.Require().Len(delivered, 6)
+
+	// Prior block's randomness is ready.
+	for i := 6; i < 8; i++ {
+		h := common.NewRandomHash()
+		s.Require().NoError(cc.processBlockRandomnessResult(
+			&types.BlockRandomnessResult{
+				BlockHash:  blocks[i].Hash,
+				Randomness: h[:],
+			}))
+	}
+	delivered = append(delivered, cc.extractBlocks()...)
+	s.Require().Len(delivered, 10)
+
+	// The delivered order should be the same as processing order.
+	for i, block := range delivered {
+		s.Equal(block.Hash, blocks[i].Hash)
 	}
 }
 

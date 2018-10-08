@@ -97,6 +97,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 		log.Println(ErrUnknownBlockConfirmed, hash)
 		return
 	}
+	recv.consensus.ccModule.registerBlock(block)
 	voteList := make([]types.Vote, 0, len(votes))
 	for _, vote := range votes {
 		voteList = append(voteList, *vote)
@@ -263,7 +264,7 @@ func NewConsensus(
 	con := &Consensus{
 		ID:            ID,
 		currentConfig: config,
-		ccModule:      newCompactionChain(db),
+		ccModule:      newCompactionChain(),
 		lattice:       lattice,
 		nbModule:      nbModule,
 		gov:           gov,
@@ -541,6 +542,9 @@ func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
 // ProcessAgreementResult processes the randomness request.
 func (con *Consensus) ProcessAgreementResult(
 	rand *types.AgreementResult) error {
+	if !con.ccModule.blockRegistered(rand.BlockHash) {
+		return nil
+	}
 	if con.round != rand.Round {
 		return nil
 	}
@@ -610,6 +614,9 @@ func (con *Consensus) ProcessAgreementResult(
 // ProcessBlockRandomnessResult processes the randomness result.
 func (con *Consensus) ProcessBlockRandomnessResult(
 	rand *types.BlockRandomnessResult) error {
+	if !con.ccModule.blockRegistered(rand.BlockHash) {
+		return nil
+	}
 	// TODO(jimmy-dexon): reuse the GPK.
 	round := rand.Round
 	gpk, err := NewDKGGroupPublicKey(round,
@@ -623,7 +630,7 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 		rand.BlockHash, crypto.Signature{Signature: rand.Randomness}) {
 		return ErrIncorrectBlockRandomnessResult
 	}
-	return nil
+	return con.ccModule.processBlockRandomnessResult(rand)
 }
 
 // preProcessBlock performs Byzantine Agreement on the block.
@@ -655,10 +662,13 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		if err = con.ccModule.processBlock(b); err != nil {
 			return
 		}
+		go con.event.NotifyTime(b.ConsensusTimestamp)
+	}
+	deliveredBlocks = con.ccModule.extractBlocks()
+	for _, b := range deliveredBlocks {
 		if err = con.db.Put(*b); err != nil {
 			return
 		}
-		go con.event.NotifyTime(b.ConsensusTimestamp)
 		con.nbModule.BlockDelivered(*b)
 		// TODO(mission): Find a way to safely recycle the block.
 		//                We should deliver block directly to
