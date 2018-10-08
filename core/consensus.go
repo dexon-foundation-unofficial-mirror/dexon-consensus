@@ -445,7 +445,7 @@ func (con *Consensus) runCRS() {
 		if err != nil {
 			log.Println(err)
 		} else {
-			con.gov.ProposeCRS(con.round+1, crs)
+			con.gov.ProposeCRS(crs)
 		}
 	}
 }

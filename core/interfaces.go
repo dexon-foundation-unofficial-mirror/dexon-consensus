@@ -97,7 +97,7 @@ type Governance interface {
 	CRS(round uint64) common.Hash
 
 	// Propose a CRS of round.
-	ProposeCRS(round uint64, signedCRS []byte)
+	ProposeCRS(signedCRS []byte)
 
 	// NodeSet returns the node set at a given round.
 	// Return the genesis node set if round == 0.

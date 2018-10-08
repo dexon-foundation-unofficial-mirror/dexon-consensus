@@ -38,7 +38,7 @@ type simGovernance struct {
 	k                  int
 	phiRatio           float32
 	chainNum           uint32
-	crs                map[uint64]common.Hash
+	crs                []common.Hash
 	tsig               map[uint64]crypto.Signature
 	dkgComplaint       map[uint64][]*types.DKGComplaint
 	dkgMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
@@ -54,14 +54,13 @@ func newSimGovernance(
 	numNodes int, consensusConfig config.Consensus) *simGovernance {
 	hashCRS := crypto.Keccak256Hash([]byte(consensusConfig.GenesisCRS))
 	return &simGovernance{
-		id:               id,
-		nodeSet:          make(map[types.NodeID]crypto.PublicKey),
-		expectedNumNodes: numNodes,
-		k:                consensusConfig.K,
-		phiRatio:         consensusConfig.PhiRatio,
-		chainNum:         consensusConfig.ChainNum,
-		crs: map[uint64]common.Hash{
-			0: hashCRS},
+		id:                 id,
+		nodeSet:            make(map[types.NodeID]crypto.PublicKey),
+		expectedNumNodes:   numNodes,
+		k:                  consensusConfig.K,
+		phiRatio:           consensusConfig.PhiRatio,
+		chainNum:           consensusConfig.ChainNum,
+		crs:                []common.Hash{hashCRS},
 		tsig:               make(map[uint64]crypto.Signature),
 		dkgComplaint:       make(map[uint64][]*types.DKGComplaint),
 		dkgMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
@@ -107,12 +106,19 @@ func (g *simGovernance) Configuration(round uint64) *types.Config {
 
 // CRS returns the CRS for a given round.
 func (g *simGovernance) CRS(round uint64) common.Hash {
+	if round >= uint64(len(g.crs)) {
+		return common.Hash{}
+	}
 	return g.crs[round]
 }
 
 // ProposeCRS proposes a CRS of round.
-func (g *simGovernance) ProposeCRS(round uint64, signedCRS []byte) {
-	g.crs[round] = crypto.Keccak256Hash(signedCRS)
+func (g *simGovernance) ProposeCRS(signedCRS []byte) {
+	crs := crypto.Keccak256Hash(signedCRS)
+	if g.crs[len(g.crs)-1].Equal(crs) {
+		return
+	}
+	g.crs = append(g.crs, crs)
 }
 
 // addNode add a new node into the simulated governance contract.

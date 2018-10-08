@@ -40,7 +40,7 @@ type Governance struct {
 	lambdaBA           time.Duration
 	lambdaDKG          time.Duration
 	privateKeys        map[types.NodeID]crypto.PrivateKey
-	crs                map[uint64]common.Hash
+	crs                []common.Hash
 	tsig               map[uint64]crypto.Signature
 	DKGComplaint       map[uint64][]*types.DKGComplaint
 	DKGMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
@@ -58,7 +58,7 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 		lambdaBA:           lambda,
 		lambdaDKG:          lambda * 10,
 		privateKeys:        make(map[types.NodeID]crypto.PrivateKey),
-		crs:                map[uint64]common.Hash{0: hashCRS},
+		crs:                []common.Hash{hashCRS},
 		tsig:               make(map[uint64]crypto.Signature),
 		DKGComplaint:       make(map[uint64][]*types.DKGComplaint),
 		DKGMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
@@ -107,14 +107,21 @@ func (g *Governance) Configuration(_ uint64) *types.Config {
 func (g *Governance) CRS(round uint64) common.Hash {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
+	if round >= uint64(len(g.crs)) {
+		return common.Hash{}
+	}
 	return g.crs[round]
 }
 
 // ProposeCRS propose a CRS.
-func (g *Governance) ProposeCRS(round uint64, signedCRS []byte) {
+func (g *Governance) ProposeCRS(signedCRS []byte) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
-	g.crs[round] = crypto.Keccak256Hash(signedCRS)
+	crs := crypto.Keccak256Hash(signedCRS)
+	if g.crs[len(g.crs)-1].Equal(crs) {
+		return
+	}
+	g.crs = append(g.crs, crs)
 }
 
 // PrivateKeys return the private key for that node, this function

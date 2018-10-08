@@ -41,7 +41,7 @@ func (g *testGov) Configuration(round uint64) (cfg *types.Config) {
 	}
 }
 func (g *testGov) CRS(round uint64) (b common.Hash) { return g.crs }
-func (g *testGov) ProposeCRS(uint64, []byte)        {}
+func (g *testGov) ProposeCRS([]byte)                {}
 func (g *testGov) NodeSet(round uint64) []crypto.PublicKey {
 	// Randomly generating keys, and check them for verification.
 	g.curKeys = []crypto.PublicKey{}
