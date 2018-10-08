@@ -63,7 +63,7 @@ func (s *CryptoTestSuite) newBlock(prevBlock *types.Block) *types.Block {
 	block := s.prepareBlock(prevBlock)
 	var err error
 	block.Hash, err = hashBlock(block)
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	return block
 }
 
@@ -88,7 +88,7 @@ func (s *CryptoTestSuite) generateBlockChain(
 		blocks[idx] = block
 		var err error
 		block.Signature, err = prv.Sign(block.Hash)
-		s.Require().Nil(err)
+		s.Require().NoError(err)
 	}
 	return blocks
 }
@@ -96,7 +96,7 @@ func (s *CryptoTestSuite) generateBlockChain(
 func (s *CryptoTestSuite) TestBlockSignature() {
 	prv, err := ecdsa.NewPrivateKey()
 	pub := prv.PublicKey()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	blocks := s.generateBlockChain(10, prv)
 	blockMap := make(map[common.Hash]*types.Block)
 	for _, block := range blocks {
@@ -108,7 +108,7 @@ func (s *CryptoTestSuite) TestBlockSignature() {
 			s.Require().True(exist)
 			s.True(parentBlock.Position.Height == block.Position.Height-1)
 			hash, err := hashBlock(parentBlock)
-			s.Require().Nil(err)
+			s.Require().NoError(err)
 			s.Equal(hash, block.ParentHash)
 		}
 		s.True(verifyBlockSignature(pub, block, block.Signature))
@@ -123,7 +123,7 @@ func (s *CryptoTestSuite) TestBlockSignature() {
 
 func (s *CryptoTestSuite) TestVoteSignature() {
 	prv, err := ecdsa.NewPrivateKey()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	pub := prv.PublicKey()
 	nID := types.NewNodeID(pub)
 	vote := &types.Vote{
@@ -133,31 +133,39 @@ func (s *CryptoTestSuite) TestVoteSignature() {
 		Period:     1,
 	}
 	vote.Signature, err = prv.Sign(hashVote(vote))
-	s.Require().Nil(err)
-	s.True(verifyVoteSignature(vote))
+	s.Require().NoError(err)
+	ok, err := verifyVoteSignature(vote)
+	s.Require().NoError(err)
+	s.True(ok)
 	vote.Type = types.VoteConfirm
-	s.False(verifyVoteSignature(vote))
+	ok, err = verifyVoteSignature(vote)
+	s.Require().NoError(err)
+	s.False(ok)
 }
 
 func (s *CryptoTestSuite) TestCRSSignature() {
 	crs := common.NewRandomHash()
 	prv, err := ecdsa.NewPrivateKey()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	pub := prv.PublicKey()
 	nID := types.NewNodeID(pub)
 	block := &types.Block{
 		ProposerID: nID,
 	}
 	block.CRSSignature, err = prv.Sign(hashCRS(block, crs))
-	s.Require().Nil(err)
-	s.True(verifyCRSSignature(block, crs))
+	s.Require().NoError(err)
+	ok, err := verifyCRSSignature(block, crs)
+	s.Require().NoError(err)
+	s.True(ok)
 	block.Position.Height++
-	s.False(verifyCRSSignature(block, crs))
+	ok, err = verifyCRSSignature(block, crs)
+	s.Require().NoError(err)
+	s.False(ok)
 }
 
 func (s *CryptoTestSuite) TestDKGSignature() {
 	prv, err := ecdsa.NewPrivateKey()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	nID := types.NewNodeID(prv.PublicKey())
 	prvShare := &types.DKGPrivateShare{
 		ProposerID:   nID,
@@ -165,10 +173,14 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 		PrivateShare: *dkg.NewPrivateKey(),
 	}
 	prvShare.Signature, err = prv.Sign(hashDKGPrivateShare(prvShare))
-	s.Require().Nil(err)
-	s.True(verifyDKGPrivateShareSignature(prvShare))
+	s.Require().NoError(err)
+	ok, err := verifyDKGPrivateShareSignature(prvShare)
+	s.Require().NoError(err)
+	s.True(ok)
 	prvShare.Round++
-	s.False(verifyDKGPrivateShareSignature(prvShare))
+	ok, err = verifyDKGPrivateShareSignature(prvShare)
+	s.Require().NoError(err)
+	s.False(ok)
 
 	id := dkg.NewID([]byte{13})
 	_, pkShare := dkg.NewPrivateKeyShares(1)
@@ -179,21 +191,49 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 		PublicKeyShares: *pkShare,
 	}
 	mpk.Signature, err = prv.Sign(hashDKGMasterPublicKey(mpk))
-	s.Require().Nil(err)
-	s.True(VerifyDKGMasterPublicKeySignature(mpk))
+	s.Require().NoError(err)
+	ok, err = VerifyDKGMasterPublicKeySignature(mpk)
+	s.Require().NoError(err)
+	s.True(ok)
 	mpk.Round++
-	s.False(VerifyDKGMasterPublicKeySignature(mpk))
+	ok, err = VerifyDKGMasterPublicKeySignature(mpk)
+	s.Require().NoError(err)
+	s.False(ok)
 
+	prvShare.Round = 5
+	prvShare.Signature, err = prv.Sign(hashDKGPrivateShare(prvShare))
+	s.Require().NoError(err)
 	complaint := &types.DKGComplaint{
 		ProposerID:   nID,
 		Round:        5,
 		PrivateShare: *prvShare,
 	}
 	complaint.Signature, err = prv.Sign(hashDKGComplaint(complaint))
-	s.Require().Nil(err)
-	s.True(VerifyDKGComplaintSignature(complaint))
+	s.Require().NoError(err)
+	ok, err = VerifyDKGComplaintSignature(complaint)
+	s.Require().NoError(err)
+	s.True(ok)
+	// Test incorrect complaint signature.
 	complaint.Round++
-	s.False(VerifyDKGComplaintSignature(complaint))
+	ok, err = VerifyDKGComplaintSignature(complaint)
+	s.Require().NoError(err)
+	s.False(ok)
+	// Test mismatch round.
+	complaint.Round--
+	complaint.PrivateShare.Round++
+	complaint.Signature, err = prv.Sign(hashDKGComplaint(complaint))
+	s.Require().NoError(err)
+	ok, err = VerifyDKGComplaintSignature(complaint)
+	s.Require().NoError(err)
+	s.False(ok)
+	// Test incorrect private share signature.
+	complaint.PrivateShare.Round--
+	complaint.PrivateShare.ReceiverID = types.NodeID{Hash: common.NewRandomHash()}
+	complaint.Signature, err = prv.Sign(hashDKGComplaint(complaint))
+	s.Require().NoError(err)
+	ok, err = VerifyDKGComplaintSignature(complaint)
+	s.Require().NoError(err)
+	s.False(ok)
 
 	sig := &types.DKGPartialSignature{
 		ProposerID:       nID,
@@ -201,10 +241,14 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 		PartialSignature: dkg.PartialSignature{},
 	}
 	sig.Signature, err = prv.Sign(hashDKGPartialSignature(sig))
-	s.Require().Nil(err)
-	s.True(verifyDKGPartialSignatureSignature(sig))
+	s.Require().NoError(err)
+	ok, err = verifyDKGPartialSignatureSignature(sig)
+	s.Require().NoError(err)
+	s.True(ok)
 	sig.Round++
-	s.False(verifyDKGPartialSignatureSignature(sig))
+	ok, err = verifyDKGPartialSignatureSignature(sig)
+	s.Require().NoError(err)
+	s.False(ok)
 }
 
 func TestCrypto(t *testing.T) {

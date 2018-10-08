@@ -202,6 +202,9 @@ func hashDKGComplaint(complaint *types.DKGComplaint) common.Hash {
 // VerifyDKGComplaintSignature verifies DKGCompliant signature.
 func VerifyDKGComplaintSignature(
 	complaint *types.DKGComplaint) (bool, error) {
+	if complaint.Round != complaint.PrivateShare.Round {
+		return false, nil
+	}
 	hash := hashDKGComplaint(complaint)
 	pubKey, err := crypto.SigToPub(hash, complaint.Signature)
 	if err != nil {
@@ -209,6 +212,9 @@ func VerifyDKGComplaintSignature(
 	}
 	if complaint.ProposerID != types.NewNodeID(pubKey) {
 		return false, nil
+	}
+	if !complaint.IsNack() {
+		return verifyDKGPrivateShareSignature(&complaint.PrivateShare)
 	}
 	return true, nil
 }
