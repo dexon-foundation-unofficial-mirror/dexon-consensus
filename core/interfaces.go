@@ -29,10 +29,10 @@ import (
 // consensus core.
 type Application interface {
 	// PreparePayload is called when consensus core is preparing a block.
-	PreparePayload(position types.Position) (payload []byte)
+	PreparePayload(position types.Position) []byte
 
 	// PrepareWitness will return the witness data no lower than consensusHeight.
-	PrepareWitness(consensusHeight uint64) (witness types.Witness)
+	PrepareWitness(consensusHeight uint64) types.Witness
 
 	// VerifyBlock verifies if the block is valid.
 	VerifyBlock(block *types.Block) bool

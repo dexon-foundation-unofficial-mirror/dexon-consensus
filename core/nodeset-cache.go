@@ -181,11 +181,11 @@ func (cache *NodeSetCache) update(
 		nodeSet:   nodeSet,
 		notarySet: make([]map[types.NodeID]struct{}, cfg.NumChains),
 		dkgSet: nodeSet.GetSubSet(
-			cfg.NumDKGSet, types.NewDKGSetTarget(crs)),
+			int(cfg.DKGSetSize), types.NewDKGSetTarget(crs)),
 	}
 	for i := range nIDs.notarySet {
 		nIDs.notarySet[i] = nodeSet.GetSubSet(
-			cfg.NumNotarySet, types.NewNotarySetTarget(crs, uint32(i)))
+			int(cfg.NotarySetSize), types.NewNotarySetTarget(crs, uint32(i)))
 	}
 
 	cache.rounds[round] = nIDs

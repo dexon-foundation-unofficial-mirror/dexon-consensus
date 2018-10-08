@@ -37,8 +37,8 @@ type Config struct {
 	PhiRatio float32
 
 	// Set related.
-	NumNotarySet int
-	NumDKGSet    int
+	NotarySetSize uint32
+	DKGSetSize    uint32
 
 	// Time related.
 	RoundInterval    time.Duration
@@ -63,10 +63,10 @@ func (c *Config) Bytes() []byte {
 	binaryPhiRatio := make([]byte, 4)
 	binary.LittleEndian.PutUint32(binaryPhiRatio, math.Float32bits(c.PhiRatio))
 
-	binaryNumNotarySet := make([]byte, 4)
-	binary.LittleEndian.PutUint32(binaryNumNotarySet, uint32(c.NumNotarySet))
-	binaryNumDKGSet := make([]byte, 4)
-	binary.LittleEndian.PutUint32(binaryNumDKGSet, uint32(c.NumDKGSet))
+	binaryNotarySetSize := make([]byte, 4)
+	binary.LittleEndian.PutUint32(binaryNotarySetSize, c.NotarySetSize)
+	binaryDKGSetSize := make([]byte, 4)
+	binary.LittleEndian.PutUint32(binaryDKGSetSize, c.DKGSetSize)
 
 	binaryRoundInterval := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRoundInterval,
@@ -84,8 +84,8 @@ func (c *Config) Bytes() []byte {
 	enc = append(enc, binaryLambdaDKG...)
 	enc = append(enc, binaryK...)
 	enc = append(enc, binaryPhiRatio...)
-	enc = append(enc, binaryNumNotarySet...)
-	enc = append(enc, binaryNumDKGSet...)
+	enc = append(enc, binaryNotarySetSize...)
+	enc = append(enc, binaryDKGSetSize...)
 	enc = append(enc, binaryRoundInterval...)
 	enc = append(enc, binaryMinBlockInterval...)
 	enc = append(enc, binaryMaxBlockInterval...)

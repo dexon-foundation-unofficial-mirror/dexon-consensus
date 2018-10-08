@@ -35,9 +35,9 @@ type testGov struct {
 
 func (g *testGov) Configuration(round uint64) (cfg *types.Config) {
 	return &types.Config{
-		NumNotarySet: 7,
-		NumDKGSet:    7,
-		NumChains:    4,
+		NotarySetSize: 7,
+		DKGSetSize:    7,
+		NumChains:     4,
 	}
 }
 func (g *testGov) CRS(round uint64) (b common.Hash) { return g.crs }

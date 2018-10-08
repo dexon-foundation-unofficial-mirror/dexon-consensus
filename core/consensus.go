@@ -259,7 +259,7 @@ func NewConsensus(
 		gov)
 	// Register DKG for the initial round. This is a temporary function call for
 	// simulation.
-	cfgModule.registerDKG(0, config.NumDKGSet/3)
+	cfgModule.registerDKG(0, int(config.DKGSetSize)/3)
 	// Construct Consensus instance.
 	con := &Consensus{
 		ID:            ID,
@@ -362,7 +362,8 @@ BALoop:
 				if err != nil {
 					panic(err)
 				}
-				nIDs = nodes.GetSubSet(con.gov.Configuration(con.round).NumNotarySet,
+				nIDs = nodes.GetSubSet(
+					int(con.gov.Configuration(con.round).NotarySetSize),
 					types.NewNotarySetTarget(con.gov.CRS(con.round), chainID))
 			}
 			agreement.restart(nIDs, con.lattice.NextPosition(chainID))
@@ -465,7 +466,8 @@ func (con *Consensus) initialRound(startTime time.Time) {
 		})
 	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval/2),
 		func(time.Time) {
-			con.cfgModule.registerDKG(con.round+1, con.currentConfig.NumDKGSet/3)
+			con.cfgModule.registerDKG(
+				con.round+1, int(con.currentConfig.DKGSetSize/3))
 		})
 	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval),
 		func(time.Time) {
@@ -555,7 +557,7 @@ func (con *Consensus) ProcessAgreementResult(
 	if _, exist := dkgSet[con.ID]; !exist {
 		return nil
 	}
-	if len(rand.Votes) <= con.currentConfig.NumNotarySet/3*2 {
+	if len(rand.Votes) <= int(con.currentConfig.NotarySetSize/3*2) {
 		return ErrNotEnoughVotes
 	}
 	if rand.Position.ChainID >= con.currentConfig.NumChains {
@@ -622,7 +624,7 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 	gpk, err := NewDKGGroupPublicKey(round,
 		con.gov.DKGMasterPublicKeys(round),
 		con.gov.DKGComplaints(round),
-		con.gov.Configuration(round).NumDKGSet/3)
+		int(con.gov.Configuration(round).DKGSetSize/3))
 	if err != nil {
 		return err
 	}
