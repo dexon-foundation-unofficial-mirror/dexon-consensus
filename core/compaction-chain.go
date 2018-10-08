@@ -15,8 +15,6 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-// TODO(jimmy-dexon): remove those comments before open source.
-
 package core
 
 import (

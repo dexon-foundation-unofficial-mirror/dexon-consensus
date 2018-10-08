@@ -74,10 +74,8 @@ func (s *Lattice) PrepareBlock(
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	s.data.prepareBlock(b)
-	// TODO(mission): the proposeTime might be earlier than tip block of
-	//                that chain. We should let latticeData suggest the time.
 	b.Timestamp = proposeTime
+	s.data.prepareBlock(b)
 	b.Payload = s.app.PreparePayload(b.Position)
 	b.Witness = s.app.PrepareWitness(b.Witness.Height)
 	if err = s.authModule.SignBlock(b); err != nil {
