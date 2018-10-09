@@ -111,11 +111,11 @@ MainLoop:
 				break MainLoop
 			}
 		case *types.DKGComplaint:
-			n.gov.AddDKGComplaint(val)
+			n.gov.AddDKGComplaint(val.Round, val)
 		case *types.DKGMasterPublicKey:
-			n.gov.AddDKGMasterPublicKey(val)
+			n.gov.AddDKGMasterPublicKey(val.Round, val)
 		case *types.DKGFinalize:
-			n.gov.AddDKGFinalize(val)
+			n.gov.AddDKGFinalize(val.Round, val)
 		default:
 			panic(fmt.Errorf("unexpected message from server: %v", val))
 		}

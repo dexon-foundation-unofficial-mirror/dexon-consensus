@@ -64,8 +64,8 @@ type Network interface {
 	// BroadcastBlock broadcasts block to all nodes in DEXON network.
 	BroadcastBlock(block *types.Block)
 
-	// BroadcastRandomnessRequest broadcasts rand request to DKG set.
-	BroadcastRandomnessRequest(randRequest *types.AgreementResult)
+	// BroadcastAgreementResult broadcasts agreement result to DKG set.
+	BroadcastAgreementResult(randRequest *types.AgreementResult)
 
 	// BroadcastRandomnessResult broadcasts rand request to Notary set.
 	BroadcastRandomnessResult(randResult *types.BlockRandomnessResult)
@@ -106,19 +106,19 @@ type Governance interface {
 	//// DKG-related methods.
 
 	// AddDKGComplaint adds a DKGComplaint.
-	AddDKGComplaint(complaint *types.DKGComplaint)
+	AddDKGComplaint(round uint64, complaint *types.DKGComplaint)
 
 	// DKGComplaints gets all the DKGComplaints of round.
 	DKGComplaints(round uint64) []*types.DKGComplaint
 
 	// AddDKGMasterPublicKey adds a DKGMasterPublicKey.
-	AddDKGMasterPublicKey(masterPublicKey *types.DKGMasterPublicKey)
+	AddDKGMasterPublicKey(round uint64, masterPublicKey *types.DKGMasterPublicKey)
 
 	// DKGMasterPublicKeys gets all the DKGMasterPublicKey of round.
 	DKGMasterPublicKeys(round uint64) []*types.DKGMasterPublicKey
 
 	// AddDKGFinalize adds a DKG finalize message.
-	AddDKGFinalize(final *types.DKGFinalize)
+	AddDKGFinalize(round uint64, final *types.DKGFinalize)
 
 	// IsDKGFinal checks if DKG is final.
 	IsDKGFinal(round uint64) bool
