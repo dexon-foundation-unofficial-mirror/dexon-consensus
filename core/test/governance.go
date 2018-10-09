@@ -136,7 +136,11 @@ func (g *Governance) PrivateKeys() (keys []crypto.PrivateKey) {
 }
 
 // AddDKGComplaint add a DKGComplaint.
-func (g *Governance) AddDKGComplaint(complaint *types.DKGComplaint) {
+func (g *Governance) AddDKGComplaint(
+	round uint64, complaint *types.DKGComplaint) {
+	if round != complaint.Round {
+		return
+	}
 	if g.IsDKGFinal(complaint.Round) {
 		return
 	}
@@ -167,7 +171,10 @@ func (g *Governance) DKGComplaints(round uint64) []*types.DKGComplaint {
 
 // AddDKGMasterPublicKey adds a DKGMasterPublicKey.
 func (g *Governance) AddDKGMasterPublicKey(
-	masterPublicKey *types.DKGMasterPublicKey) {
+	round uint64, masterPublicKey *types.DKGMasterPublicKey) {
+	if round != masterPublicKey.Round {
+		return
+	}
 	g.lock.Lock()
 	defer g.lock.Unlock()
 	g.DKGMasterPublicKey[masterPublicKey.Round] = append(
@@ -194,7 +201,10 @@ func (g *Governance) DKGMasterPublicKeys(
 }
 
 // AddDKGFinalize adds a DKG finalize message.
-func (g *Governance) AddDKGFinalize(final *types.DKGFinalize) {
+func (g *Governance) AddDKGFinalize(round uint64, final *types.DKGFinalize) {
+	if round != final.Round {
+		return
+	}
 	g.lock.Lock()
 	defer g.lock.Unlock()
 	if _, exist := g.DKGFinal[final.Round]; !exist {

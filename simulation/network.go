@@ -132,8 +132,8 @@ func (n *network) BroadcastBlock(block *types.Block) {
 	}
 }
 
-// BroadcastRandomnessRequest implements core.Network interface.
-func (n *network) BroadcastRandomnessRequest(
+// BroadcastAgreementResult implements core.Network interface.
+func (n *network) BroadcastAgreementResult(
 	randRequest *types.AgreementResult) {
 	if err := n.trans.Broadcast(randRequest); err != nil {
 		panic(err)

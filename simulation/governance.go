@@ -140,7 +140,11 @@ func (g *simGovernance) addNode(pubKey crypto.PublicKey) {
 }
 
 // AddDKGComplaint adds a DKGComplaint.
-func (g *simGovernance) AddDKGComplaint(complaint *types.DKGComplaint) {
+func (g *simGovernance) AddDKGComplaint(
+	round uint64, complaint *types.DKGComplaint) {
+	if round != complaint.Round {
+		return
+	}
 	if g.IsDKGFinal(complaint.Round) {
 		return
 	}
@@ -166,7 +170,10 @@ func (g *simGovernance) DKGComplaints(round uint64) []*types.DKGComplaint {
 
 // AddDKGMasterPublicKey adds a DKGMasterPublicKey.
 func (g *simGovernance) AddDKGMasterPublicKey(
-	masterPublicKey *types.DKGMasterPublicKey) {
+	round uint64, masterPublicKey *types.DKGMasterPublicKey) {
+	if round != masterPublicKey.Round {
+		return
+	}
 	// TODO(jimmy-dexon): check if the input is valid.
 	g.dkgMasterPublicKey[masterPublicKey.Round] = append(
 		g.dkgMasterPublicKey[masterPublicKey.Round], masterPublicKey)
@@ -186,7 +193,11 @@ func (g *simGovernance) DKGMasterPublicKeys(
 }
 
 // AddDKGFinalize adds a DKG finalize message.
-func (g *simGovernance) AddDKGFinalize(final *types.DKGFinalize) {
+func (g *simGovernance) AddDKGFinalize(
+	round uint64, final *types.DKGFinalize) {
+	if round != final.Round {
+		return
+	}
 	// TODO(jimmy-dexon): check if the input is valid.
 	if _, exist := g.dkgFinal[final.Round]; !exist {
 		g.dkgFinal[final.Round] = make(map[types.NodeID]struct{})

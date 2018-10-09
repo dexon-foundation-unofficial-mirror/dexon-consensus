@@ -47,8 +47,8 @@ func (n *network) BroadcastBlock(block *types.Block) {
 	n.conn.broadcast(n.nID, block)
 }
 
-// BroadcastRandomnessRequest broadcasts rand request to DKG set.
-func (n *network) BroadcastRandomnessRequest(
+// BroadcastAgreementResult broadcasts agreement result to DKG set.
+func (n *network) BroadcastAgreementResult(
 	randRequest *types.AgreementResult) {
 	n.conn.broadcast(n.nID, randRequest)
 }

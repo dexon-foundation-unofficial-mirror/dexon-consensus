@@ -249,6 +249,20 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	ok, err = verifyDKGPartialSignatureSignature(sig)
 	s.Require().NoError(err)
 	s.False(ok)
+
+	final := &types.DKGFinalize{
+		ProposerID: nID,
+		Round:      5,
+	}
+	final.Signature, err = prv.Sign(hashDKGFinalize(final))
+	s.Require().NoError(err)
+	ok, err = VerifyDKGFinalizeSignature(final)
+	s.Require().NoError(err)
+	s.True(ok)
+	final.Round++
+	ok, err = VerifyDKGFinalizeSignature(final)
+	s.Require().NoError(err)
+	s.False(ok)
 }
 
 func TestCrypto(t *testing.T) {

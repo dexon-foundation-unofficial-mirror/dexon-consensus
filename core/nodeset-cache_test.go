@@ -52,20 +52,20 @@ func (g *testGov) NodeSet(round uint64) []crypto.PublicKey {
 	}
 	return g.curKeys
 }
-func (g *testGov) AddDKGComplaint(complaint *types.DKGComplaint) {}
+func (g *testGov) AddDKGComplaint(_ uint64, _ *types.DKGComplaint) {}
 func (g *testGov) DKGComplaints(
 	round uint64) (cs []*types.DKGComplaint) {
 	return
 }
 func (g *testGov) AddDKGMasterPublicKey(
-	masterPublicKey *types.DKGMasterPublicKey) {
+	_ uint64, _ *types.DKGMasterPublicKey) {
 }
 func (g *testGov) DKGMasterPublicKeys(
 	round uint64) (keys []*types.DKGMasterPublicKey) {
 	return
 }
-func (g *testGov) AddDKGFinalize(final *types.DKGFinalize) {}
-func (g *testGov) IsDKGFinal(round uint64) bool            { return true }
+func (g *testGov) AddDKGFinalize(_ uint64, _ *types.DKGFinalize) {}
+func (g *testGov) IsDKGFinal(round uint64) bool                  { return true }
 
 type NodeSetCacheTestSuite struct {
 	suite.Suite

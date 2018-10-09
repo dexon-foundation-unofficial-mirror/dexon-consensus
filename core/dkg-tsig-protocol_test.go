@@ -145,7 +145,7 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 	receivers, protocols := s.newProtocols(k, n, round)
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(receiver.mpk)
+		gov.AddDKGMasterPublicKey(round, receiver.mpk)
 	}
 
 	for _, protocol := range protocols {
@@ -250,7 +250,7 @@ func (s *DKGTSIGProtocolTestSuite) TestNackComplaint() {
 	byzantineID := s.nIDs[0]
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(receiver.mpk)
+		gov.AddDKGMasterPublicKey(round, receiver.mpk)
 	}
 
 	for _, protocol := range protocols {
@@ -297,7 +297,7 @@ func (s *DKGTSIGProtocolTestSuite) TestComplaint() {
 	protocol := protocols[targetID]
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(receiver.mpk)
+		gov.AddDKGMasterPublicKey(round, receiver.mpk)
 	}
 
 	for _, protocol := range protocols {
@@ -359,7 +359,7 @@ func (s *DKGTSIGProtocolTestSuite) TestAntiComplaint() {
 	thirdPerson := s.nIDs[2]
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(receiver.mpk)
+		gov.AddDKGMasterPublicKey(round, receiver.mpk)
 	}
 
 	for _, protocol := range protocols {
@@ -414,7 +414,7 @@ func (s *DKGTSIGProtocolTestSuite) TestEncorceNackComplaint() {
 	thirdPerson := s.nIDs[2]
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(receiver.mpk)
+		gov.AddDKGMasterPublicKey(round, receiver.mpk)
 	}
 
 	for _, protocol := range protocols {
@@ -464,7 +464,7 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 	byzantineID := s.nIDs[0]
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(receiver.mpk)
+		gov.AddDKGMasterPublicKey(round, receiver.mpk)
 	}
 
 	// Test for nack complaints.
@@ -527,7 +527,7 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 	byzantineID := s.nIDs[0]
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(receiver.mpk)
+		gov.AddDKGMasterPublicKey(round, receiver.mpk)
 	}
 
 	for _, protocol := range protocols {
@@ -553,7 +553,7 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 		s.Require().Len(recv.complaints, 1)
 		complaint, exist := recv.complaints[byzantineID]
 		s.Require().True(exist)
-		gov.AddDKGComplaint(complaint)
+		gov.AddDKGComplaint(round, complaint)
 	}
 
 	// DKG is fininished.

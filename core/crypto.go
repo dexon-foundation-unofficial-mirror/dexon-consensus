@@ -256,8 +256,8 @@ func hashDKGFinalize(final *types.DKGFinalize) common.Hash {
 
 // VerifyDKGFinalizeSignature verifies DKGFinalize signature.
 func VerifyDKGFinalizeSignature(
-	final *types.DKGPartialSignature) (bool, error) {
-	hash := hashDKGPartialSignature(final)
+	final *types.DKGFinalize) (bool, error) {
+	hash := hashDKGFinalize(final)
 	pubKey, err := crypto.SigToPub(hash, final.Signature)
 	if err != nil {
 		return false, err

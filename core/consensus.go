@@ -102,7 +102,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 	for _, vote := range votes {
 		voteList = append(voteList, *vote)
 	}
-	recv.consensus.network.BroadcastRandomnessRequest(&types.AgreementResult{
+	recv.consensus.network.BroadcastAgreementResult(&types.AgreementResult{
 		BlockHash: hash,
 		Round:     recv.round,
 		Position:  block.Position,
@@ -136,7 +136,7 @@ func (recv *consensusDKGReceiver) ProposeDKGComplaint(
 		log.Println(err)
 		return
 	}
-	recv.gov.AddDKGComplaint(complaint)
+	recv.gov.AddDKGComplaint(complaint.Round, complaint)
 }
 
 // ProposeDKGMasterPublicKey propose a DKGMasterPublicKey.
@@ -146,7 +146,7 @@ func (recv *consensusDKGReceiver) ProposeDKGMasterPublicKey(
 		log.Println(err)
 		return
 	}
-	recv.gov.AddDKGMasterPublicKey(mpk)
+	recv.gov.AddDKGMasterPublicKey(mpk.Round, mpk)
 }
 
 // ProposeDKGPrivateShare propose a DKGPrivateShare.
@@ -182,7 +182,7 @@ func (recv *consensusDKGReceiver) ProposeDKGFinalize(final *types.DKGFinalize) {
 		log.Println(err)
 		return
 	}
-	recv.gov.AddDKGFinalize(final)
+	recv.gov.AddDKGFinalize(final.Round, final)
 }
 
 // Consensus implements DEXON Consensus algorithm.

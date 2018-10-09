@@ -69,7 +69,7 @@ func (r *testCCReceiver) ProposeDKGComplaint(complaint *types.DKGComplaint) {
 		r.s.Require().NoError(err)
 		complaintCopy := &types.DKGComplaint{}
 		r.s.Require().NoError(json.Unmarshal(data, complaintCopy))
-		gov.AddDKGComplaint(complaintCopy)
+		gov.AddDKGComplaint(complaintCopy.Round, complaintCopy)
 	}
 }
 
@@ -86,7 +86,7 @@ func (r *testCCReceiver) ProposeDKGMasterPublicKey(
 		r.s.Require().NoError(err)
 		mpkCopy := types.NewDKGMasterPublicKey()
 		r.s.Require().NoError(json.Unmarshal(data, mpkCopy))
-		gov.AddDKGMasterPublicKey(mpkCopy)
+		gov.AddDKGMasterPublicKey(mpkCopy.Round, mpkCopy)
 	}
 }
 
@@ -137,7 +137,7 @@ func (r *testCCReceiver) ProposeDKGFinalize(final *types.DKGFinalize) {
 		r.s.Require().NoError(err)
 		finalCopy := &types.DKGFinalize{}
 		r.s.Require().NoError(json.Unmarshal(data, finalCopy))
-		gov.AddDKGFinalize(finalCopy)
+		gov.AddDKGFinalize(finalCopy.Round, finalCopy)
 	}
 }
 
