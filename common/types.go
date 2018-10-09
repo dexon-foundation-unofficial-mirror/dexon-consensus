@@ -53,6 +53,11 @@ func (h Hash) String() string {
 	return hex.EncodeToString([]byte(h[:]))
 }
 
+// Bytes return the hash as slice of bytes.
+func (h Hash) Bytes() []byte {
+	return h[:]
+}
+
 // Equal compares if two hashes are the same.
 func (h Hash) Equal(hp Hash) bool {
 	return h == hp
