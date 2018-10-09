@@ -64,6 +64,8 @@ func (g *testGov) DKGMasterPublicKeys(
 	round uint64) (keys []*types.DKGMasterPublicKey) {
 	return
 }
+func (g *testGov) AddDKGFinalize(final *types.DKGFinalize) {}
+func (g *testGov) IsDKGFinal(round uint64) bool            { return true }
 
 type NodeSetCacheTestSuite struct {
 	suite.Suite

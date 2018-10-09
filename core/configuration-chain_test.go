@@ -125,6 +125,22 @@ func (r *testCCReceiver) ProposeDKGAntiNackComplaint(
 	}()
 }
 
+func (r *testCCReceiver) ProposeDKGFinalize(final *types.DKGFinalize) {
+	prvKey, exist := r.s.prvKeys[final.ProposerID]
+	r.s.Require().True(exist)
+	var err error
+	final.Signature, err = prvKey.Sign(hashDKGFinalize(final))
+	r.s.Require().NoError(err)
+	for _, gov := range r.govs {
+		// Use Marshal/Unmarshal to do deep copy.
+		data, err := json.Marshal(final)
+		r.s.Require().NoError(err)
+		finalCopy := &types.DKGFinalize{}
+		r.s.Require().NoError(json.Unmarshal(data, finalCopy))
+		gov.AddDKGFinalize(finalCopy)
+	}
+}
+
 func (s *ConfigurationChainTestSuite) setupNodes(n int) {
 	s.nIDs = make(types.NodeIDs, 0, n)
 	s.prvKeys = make(map[types.NodeID]crypto.PrivateKey, n)

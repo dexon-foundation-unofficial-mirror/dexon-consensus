@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
@@ -123,10 +124,21 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	// Phase 7(T = 4λ): Enforce complaints and nack complaints.
 	cc.dkg.enforceNackComplaints(cc.gov.DKGComplaints(round))
 	// Enforce complaint is done in `processPrivateShare`.
-	// Phase 8(T = 5λ): DKG is ready.
+	// Phase 8(T = 5λ): DKG finalize.
 	cc.dkgLock.Unlock()
 	<-ticker.Tick()
 	cc.dkgLock.Lock()
+	cc.dkg.proposeFinalize()
+	// Phase 9(T = 6λ): DKG is ready.
+	cc.dkgLock.Unlock()
+	<-ticker.Tick()
+	cc.dkgLock.Lock()
+	// Normally, IsDKGFinal would return true here. Use this for in case of
+	// unexpected network fluctuation and ensure the robustness of DKG protocol.
+	for !cc.gov.IsDKGFinal(round) {
+		log.Printf("[%s] DKG is not ready yet. Try again later...\n", cc.ID)
+		time.Sleep(500 * time.Millisecond)
+	}
 	gpk, err := NewDKGGroupPublicKey(round,
 		cc.gov.DKGMasterPublicKeys(round),
 		cc.gov.DKGComplaints(round),

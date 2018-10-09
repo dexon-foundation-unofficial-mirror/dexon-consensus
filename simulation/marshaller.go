@@ -99,6 +99,12 @@ func (m *jsonMarshaller) Unmarshal(
 			break
 		}
 		msg = psig
+	case "dkg-finalize":
+		final := &types.DKGFinalize{}
+		if err = json.Unmarshal(payload, final); err != nil {
+			break
+		}
+		msg = final
 	default:
 		err = fmt.Errorf("unrecognized message type: %v", msgType)
 	}
@@ -135,6 +141,8 @@ func (m *jsonMarshaller) Marshal(msg interface{}) (
 		msgType = "dkg-complaint"
 	case *types.DKGPartialSignature:
 		msgType = "dkg-partial-signature"
+	case *types.DKGFinalize:
+		msgType = "dkg-finalize"
 	default:
 		err = fmt.Errorf("unknwon message type: %v", msg)
 	}

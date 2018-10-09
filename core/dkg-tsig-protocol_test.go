@@ -46,6 +46,7 @@ type testDKGReceiver struct {
 	mpk            *types.DKGMasterPublicKey
 	prvShare       map[types.NodeID]*types.DKGPrivateShare
 	antiComplaints map[types.NodeID]*types.DKGPrivateShare
+	final          []*types.DKGFinalize
 }
 
 func newTestDKGReceiver(
@@ -88,6 +89,10 @@ func (r *testDKGReceiver) ProposeDKGAntiNackComplaint(
 	prv.Signature, err = r.prvKey.Sign(hashDKGPrivateShare(prv))
 	r.s.Require().NoError(err)
 	r.antiComplaints[prv.ReceiverID] = prv
+}
+
+func (r *testDKGReceiver) ProposeDKGFinalize(final *types.DKGFinalize) {
+	r.final = append(r.final, final)
 }
 
 func (s *DKGTSIGProtocolTestSuite) setupDKGParticipants(n int) {
@@ -616,6 +621,20 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 	s.True(gpk.VerifySignature(msgHash, sig))
 }
 
+func (s *DKGTSIGProtocolTestSuite) TestProposeFinalize() {
+	prvKey, err := ecdsa.NewPrivateKey()
+	s.Require().NoError(err)
+	recv := newTestDKGReceiver(s, prvKey)
+	nID := types.NewNodeID(prvKey.PublicKey())
+	protocol := newDKGProtocol(nID, recv, 1, 2)
+	protocol.proposeFinalize()
+	s.Require().Len(recv.final, 1)
+	final := recv.final[0]
+	s.Equal(&types.DKGFinalize{
+		ProposerID: nID,
+		Round:      1,
+	}, final)
+}
 func TestDKGTSIGProtocol(t *testing.T) {
 	suite.Run(t, new(DKGTSIGProtocolTestSuite))
 }

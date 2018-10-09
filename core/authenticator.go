@@ -101,6 +101,14 @@ func (au *Authenticator) SignDKGPartialSignature(
 	return
 }
 
+// SignDKGFinalize signs a DKG finalize message.
+func (au *Authenticator) SignDKGFinalize(
+	final *types.DKGFinalize) (err error) {
+	final.ProposerID = au.proposerID
+	final.Signature, err = au.prvKey.Sign(hashDKGFinalize(final))
+	return
+}
+
 // VerifyBlock verifies the signature of types.Block.
 func (au *Authenticator) VerifyBlock(b *types.Block) (err error) {
 	hash, err := hashBlock(b)

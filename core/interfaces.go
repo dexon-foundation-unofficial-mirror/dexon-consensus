@@ -116,6 +116,12 @@ type Governance interface {
 
 	// DKGMasterPublicKeys gets all the DKGMasterPublicKey of round.
 	DKGMasterPublicKeys(round uint64) []*types.DKGMasterPublicKey
+
+	// AddDKGFinalize adds a DKG finalize message.
+	AddDKGFinalize(final *types.DKGFinalize)
+
+	// IsDKGFinal checks if DKG is final.
+	IsDKGFinal(round uint64) bool
 }
 
 // Ticker define the capability to tick by interval.

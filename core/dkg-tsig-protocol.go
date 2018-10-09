@@ -60,6 +60,9 @@ type dkgReceiver interface {
 
 	// ProposeDKGAntiNackComplaint propose a DKGPrivateShare as an anti complaint.
 	ProposeDKGAntiNackComplaint(prv *types.DKGPrivateShare)
+
+	// ProposeDKGFinalize propose a DKGFinalize message.
+	ProposeDKGFinalize(final *types.DKGFinalize)
 }
 
 type dkgProtocol struct {
@@ -297,6 +300,13 @@ func (d *dkgProtocol) processPrivateShare(
 			struct{}{}
 	}
 	return nil
+}
+
+func (d *dkgProtocol) proposeFinalize() {
+	d.recv.ProposeDKGFinalize(&types.DKGFinalize{
+		ProposerID: d.ID,
+		Round:      d.round,
+	})
 }
 
 func (d *dkgProtocol) recoverShareSecret(qualifyIDs dkg.IDs) (

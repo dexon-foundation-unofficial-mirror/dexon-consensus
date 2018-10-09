@@ -44,6 +44,7 @@ type Governance struct {
 	tsig               map[uint64]crypto.Signature
 	DKGComplaint       map[uint64][]*types.DKGComplaint
 	DKGMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
+	DKGFinal           map[uint64]map[types.NodeID]struct{}
 	RoundInterval      time.Duration
 	MinBlockInterval   time.Duration
 	MaxBlockInterval   time.Duration
@@ -62,6 +63,7 @@ func NewGovernance(nodeCount int, lambda time.Duration) (
 		tsig:               make(map[uint64]crypto.Signature),
 		DKGComplaint:       make(map[uint64][]*types.DKGComplaint),
 		DKGMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
+		DKGFinal:           make(map[uint64]map[types.NodeID]struct{}),
 		RoundInterval:      365 * 86400 * time.Second,
 		MinBlockInterval:   1 * time.Millisecond,
 		MaxBlockInterval:   lambda * 8,
@@ -135,8 +137,14 @@ func (g *Governance) PrivateKeys() (keys []crypto.PrivateKey) {
 
 // AddDKGComplaint add a DKGComplaint.
 func (g *Governance) AddDKGComplaint(complaint *types.DKGComplaint) {
+	if g.IsDKGFinal(complaint.Round) {
+		return
+	}
 	g.lock.Lock()
 	defer g.lock.Unlock()
+	if _, exist := g.DKGFinal[complaint.Round][complaint.ProposerID]; exist {
+		return
+	}
 	for _, comp := range g.DKGComplaint[complaint.Round] {
 		if comp == complaint {
 			return
@@ -183,4 +191,21 @@ func (g *Governance) DKGMasterPublicKeys(
 		mpks = append(mpks, mpkCopy)
 	}
 	return mpks
+}
+
+// AddDKGFinalize adds a DKG finalize message.
+func (g *Governance) AddDKGFinalize(final *types.DKGFinalize) {
+	g.lock.Lock()
+	defer g.lock.Unlock()
+	if _, exist := g.DKGFinal[final.Round]; !exist {
+		g.DKGFinal[final.Round] = make(map[types.NodeID]struct{})
+	}
+	g.DKGFinal[final.Round][final.ProposerID] = struct{}{}
+}
+
+// IsDKGFinal checks if DKG is final.
+func (g *Governance) IsDKGFinal(round uint64) bool {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+	return len(g.DKGFinal[round]) > int(g.Configuration(round).DKGSetSize)/3*2
 }

@@ -42,6 +42,7 @@ type simGovernance struct {
 	tsig               map[uint64]crypto.Signature
 	dkgComplaint       map[uint64][]*types.DKGComplaint
 	dkgMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
+	dkgFinal           map[uint64]map[types.NodeID]struct{}
 	lambdaBA           time.Duration
 	lambdaDKG          time.Duration
 	roundInterval      time.Duration
@@ -64,6 +65,7 @@ func newSimGovernance(
 		tsig:               make(map[uint64]crypto.Signature),
 		dkgComplaint:       make(map[uint64][]*types.DKGComplaint),
 		dkgMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
+		dkgFinal:           make(map[uint64]map[types.NodeID]struct{}),
 		lambdaBA: time.Duration(consensusConfig.LambdaBA) *
 			time.Millisecond,
 		lambdaDKG: time.Duration(consensusConfig.LambdaDKG) *
@@ -139,6 +141,12 @@ func (g *simGovernance) addNode(pubKey crypto.PublicKey) {
 
 // AddDKGComplaint adds a DKGComplaint.
 func (g *simGovernance) AddDKGComplaint(complaint *types.DKGComplaint) {
+	if g.IsDKGFinal(complaint.Round) {
+		return
+	}
+	if _, exist := g.dkgFinal[complaint.Round][complaint.ProposerID]; exist {
+		return
+	}
 	// TODO(jimmy-dexon): check if the input is valid.
 	g.dkgComplaint[complaint.Round] = append(
 		g.dkgComplaint[complaint.Round], complaint)
@@ -175,4 +183,21 @@ func (g *simGovernance) DKGMasterPublicKeys(
 		return []*types.DKGMasterPublicKey{}
 	}
 	return masterPublicKeys
+}
+
+// AddDKGFinalize adds a DKG finalize message.
+func (g *simGovernance) AddDKGFinalize(final *types.DKGFinalize) {
+	// TODO(jimmy-dexon): check if the input is valid.
+	if _, exist := g.dkgFinal[final.Round]; !exist {
+		g.dkgFinal[final.Round] = make(map[types.NodeID]struct{})
+	}
+	g.dkgFinal[final.Round][final.ProposerID] = struct{}{}
+	if final.ProposerID == g.id {
+		g.network.broadcast(final)
+	}
+}
+
+// IsDKGFinal checks if DKG is final.
+func (g *simGovernance) IsDKGFinal(round uint64) bool {
+	return len(g.dkgFinal[round]) > int(g.Configuration(round).DKGSetSize)/3*2
 }

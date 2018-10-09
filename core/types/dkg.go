@@ -69,11 +69,18 @@ type DKGComplaint struct {
 
 // DKGPartialSignature describe a partial signature in DKG protocol.
 type DKGPartialSignature struct {
-	ProposerID       NodeID               `json:"proposerID"`
+	ProposerID       NodeID               `json:"proposer_id"`
 	Round            uint64               `json:"round"`
 	Hash             common.Hash          `json:"hash"`
 	PartialSignature dkg.PartialSignature `json:"partial_signature"`
 	Signature        crypto.Signature     `json:"signature"`
+}
+
+// DKGFinalize describe a dig finalize message in DKG protocol.
+type DKGFinalize struct {
+	ProposerID NodeID           `json:"proposer_id"`
+	Round      uint64           `json:"round"`
+	Signature  crypto.Signature `json:"signature"`
 }
 
 // IsNack returns true if it's a nack complaint in DKG protocol.

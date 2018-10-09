@@ -114,6 +114,8 @@ MainLoop:
 			n.gov.AddDKGComplaint(val)
 		case *types.DKGMasterPublicKey:
 			n.gov.AddDKGMasterPublicKey(val)
+		case *types.DKGFinalize:
+			n.gov.AddDKGFinalize(val)
 		default:
 			panic(fmt.Errorf("unexpected message from server: %v", val))
 		}

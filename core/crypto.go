@@ -243,3 +243,27 @@ func verifyDKGPartialSignatureSignature(
 	}
 	return true, nil
 }
+
+func hashDKGFinalize(final *types.DKGFinalize) common.Hash {
+	binaryRound := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryRound, final.Round)
+
+	return crypto.Keccak256Hash(
+		final.ProposerID.Hash[:],
+		binaryRound,
+	)
+}
+
+// VerifyDKGFinalizeSignature verifies DKGFinalize signature.
+func VerifyDKGFinalizeSignature(
+	final *types.DKGPartialSignature) (bool, error) {
+	hash := hashDKGPartialSignature(final)
+	pubKey, err := crypto.SigToPub(hash, final.Signature)
+	if err != nil {
+		return false, err
+	}
+	if final.ProposerID != types.NewNodeID(pubKey) {
+		return false, nil
+	}
+	return true, nil
+}

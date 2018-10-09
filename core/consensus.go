@@ -176,6 +176,15 @@ func (recv *consensusDKGReceiver) ProposeDKGAntiNackComplaint(
 	recv.network.BroadcastDKGPrivateShare(prv)
 }
 
+// ProposeDKGFinalize propose a DKGFinalize message.
+func (recv *consensusDKGReceiver) ProposeDKGFinalize(final *types.DKGFinalize) {
+	if err := recv.authModule.SignDKGFinalize(final); err != nil {
+		log.Println(err)
+		return
+	}
+	recv.gov.AddDKGFinalize(final)
+}
+
 // Consensus implements DEXON Consensus algorithm.
 type Consensus struct {
 	// Node Info.
