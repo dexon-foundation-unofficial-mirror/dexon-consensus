@@ -4,7 +4,6 @@ if [ -e .dep/dkg ]; then
   exit 0
 fi
 
-rm -rf vendor/github.com/herumi/*
 if [ ! -d .dep/dkg ]; then
   mkdir -p .dep/dkg
   cd .dep/dkg
@@ -17,4 +16,5 @@ if [ ! -d .dep/dkg ]; then
   make test_go -j
   cd ../../../
 fi
-cp -r .dep/dkg/* vendor/github.com/Spiderpowa
+cd vendor/github.com/Spiderpowa && rm -rf *
+ln -s ../../../.dep/dkg/* .

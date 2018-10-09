@@ -7,7 +7,7 @@ else
 BINDIR := $(abspath $(BINDIR))
 endif
 PROJECT_ROOT=github.com/dexon-foundation/dexon-consensus-core
-BUILDER_REPO = cobinhooddev/ci-base-alpine
+BUILDER_REPO = dexonfoundation/dexon-alpine
 
 ifeq ($(DOCKER),true)
 GO_LDFLAGS += -linkmode external -extldflags \"-static\"
@@ -30,6 +30,8 @@ ifeq ($(DOCKER),true)
 		-e "GOPATH=/go" \
 		-w /go/src/$(PROJECT_ROOT) \
 		$(BUILDER_REPO):latest sh -c "\
+			cd .dep/dkg/mcl && make clean; cd -; \
+			cd .dep/dkg/bls && make clean && make test_go DOCKER=alpine -j; cd -; \
 			go build -o /artifacts/$1 $(PROJECT_ROOT)/cmd/$1"
 else
 	@mkdir -p $(BINDIR)
