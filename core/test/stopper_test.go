@@ -61,9 +61,9 @@ func (s *StopperTestSuite) TestStopByConfirmedBlocks() {
 			}
 			app.TotalOrderingDelivered(hashes, false)
 			for _, h := range hashes {
-				app.BlockDelivered(types.Block{
-					Hash:               h,
-					ConsensusTimestamp: time.Time{}})
+				app.BlockDelivered(h, types.FinalizationResult{
+					Timestamp: time.Time{},
+				})
 			}
 		}
 	}

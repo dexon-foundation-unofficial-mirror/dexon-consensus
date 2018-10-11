@@ -26,7 +26,7 @@ import (
 )
 
 type blockConfirmedEvent struct {
-	blockHash common.Hash
+	block *types.Block
 }
 
 type stronglyAckedEvent struct {
@@ -39,7 +39,8 @@ type totalOrderingDeliveredEvent struct {
 }
 
 type blockDeliveredEvent struct {
-	block *types.Block
+	blockHash common.Hash
+	result    *types.FinalizationResult
 }
 
 // nonBlocking implements these interfaces and is a decorator for
@@ -94,11 +95,11 @@ func (nb *nonBlocking) run() {
 		case stronglyAckedEvent:
 			nb.debug.StronglyAcked(e.blockHash)
 		case blockConfirmedEvent:
-			nb.app.BlockConfirmed(e.blockHash)
+			nb.app.BlockConfirmed(*e.block)
 		case totalOrderingDeliveredEvent:
 			nb.debug.TotalOrderingDelivered(e.blockHashes, e.early)
 		case blockDeliveredEvent:
-			nb.app.BlockDelivered(*e.block)
+			nb.app.BlockDelivered(e.blockHash, *e.result)
 		default:
 			fmt.Printf("Unknown event %v.", e)
 		}
@@ -133,9 +134,9 @@ func (nb *nonBlocking) VerifyBlock(block *types.Block) bool {
 }
 
 // BlockConfirmed is called when a block is confirmed and added to lattice.
-func (nb *nonBlocking) BlockConfirmed(blockHash common.Hash) {
+func (nb *nonBlocking) BlockConfirmed(block types.Block) {
 	if nb.debug != nil {
-		nb.addEvent(blockConfirmedEvent{blockHash})
+		nb.addEvent(blockConfirmedEvent{&block})
 	}
 }
 
@@ -156,6 +157,10 @@ func (nb *nonBlocking) TotalOrderingDelivered(
 }
 
 // BlockDelivered is called when a block is add to the compaction chain.
-func (nb *nonBlocking) BlockDelivered(block types.Block) {
-	nb.addEvent(blockDeliveredEvent{&block})
+func (nb *nonBlocking) BlockDelivered(
+	blockHash common.Hash, result types.FinalizationResult) {
+	nb.addEvent(blockDeliveredEvent{
+		blockHash: blockHash,
+		result:    &result,
+	})
 }

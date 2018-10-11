@@ -195,7 +195,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	broadcast := func(b *types.Block) {
 		for _, obj := range objs {
 			h := common.NewRandomHash()
-			b.Randomness = h[:]
+			b.Finalization.Randomness = h[:]
 			obj.con.ccModule.registerBlock(b)
 			req.Nil(obj.con.processBlock(b))
 		}

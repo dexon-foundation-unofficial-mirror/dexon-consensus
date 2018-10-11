@@ -114,7 +114,7 @@ func (app *App) VerifyBlock(block *types.Block) bool {
 }
 
 // BlockConfirmed implements Application interface.
-func (app *App) BlockConfirmed(_ common.Hash) {
+func (app *App) BlockConfirmed(_ types.Block) {
 }
 
 // StronglyAcked implements Application interface.
@@ -145,15 +145,16 @@ func (app *App) TotalOrderingDelivered(blockHashes common.Hashes, early bool) {
 }
 
 // BlockDelivered implements Application interface.
-func (app *App) BlockDelivered(block types.Block) {
+func (app *App) BlockDelivered(
+	blockHash common.Hash, result types.FinalizationResult) {
 	app.deliveredLock.Lock()
 	defer app.deliveredLock.Unlock()
 
-	app.Delivered[block.Hash] = &AppDeliveredRecord{
-		ConsensusTime: block.ConsensusTimestamp,
+	app.Delivered[blockHash] = &AppDeliveredRecord{
+		ConsensusTime: result.Timestamp,
 		When:          time.Now().UTC(),
 	}
-	app.DeliverSequence = append(app.DeliverSequence, block.Hash)
+	app.DeliverSequence = append(app.DeliverSequence, blockHash)
 }
 
 // Compare performs these checks against another App instance

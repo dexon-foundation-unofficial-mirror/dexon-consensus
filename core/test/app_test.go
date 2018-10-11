@@ -80,9 +80,8 @@ func (s *AppTestSuite) deliverBlockWithTimeFromSequenceLength(
 func (s *AppTestSuite) deliverBlock(
 	app *App, hash common.Hash, timestamp time.Time) {
 
-	app.BlockDelivered(types.Block{
-		Hash:               hash,
-		ConsensusTimestamp: timestamp,
+	app.BlockDelivered(hash, types.FinalizationResult{
+		Timestamp: timestamp,
 	})
 }
 

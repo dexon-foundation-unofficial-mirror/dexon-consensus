@@ -57,9 +57,9 @@ func (app *slowApp) VerifyBlock(_ *types.Block) bool {
 	return true
 }
 
-func (app *slowApp) BlockConfirmed(blockHash common.Hash) {
+func (app *slowApp) BlockConfirmed(block types.Block) {
 	time.Sleep(app.sleep)
-	app.blockConfirmed[blockHash] = struct{}{}
+	app.blockConfirmed[block.Hash] = struct{}{}
 }
 
 func (app *slowApp) StronglyAcked(blockHash common.Hash) {
@@ -74,9 +74,10 @@ func (app *slowApp) TotalOrderingDelivered(blockHashes common.Hashes, early bool
 	}
 }
 
-func (app *slowApp) BlockDelivered(block types.Block) {
+func (app *slowApp) BlockDelivered(
+	blockHash common.Hash, _ types.FinalizationResult) {
 	time.Sleep(app.sleep)
-	app.blockDelivered[block.Hash] = struct{}{}
+	app.blockDelivered[blockHash] = struct{}{}
 }
 
 type NonBlockingTestSuite struct {
@@ -96,12 +97,12 @@ func (s *NonBlockingTestSuite) TestNonBlocking() {
 
 	// Start doing some 'heavy' job.
 	for _, hash := range hashes {
-		nbModule.BlockConfirmed(hash)
-		nbModule.StronglyAcked(hash)
-		nbModule.BlockDelivered(types.Block{
+		nbModule.BlockConfirmed(types.Block{
 			Hash:    hash,
 			Witness: types.Witness{Timestamp: time.Now().UTC()},
 		})
+		nbModule.StronglyAcked(hash)
+		nbModule.BlockDelivered(hash, types.FinalizationResult{})
 	}
 	nbModule.TotalOrderingDelivered(hashes, true)
 

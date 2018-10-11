@@ -58,7 +58,12 @@ func newSimApp(id types.NodeID, netModule *network) *simApp {
 }
 
 // BlockConfirmed implements core.Application.
-func (a *simApp) BlockConfirmed(_ common.Hash) {
+func (a *simApp) BlockConfirmed(block types.Block) {
+	a.blockByHashMutex.Lock()
+	defer a.blockByHashMutex.Unlock()
+
+	// TODO(jimmy-dexon) : Remove block in this hash if it's no longer needed.
+	a.blockByHash[block.Hash] = &block
 }
 
 // VerifyBlock implements core.Application.
@@ -125,40 +130,34 @@ func (a *simApp) TotalOrderingDelivered(blockHashes common.Hashes, early bool) {
 }
 
 // BlockDelivered is called when a block in compaction chain is delivered.
-func (a *simApp) BlockDelivered(block types.Block) {
-	if len(block.Randomness) == 0 {
-		panic(fmt.Errorf("Block %s randomness is empty", block.Hash))
+func (a *simApp) BlockDelivered(
+	blockHash common.Hash, result types.FinalizationResult) {
+	if len(result.Randomness) == 0 {
+		panic(fmt.Errorf("Block %s randomness is empty", blockHash))
 	}
-	func() {
-		a.blockByHashMutex.Lock()
-		defer a.blockByHashMutex.Unlock()
-
-		// TODO(jimmy-dexon) : Remove block in this hash if it's no longer needed.
-		a.blockByHash[block.Hash] = &block
-	}()
 	func() {
 		a.latestWitnessReady.L.Lock()
 		defer a.latestWitnessReady.L.Unlock()
 		a.latestWitness = types.Witness{
-			Timestamp: block.ConsensusTimestamp,
-			Height:    block.ConsensusHeight,
+			Timestamp: result.Timestamp,
+			Height:    result.Height,
 		}
 		a.latestWitnessReady.Broadcast()
 	}()
 
-	seenTime, exist := a.blockSeen[block.Hash]
+	seenTime, exist := a.blockSeen[blockHash]
 	if !exist {
 		return
 	}
 	now := time.Now()
 	payload := []timestampMessage{
 		{
-			BlockHash: block.Hash,
+			BlockHash: blockHash,
 			Event:     blockSeen,
 			Timestamp: seenTime,
 		},
 		{
-			BlockHash: block.Hash,
+			BlockHash: blockHash,
 			Event:     timestampConfirm,
 			Timestamp: now,
 		},

@@ -673,18 +673,15 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		if err = con.ccModule.processBlock(b); err != nil {
 			return
 		}
-		go con.event.NotifyTime(b.ConsensusTimestamp)
+		go con.event.NotifyTime(b.Finalization.Timestamp)
 	}
 	deliveredBlocks = con.ccModule.extractBlocks()
 	for _, b := range deliveredBlocks {
 		if err = con.db.Put(*b); err != nil {
 			return
 		}
-		con.nbModule.BlockDelivered(*b)
-		// TODO(mission): Find a way to safely recycle the block.
-		//                We should deliver block directly to
-		//                nonBlocking and let them recycle the
-		//                block.
+		// TODO(mission): clone types.FinalizationResult
+		con.nbModule.BlockDelivered(b.Hash, b.Finalization)
 	}
 	if err = con.lattice.PurgeBlocks(deliveredBlocks); err != nil {
 		return

@@ -64,7 +64,7 @@ func (cc *compactionChain) blockRegistered(hash common.Hash) (exist bool) {
 func (cc *compactionChain) processBlock(block *types.Block) error {
 	prevBlock := cc.lastBlock()
 	if prevBlock != nil {
-		block.ConsensusHeight = prevBlock.ConsensusHeight + 1
+		block.Finalization.Height = prevBlock.Finalization.Height + 1
 	}
 	cc.prevBlockLock.Lock()
 	defer cc.prevBlockLock.Unlock()
@@ -79,7 +79,8 @@ func (cc *compactionChain) extractBlocks() []*types.Block {
 	deliveringBlocks := make([]*types.Block, 0)
 	cc.blocksLock.Lock()
 	defer cc.blocksLock.Unlock()
-	for len(cc.pendingBlocks) != 0 && len(cc.pendingBlocks[0].Randomness) != 0 {
+	for len(cc.pendingBlocks) != 0 &&
+		len(cc.pendingBlocks[0].Finalization.Randomness) != 0 {
 		var block *types.Block
 		block, cc.pendingBlocks = cc.pendingBlocks[0], cc.pendingBlocks[1:]
 		delete(cc.blocks, block.Hash)
@@ -95,7 +96,7 @@ func (cc *compactionChain) processBlockRandomnessResult(
 	}
 	cc.blocksLock.Lock()
 	defer cc.blocksLock.Unlock()
-	cc.blocks[rand.BlockHash].Randomness = rand.Randomness
+	cc.blocks[rand.BlockHash].Finalization.Randomness = rand.Randomness
 	return nil
 }
 

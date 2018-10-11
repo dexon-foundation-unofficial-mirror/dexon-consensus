@@ -206,7 +206,7 @@ func (n *Node) processBlock(b *types.Block) (err error) {
 			if err = n.db.Put(*b); err != nil {
 				return
 			}
-			n.app.BlockDelivered(*b)
+			n.app.BlockDelivered(b.Hash, b.Finalization)
 		}
 		if err = n.lattice.PurgeBlocks(delivered); err != nil {
 			return

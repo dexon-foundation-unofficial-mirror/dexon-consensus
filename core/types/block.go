@@ -39,6 +39,13 @@ var (
 	}
 )
 
+// FinalizationResult represents the result of DEXON consensus algorithm.
+type FinalizationResult struct {
+	Randomness []byte    `json:"randomness"`
+	Timestamp  time.Time `json:"timestamp"`
+	Height     uint64    `json:"height"`
+}
+
 // Witness represents the consensus information on the compaction chain.
 type Witness struct {
 	Timestamp time.Time `json:"timestamp"`
@@ -61,18 +68,16 @@ func NewBlock() (b *Block) {
 
 // Block represents a single event broadcasted on the network.
 type Block struct {
-	ProposerID         NodeID              `json:"proposer_id"`
-	ParentHash         common.Hash         `json:"parent_hash"`
-	Hash               common.Hash         `json:"hash"`
-	Position           Position            `json:"position"`
-	Timestamp          time.Time           `json:"timestamps"`
-	Acks               common.SortedHashes `json:"acks"`
-	Payload            []byte              `json:"payload"`
-	Randomness         []byte              `json:"randomness"`
-	ConsensusTimestamp time.Time           `json:"consensus_timestamp"`
-	ConsensusHeight    uint64              `json:"consensus_height"`
-	Witness            Witness             `json:"witness"`
-	Signature          crypto.Signature    `json:"signature"`
+	ProposerID   NodeID              `json:"proposer_id"`
+	ParentHash   common.Hash         `json:"parent_hash"`
+	Hash         common.Hash         `json:"hash"`
+	Position     Position            `json:"position"`
+	Timestamp    time.Time           `json:"timestamps"`
+	Acks         common.SortedHashes `json:"acks"`
+	Payload      []byte              `json:"payload"`
+	Witness      Witness             `json:"witness"`
+	Finalization FinalizationResult  `json:"finalization"`
+	Signature    crypto.Signature    `json:"signature"`
 
 	CRSSignature crypto.Signature `json:"crs_signature"`
 }
@@ -92,8 +97,8 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.Position.Height = b.Position.Height
 	bcopy.Signature = b.Signature.Clone()
 	bcopy.CRSSignature = b.CRSSignature.Clone()
-	bcopy.ConsensusTimestamp = b.ConsensusTimestamp
-	bcopy.ConsensusHeight = b.ConsensusHeight
+	bcopy.Finalization.Timestamp = b.Finalization.Timestamp
+	bcopy.Finalization.Height = b.Finalization.Height
 	bcopy.Witness.Timestamp = b.Witness.Timestamp
 	bcopy.Witness.Height = b.Witness.Height
 	bcopy.Witness.Data = make([]byte, len(b.Witness.Data))
@@ -103,8 +108,8 @@ func (b *Block) Clone() (bcopy *Block) {
 	copy(bcopy.Acks, b.Acks)
 	bcopy.Payload = make([]byte, len(b.Payload))
 	copy(bcopy.Payload, b.Payload)
-	bcopy.Randomness = make([]byte, len(b.Randomness))
-	copy(bcopy.Randomness, b.Randomness)
+	bcopy.Finalization.Randomness = make([]byte, len(b.Finalization.Randomness))
+	copy(bcopy.Finalization.Randomness, b.Finalization.Randomness)
 	return
 }
 

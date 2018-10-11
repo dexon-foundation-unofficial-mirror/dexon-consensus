@@ -38,10 +38,10 @@ type Application interface {
 	VerifyBlock(block *types.Block) bool
 
 	// BlockConfirmed is called when a block is confirmed and added to lattice.
-	BlockConfirmed(blockHash common.Hash)
+	BlockConfirmed(block types.Block)
 
 	// BlockDelivered is called when a block is add to the compaction chain.
-	BlockDelivered(block types.Block)
+	BlockDelivered(blockHash common.Hash, result types.FinalizationResult)
 }
 
 // Debug describes the application interface that requires
