@@ -32,12 +32,12 @@ type NodeID struct {
 // NewNodeID returns a NodeID with Hash set to the hash value of
 // public key.
 func NewNodeID(pubKey crypto.PublicKey) NodeID {
-	return NodeID{Hash: crypto.Keccak256Hash(pubKey.Bytes())}
+	return NodeID{Hash: crypto.Keccak256Hash(pubKey.Bytes()[1:])}
 }
 
 // Equal checks if the hash representation is the same NodeID.
-func (v NodeID) Equal(hash common.Hash) bool {
-	return v.Hash == hash
+func (v NodeID) Equal(v2 NodeID) bool {
+	return v.Hash == v2.Hash
 }
 
 // NodeIDs implements sort.Interface for NodeID.

@@ -123,7 +123,7 @@ func (au *Authenticator) VerifyBlock(b *types.Block) (err error) {
 	if err != nil {
 		return
 	}
-	if !b.ProposerID.Equal(crypto.Keccak256Hash(pubKey.Bytes())) {
+	if !b.ProposerID.Equal(types.NewNodeID(pubKey)) {
 		err = ErrIncorrectSignature
 		return
 	}

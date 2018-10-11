@@ -709,12 +709,16 @@ func NewTCPTransportServer(
 	marshaller Marshaller,
 	serverPort int) *TCPTransportServer {
 
+	prvKey, err := ecdsa.NewPrivateKey()
+	if err != nil {
+		panic(err)
+	}
 	return &TCPTransportServer{
 		// NOTE: the assumption here is the node ID of peers
 		//       won't be zero.
 		TCPTransport: *NewTCPTransport(
 			TransportPeerServer,
-			ecdsa.NewPublicKeyFromByteSlice(nil),
+			prvKey.PublicKey(),
 			nil,
 			marshaller,
 			serverPort),
