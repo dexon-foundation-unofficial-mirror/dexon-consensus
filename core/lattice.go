@@ -153,8 +153,8 @@ func (s *Lattice) ProcessBlock(
 	//                be done here.
 	if s.debug != nil {
 		s.debug.StronglyAcked(input.Hash)
-		s.debug.BlockConfirmed(input.Hash)
 	}
+	s.app.BlockConfirmed(input.Hash)
 	// Purge blocks in pool with the same chainID and lower height.
 	s.pool.purgeBlocks(input.Position.ChainID, input.Position.Height)
 	// Replay tips in pool to check their validity.

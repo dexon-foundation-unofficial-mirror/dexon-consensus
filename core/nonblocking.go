@@ -94,7 +94,7 @@ func (nb *nonBlocking) run() {
 		case stronglyAckedEvent:
 			nb.debug.StronglyAcked(e.blockHash)
 		case blockConfirmedEvent:
-			nb.debug.BlockConfirmed(e.blockHash)
+			nb.app.BlockConfirmed(e.blockHash)
 		case totalOrderingDeliveredEvent:
 			nb.debug.TotalOrderingDelivered(e.blockHashes, e.early)
 		case blockDeliveredEvent:

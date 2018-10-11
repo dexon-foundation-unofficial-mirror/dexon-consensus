@@ -37,6 +37,9 @@ type Application interface {
 	// VerifyBlock verifies if the block is valid.
 	VerifyBlock(block *types.Block) bool
 
+	// BlockConfirmed is called when a block is confirmed and added to lattice.
+	BlockConfirmed(blockHash common.Hash)
+
 	// BlockDelivered is called when a block is add to the compaction chain.
 	BlockDelivered(block types.Block)
 }
@@ -44,9 +47,6 @@ type Application interface {
 // Debug describes the application interface that requires
 // more detailed consensus execution.
 type Debug interface {
-	// BlockConfirmed is called when a block is confirmed and added to lattice.
-	BlockConfirmed(blockHash common.Hash)
-
 	// StronglyAcked is called when a block is strongly acked.
 	StronglyAcked(blockHash common.Hash)
 
