@@ -94,11 +94,8 @@ type LatticeTestSuite struct {
 }
 
 func (s *LatticeTestSuite) newTestLatticeMgr(
-	cfg *types.Config) *testLatticeMgr {
-	var (
-		req   = s.Require()
-		round uint64
-	)
+	cfg *types.Config, dMoment time.Time) *testLatticeMgr {
+	var req = s.Require()
 	// Setup private key.
 	prvKey, err := ecdsa.NewPrivateKey()
 	req.Nil(err)
@@ -113,7 +110,7 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 		app:      app,
 		db:       db,
 		lattice: NewLattice(
-			round,
+			dMoment,
 			cfg,
 			NewAuthenticator(prvKey),
 			app,
@@ -137,8 +134,10 @@ func (s *LatticeTestSuite) TestBasicUsage() {
 			K:                0,
 			MinBlockInterval: 0,
 			MaxBlockInterval: 3000 * time.Second,
+			RoundInterval:    time.Hour,
 		}
-		master    = s.newTestLatticeMgr(&cfg)
+		dMoment   = time.Now().UTC()
+		master    = s.newTestLatticeMgr(&cfg, dMoment)
 		apps      = []*test.App{master.app}
 		revealSeq = map[string]struct{}{}
 	)
@@ -167,7 +166,7 @@ func (s *LatticeTestSuite) TestBasicUsage() {
 	for i := 0; i < otherLatticeNum; i++ {
 		revealer.Reset()
 		revealed := ""
-		other := s.newTestLatticeMgr(&cfg)
+		other := s.newTestLatticeMgr(&cfg, dMoment)
 		for {
 			b, err := revealer.Next()
 			if err != nil {
@@ -208,14 +207,15 @@ func (s *LatticeTestSuite) TestSanityCheck() {
 			MinBlockInterval: 0,
 			MaxBlockInterval: 3000 * time.Second,
 		}
-		lattice = s.newTestLatticeMgr(&cfg).lattice
+		lattice = s.newTestLatticeMgr(&cfg, time.Now().UTC()).lattice
 		auth    = lattice.authModule // Steal auth module from lattice, :(
 		req     = s.Require()
 		err     error
 	)
 	// A block properly signed should pass sanity check.
 	b := &types.Block{
-		Position: types.Position{ChainID: 0},
+		Position:  types.Position{ChainID: 0},
+		Timestamp: time.Now().UTC(),
 	}
 	req.NoError(auth.SignBlock(b))
 	req.NoError(lattice.SanityCheck(b))

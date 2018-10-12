@@ -43,12 +43,14 @@ type Lattice struct {
 
 // NewLattice constructs an Lattice instance.
 func NewLattice(
-	round uint64,
+	dMoment time.Time,
 	cfg *types.Config,
 	authModule *Authenticator,
 	app Application,
 	debug Debug,
 	db blockdb.BlockDatabase) (s *Lattice) {
+	// Create genesis latticeDataConfig.
+	dataConfig := newGenesisLatticeDataConfig(dMoment, cfg)
 	s = &Lattice{
 		authModule: authModule,
 		chainNum:   cfg.NumChains,
@@ -56,13 +58,12 @@ func NewLattice(
 		debug:      debug,
 		lastConfig: cfg,
 		pool:       newBlockPool(cfg.NumChains),
-		data:       newLatticeData(db, round, newLatticeDataConfig(nil, cfg)),
+		data:       newLatticeData(db, dataConfig),
 		toModule: newTotalOrdering(
-			round,
 			uint64(cfg.K),
 			uint64(float32(cfg.NumChains-1)*cfg.PhiRatio+1),
 			cfg.NumChains),
-		ctModule: newConsensusTimestamp(round, cfg.NumChains),
+		ctModule: newConsensusTimestamp(cfg.NumChains),
 	}
 	return
 }
@@ -75,7 +76,9 @@ func (s *Lattice) PrepareBlock(
 	defer s.lock.RUnlock()
 
 	b.Timestamp = proposeTime
-	s.data.prepareBlock(b)
+	if err = s.data.prepareBlock(b); err != nil {
+		return
+	}
 	b.Payload = s.app.PreparePayload(b.Position)
 	b.Witness = s.app.PrepareWitness(b.Witness.Height)
 	if err = s.authModule.SignBlock(b); err != nil {

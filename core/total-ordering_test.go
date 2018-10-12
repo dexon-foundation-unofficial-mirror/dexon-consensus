@@ -77,7 +77,6 @@ func (s *TotalOrderingTestSuite) TestBlockRelation() {
 	//
 	// The DAG used below is:
 	//  A <- B <- C
-	var round uint64
 	nodes := test.GenerateRandomNodeIDs(5)
 	vID := nodes[0]
 	blockA := s.genGenesisBlock(nodes, 0, common.Hashes{})
@@ -102,7 +101,7 @@ func (s *TotalOrderingTestSuite) TestBlockRelation() {
 		Acks: common.NewSortedHashes(common.Hashes{blockB.Hash}),
 	}
 
-	to := newTotalOrdering(round, 1, 3, uint32(len(nodes)))
+	to := newTotalOrdering(1, 3, uint32(len(nodes)))
 	s.checkNotDeliver(to, blockA)
 	s.checkNotDeliver(to, blockB)
 	s.checkNotDeliver(to, blockC)
@@ -242,7 +241,6 @@ func (s *TotalOrderingTestSuite) TestGrade() {
 func (s *TotalOrderingTestSuite) TestCycleDetection() {
 	// Make sure we don't get hang by cycle from
 	// block's acks.
-	var round uint64
 	nodes := test.GenerateRandomNodeIDs(5)
 
 	// create blocks with cycles in acking relation.
@@ -284,7 +282,7 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 	b10.Acks = append(b10.Acks, b10.Hash)
 
 	// Make sure we won't hang when cycle exists.
-	to := newTotalOrdering(round, 1, 3, uint32(len(nodes)))
+	to := newTotalOrdering(1, 3, uint32(len(nodes)))
 	s.checkNotDeliver(to, b00)
 	s.checkNotDeliver(to, b01)
 	s.checkNotDeliver(to, b02)
@@ -296,9 +294,8 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 }
 
 func (s *TotalOrderingTestSuite) TestNotValidDAGDetection() {
-	var round uint64
 	nodes := test.GenerateRandomNodeIDs(5)
-	to := newTotalOrdering(round, 1, 3, uint32(len(nodes)))
+	to := newTotalOrdering(1, 3, uint32(len(nodes)))
 
 	b00 := s.genGenesisBlock(nodes, 0, common.Hashes{})
 	b01 := &types.Block{
@@ -329,9 +326,8 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 	//     A    B
 	//  Even when B is not received, A should
 	//  be able to be delivered.
-	var round uint64
 	nodes := test.GenerateRandomNodeIDs(5)
-	to := newTotalOrdering(round, 2, 3, uint32(len(nodes)))
+	to := newTotalOrdering(2, 3, uint32(len(nodes)))
 	genNextBlock := func(b *types.Block) *types.Block {
 		return &types.Block{
 			ProposerID: b.ProposerID,
@@ -435,9 +431,8 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 
 func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	// It's a handcrafted test case.
-	var round uint64
 	nodes := test.GenerateRandomNodeIDs(5)
-	to := newTotalOrdering(round, 2, 3, uint32(len(nodes)))
+	to := newTotalOrdering(2, 3, uint32(len(nodes)))
 	// Setup blocks.
 	b00 := s.genGenesisBlock(nodes, 0, common.Hashes{})
 	b10 := s.genGenesisBlock(nodes, 1, common.Hashes{})
@@ -771,10 +766,9 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 	//  v   v   v    v
 	//  o   o   o <- o        Height: 0
 	var (
-		round uint64
 		req   = s.Require()
 		nodes = test.GenerateRandomNodeIDs(5)
-		to    = newTotalOrdering(round, 0, 3, uint32(len(nodes)))
+		to    = newTotalOrdering(0, 3, uint32(len(nodes)))
 	)
 	// Setup blocks.
 	b00 := s.genGenesisBlock(nodes, 0, common.Hashes{})
@@ -944,7 +938,6 @@ func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 
 func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 	var (
-		round    uint64
 		chainNum        = uint32(23)
 		blockNum        = 50
 		phi      uint64 = 10
@@ -965,25 +958,25 @@ func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 	for _, gen := range ackingCountGenerators {
 		// Test for K=0.
 		constructor := func(chainNum uint32) *totalOrdering {
-			return newTotalOrdering(round, 0, phi, chainNum)
+			return newTotalOrdering(0, phi, chainNum)
 		}
 		s.baseTestRandomlyGeneratedBlocks(
 			constructor, chainNum, blockNum, gen, repeat)
 		// Test for K=1,
 		constructor = func(chainNum uint32) *totalOrdering {
-			return newTotalOrdering(round, 1, phi, chainNum)
+			return newTotalOrdering(1, phi, chainNum)
 		}
 		s.baseTestRandomlyGeneratedBlocks(
 			constructor, chainNum, blockNum, gen, repeat)
 		// Test for K=2,
 		constructor = func(chainNum uint32) *totalOrdering {
-			return newTotalOrdering(round, 2, phi, chainNum)
+			return newTotalOrdering(2, phi, chainNum)
 		}
 		s.baseTestRandomlyGeneratedBlocks(
 			constructor, chainNum, blockNum, gen, repeat)
 		// Test for K=3,
 		constructor = func(chainNum uint32) *totalOrdering {
-			return newTotalOrdering(round, 3, phi, chainNum)
+			return newTotalOrdering(3, phi, chainNum)
 		}
 		s.baseTestRandomlyGeneratedBlocks(
 			constructor, chainNum, blockNum, gen, repeat)

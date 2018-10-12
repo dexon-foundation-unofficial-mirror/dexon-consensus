@@ -232,15 +232,15 @@ func NewConsensus(
 	prv crypto.PrivateKey) *Consensus {
 
 	// TODO(w): load latest blockHeight from DB, and use config at that height.
-	var round uint64
+	var (
+		round   uint64
+		dMoment = time.Now().UTC()
+	)
 	config := gov.Configuration(round)
-	// TODO(w): notarySet is different for each chain, need to write a
-	// GetNotarySetForChain(nodeSet, chainID, crs) function to get the
-	// correct notary set for a given chain.
 	nodeSetCache := NewNodeSetCache(gov)
 	crs := gov.CRS(round)
 	// Setup acking by information returned from Governace.
-	nodes, err := nodeSetCache.GetNodeSet(0)
+	nodes, err := nodeSetCache.GetNodeSet(round)
 	if err != nil {
 		panic(err)
 	}
@@ -253,7 +253,7 @@ func NewConsensus(
 	// Setup nonblocking module.
 	nbModule := newNonBlocking(app, debugApp)
 	// Init lattice.
-	lattice := NewLattice(round, config, authModule, nbModule, nbModule, db)
+	lattice := NewLattice(dMoment, config, authModule, nbModule, nbModule, db)
 	// Init configuration chain.
 	ID := types.NewNodeID(prv.PublicKey())
 	cfgModule := newConfigurationChain(
@@ -268,7 +268,7 @@ func NewConsensus(
 		gov)
 	// Register DKG for the initial round. This is a temporary function call for
 	// simulation.
-	cfgModule.registerDKG(0, int(config.DKGSetSize)/3)
+	cfgModule.registerDKG(round, int(config.DKGSetSize)/3)
 	// Construct Consensus instance.
 	con := &Consensus{
 		ID:            ID,
@@ -279,7 +279,7 @@ func NewConsensus(
 		gov:           gov,
 		db:            db,
 		network:       network,
-		tickerObj:     newTicker(gov, 0, TickerBA),
+		tickerObj:     newTicker(gov, round, TickerBA),
 		dkgReady:      sync.NewCond(&sync.Mutex{}),
 		cfgModule:     cfgModule,
 		nodeSetCache:  nodeSetCache,

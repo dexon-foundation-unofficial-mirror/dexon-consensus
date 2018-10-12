@@ -588,11 +588,10 @@ type totalOrdering struct {
 	candidateChainIDs []uint32
 
 	// configs keeps configuration for each round in continuous way.
-	configs  []*totalOrderingConfig
-	minRound uint64
+	configs []*totalOrderingConfig
 }
 
-func newTotalOrdering(round, k, phi uint64, chainNum uint32) *totalOrdering {
+func newTotalOrdering(k, phi uint64, chainNum uint32) *totalOrdering {
 	to := &totalOrdering{
 		pendings:              make(map[common.Hash]*types.Block),
 		k:                     k,
@@ -612,7 +611,6 @@ func newTotalOrdering(round, k, phi uint64, chainNum uint32) *totalOrdering {
 			phi:       phi,
 			numChains: chainNum,
 		}}
-	to.minRound = round
 	return to
 }
 
@@ -621,7 +619,7 @@ func newTotalOrdering(round, k, phi uint64, chainNum uint32) *totalOrdering {
 func (to *totalOrdering) appendConfig(
 	round uint64, config *types.Config) error {
 
-	if round != to.minRound+uint64(len(to.configs)) {
+	if round != uint64(len(to.configs)) {
 		return ErrRoundNotIncreasing
 	}
 	to.configs = append(to.configs, &totalOrderingConfig{

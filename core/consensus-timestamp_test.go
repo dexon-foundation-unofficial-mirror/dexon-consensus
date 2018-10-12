@@ -90,12 +90,11 @@ func (s *ConsensusTimestampTest) extractTimestamps(
 // TestTimestampPartition verifies that processing segments of compatction chain
 // should have the same result as processing the whole chain at once.
 func (s *ConsensusTimestampTest) TestTimestampPartition() {
-	var round uint64
 	blockNums := []int{50, 100, 30}
 	chainNum := 19
 	sigma := 100 * time.Millisecond
 	totalTimestamps := make([]time.Time, 0)
-	ct := newConsensusTimestamp(round, uint32(chainNum))
+	ct := newConsensusTimestamp(uint32(chainNum))
 	totalBlockNum := 0
 	for _, blockNum := range blockNums {
 		totalBlockNum += blockNum
@@ -111,7 +110,7 @@ func (s *ConsensusTimestampTest) TestTimestampPartition() {
 		totalChain = append(totalChain, chain...)
 		totalTimestamps = append(totalTimestamps, timestamps...)
 	}
-	ct2 := newConsensusTimestamp(round, uint32(chainNum))
+	ct2 := newConsensusTimestamp(uint32(chainNum))
 	err := ct2.processBlocks(totalChain)
 	s.Require().NoError(err)
 	timestamps2 := s.extractTimestamps(totalChain)
@@ -119,10 +118,9 @@ func (s *ConsensusTimestampTest) TestTimestampPartition() {
 }
 
 func (s *ConsensusTimestampTest) TestTimestampIncrease() {
-	var round uint64
 	chainNum := 19
 	sigma := 100 * time.Millisecond
-	ct := newConsensusTimestamp(round, uint32(chainNum))
+	ct := newConsensusTimestamp(uint32(chainNum))
 	chain := s.generateBlocksWithTimestamp(1000, chainNum, time.Second, sigma)
 	err := ct.processBlocks(chain)
 	s.Require().NoError(err)
@@ -131,7 +129,7 @@ func (s *ConsensusTimestampTest) TestTimestampIncrease() {
 		s.False(timestamps[i].Before(timestamps[i-1]))
 	}
 	// Test if the processBlocks is stable.
-	ct2 := newConsensusTimestamp(round, uint32(chainNum))
+	ct2 := newConsensusTimestamp(uint32(chainNum))
 	ct2.processBlocks(chain)
 	s.Require().NoError(err)
 	timestamps2 := s.extractTimestamps(chain)

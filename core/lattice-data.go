@@ -20,6 +20,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
@@ -30,60 +31,87 @@ import (
 // Errors for sanity check error.
 var (
 	ErrAckingBlockNotExists    = fmt.Errorf("acking block not exists")
-	ErrInvalidParentChain      = fmt.Errorf("invalid parent chain")
 	ErrDuplicatedAckOnOneChain = fmt.Errorf("duplicated ack on one chain")
-	ErrChainStatusCorrupt      = fmt.Errorf("chain status corrupt")
 	ErrInvalidChainID          = fmt.Errorf("invalid chain id")
 	ErrInvalidProposerID       = fmt.Errorf("invalid proposer id")
-	ErrInvalidTimestamp        = fmt.Errorf("invalid timestamp")
 	ErrInvalidWitness          = fmt.Errorf("invalid witness data")
 	ErrInvalidBlock            = fmt.Errorf("invalid block")
-	ErrForkBlock               = fmt.Errorf("fork block")
 	ErrNotAckParent            = fmt.Errorf("not ack parent")
 	ErrDoubleAck               = fmt.Errorf("double ack")
 	ErrAcksNotSorted           = fmt.Errorf("acks not sorted")
 	ErrInvalidBlockHeight      = fmt.Errorf("invalid block height")
 	ErrAlreadyInLattice        = fmt.Errorf("block already in lattice")
 	ErrIncorrectBlockTime      = fmt.Errorf("block timestamp is incorrect")
+	ErrInvalidRoundID          = fmt.Errorf("invalid round id")
 	ErrUnknownRoundID          = fmt.Errorf("unknown round id")
+	ErrRoundOutOfRange         = fmt.Errorf("round out of range")
+	ErrRoundNotSwitch          = fmt.Errorf("round not switch")
+	ErrNotGenesisBlock         = fmt.Errorf("not a genesis block")
+	ErrUnexpectedGenesisBlock  = fmt.Errorf("unexpected genesis block")
 )
 
 // Errors for method usage
 var (
-	ErrRoundNotIncreasing  = errors.New("round not increasing")
-	ErrPurgedBlockNotFound = errors.New("purged block not found")
+	ErrRoundNotIncreasing     = errors.New("round not increasing")
+	ErrPurgedBlockNotFound    = errors.New("purged block not found")
+	ErrPurgeNotDeliveredBlock = errors.New("not purge from head")
 )
 
 // latticeDataConfig is the configuration for latticeData for each round.
 type latticeDataConfig struct {
 	// Number of chains between runs
-	prevNumChains uint32
-	numChains     uint32
+	numChains uint32
 	// Block interval specifies reasonable time difference between
 	// parent/child blocks.
 	minBlockTimeInterval time.Duration
 	maxBlockTimeInterval time.Duration
-	// the range of clean cut at the beginning of this round.
-	cleanCutRange int
+	// roundBeginTime is the beginning of round, as local time.
+	roundBeginTime time.Time
+	roundInterval  time.Duration
+	// roundEndTime is a cache for begin + interval.
+	roundEndTime time.Time
+}
+
+// Initiate latticeDataConfig from types.Config.
+func (config *latticeDataConfig) fromConfig(cfg *types.Config) {
+	config.numChains = cfg.NumChains
+	config.minBlockTimeInterval = cfg.MinBlockInterval
+	config.maxBlockTimeInterval = cfg.MaxBlockInterval
+	config.roundInterval = cfg.RoundInterval
+}
+
+func (config *latticeDataConfig) setRoundBeginTime(begin time.Time) {
+	config.roundBeginTime = begin
+	config.roundEndTime = begin.Add(config.roundInterval)
+}
+
+// Check if timestamp of a block is valid according to a reference time.
+func (config *latticeDataConfig) isValidBlockTime(
+	b *types.Block, ref time.Time) bool {
+	return !(b.Timestamp.Before(ref.Add(config.minBlockTimeInterval)) ||
+		b.Timestamp.After(ref.Add(config.maxBlockTimeInterval)))
+}
+
+// isValidGenesisBlockTime check if a timestamp is valid for a genesis block.
+func (config *latticeDataConfig) isValidGenesisBlockTime(b *types.Block) bool {
+	return !(b.Timestamp.Before(config.roundBeginTime) || b.Timestamp.After(
+		config.roundBeginTime.Add(config.maxBlockTimeInterval)))
+}
+
+// newGenesisLatticeDataConfig constructs a latticeDataConfig instance.
+func newGenesisLatticeDataConfig(
+	dMoment time.Time, config *types.Config) *latticeDataConfig {
+	c := &latticeDataConfig{}
+	c.fromConfig(config)
+	c.setRoundBeginTime(dMoment)
+	return c
 }
 
 // newLatticeDataConfig constructs a latticeDataConfig instance.
 func newLatticeDataConfig(prev, cur *types.Config) *latticeDataConfig {
-	config := &latticeDataConfig{
-		numChains:            cur.NumChains,
-		minBlockTimeInterval: cur.MinBlockInterval,
-		maxBlockTimeInterval: cur.MaxBlockInterval,
-	}
-	if prev != nil {
-		config.prevNumChains = prev.NumChains
-		if prev.K != cur.K ||
-			prev.PhiRatio != cur.PhiRatio ||
-			prev.NumChains != cur.NumChains {
-			// K plus 2 is a magic from GOD.
-			config.cleanCutRange = prev.K + 2
-		}
-	}
-	return config
+	c := &latticeDataConfig{}
+	c.fromConfig(cur)
+	return c
 }
 
 // latticeData is a module for storing lattice.
@@ -95,56 +123,29 @@ type latticeData struct {
 	// blockByHash stores blocks, indexed by block hash.
 	blockByHash map[common.Hash]*types.Block
 	// This stores configuration for each round.
-	configs  []*latticeDataConfig
-	minRound uint64
+	configs []*latticeDataConfig
 }
 
 // newLatticeData creates a new latticeData struct.
-func newLatticeData(db blockdb.Reader,
-	round uint64, config *latticeDataConfig) (data *latticeData) {
+func newLatticeData(
+	db blockdb.Reader, genesisConfig *latticeDataConfig) (data *latticeData) {
 	data = &latticeData{
 		db:          db,
-		chains:      make([]*chainStatus, config.numChains),
+		chains:      make([]*chainStatus, genesisConfig.numChains),
 		blockByHash: make(map[common.Hash]*types.Block),
-		configs:     []*latticeDataConfig{config},
-		minRound:    round,
+		configs:     []*latticeDataConfig{genesisConfig},
 	}
 	for i := range data.chains {
 		data.chains[i] = &chainStatus{
-			ID:      uint32(i),
-			blocks:  []*types.Block{},
-			nextAck: make([]uint64, config.numChains),
+			ID:         uint32(i),
+			blocks:     []*types.Block{},
+			lastAckPos: make([]*types.Position, genesisConfig.numChains),
 		}
 	}
 	return
 }
 
-func (data *latticeData) sanityCheck(b *types.Block) error {
-	config := data.getConfig(b.Position.Round)
-	if config == nil {
-		return ErrUnknownRoundID
-	}
-	// Check if the chain id is valid.
-	if b.Position.ChainID >= config.numChains {
-		return ErrInvalidChainID
-	}
-
-	// TODO(mission): Check if its proposer is in validator set somewhere,
-	//                lattice doesn't have to know about node set.
-
-	// Check if it forks
-	if bInLattice := data.chains[b.Position.ChainID].getBlockByHeight(
-		b.Position.Height); bInLattice != nil {
-
-		if b.Hash != bInLattice.Hash {
-			return ErrForkBlock
-		}
-		return ErrAlreadyInLattice
-	}
-	// TODO(mission): check if fork by loading blocks from DB if the block
-	//                doesn't exists because forking is serious.
-
-	// Check if it acks older blocks.
+func (data *latticeData) checkAckingRelations(b *types.Block) error {
 	acksByChainID := make(map[uint32]struct{}, len(data.chains))
 	for _, hash := range b.Acks {
 		bAck, err := data.findBlock(hash)
@@ -154,8 +155,15 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 			}
 			return err
 		}
-		if bAck.Position.Height <
-			data.chains[bAck.Position.ChainID].nextAck[b.Position.ChainID] {
+		// Check if it acks blocks from old rounds, the allowed round difference
+		// is 1.
+		if DiffUint64(bAck.Position.Round, b.Position.Round) > 1 {
+			return ErrRoundOutOfRange
+		}
+		// Check if it acks older blocks than blocks on the same chain.
+		lastAckPos :=
+			data.chains[bAck.Position.ChainID].lastAckPos[b.Position.ChainID]
+		if lastAckPos != nil && !bAck.Position.Newer(lastAckPos) {
 			return ErrDoubleAck
 		}
 		// Check if ack two blocks on the same chain. This would need
@@ -165,39 +173,94 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 		}
 		acksByChainID[bAck.Position.ChainID] = struct{}{}
 	}
+	return nil
+}
 
-	// Check non-genesis blocks if it acks its parent.
-	if b.Position.Height > 0 {
+func (data *latticeData) sanityCheck(b *types.Block) error {
+	// TODO(mission): Check if its proposer is in validator set somewhere,
+	//                lattice doesn't have to know about node set.
+	config := data.getConfig(b.Position.Round)
+	if config == nil {
+		return ErrInvalidRoundID
+	}
+	// Check if the chain id is valid.
+	if b.Position.ChainID >= config.numChains {
+		return ErrInvalidChainID
+	}
+	// Make sure parent block is arrived.
+	chain := data.chains[b.Position.ChainID]
+	chainTip := chain.tip
+	if chainTip == nil {
+		if !b.ParentHash.Equal(common.Hash{}) {
+			return ErrAckingBlockNotExists
+		}
+		if !b.IsGenesis() {
+			return ErrNotGenesisBlock
+		}
+		if !config.isValidGenesisBlockTime(b) {
+			return ErrIncorrectBlockTime
+		}
+		return data.checkAckingRelations(b)
+	}
+	// Check parent block if parent hash is specified.
+	if !b.ParentHash.Equal(common.Hash{}) {
+		if !b.ParentHash.Equal(chainTip.Hash) {
+			return ErrAckingBlockNotExists
+		}
 		if !b.IsAcking(b.ParentHash) {
 			return ErrNotAckParent
 		}
-		bParent, err := data.findBlock(b.ParentHash)
-		if err != nil {
-			// This error should never happened, a parent block is always
-			// an acked block.
-			panic(err)
+	}
+	chainTipConfig := data.getConfig(chainTip.Position.Round)
+	// Round can't be rewinded.
+	if chainTip.Position.Round > b.Position.Round {
+		return ErrInvalidRoundID
+	}
+	checkTip := false
+	if chainTip.Timestamp.After(chainTipConfig.roundEndTime) {
+		// Round switching should happen when chainTip already pass
+		// round end time of its round.
+		if chainTip.Position.Round == b.Position.Round {
+			return ErrRoundNotSwitch
 		}
-		if bParent.Position.ChainID != b.Position.ChainID {
-			return ErrInvalidParentChain
+		// The round ID is continuous.
+		if b.Position.Round-chainTip.Position.Round == 1 {
+			checkTip = true
+		} else {
+			// This block should be genesis block of new round because round
+			// ID is not continuous.
+			if !b.IsGenesis() {
+				return ErrNotGenesisBlock
+			}
+			if !config.isValidGenesisBlockTime(b) {
+				return ErrIncorrectBlockTime
+			}
 		}
-		if bParent.Position.Height != b.Position.Height-1 {
+	} else {
+		if chainTip.Position.Round != b.Position.Round {
+			// Round should not switch.
+			return ErrInvalidRoundID
+		}
+		checkTip = true
+	}
+	// Validate the relation between chain tip when needed.
+	if checkTip {
+		if b.Position.Height != chainTip.Position.Height+1 {
 			return ErrInvalidBlockHeight
 		}
-		if bParent.Witness.Height > b.Witness.Height {
+		if b.Witness.Height < chainTip.Witness.Height {
 			return ErrInvalidWitness
 		}
-		// Check if its timestamp is valid.
-		if !b.Timestamp.After(bParent.Timestamp) {
-			return ErrInvalidTimestamp
-		}
-		// Check if its timestamp is in expected range.
-		if b.Timestamp.Before(
-			bParent.Timestamp.Add(config.minBlockTimeInterval)) ||
-			b.Timestamp.After(
-				bParent.Timestamp.Add(config.maxBlockTimeInterval)) {
-
+		if !config.isValidBlockTime(b, chainTip.Timestamp) {
 			return ErrIncorrectBlockTime
 		}
+		// Chain tip should be acked.
+		if !b.IsAcking(chainTip.Hash) {
+			return ErrNotAckParent
+		}
+	}
+	if err := data.checkAckingRelations(b); err != nil {
+		return err
 	}
 	return nil
 }
@@ -220,13 +283,13 @@ func (data *latticeData) addBlock(
 		return
 	}
 	data.blockByHash[block.Hash] = block
-	// Update nextAcks.
+	// Update lastAckPos.
 	for _, ack := range block.Acks {
 		if bAck, err = data.findBlock(ack); err != nil {
 			return
 		}
-		data.chains[bAck.Position.ChainID].nextAck[block.Position.ChainID] =
-			bAck.Position.Height + 1
+		data.chains[bAck.Position.ChainID].lastAckPos[block.Position.ChainID] =
+			bAck.Position.Clone()
 	}
 	// Extract blocks that deliverable to total ordering.
 	// A block is deliverable to total ordering iff:
@@ -234,26 +297,28 @@ func (data *latticeData) addBlock(
 	for {
 		updated = false
 		for _, status := range data.chains {
-			tip := status.getBlockByHeight(status.nextOutput)
-			if tip == nil {
+			if status.nextOutputIndex >= len(status.blocks) {
 				continue
 			}
+			tip := status.blocks[status.nextOutputIndex]
 			allAckingBlockDelivered := true
 			for _, ack := range tip.Acks {
 				if bAck, err = data.findBlock(ack); err != nil {
 					return
 				}
-				if data.chains[bAck.Position.ChainID].nextOutput >
-					bAck.Position.Height {
-
+				// Check if this block is outputed or not.
+				idx := data.chains[bAck.Position.ChainID].findBlock(
+					&bAck.Position)
+				if idx == -1 ||
+					idx < data.chains[bAck.Position.ChainID].nextOutputIndex {
 					continue
 				}
 				// This acked block exists and not delivered yet.
 				allAckingBlockDelivered = false
 			}
 			if allAckingBlockDelivered {
+				status.nextOutputIndex++
 				deliverable = append(deliverable, tip)
-				status.nextOutput++
 				updated = true
 			}
 		}
@@ -261,67 +326,96 @@ func (data *latticeData) addBlock(
 			break
 		}
 	}
-
-	// Delete old blocks in "chains" and "blocks" to release memory space.
-	//
-	// A block is safe to be deleted iff:
-	//  - It's delivered to total ordering
-	//  - All chains (including its proposing chain) acks some block with
-	//    higher height in its proposing chain.
-	//
-	// This works because blocks of height below this minimum are not going to be
-	// acked anymore, the ackings of these blocks are illegal.
-	for _, status := range data.chains {
-		status.purge()
-	}
 	return
 }
 
-// prepareBlock helps to setup fields of block based on its ProposerID,
+// prepareBlock helps to setup fields of block based on its ChainID and Round,
 // including:
-//  - Set 'Acks' and 'Timestamps' for the highest block of each validator not
-//    acked by this proposer before.
-//  - Set 'ParentHash' and 'Height' from parent block, if we can't find a
-//    parent, these fields would be setup like a genesis block.
-func (data *latticeData) prepareBlock(block *types.Block) {
-	config := data.getConfig(block.Position.Round)
+//  - Acks
+//  - Timestamp
+//  - ParentHash and Height from parent block. If there is no valid parent block
+//    (ex. Newly added chain or bootstrap ), these fields would be setup as
+//    genesis block.
+func (data *latticeData) prepareBlock(b *types.Block) error {
+	var (
+		minTimestamp, maxTimestamp time.Time
+		config                     *latticeDataConfig
+		acks                       common.Hashes
+		bindTip                    bool
+		chainTip                   *types.Block
+	)
+	if config = data.getConfig(b.Position.Round); config == nil {
+		return ErrUnknownRoundID
+	}
 	// Reset fields to make sure we got these information from parent block.
-	block.Position.Height = 0
-	block.ParentHash = common.Hash{}
-	acks := common.Hashes{}
-	for chainID := range data.chains {
-		// find height of the latest block for that validator.
-		var (
-			curBlock   *types.Block
-			nextHeight = data.chains[chainID].nextAck[block.Position.ChainID]
-		)
-		for {
-			tmpBlock := data.chains[chainID].getBlockByHeight(nextHeight)
-			if tmpBlock == nil {
-				break
-			}
-			curBlock = tmpBlock
-			nextHeight++
+	b.Position.Height = 0
+	b.ParentHash = common.Hash{}
+	// Decide valid timestamp range.
+	homeChain := data.chains[b.Position.ChainID]
+	if homeChain.tip != nil {
+		chainTip = homeChain.tip
+		if b.Position.Round < chainTip.Position.Round {
+			return ErrInvalidRoundID
 		}
-		if curBlock == nil {
+		chainTipConfig := data.getConfig(chainTip.Position.Round)
+		if chainTip.Timestamp.After(chainTipConfig.roundEndTime) {
+			if b.Position.Round == chainTip.Position.Round {
+				return ErrRoundNotSwitch
+			}
+			if b.Position.Round == chainTip.Position.Round+1 {
+				bindTip = true
+			}
+		} else {
+			if b.Position.Round != chainTip.Position.Round {
+				return ErrInvalidRoundID
+			}
+			bindTip = true
+		}
+		// TODO(mission): find a way to prevent us to assign a witness height
+		//                from Jurassic period.
+		b.Witness.Height = chainTip.Witness.Height
+	}
+	// For blocks with continuous round ID, assign timestamp range based on
+	// parent block and bound config.
+	if bindTip {
+		minTimestamp = chainTip.Timestamp.Add(config.minBlockTimeInterval)
+		maxTimestamp = chainTip.Timestamp.Add(config.maxBlockTimeInterval)
+		// When a chain is removed and added back, the reference block
+		// of previous round can't be used as parent block.
+		b.ParentHash = chainTip.Hash
+		b.Position.Height = chainTip.Position.Height + 1
+	} else {
+		// Discontinuous round ID detected, another fresh start of
+		// new round.
+		minTimestamp = config.roundBeginTime
+		maxTimestamp = config.roundBeginTime.Add(config.maxBlockTimeInterval)
+	}
+	// Fix timestamp if the given one is invalid.
+	if b.Timestamp.Before(minTimestamp) {
+		b.Timestamp = minTimestamp
+	} else if b.Timestamp.After(maxTimestamp) {
+		b.Timestamp = maxTimestamp
+	}
+	// Setup acks fields.
+	for _, status := range data.chains {
+		// Check if we can ack latest block on that chain.
+		if status.tip == nil {
 			continue
 		}
-		acks = append(acks, curBlock.Hash)
-		if uint32(chainID) == block.Position.ChainID {
-			block.ParentHash = curBlock.Hash
-			block.Position.Height = curBlock.Position.Height + 1
-			block.Witness.Height = curBlock.Witness.Height
-			minTimestamp := curBlock.Timestamp.Add(config.minBlockTimeInterval)
-			maxTimestamp := curBlock.Timestamp.Add(config.maxBlockTimeInterval)
-			if block.Timestamp.Before(minTimestamp) {
-				block.Timestamp = minTimestamp
-			} else if block.Timestamp.After(maxTimestamp) {
-				block.Timestamp = maxTimestamp
-			}
+		lastAckPos := status.lastAckPos[b.Position.ChainID]
+		if lastAckPos != nil && !status.tip.Position.Newer(lastAckPos) {
+			// The reference block is already acked.
+			continue
 		}
+		// Can't ack block too old or too new to us.
+		if DiffUint64(
+			status.tip.Position.Round, b.Position.Round) > 1 {
+			continue
+		}
+		acks = append(acks, status.tip.Hash)
 	}
-	block.Acks = common.NewSortedHashes(acks)
-	return
+	b.Acks = common.NewSortedHashes(acks)
+	return nil
 }
 
 // TODO(mission): make more abstraction for this method.
@@ -350,122 +444,118 @@ func (data *latticeData) purgeBlocks(blocks []*types.Block) error {
 			return ErrPurgedBlockNotFound
 		}
 		delete(data.blockByHash, b.Hash)
+		// blocks would be purged in ascending order in position.
+		if err := data.chains[b.Position.ChainID].purgeBlock(b); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 // getConfig get configuration for lattice-data by round ID.
 func (data *latticeData) getConfig(round uint64) (config *latticeDataConfig) {
-	if round < data.minRound {
+	if round >= uint64(len(data.configs)) {
 		return
 	}
-	diff := round - data.minRound
-	if diff >= uint64(len(data.configs)) {
-		return
-	}
-	return data.configs[diff]
+	return data.configs[round]
 }
 
 // appendConfig appends a configuration for upcoming round. When you append
 // a config for round R, next time you can only append the config for round R+1.
 func (data *latticeData) appendConfig(
 	round uint64, config *latticeDataConfig) (err error) {
-
-	if round != data.minRound+uint64(len(data.configs)) {
+	// Make sure caller knows which round this config belongs to.
+	if round != uint64(len(data.configs)) {
 		return ErrRoundNotIncreasing
 	}
+	// Set round beginning time.
+	config.setRoundBeginTime(data.configs[len(data.configs)-1].roundEndTime)
 	data.configs = append(data.configs, config)
+	// Resize each slice if incoming config contains larger number of chains.
+	if uint32(len(data.chains)) < config.numChains {
+		count := config.numChains - uint32(len(data.chains))
+		for _, status := range data.chains {
+			status.lastAckPos = append(
+				status.lastAckPos, make([]*types.Position, count)...)
+		}
+		for i := uint32(len(data.chains)); i < config.numChains; i++ {
+			data.chains = append(data.chains, &chainStatus{
+				ID:         i,
+				blocks:     []*types.Block{},
+				lastAckPos: make([]*types.Position, config.numChains),
+			})
+		}
+	}
 	return nil
 }
 
 type chainStatus struct {
 	// ID keeps the chainID of this chain status.
 	ID uint32
-
 	// blocks stores blocks proposed for this chain, sorted by height.
 	blocks []*types.Block
-
-	// minHeight keeps minimum height in blocks.
-	minHeight uint64
-
-	// nextAck stores the height of next height that should be acked, i.e. last
-	// acked height + 1. Initialized to 0.
-	// being acked. For example, rb.chains[vid1].nextAck[vid2] - 1 is the last
-	// acked height by vid2 acking vid1.
-	nextAck []uint64
-
-	// nextOutput is the next output height of block, default to 0.
-	nextOutput uint64
+	// tip is the last block on this chain.
+	tip *types.Block
+	// lastAckPos caches last acking position from other chains. Nil means
+	// not acked yet.
+	lastAckPos []*types.Position
+	// the index to be output next time.
+	nextOutputIndex int
 }
 
-func (s *chainStatus) getBlockByHeight(height uint64) (b *types.Block) {
-	if height < s.minHeight {
-		return
+// findBlock finds index of block in current pending blocks on this chain.
+// -1 means not found.
+func (s *chainStatus) findBlock(pos *types.Position) (idx int) {
+	idx = sort.Search(len(s.blocks), func(i int) bool {
+		return s.blocks[i].Position.Newer(pos) ||
+			s.blocks[i].Position.Equal(pos)
+	})
+	if idx == len(s.blocks) {
+		idx = -1
+	} else if !s.blocks[idx].Position.Equal(pos) {
+		idx = -1
 	}
-	idx := int(height - s.minHeight)
-	if idx >= len(s.blocks) {
+	return idx
+}
+
+// getBlock returns a pending block by giving its index from findBlock method.
+func (s *chainStatus) getBlock(idx int) (b *types.Block) {
+	if idx < 0 || idx >= len(s.blocks) {
 		return
 	}
 	b = s.blocks[idx]
 	return
 }
 
+// addBlock adds a block to pending blocks on this chain.
 func (s *chainStatus) addBlock(b *types.Block) error {
-	if len(s.blocks) > 0 {
-		// Make sure the height of incoming block should be
-		// plus one to current latest blocks if exists.
-		if s.blocks[len(s.blocks)-1].Position.Height != b.Position.Height-1 {
-			return ErrChainStatusCorrupt
-		}
-	} else {
-		if b.Position.Height != 0 {
-			return ErrChainStatusCorrupt
-		}
-	}
 	s.blocks = append(s.blocks, b)
+	s.tip = b
 	return nil
 }
 
-func (s *chainStatus) calcPurgeHeight() (safe uint64, ok bool) {
-	// blocks with height less than min(nextOutput, nextAck...)
-	// are safe to be purged.
-	safe = s.nextOutput
-	for _, ackedHeight := range s.nextAck {
-		if safe > ackedHeight {
-			safe = ackedHeight
-		}
-	}
-	// Both 'nextOutput' and 'nextAck' represents some block to be
-	// outputed/acked. To find a block already outputed/acked, the height
-	// needs to be minus 1.
-	if safe == 0 {
-		// Avoid underflow.
-		return
-	}
-	safe--
-	if safe < s.minHeight {
-		return
-	}
-	ok = true
-	return
-}
-
-// purge blocks if they are safe to be deleted from working set.
-func (s *chainStatus) purge() {
-	safe, ok := s.calcPurgeHeight()
-	if !ok {
-		return
-	}
-	newMinIndex := safe - s.minHeight + 1
-	s.blocks = s.blocks[newMinIndex:]
-	s.minHeight = safe + 1
-	return
-}
-
+// TODO(mission): change back to nextHeight.
 // nextPosition returns a valid position for new block in this chain.
 func (s *chainStatus) nextPosition() types.Position {
+	if s.tip == nil {
+		return types.Position{
+			ChainID: s.ID,
+			Height:  0,
+		}
+	}
 	return types.Position{
 		ChainID: s.ID,
-		Height:  s.minHeight + uint64(len(s.blocks)),
+		Height:  s.tip.Position.Height + 1,
 	}
+}
+
+// purgeBlock purge a block from cache, make sure this block already
+// persists to blockdb.
+func (s *chainStatus) purgeBlock(b *types.Block) error {
+	if b.Hash != s.blocks[0].Hash || s.nextOutputIndex <= 0 {
+		return ErrPurgeNotDeliveredBlock
+	}
+	s.blocks = s.blocks[1:]
+	s.nextOutputIndex--
+	return nil
 }

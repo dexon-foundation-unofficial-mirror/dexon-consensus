@@ -17,9 +17,44 @@
 
 package types
 
+import "errors"
+
+// ErrComparePositionOnDifferentChains raised when attempting to
+// compare two positions with different chain ID.
+var ErrComparePositionOnDifferentChains = errors.New(
+	"position on different chain")
+
 // Position describes the position in the block lattice of an entity.
 type Position struct {
 	ChainID uint32 `json:"chain_id"`
 	Round   uint64 `json:"round"`
 	Height  uint64 `json:"height"`
+}
+
+// Equal checks if two positions are equal, it panics when their chainIDs
+// are different.
+func (pos *Position) Equal(other *Position) bool {
+	if pos.ChainID != other.ChainID {
+		panic(ErrComparePositionOnDifferentChains)
+	}
+	return pos.Round == other.Round && pos.Height == other.Height
+}
+
+// Newer checks if one block is newer than another one on the same chain.
+// If two blocks on different chain compared by this function, it would panic.
+func (pos *Position) Newer(other *Position) bool {
+	if pos.ChainID != other.ChainID {
+		panic(ErrComparePositionOnDifferentChains)
+	}
+	return pos.Round > other.Round ||
+		(pos.Round == other.Round && pos.Height > other.Height)
+}
+
+// Clone a position instance.
+func (pos *Position) Clone() *Position {
+	return &Position{
+		ChainID: pos.ChainID,
+		Round:   pos.Round,
+		Height:  pos.Height,
+	}
 }

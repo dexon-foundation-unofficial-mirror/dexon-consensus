@@ -130,3 +130,11 @@ func HashConfigurationBlock(
 		prevHash[:],
 	)
 }
+
+// DiffUint64 calculates difference between two uint64.
+func DiffUint64(a, b uint64) uint64 {
+	if a > b {
+		return a - b
+	}
+	return b - a
+}

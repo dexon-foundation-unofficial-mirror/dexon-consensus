@@ -30,7 +30,6 @@ type consensusTimestamp struct {
 
 	// This part keeps configs for each round.
 	numChainsForRounds []uint32
-	minRound           uint64
 }
 
 var (
@@ -40,10 +39,9 @@ var (
 )
 
 // newConsensusTimestamp create timestamper object.
-func newConsensusTimestamp(round uint64, numChains uint32) *consensusTimestamp {
+func newConsensusTimestamp(numChains uint32) *consensusTimestamp {
 	return &consensusTimestamp{
 		numChainsForRounds: []uint32{numChains},
-		minRound:           round,
 	}
 }
 
@@ -52,7 +50,7 @@ func newConsensusTimestamp(round uint64, numChains uint32) *consensusTimestamp {
 func (ct *consensusTimestamp) appendConfig(
 	round uint64, config *types.Config) error {
 
-	if round != ct.minRound+uint64(len(ct.numChainsForRounds)) {
+	if round != uint64(len(ct.numChainsForRounds)) {
 		return ErrRoundNotIncreasing
 	}
 	ct.numChainsForRounds = append(ct.numChainsForRounds, config.NumChains)
