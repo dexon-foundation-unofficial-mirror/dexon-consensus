@@ -114,6 +114,11 @@ func (g *simGovernance) CRS(round uint64) common.Hash {
 	return g.crs[round]
 }
 
+// NotifyRoundHeight notifies governance contract to snapshot configuration
+// for that round with the block on that consensus height.
+func (g *simGovernance) NotifyRoundHeight(round, height uint64) {
+}
+
 // ProposeCRS proposes a CRS of round.
 func (g *simGovernance) ProposeCRS(signedCRS []byte) {
 	crs := crypto.Keccak256Hash(signedCRS)

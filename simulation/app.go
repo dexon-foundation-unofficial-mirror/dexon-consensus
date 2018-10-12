@@ -98,18 +98,18 @@ func (a *simApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
 }
 
 // PreparePayload implements core.Application.
-func (a *simApp) PreparePayload(position types.Position) []byte {
-	return []byte{}
+func (a *simApp) PreparePayload(position types.Position) ([]byte, error) {
+	return []byte{}, nil
 }
 
 // PrepareWitness implements core.Application.
-func (a *simApp) PrepareWitness(height uint64) types.Witness {
+func (a *simApp) PrepareWitness(height uint64) (types.Witness, error) {
 	a.latestWitnessReady.L.Lock()
 	defer a.latestWitnessReady.L.Unlock()
 	for a.latestWitness.Height < height {
 		a.latestWitnessReady.Wait()
 	}
-	return a.latestWitness
+	return a.latestWitness, nil
 }
 
 // StronglyAcked is called when a block is strongly acked by DEXON

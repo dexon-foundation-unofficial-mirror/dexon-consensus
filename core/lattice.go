@@ -79,8 +79,12 @@ func (s *Lattice) PrepareBlock(
 	if err = s.data.prepareBlock(b); err != nil {
 		return
 	}
-	b.Payload = s.app.PreparePayload(b.Position)
-	b.Witness = s.app.PrepareWitness(b.Witness.Height)
+	if b.Payload, err = s.app.PreparePayload(b.Position); err != nil {
+		return
+	}
+	if b.Witness, err = s.app.PrepareWitness(b.Witness.Height); err != nil {
+		return
+	}
 	if err = s.authModule.SignBlock(b); err != nil {
 		return
 	}

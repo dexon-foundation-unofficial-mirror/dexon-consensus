@@ -29,10 +29,10 @@ import (
 // consensus core.
 type Application interface {
 	// PreparePayload is called when consensus core is preparing a block.
-	PreparePayload(position types.Position) []byte
+	PreparePayload(position types.Position) ([]byte, error)
 
 	// PrepareWitness will return the witness data no lower than consensusHeight.
-	PrepareWitness(consensusHeight uint64) types.Witness
+	PrepareWitness(consensusHeight uint64) (types.Witness, error)
 
 	// VerifyBlock verifies if the block is valid.
 	VerifyBlock(block *types.Block) bool
@@ -102,6 +102,10 @@ type Governance interface {
 	// NodeSet returns the node set at a given round.
 	// Return the genesis node set if round == 0.
 	NodeSet(round uint64) []crypto.PublicKey
+
+	// NotifyRoundHeight notifies governance contract to generate configuration
+	// for that round with the block on that consensus height.
+	NotifyRoundHeight(targetRound, consensusHeight uint64)
 
 	//// DKG-related methods.
 

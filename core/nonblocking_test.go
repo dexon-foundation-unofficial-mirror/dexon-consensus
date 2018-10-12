@@ -45,12 +45,12 @@ func newSlowApp(sleep time.Duration) *slowApp {
 	}
 }
 
-func (app *slowApp) PreparePayload(_ types.Position) []byte {
-	return []byte{}
+func (app *slowApp) PreparePayload(_ types.Position) ([]byte, error) {
+	return []byte{}, nil
 }
 
-func (app *slowApp) PrepareWitness(_ uint64) types.Witness {
-	return types.Witness{}
+func (app *slowApp) PrepareWitness(_ uint64) (types.Witness, error) {
+	return types.Witness{}, nil
 }
 
 func (app *slowApp) VerifyBlock(_ *types.Block) bool {

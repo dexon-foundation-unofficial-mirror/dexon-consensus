@@ -97,15 +97,15 @@ func NewApp() *App {
 }
 
 // PreparePayload implements Application interface.
-func (app *App) PreparePayload(position types.Position) []byte {
-	return []byte{}
+func (app *App) PreparePayload(position types.Position) ([]byte, error) {
+	return []byte{}, nil
 }
 
 // PrepareWitness implements Application interface.
-func (app *App) PrepareWitness(height uint64) types.Witness {
+func (app *App) PrepareWitness(height uint64) (types.Witness, error) {
 	return types.Witness{
 		Height: height,
-	}
+	}, nil
 }
 
 // VerifyBlock implements Application.

@@ -115,6 +115,10 @@ func (g *Governance) CRS(round uint64) common.Hash {
 	return g.crs[round]
 }
 
+// NotifyRoundHeight notifies governace contract to snapshot config.
+func (g *Governance) NotifyRoundHeight(round, height uint64) {
+}
+
 // ProposeCRS propose a CRS.
 func (g *Governance) ProposeCRS(signedCRS []byte) {
 	g.lock.Lock()
