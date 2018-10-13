@@ -57,6 +57,15 @@ func NewPrivateKey() (*PrivateKey, error) {
 	}, nil
 }
 
+// NewPrivateKeyFromECDSA creates a new PrivateKey structure from
+// ecdsa.PrivateKey.
+func NewPrivateKeyFromECDSA(key *ecdsa.PrivateKey) *PrivateKey {
+	return &PrivateKey{
+		privateKey: *key,
+		publicKey:  *newPublicKey(key),
+	}
+}
+
 // newPublicKey creates a new PublicKey structure.
 func newPublicKey(prvKey *ecdsa.PrivateKey) *publicKey {
 	return &publicKey{
