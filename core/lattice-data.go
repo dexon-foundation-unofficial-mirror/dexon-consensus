@@ -235,6 +235,8 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 			if !config.isValidGenesisBlockTime(b) {
 				return ErrIncorrectBlockTime
 			}
+			// TODO(mission): make sure rounds between chainTip and current block
+			//                don't expect blocks from this chain.
 		}
 	} else {
 		if chainTip.Position.Round != b.Position.Round {

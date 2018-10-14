@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
@@ -866,30 +867,32 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 	totalOrderingConstructor func(chainNum uint32) *totalOrdering,
 	chainNum uint32,
-	blockNum int,
 	ackingCountGenerator func() int,
 	repeat int) {
-
 	var (
 		req               = s.Require()
-		gen               = test.NewBlocksGenerator(nil, hashBlock)
 		revealingSequence = make(map[string]struct{})
 		orderingSequence  = make(map[string]struct{})
+		genesisTime       = time.Now().UTC()
 	)
-
+	gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
+		NumChains:            chainNum,
+		MinBlockTimeInterval: 0,
+		MaxBlockTimeInterval: 500 * time.Millisecond,
+	}, ackingCountGenerator, hashBlock)
 	db, err := blockdb.NewMemBackedBlockDB()
-	req.Nil(err)
-	nodePrvKeys, err := gen.Generate(
-		chainNum, blockNum, ackingCountGenerator, db)
-	req.Nil(err)
-	req.Len(nodePrvKeys, int(chainNum))
+	req.NoError(err)
+	req.NoError(gen.Generate(
+		0,
+		genesisTime,
+		genesisTime.Add(20*time.Second),
+		db))
 	iter, err := db.GetAll()
-	req.Nil(err)
+	req.NoError(err)
 	// Setup a revealer that would reveal blocks forming
 	// valid DAGs.
 	revealer, err := test.NewRandomDAGRevealer(iter)
-	req.Nil(err)
-
+	req.NoError(err)
 	// TODO (mission): make this part run concurrently.
 	for i := 0; i < repeat; i++ {
 		revealed := ""
@@ -939,7 +942,6 @@ func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 	var (
 		chainNum        = uint32(23)
-		blockNum        = 50
 		phi      uint64 = 10
 		repeat          = 15
 	)
@@ -960,26 +962,22 @@ func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 		constructor := func(chainNum uint32) *totalOrdering {
 			return newTotalOrdering(0, phi, chainNum)
 		}
-		s.baseTestRandomlyGeneratedBlocks(
-			constructor, chainNum, blockNum, gen, repeat)
-		// Test for K=1,
+		s.baseTestRandomlyGeneratedBlocks(constructor, chainNum, gen, repeat)
+		// Test for K=1.
 		constructor = func(chainNum uint32) *totalOrdering {
 			return newTotalOrdering(1, phi, chainNum)
 		}
-		s.baseTestRandomlyGeneratedBlocks(
-			constructor, chainNum, blockNum, gen, repeat)
-		// Test for K=2,
+		s.baseTestRandomlyGeneratedBlocks(constructor, chainNum, gen, repeat)
+		// Test for K=2.
 		constructor = func(chainNum uint32) *totalOrdering {
 			return newTotalOrdering(2, phi, chainNum)
 		}
-		s.baseTestRandomlyGeneratedBlocks(
-			constructor, chainNum, blockNum, gen, repeat)
-		// Test for K=3,
+		s.baseTestRandomlyGeneratedBlocks(constructor, chainNum, gen, repeat)
+		// Test for K=3.
 		constructor = func(chainNum uint32) *totalOrdering {
 			return newTotalOrdering(3, phi, chainNum)
 		}
-		s.baseTestRandomlyGeneratedBlocks(
-			constructor, chainNum, blockNum, gen, repeat)
+		s.baseTestRandomlyGeneratedBlocks(constructor, chainNum, gen, repeat)
 	}
 }
 

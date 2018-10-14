@@ -19,6 +19,7 @@ package test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
@@ -35,25 +36,30 @@ type RevealerTestSuite struct {
 
 func (s *RevealerTestSuite) SetupSuite() {
 	var (
-		err      error
-		chainNum = uint32(19)
-		blockNum = 50
+		err         error
+		genesisTime = time.Now().UTC()
 	)
 	// Setup block database.
 	s.db, err = blockdb.NewMemBackedBlockDB()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 
 	// Randomly generate blocks.
-	gen := NewBlocksGenerator(nil, stableRandomHash)
-	nodes, err := gen.Generate(chainNum, blockNum, nil, s.db)
-	s.Require().Nil(err)
-	s.Require().Len(nodes, int(chainNum))
-
+	config := &BlocksGeneratorConfig{
+		NumChains:            19,
+		MinBlockTimeInterval: 0,
+		MaxBlockTimeInterval: 500 * time.Millisecond,
+	}
+	gen := NewBlocksGenerator(config, nil, stableRandomHash)
+	s.Require().NoError(gen.Generate(
+		0,
+		genesisTime,
+		genesisTime.Add(30*time.Second),
+		s.db))
 	// Cache the count of total generated block.
 	iter, err := s.db.GetAll()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	blocks, err := loadAllBlocks(iter)
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	s.totalBlockCount = len(blocks)
 }
 

@@ -351,13 +351,13 @@ func (s *LatticeDataTestSuite) TestSanityCheck() {
 
 func (s *LatticeDataTestSuite) TestRandomlyGeneratedBlocks() {
 	var (
-		chainNum  uint32 = 19
-		blockNum         = 50
-		repeat           = 20
-		delivered []*types.Block
-		err       error
-		req       = s.Require()
-		datum     []*latticeData
+		chainNum    uint32 = 19
+		repeat             = 20
+		delivered   []*types.Block
+		err         error
+		req         = s.Require()
+		datum       []*latticeData
+		genesisTime = time.Now().UTC()
 	)
 	if testing.Short() {
 		chainNum = 7
@@ -371,13 +371,20 @@ func (s *LatticeDataTestSuite) TestRandomlyGeneratedBlocks() {
 		maxBlockTimeInterval: 1000 * time.Second,
 		roundInterval:        1000 * time.Second,
 	}
-	genesisConfig.setRoundBeginTime(time.Now().UTC())
+	genesisConfig.setRoundBeginTime(genesisTime)
 	// Prepare a randomly generated blocks.
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)
-	gen := test.NewBlocksGenerator(nil, hashBlock)
-	_, err = gen.Generate(chainNum, blockNum, nil, db)
-	req.NoError(err)
+	gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
+		NumChains:            genesisConfig.numChains,
+		MinBlockTimeInterval: genesisConfig.minBlockTimeInterval,
+		MaxBlockTimeInterval: genesisConfig.maxBlockTimeInterval,
+	}, nil, hashBlock)
+	req.NoError(gen.Generate(
+		0,
+		genesisTime,
+		genesisTime.Add(genesisConfig.roundInterval),
+		db))
 	iter, err := db.GetAll()
 	req.NoError(err)
 	// Setup a revealer that would reveal blocks randomly but still form
