@@ -641,7 +641,7 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 	gpk, err := NewDKGGroupPublicKey(round,
 		con.gov.DKGMasterPublicKeys(round),
 		con.gov.DKGComplaints(round),
-		int(con.gov.Configuration(round).DKGSetSize/3))
+		int(con.gov.Configuration(round).DKGSetSize/3)+1)
 	if err != nil {
 		return err
 	}
