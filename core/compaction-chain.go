@@ -80,7 +80,8 @@ func (cc *compactionChain) extractBlocks() []*types.Block {
 	cc.blocksLock.Lock()
 	defer cc.blocksLock.Unlock()
 	for len(cc.pendingBlocks) != 0 &&
-		len(cc.pendingBlocks[0].Finalization.Randomness) != 0 {
+		(len(cc.pendingBlocks[0].Finalization.Randomness) != 0 ||
+			cc.pendingBlocks[0].Position.Round == 0) {
 		var block *types.Block
 		block, cc.pendingBlocks = cc.pendingBlocks[0], cc.pendingBlocks[1:]
 		delete(cc.blocks, block.Hash)

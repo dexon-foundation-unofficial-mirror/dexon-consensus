@@ -553,6 +553,9 @@ func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
 // ProcessAgreementResult processes the randomness request.
 func (con *Consensus) ProcessAgreementResult(
 	rand *types.AgreementResult) error {
+	if rand.Round == 0 {
+		return nil
+	}
 	if !con.ccModule.blockRegistered(rand.BlockHash) {
 		return nil
 	}
@@ -625,6 +628,9 @@ func (con *Consensus) ProcessAgreementResult(
 // ProcessBlockRandomnessResult processes the randomness result.
 func (con *Consensus) ProcessBlockRandomnessResult(
 	rand *types.BlockRandomnessResult) error {
+	if rand.Round == 0 {
+		return nil
+	}
 	if !con.ccModule.blockRegistered(rand.BlockHash) {
 		return nil
 	}

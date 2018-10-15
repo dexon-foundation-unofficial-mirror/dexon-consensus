@@ -84,6 +84,9 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 	for idx := range blocks {
 		blocks[idx] = &types.Block{
 			Hash: common.NewRandomHash(),
+			Position: types.Position{
+				Round: 1,
+			},
 		}
 		s.Require().False(cc.blockRegistered(blocks[idx].Hash))
 		cc.registerBlock(blocks[idx])
@@ -145,6 +148,40 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 				BlockHash:  blocks[i].Hash,
 				Randomness: h[:],
 			}))
+	}
+	delivered = append(delivered, cc.extractBlocks()...)
+	s.Require().Len(delivered, 10)
+
+	// The delivered order should be the same as processing order.
+	for i, block := range delivered {
+		s.Equal(block.Hash, blocks[i].Hash)
+	}
+}
+
+func (s *CompactionChainTestSuite) TestExtractBlocksRound0() {
+	cc := s.newCompactionChain()
+	blocks := make([]*types.Block, 10)
+	for idx := range blocks {
+		blocks[idx] = &types.Block{
+			Hash: common.NewRandomHash(),
+			Position: types.Position{
+				Round: 0,
+			},
+		}
+		s.Require().False(cc.blockRegistered(blocks[idx].Hash))
+		cc.registerBlock(blocks[idx])
+		s.Require().True(cc.blockRegistered(blocks[idx].Hash))
+	}
+	// Round 0 should be able to be extracted without randomness.
+	for i := 0; i < 3; i++ {
+		s.Require().NoError(cc.processBlock(blocks[i]))
+	}
+	delivered := cc.extractBlocks()
+	s.Require().Len(delivered, 3)
+
+	// Round 0 should be able to be extracted without randomness.
+	for i := 3; i < 10; i++ {
+		s.Require().NoError(cc.processBlock(blocks[i]))
 	}
 	delivered = append(delivered, cc.extractBlocks()...)
 	s.Require().Len(delivered, 10)
