@@ -100,7 +100,7 @@ func GenerateDefault(path string) error {
 				GenesisCRS:    "In DEXON we trust.",
 				LambdaBA:      250,
 				LambdaDKG:     1000,
-				RoundInterval: 365 * 86400 * 1000,
+				RoundInterval: 30 * 1000,
 			},
 			Legacy: Legacy{
 				ProposeIntervalMean:  500,
