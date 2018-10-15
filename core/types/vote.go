@@ -59,10 +59,7 @@ func (v *Vote) Clone() *Vote {
 		Type:       v.Type,
 		BlockHash:  v.BlockHash,
 		Period:     v.Period,
-		Position: Position{
-			ChainID: v.Position.ChainID,
-			Height:  v.Position.Height,
-		},
-		Signature: v.Signature.Clone(),
+		Position:   v.Position,
+		Signature:  v.Signature.Clone(),
 	}
 }

@@ -80,7 +80,7 @@ func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {
 }
 
 func (recv *consensusBAReceiver) ProposeBlock() {
-	block := recv.consensus.proposeBlock(recv.chainID)
+	block := recv.consensus.proposeBlock(recv.chainID, recv.round)
 	recv.consensus.baModules[recv.chainID].addCandidateBlock(block)
 	if err := recv.consensus.preProcessBlock(block); err != nil {
 		log.Println(err)
@@ -307,6 +307,7 @@ func NewConsensus(
 		)
 		// Hacky way to make agreement module self contained.
 		recv.agreementModule = agreementModule
+		recv.changeNotaryTime = dMoment
 		con.baModules[chainID] = agreementModule
 		con.receivers[chainID] = recv
 	}
@@ -314,18 +315,12 @@ func NewConsensus(
 }
 
 // Run starts running DEXON Consensus.
-func (con *Consensus) Run() {
+func (con *Consensus) Run(dMoment time.Time) {
 	go con.processMsg(con.network.ReceiveChan())
-	startTime := time.Now().UTC().Add(con.currentConfig.RoundInterval / 2)
-	con.initialRound(startTime)
-	func() {
-		con.dkgReady.L.Lock()
-		defer con.dkgReady.L.Unlock()
-		for con.dkgRunning != 2 {
-			con.dkgReady.Wait()
-		}
-	}()
-	time.Sleep(startTime.Sub(time.Now().UTC()))
+	con.runDKGTSIG(con.round)
+	round1 := uint64(1)
+	con.lattice.AppendConfig(round1, con.gov.Configuration(round1))
+	con.initialRound(dMoment)
 	ticks := make([]chan struct{}, 0, con.currentConfig.NumChains)
 	for i := uint32(0); i < con.currentConfig.NumChains; i++ {
 		tick := make(chan struct{})
@@ -348,7 +343,6 @@ func (con *Consensus) runBA(chainID uint32, tick <-chan struct{}) {
 	// TODO(jimmy-dexon): move this function inside agreement.
 	agreement := con.baModules[chainID]
 	recv := con.receivers[chainID]
-	recv.changeNotaryTime = time.Now().UTC()
 	recv.restartNotary <- true
 	nIDs := make(map[types.NodeID]struct{})
 	// Reset ticker
@@ -366,16 +360,19 @@ BALoop:
 		select {
 		case newNotary := <-recv.restartNotary:
 			if newNotary {
-				recv.changeNotaryTime.Add(con.currentConfig.RoundInterval)
-				nodes, err := con.nodeSetCache.GetNodeSet(con.round)
+				recv.changeNotaryTime =
+					recv.changeNotaryTime.Add(con.currentConfig.RoundInterval)
+				nodes, err := con.nodeSetCache.GetNodeSet(recv.round)
 				if err != nil {
 					panic(err)
 				}
 				nIDs = nodes.GetSubSet(
-					int(con.gov.Configuration(con.round).NotarySetSize),
-					types.NewNotarySetTarget(con.gov.CRS(con.round), chainID))
+					int(con.gov.Configuration(recv.round).NotarySetSize),
+					types.NewNotarySetTarget(con.gov.CRS(recv.round), chainID))
 			}
-			agreement.restart(nIDs, con.lattice.NextPosition(chainID))
+			nextPos := con.lattice.NextPosition(chainID)
+			nextPos.Round = recv.round
+			agreement.restart(nIDs, nextPos)
 		default:
 		}
 		err := agreement.nextState()
@@ -387,7 +384,7 @@ BALoop:
 }
 
 // runDKGTSIG starts running DKG+TSIG protocol.
-func (con *Consensus) runDKGTSIG() {
+func (con *Consensus) runDKGTSIG(round uint64) {
 	con.dkgReady.L.Lock()
 	defer con.dkgReady.L.Unlock()
 	if con.dkgRunning != 0 {
@@ -408,7 +405,6 @@ func (con *Consensus) runDKGTSIG() {
 					con.ID)
 			}
 		}()
-		round := con.round
 		if err := con.cfgModule.runDKG(round); err != nil {
 			panic(err)
 		}
@@ -462,12 +458,6 @@ func (con *Consensus) runCRS() {
 
 func (con *Consensus) initialRound(startTime time.Time) {
 	con.currentConfig = con.gov.Configuration(con.round)
-	func() {
-		con.dkgReady.L.Lock()
-		defer con.dkgReady.L.Unlock()
-		con.dkgRunning = 0
-	}()
-	con.runDKGTSIG()
 
 	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval/2),
 		func(time.Time) {
@@ -477,6 +467,15 @@ func (con *Consensus) initialRound(startTime time.Time) {
 		func(time.Time) {
 			con.cfgModule.registerDKG(
 				con.round+1, int(con.currentConfig.DKGSetSize/3))
+		})
+	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval*2/3),
+		func(time.Time) {
+			func() {
+				con.dkgReady.L.Lock()
+				defer con.dkgReady.L.Unlock()
+				con.dkgRunning = 0
+			}()
+			con.runDKGTSIG(con.round + 1)
 		})
 	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval),
 		func(time.Time) {
@@ -530,10 +529,11 @@ func (con *Consensus) processMsg(msgChan <-chan interface{}) {
 	}
 }
 
-func (con *Consensus) proposeBlock(chainID uint32) *types.Block {
+func (con *Consensus) proposeBlock(chainID uint32, round uint64) *types.Block {
 	block := &types.Block{
 		Position: types.Position{
 			ChainID: chainID,
+			Round:   round,
 		},
 	}
 	if err := con.prepareBlock(block, time.Now().UTC()); err != nil {
@@ -559,7 +559,7 @@ func (con *Consensus) ProcessAgreementResult(
 	if !con.ccModule.blockRegistered(rand.BlockHash) {
 		return nil
 	}
-	if con.round != rand.Round {
+	if DiffUint64(con.round, rand.Round) > 1 {
 		return nil
 	}
 	dkgSet, err := con.nodeSetCache.GetDKGSet(rand.Round)
@@ -685,6 +685,10 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 	for _, b := range deliveredBlocks {
 		if err = con.db.Put(*b); err != nil {
 			return
+		}
+		if b.Position.Round > con.round {
+			con.round++
+			con.lattice.AppendConfig(con.round+1, con.gov.Configuration(con.round+1))
 		}
 		// TODO(mission): clone types.FinalizationResult
 		con.nbModule.BlockDelivered(b.Hash, b.Finalization)

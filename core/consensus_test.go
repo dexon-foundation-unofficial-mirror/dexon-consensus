@@ -465,7 +465,7 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 		go con.processMsg(con.network.ReceiveChan())
 	}
 	for _, con := range cons {
-		con.runDKGTSIG()
+		con.runDKGTSIG(uint64(0))
 	}
 	for _, con := range cons {
 		func() {
