@@ -72,7 +72,7 @@ type Block struct {
 	ParentHash   common.Hash         `json:"parent_hash"`
 	Hash         common.Hash         `json:"hash"`
 	Position     Position            `json:"position"`
-	Timestamp    time.Time           `json:"timestamps"`
+	Timestamp    time.Time           `json:"timestamp"`
 	Acks         common.SortedHashes `json:"acks"`
 	Payload      []byte              `json:"payload"`
 	Witness      Witness             `json:"witness"`

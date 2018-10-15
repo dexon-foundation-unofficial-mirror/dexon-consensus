@@ -26,7 +26,7 @@ import (
 )
 
 func hashWitness(witness *types.Witness) (common.Hash, error) {
-	binaryTimestamp, err := witness.Timestamp.MarshalBinary()
+	binaryTimestamp, err := witness.Timestamp.UTC().MarshalBinary()
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -46,7 +46,7 @@ func hashBlock(block *types.Block) (common.Hash, error) {
 		binaryAcks[idx] = ack[:]
 	}
 	hashAcks := crypto.Keccak256Hash(binaryAcks...)
-	binaryTimestamp, err := block.Timestamp.MarshalBinary()
+	binaryTimestamp, err := block.Timestamp.UTC().MarshalBinary()
 	if err != nil {
 		return common.Hash{}, err
 	}
