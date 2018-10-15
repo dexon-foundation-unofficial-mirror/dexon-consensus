@@ -215,6 +215,7 @@ type Consensus struct {
 	tickerObj Ticker
 
 	// Misc.
+	dMoment      time.Time
 	nodeSetCache *NodeSetCache
 	round        uint64
 	lock         sync.RWMutex
@@ -282,6 +283,7 @@ func NewConsensus(
 		tickerObj:     newTicker(gov, round, TickerBA),
 		dkgReady:      sync.NewCond(&sync.Mutex{}),
 		cfgModule:     cfgModule,
+		dMoment:       dMoment,
 		nodeSetCache:  nodeSetCache,
 		ctx:           ctx,
 		ctxCancel:     ctxCancel,
@@ -315,12 +317,12 @@ func NewConsensus(
 }
 
 // Run starts running DEXON Consensus.
-func (con *Consensus) Run(dMoment time.Time) {
+func (con *Consensus) Run() {
 	go con.processMsg(con.network.ReceiveChan())
 	con.runDKGTSIG(con.round)
 	round1 := uint64(1)
 	con.lattice.AppendConfig(round1, con.gov.Configuration(round1))
-	con.initialRound(dMoment)
+	con.initialRound(con.dMoment)
 	ticks := make([]chan struct{}, 0, con.currentConfig.NumChains)
 	for i := uint32(0); i < con.currentConfig.NumChains; i++ {
 		tick := make(chan struct{})

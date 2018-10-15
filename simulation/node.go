@@ -101,7 +101,7 @@ func (n *node) run(serverEndpoint interface{}, dMoment time.Time) {
 	}
 	n.consensus = core.NewConsensus(
 		dMoment, n.app, n.gov, n.db, n.netModule, n.prvKey)
-	go n.consensus.Run(dMoment)
+	go n.consensus.Run()
 
 	// Blocks forever.
 MainLoop:
