@@ -22,6 +22,7 @@ import (
 	"math"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -41,9 +42,45 @@ var (
 
 // totalOrderingConfig is the configuration for total ordering.
 type totalOrderingConfig struct {
-	k         uint64
-	phi       uint64
+	roundBasedConfig
+	// k represents the k in 'k-level total ordering'.
+	// In short, only block height equals to (global minimum height + k)
+	// would be taken into consideration.
+	k uint64
+	// phi is a const to control how strong the leading preceding block
+	// should be.
+	phi uint64
+	// chainNum is the count of chains.
 	numChains uint32
+	// Is round cutting required?
+	isFlushRequired bool
+}
+
+func (config *totalOrderingConfig) fromConfig(
+	roundID uint64, cfg *types.Config) {
+	config.k = uint64(cfg.K)
+	config.numChains = cfg.NumChains
+	config.phi = uint64(float32(cfg.NumChains-1)*cfg.PhiRatio + 1)
+	config.setupRoundBasedFields(roundID, cfg)
+}
+
+func newGenesisTotalOrderingConfig(
+	dMoment time.Time, config *types.Config) *totalOrderingConfig {
+	c := &totalOrderingConfig{}
+	c.fromConfig(0, config)
+	c.setRoundBeginTime(dMoment)
+	return c
+}
+
+func newTotalOrderingConfig(
+	prev *totalOrderingConfig, cur *types.Config) *totalOrderingConfig {
+	c := &totalOrderingConfig{}
+	c.fromConfig(prev.roundID+1, cur)
+	c.setRoundBeginTime(prev.roundEndTime)
+	prev.isFlushRequired = c.k != prev.k ||
+		c.phi != prev.phi ||
+		c.numChains != prev.numChains
+	return c
 }
 
 // totalOrderingWinRecord caches which chains this candidate
@@ -62,7 +99,6 @@ func (rec *totalOrderingWinRecord) reset() {
 
 func newTotalOrderingWinRecord(chainNum uint32) (
 	rec *totalOrderingWinRecord) {
-
 	rec = &totalOrderingWinRecord{}
 	rec.reset()
 	rec.wins = make([]int8, chainNum)
@@ -71,10 +107,7 @@ func newTotalOrderingWinRecord(chainNum uint32) (
 
 // grade implements the 'grade' potential function described in white paper.
 func (rec *totalOrderingWinRecord) grade(
-	chainNum uint32,
-	phi uint64,
-	globalAnsLength uint64) int {
-
+	chainNum uint32, phi uint64, globalAnsLength uint64) int {
 	if uint64(rec.count) >= phi {
 		return 1
 	} else if uint64(rec.count) < phi-uint64(chainNum)+globalAnsLength {
@@ -122,7 +155,6 @@ func newTotalOrderingObjectCache(chainNum uint32) *totalOrderingObjectCache {
 // candidate (or a global view of acking status of pending set).
 func (cache *totalOrderingObjectCache) requestAckedStatus() (
 	acked []*totalOrderingHeightRecord) {
-
 	if len(cache.ackedStatus) == 0 {
 		acked = make([]*totalOrderingHeightRecord, cache.chainNum)
 		for idx := range acked {
@@ -143,14 +175,12 @@ func (cache *totalOrderingObjectCache) requestAckedStatus() (
 // recycleAckedStatys recycles the structure to record acking status.
 func (cache *totalOrderingObjectCache) recycleAckedStatus(
 	acked []*totalOrderingHeightRecord) {
-
 	cache.ackedStatus = append(cache.ackedStatus, acked)
 }
 
 // requestWinRecord requests an totalOrderingWinRecord instance.
 func (cache *totalOrderingObjectCache) requestWinRecord() (
 	win *totalOrderingWinRecord) {
-
 	win = cache.winRecordPool.Get().(*totalOrderingWinRecord)
 	win.reset()
 	return
@@ -159,7 +189,6 @@ func (cache *totalOrderingObjectCache) requestWinRecord() (
 // recycleWinRecord recycles an totalOrderingWinRecord instance.
 func (cache *totalOrderingObjectCache) recycleWinRecord(
 	win *totalOrderingWinRecord) {
-
 	if win == nil {
 		return
 	}
@@ -168,9 +197,7 @@ func (cache *totalOrderingObjectCache) recycleWinRecord(
 
 // requestHeightVector requests a structure to record acking heights
 // of one candidate.
-func (cache *totalOrderingObjectCache) requestHeightVector() (
-	hv []uint64) {
-
+func (cache *totalOrderingObjectCache) requestHeightVector() (hv []uint64) {
 	if len(cache.heightVectors) == 0 {
 		hv = make([]uint64, cache.chainNum)
 	} else {
@@ -186,16 +213,13 @@ func (cache *totalOrderingObjectCache) requestHeightVector() (
 
 // recycleHeightVector recycles an instance to record acking heights
 // of one candidate.
-func (cache *totalOrderingObjectCache) recycleHeightVector(
-	hv []uint64) {
-
+func (cache *totalOrderingObjectCache) recycleHeightVector(hv []uint64) {
 	cache.heightVectors = append(cache.heightVectors, hv)
 }
 
 // requestWinRecordContainer requests a map of totalOrderingWinRecord.
 func (cache *totalOrderingObjectCache) requestWinRecordContainer() (
 	con []*totalOrderingWinRecord) {
-
 	if len(cache.winRecordContainers) == 0 {
 		con = make([]*totalOrderingWinRecord, cache.chainNum)
 	} else {
@@ -212,14 +236,12 @@ func (cache *totalOrderingObjectCache) requestWinRecordContainer() (
 // recycleWinRecordContainer recycles a map of totalOrderingWinRecord.
 func (cache *totalOrderingObjectCache) recycleWinRecordContainer(
 	con []*totalOrderingWinRecord) {
-
 	cache.winRecordContainers = append(cache.winRecordContainers, con)
 }
 
 // requestAckedVector requests an acked vector instance.
 func (cache *totalOrderingObjectCache) requestAckedVector() (
 	acked map[common.Hash]struct{}) {
-
 	if len(cache.ackedVectors) == 0 {
 		acked = make(map[common.Hash]struct{})
 	} else {
@@ -236,7 +258,6 @@ func (cache *totalOrderingObjectCache) requestAckedVector() (
 // recycleAckedVector recycles an acked vector instance.
 func (cache *totalOrderingObjectCache) recycleAckedVector(
 	acked map[common.Hash]struct{}) {
-
 	if acked == nil {
 		return
 	}
@@ -270,7 +291,6 @@ type totalOrderingCandidateInfo struct {
 func newTotalOrderingCandidateInfo(
 	candidateHash common.Hash,
 	objCache *totalOrderingObjectCache) *totalOrderingCandidateInfo {
-
 	return &totalOrderingCandidateInfo{
 		ackedStatus: objCache.requestAckedStatus(),
 		winRecords:  objCache.requestWinRecordContainer(),
@@ -288,7 +308,6 @@ func (v *totalOrderingCandidateInfo) clean(otherCandidateChainID uint32) {
 // golangs' GC.
 func (v *totalOrderingCandidateInfo) recycle(
 	objCache *totalOrderingObjectCache) {
-
 	if v.winRecords != nil {
 		for _, win := range v.winRecords {
 			objCache.recycleWinRecord(win)
@@ -330,9 +349,7 @@ func (v *totalOrderingCandidateInfo) addBlock(b *types.Block) (err error) {
 //   - k = 1
 //  then only block height >= 2 would be added to acking node set.
 func (v *totalOrderingCandidateInfo) getAckingNodeSetLength(
-	global *totalOrderingCandidateInfo,
-	k uint64) (count uint64) {
-
+	global *totalOrderingCandidateInfo, k uint64) (count uint64) {
 	var rec *totalOrderingHeightRecord
 	for idx, gRec := range global.ackedStatus {
 		if gRec.count == 0 {
@@ -361,12 +378,10 @@ func (v *totalOrderingCandidateInfo) updateAckingHeightVector(
 	k uint64,
 	dirtyChainIDs []int,
 	objCache *totalOrderingObjectCache) {
-
 	var (
 		idx       int
 		gRec, rec *totalOrderingHeightRecord
 	)
-
 	// The reason not to merge the two loops is the iteration over map
 	// is expensive when chain count is large, iterating over dirty
 	// chains is cheaper.
@@ -420,12 +435,10 @@ func (v *totalOrderingCandidateInfo) updateWinRecord(
 	other *totalOrderingCandidateInfo,
 	dirtyChainIDs []int,
 	objCache *totalOrderingObjectCache) {
-
 	var (
 		idx    int
 		height uint64
 	)
-
 	// The reason not to merge the two loops is the iteration over map
 	// is expensive when chain count is large, iterating over dirty
 	// chains is cheaper.
@@ -483,7 +496,6 @@ type totalOrderingGlobalVector struct {
 
 func newTotalOrderingGlobalVector(
 	chainNum uint32) *totalOrderingGlobalVector {
-
 	return &totalOrderingGlobalVector{
 		blocks: make([][]*types.Block, chainNum),
 	}
@@ -505,14 +517,12 @@ func (global *totalOrderingGlobalVector) addBlock(b *types.Block) (err error) {
 // updateCandidateInfo udpate cached candidate info.
 func (global *totalOrderingGlobalVector) updateCandidateInfo(
 	dirtyChainIDs []int, objCache *totalOrderingObjectCache) {
-
 	var (
 		idx    int
 		blocks []*types.Block
 		info   *totalOrderingCandidateInfo
 		rec    *totalOrderingHeightRecord
 	)
-
 	if global.cachedCandidateInfo == nil {
 		info = newTotalOrderingCandidateInfo(common.Hash{}, objCache)
 		for idx, blocks = range global.blocks {
@@ -546,17 +556,8 @@ type totalOrdering struct {
 	// pendings stores blocks awaiting to be ordered.
 	pendings map[common.Hash]*types.Block
 
-	// k represents the k in 'k-level total ordering'.
-	// In short, only block height equals to (global minimum height + k)
-	// would be taken into consideration.
-	k uint64
-
-	// phi is a const to control how strong the leading preceding block
-	// should be.
-	phi uint64
-
-	// chainNum is the count of chains.
-	chainNum uint32
+	// The round of config used when performing total ordering.
+	curRound uint64
 
 	// globalVector group all pending blocks by proposers and
 	// sort them by block height. This structure is helpful when:
@@ -591,26 +592,22 @@ type totalOrdering struct {
 	configs []*totalOrderingConfig
 }
 
-func newTotalOrdering(k, phi uint64, chainNum uint32) *totalOrdering {
+// newTotalOrdering constructs an totalOrdering instance.
+func newTotalOrdering(genesisConfig *totalOrderingConfig) *totalOrdering {
+	globalVector := newTotalOrderingGlobalVector(genesisConfig.numChains)
+	objCache := newTotalOrderingObjectCache(genesisConfig.numChains)
+	candidates := make([]*totalOrderingCandidateInfo, genesisConfig.numChains)
 	to := &totalOrdering{
 		pendings:              make(map[common.Hash]*types.Block),
-		k:                     k,
-		phi:                   phi,
-		chainNum:              chainNum,
-		globalVector:          newTotalOrderingGlobalVector(chainNum),
-		dirtyChainIDs:         make([]int, 0, chainNum),
+		globalVector:          globalVector,
+		dirtyChainIDs:         make([]int, 0, genesisConfig.numChains),
 		acked:                 make(map[common.Hash]map[common.Hash]struct{}),
-		objCache:              newTotalOrderingObjectCache(chainNum),
+		objCache:              objCache,
 		candidateChainMapping: make(map[common.Hash]uint32),
-		candidates:            make([]*totalOrderingCandidateInfo, chainNum),
-		candidateChainIDs:     make([]uint32, 0, chainNum),
+		candidates:            candidates,
+		candidateChainIDs:     make([]uint32, 0, genesisConfig.numChains),
 	}
-	to.configs = []*totalOrderingConfig{
-		&totalOrderingConfig{
-			k:         k,
-			phi:       phi,
-			numChains: chainNum,
-		}}
+	to.configs = []*totalOrderingConfig{genesisConfig}
 	return to
 }
 
@@ -618,15 +615,12 @@ func newTotalOrdering(k, phi uint64, chainNum uint32) *totalOrdering {
 // round R, next time you can only add the config for round R+1.
 func (to *totalOrdering) appendConfig(
 	round uint64, config *types.Config) error {
-
 	if round != uint64(len(to.configs)) {
 		return ErrRoundNotIncreasing
 	}
-	to.configs = append(to.configs, &totalOrderingConfig{
-		numChains: config.NumChains,
-		k:         uint64(config.K),
-		phi:       uint64(float32(config.NumChains-1)*config.PhiRatio + 1),
-	})
+	to.configs = append(
+		to.configs,
+		newTotalOrderingConfig(to.configs[len(to.configs)-1], config))
 	return nil
 }
 
@@ -666,8 +660,8 @@ func (to *totalOrdering) buildBlockRelation(b *types.Block) {
 	}
 }
 
-// clean would remove a block from working set. This behaviour
-// would prevent our memory usage growing infinity.
+// clean a block from working set. This behaviour would prevent
+// our memory usage growing infinity.
 func (to *totalOrdering) clean(b *types.Block) {
 	var (
 		h       = b.Hash
@@ -699,7 +693,6 @@ func (to *totalOrdering) updateVectors(b *types.Block) (err error) {
 	if err = to.globalVector.addBlock(b); err != nil {
 		return
 	}
-
 	// Update acking status of candidates.
 	for candidateHash, chainID = range to.candidateChainMapping {
 		if _, acked = to.acked[candidateHash][b.Hash]; !acked {
@@ -720,7 +713,6 @@ func (to *totalOrdering) prepareCandidate(candidate *types.Block) {
 			candidate.Hash, to.objCache)
 		chainID = candidate.Position.ChainID
 	)
-
 	to.candidates[chainID] = info
 	to.candidateChainMapping[candidate.Hash] = chainID
 	// Add index to slot to allocated list, make sure the modified list sorted.
@@ -728,7 +720,6 @@ func (to *totalOrdering) prepareCandidate(candidate *types.Block) {
 	sort.Slice(to.candidateChainIDs, func(i, j int) bool {
 		return to.candidateChainIDs[i] < to.candidateChainIDs[j]
 	})
-
 	info.ackedStatus[chainID] = &totalOrderingHeightRecord{
 		minHeight: candidate.Position.Height,
 		count:     uint64(len(to.globalVector.blocks[chainID])),
@@ -780,13 +771,11 @@ func (to *totalOrdering) output(precedings map[common.Hash]struct{}) (ret []*typ
 		to.globalVector.blocks[int(chainID)] =
 			to.globalVector.blocks[int(chainID)][1:]
 		ret = append(ret, b)
-
 		// Remove block relations.
 		to.clean(b)
 		to.dirtyChainIDs = append(to.dirtyChainIDs, int(chainID))
 	}
 	sort.Sort(types.ByHash(ret))
-
 	// Find new candidates from tip of globalVector of each chain.
 	// The complexity here is O(N^2logN).
 	// TODO(mission): only those tips that acking some blocks in
@@ -815,20 +804,18 @@ func (to *totalOrdering) output(precedings map[common.Hash]struct{}) (ret []*typ
 //  - check if the preceding set deliverable by checking potential function
 func (to *totalOrdering) generateDeliverSet() (
 	delivered map[common.Hash]struct{}, early bool) {
-
 	var (
 		chainID, otherChainID uint32
 		info, otherInfo       *totalOrderingCandidateInfo
 		precedings            = make(map[uint32]struct{})
+		cfg                   = to.configs[to.curRound]
 	)
-
 	to.globalVector.updateCandidateInfo(to.dirtyChainIDs, to.objCache)
 	globalInfo := to.globalVector.cachedCandidateInfo
 	for _, chainID = range to.candidateChainIDs {
 		to.candidates[chainID].updateAckingHeightVector(
-			globalInfo, to.k, to.dirtyChainIDs, to.objCache)
+			globalInfo, cfg.k, to.dirtyChainIDs, to.objCache)
 	}
-
 	// Update winning records for each candidate.
 	// TODO(mission): It's not reasonable to
 	//                request one routine for each candidate, the context
@@ -852,11 +839,10 @@ func (to *totalOrdering) generateDeliverSet() (
 		}(chainID, info)
 	}
 	wg.Wait()
-
 	// Reset dirty chains.
 	to.dirtyChainIDs = to.dirtyChainIDs[:0]
-
-	globalAnsLength := globalInfo.getAckingNodeSetLength(globalInfo, to.k)
+	// TODO(mission): ANS should be bound by current numChains.
+	globalAnsLength := globalInfo.getAckingNodeSetLength(globalInfo, cfg.k)
 CheckNextCandidateLoop:
 	for _, chainID = range to.candidateChainIDs {
 		info = to.candidates[chainID]
@@ -865,9 +851,9 @@ CheckNextCandidateLoop:
 				continue
 			}
 			otherInfo = to.candidates[otherChainID]
+			// TODO(mission): grade should be bound by current numChains.
 			if otherInfo.winRecords[chainID].grade(
-				to.chainNum, to.phi, globalAnsLength) != 0 {
-
+				cfg.numChains, cfg.phi, globalAnsLength) != 0 {
 				continue CheckNextCandidateLoop
 			}
 		}
@@ -876,7 +862,6 @@ CheckNextCandidateLoop:
 	if len(precedings) == 0 {
 		return
 	}
-
 	// internal is a helper function to verify internal stability.
 	internal := func() bool {
 		var (
@@ -889,8 +874,9 @@ CheckNextCandidateLoop:
 			}
 			beaten = false
 			for p = range precedings {
+				// TODO(mission): grade should be bound by current numChains.
 				if beaten = to.candidates[p].winRecords[chainID].grade(
-					to.chainNum, to.phi, globalAnsLength) == 1; beaten {
+					cfg.numChains, cfg.phi, globalAnsLength) == 1; beaten {
 					break
 				}
 			}
@@ -900,7 +886,6 @@ CheckNextCandidateLoop:
 		}
 		return true
 	}
-
 	// checkAHV is a helper function to verify external stability.
 	// It would make sure some preceding block is strong enough
 	// to lead the whole preceding set.
@@ -915,7 +900,7 @@ CheckNextCandidateLoop:
 			for _, height = range info.cachedHeightVector {
 				if height != infinity {
 					count++
-					if count > to.phi {
+					if count > cfg.phi {
 						return true
 					}
 				}
@@ -923,25 +908,24 @@ CheckNextCandidateLoop:
 		}
 		return false
 	}
-
 	// checkANS is a helper function to verify external stability.
 	// It would make sure all preceding blocks are strong enough
 	// to be delivered.
 	checkANS := func() bool {
 		var chainAnsLength uint64
 		for p := range precedings {
+			// TODO(mission): ANS should be bound by current numChains.
 			chainAnsLength = to.candidates[p].getAckingNodeSetLength(
-				globalInfo, to.k)
-			if uint64(chainAnsLength) < uint64(to.chainNum)-to.phi {
+				globalInfo, cfg.k)
+			if uint64(chainAnsLength) < uint64(cfg.numChains)-cfg.phi {
 				return false
 			}
 		}
 		return true
 	}
-
 	// If all chains propose enough blocks, we should force
 	// to deliver since the whole picture of the DAG is revealed.
-	if globalAnsLength != uint64(to.chainNum) {
+	if globalAnsLength != uint64(cfg.numChains) {
 		// Check internal stability first.
 		if !internal() {
 			return
@@ -968,12 +952,11 @@ func (to *totalOrdering) processBlock(b *types.Block) (
 	// NOTE: I assume the block 'b' is already safe for total ordering.
 	//       That means, all its acking blocks are during/after
 	//       total ordering stage.
-
-	if b.Position.ChainID >= to.chainNum {
+	cfg := to.configs[to.curRound]
+	if b.Position.ChainID >= cfg.numChains {
 		err = ErrChainIDNotRecognized
 		return
 	}
-
 	to.pendings[b.Hash] = b
 	to.buildBlockRelation(b)
 	if err = to.updateVectors(b); err != nil {

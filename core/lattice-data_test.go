@@ -54,23 +54,21 @@ func (s *LatticeDataTestSuite) genTestCase1() (
 		err       error
 	)
 	// Setup stuffs.
-	genesisConfig := &latticeDataConfig{
-		numChains:            chainNum,
-		minBlockTimeInterval: 2 * time.Nanosecond,
-		maxBlockTimeInterval: 1000 * time.Second,
-		roundInterval:        500 * time.Second,
+	genesisConfig := &types.Config{
+		RoundInterval:    500 * time.Second,
+		NumChains:        chainNum,
+		MinBlockInterval: 2 * time.Nanosecond,
+		MaxBlockInterval: 1000 * time.Second,
 	}
-	genesisConfig.setRoundBeginTime(now)
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)
-	data = newLatticeData(db, genesisConfig)
-	config := &latticeDataConfig{
-		numChains:            chainNum,
-		minBlockTimeInterval: 2 * time.Nanosecond,
-		maxBlockTimeInterval: 1000 * time.Second,
-		roundInterval:        1000 * time.Second,
+	data = newLatticeData(db, newGenesisLatticeDataConfig(now, genesisConfig))
+	config := &types.Config{
+		RoundInterval:    1000 * time.Second,
+		NumChains:        chainNum,
+		MinBlockInterval: 2 * time.Nanosecond,
+		MaxBlockInterval: 1000 * time.Second,
 	}
-	config.setRoundBeginTime(now)
 	data.appendConfig(1, config)
 	// Add genesis blocks.
 	addBlock := func(b *types.Block) {
@@ -365,25 +363,24 @@ func (s *LatticeDataTestSuite) TestRandomlyGeneratedBlocks() {
 	}
 	// Setup configuration that no restriction on block interval and
 	// round cutting.
-	genesisConfig := &latticeDataConfig{
-		numChains:            chainNum,
-		minBlockTimeInterval: 0,
-		maxBlockTimeInterval: 1000 * time.Second,
-		roundInterval:        1000 * time.Second,
+	genesisConfig := &types.Config{
+		RoundInterval:    1000 * time.Second,
+		NumChains:        chainNum,
+		MinBlockInterval: 0,
+		MaxBlockInterval: 1000 * time.Second,
 	}
-	genesisConfig.setRoundBeginTime(genesisTime)
 	// Prepare a randomly generated blocks.
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)
 	gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
-		NumChains:            genesisConfig.numChains,
-		MinBlockTimeInterval: genesisConfig.minBlockTimeInterval,
-		MaxBlockTimeInterval: genesisConfig.maxBlockTimeInterval,
+		NumChains:            genesisConfig.NumChains,
+		MinBlockTimeInterval: genesisConfig.MinBlockInterval,
+		MaxBlockTimeInterval: genesisConfig.MaxBlockInterval,
 	}, nil, hashBlock)
 	req.NoError(gen.Generate(
 		0,
 		genesisTime,
-		genesisTime.Add(genesisConfig.roundInterval),
+		genesisTime.Add(genesisConfig.RoundInterval),
 		db))
 	iter, err := db.GetAll()
 	req.NoError(err)
@@ -397,7 +394,8 @@ func (s *LatticeDataTestSuite) TestRandomlyGeneratedBlocks() {
 	for i := 0; i < repeat; i++ {
 		db, err := blockdb.NewMemBackedBlockDB()
 		req.NoError(err)
-		data := newLatticeData(db, genesisConfig)
+		data := newLatticeData(
+			db, newGenesisLatticeDataConfig(genesisTime, genesisConfig))
 		deliveredHashes := common.Hashes{}
 		revealedHashes := common.Hashes{}
 		revealer.Reset()
@@ -479,16 +477,16 @@ func (s *LatticeDataTestSuite) TestPrepareBlock() {
 	)
 	// Setup configuration that no restriction on block interval and
 	// round cutting.
-	genesisConfig := &latticeDataConfig{
-		numChains:            chainNum,
-		minBlockTimeInterval: 0,
-		maxBlockTimeInterval: 3000 * time.Second,
-		roundInterval:        3000 * time.Second,
+	genesisConfig := &types.Config{
+		RoundInterval:    3000 * time.Second,
+		NumChains:        chainNum,
+		MinBlockInterval: 0,
+		MaxBlockInterval: 3000 * time.Second,
 	}
-	genesisConfig.setRoundBeginTime(time.Now().UTC())
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)
-	data := newLatticeData(db, genesisConfig)
+	data := newLatticeData(
+		db, newGenesisLatticeDataConfig(time.Now().UTC(), genesisConfig))
 	// Setup genesis blocks.
 	b00 := s.prepareGenesisBlock(0)
 	time.Sleep(minInterval)
@@ -568,14 +566,14 @@ func (s *LatticeDataTestSuite) TestNextPosition() {
 	// Test 'NextPosition' method when lattice is empty.
 	// Setup a configuration that no restriction on block interval and
 	// round cutting.
-	genesisConfig := &latticeDataConfig{
-		numChains:            4,
-		minBlockTimeInterval: 0,
-		maxBlockTimeInterval: 1000 * time.Second,
-		roundInterval:        1000 * time.Second,
+	genesisConfig := &types.Config{
+		RoundInterval:    1000 * time.Second,
+		NumChains:        4,
+		MinBlockInterval: 0,
+		MaxBlockInterval: 1000 * time.Second,
 	}
-	genesisConfig.setRoundBeginTime(time.Now().UTC())
-	data = newLatticeData(nil, genesisConfig)
+	data = newLatticeData(
+		nil, newGenesisLatticeDataConfig(time.Now().UTC(), genesisConfig))
 	s.Equal(data.nextPosition(0), types.Position{ChainID: 0, Height: 0})
 }
 
@@ -596,24 +594,20 @@ func (s *LatticeDataTestSuite) TestNumChainsChange() {
 	//   should be no error when passing to latticeData.sanityCheck
 	//   and latticeData.addBlock.
 	// - The delivered blocks should form a valid DAG.
-
-	begin := time.Now().UTC()
-	fixConfig := func(config *latticeDataConfig) *latticeDataConfig {
-		config.minBlockTimeInterval = 10 * time.Second
-		config.maxBlockTimeInterval = time.Hour // We don't care time.
-		config.roundInterval = 100 * time.Second
-		config.setRoundBeginTime(begin)
-		begin = config.roundEndTime
+	fixConfig := func(config *types.Config) *types.Config {
+		config.MinBlockInterval = 10 * time.Second
+		config.MaxBlockInterval = time.Hour // We don't care time.
+		config.RoundInterval = 100 * time.Second
 		return config
 	}
 	var (
 		req       = s.Require()
 		maxChains = uint32(16)
-		configs   = []*latticeDataConfig{
-			fixConfig(&latticeDataConfig{numChains: 13}),
-			fixConfig(&latticeDataConfig{numChains: 10}),
-			fixConfig(&latticeDataConfig{numChains: maxChains}),
-			fixConfig(&latticeDataConfig{numChains: 7}),
+		configs   = []*types.Config{
+			fixConfig(&types.Config{NumChains: 13}),
+			fixConfig(&types.Config{NumChains: 10}),
+			fixConfig(&types.Config{NumChains: maxChains}),
+			fixConfig(&types.Config{NumChains: 7}),
 		}
 		randObj = rand.New(rand.NewSource(time.Now().UnixNano()))
 	)
@@ -621,7 +615,8 @@ func (s *LatticeDataTestSuite) TestNumChainsChange() {
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)
 	// Set up latticeData instance.
-	lattice := newLatticeData(db, configs[0])
+	lattice := newLatticeData(db, newGenesisLatticeDataConfig(
+		time.Now().UTC(), configs[0]))
 	req.NoError(lattice.appendConfig(1, configs[1]))
 	req.NoError(lattice.appendConfig(2, configs[2]))
 	req.NoError(lattice.appendConfig(3, configs[3]))
@@ -640,7 +635,7 @@ func (s *LatticeDataTestSuite) TestNumChainsChange() {
 			}
 			c := configs[nextRound]
 			nextRound++
-			for i := uint32(0); i < c.numChains; i++ {
+			for i := uint32(0); i < c.NumChains; i++ {
 				candidateChainIDs = append(candidateChainIDs, i)
 			}
 		}

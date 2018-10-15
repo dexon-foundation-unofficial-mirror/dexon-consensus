@@ -59,30 +59,21 @@ var (
 
 // latticeDataConfig is the configuration for latticeData for each round.
 type latticeDataConfig struct {
+	roundBasedConfig
 	// Number of chains between runs
 	numChains uint32
 	// Block interval specifies reasonable time difference between
 	// parent/child blocks.
 	minBlockTimeInterval time.Duration
 	maxBlockTimeInterval time.Duration
-	// roundBeginTime is the beginning of round, as local time.
-	roundBeginTime time.Time
-	roundInterval  time.Duration
-	// roundEndTime is a cache for begin + interval.
-	roundEndTime time.Time
 }
 
 // Initiate latticeDataConfig from types.Config.
-func (config *latticeDataConfig) fromConfig(cfg *types.Config) {
+func (config *latticeDataConfig) fromConfig(roundID uint64, cfg *types.Config) {
 	config.numChains = cfg.NumChains
 	config.minBlockTimeInterval = cfg.MinBlockInterval
 	config.maxBlockTimeInterval = cfg.MaxBlockInterval
-	config.roundInterval = cfg.RoundInterval
-}
-
-func (config *latticeDataConfig) setRoundBeginTime(begin time.Time) {
-	config.roundBeginTime = begin
-	config.roundEndTime = begin.Add(config.roundInterval)
+	config.setupRoundBasedFields(roundID, cfg)
 }
 
 // Check if timestamp of a block is valid according to a reference time.
@@ -102,15 +93,17 @@ func (config *latticeDataConfig) isValidGenesisBlockTime(b *types.Block) bool {
 func newGenesisLatticeDataConfig(
 	dMoment time.Time, config *types.Config) *latticeDataConfig {
 	c := &latticeDataConfig{}
-	c.fromConfig(config)
+	c.fromConfig(0, config)
 	c.setRoundBeginTime(dMoment)
 	return c
 }
 
 // newLatticeDataConfig constructs a latticeDataConfig instance.
-func newLatticeDataConfig(prev, cur *types.Config) *latticeDataConfig {
+func newLatticeDataConfig(
+	prev *latticeDataConfig, cur *types.Config) *latticeDataConfig {
 	c := &latticeDataConfig{}
-	c.fromConfig(cur)
+	c.fromConfig(prev.roundID+1, cur)
+	c.setRoundBeginTime(prev.roundEndTime)
 	return c
 }
 
@@ -271,7 +264,6 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 // lattice and deletes blocks which will not be used.
 func (data *latticeData) addBlock(
 	block *types.Block) (deliverable []*types.Block, err error) {
-
 	var (
 		bAck    *types.Block
 		updated bool
@@ -465,26 +457,26 @@ func (data *latticeData) getConfig(round uint64) (config *latticeDataConfig) {
 // appendConfig appends a configuration for upcoming round. When you append
 // a config for round R, next time you can only append the config for round R+1.
 func (data *latticeData) appendConfig(
-	round uint64, config *latticeDataConfig) (err error) {
+	round uint64, config *types.Config) (err error) {
 	// Make sure caller knows which round this config belongs to.
 	if round != uint64(len(data.configs)) {
 		return ErrRoundNotIncreasing
 	}
 	// Set round beginning time.
-	config.setRoundBeginTime(data.configs[len(data.configs)-1].roundEndTime)
-	data.configs = append(data.configs, config)
+	newConfig := newLatticeDataConfig(data.configs[len(data.configs)-1], config)
+	data.configs = append(data.configs, newConfig)
 	// Resize each slice if incoming config contains larger number of chains.
-	if uint32(len(data.chains)) < config.numChains {
-		count := config.numChains - uint32(len(data.chains))
+	if uint32(len(data.chains)) < newConfig.numChains {
+		count := newConfig.numChains - uint32(len(data.chains))
 		for _, status := range data.chains {
 			status.lastAckPos = append(
 				status.lastAckPos, make([]*types.Position, count)...)
 		}
-		for i := uint32(len(data.chains)); i < config.numChains; i++ {
+		for i := uint32(len(data.chains)); i < newConfig.numChains; i++ {
 			data.chains = append(data.chains, &chainStatus{
 				ID:         i,
 				blocks:     []*types.Block{},
-				lastAckPos: make([]*types.Position, config.numChains),
+				lastAckPos: make([]*types.Position, newConfig.numChains),
 			})
 		}
 	}

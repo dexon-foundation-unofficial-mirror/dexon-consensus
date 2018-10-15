@@ -23,7 +23,6 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -34,7 +33,6 @@ type Lattice struct {
 	chainNum   uint32
 	app        Application
 	debug      Debug
-	lastConfig *types.Config
 	pool       blockPool
 	data       *latticeData
 	toModule   *totalOrdering
@@ -51,19 +49,16 @@ func NewLattice(
 	db blockdb.BlockDatabase) (s *Lattice) {
 	// Create genesis latticeDataConfig.
 	dataConfig := newGenesisLatticeDataConfig(dMoment, cfg)
+	toConfig := newGenesisTotalOrderingConfig(dMoment, cfg)
 	s = &Lattice{
 		authModule: authModule,
 		chainNum:   cfg.NumChains,
 		app:        app,
 		debug:      debug,
-		lastConfig: cfg,
 		pool:       newBlockPool(cfg.NumChains),
 		data:       newLatticeData(db, dataConfig),
-		toModule: newTotalOrdering(
-			uint64(cfg.K),
-			uint64(float32(cfg.NumChains-1)*cfg.PhiRatio+1),
-			cfg.NumChains),
-		ctModule: newConsensusTimestamp(cfg.NumChains),
+		toModule:   newTotalOrdering(toConfig),
+		ctModule:   newConsensusTimestamp(cfg.NumChains),
 	}
 	return
 }
@@ -96,12 +91,11 @@ func (s *Lattice) PrepareBlock(
 // If some acking blocks don't exists, Lattice would help to cache this block
 // and retry when lattice updated in Lattice.ProcessBlock.
 func (s *Lattice) SanityCheck(b *types.Block) (err error) {
-	// Check the hash of block.
-	hash, err := hashBlock(b)
-	if err != nil || hash != b.Hash {
-		err = ErrIncorrectHash
+	// Verify block's signature.
+	if err = s.authModule.VerifyBlock(b); err != nil {
 		return
 	}
+	// Make sure acks are sorted.
 	for i := range b.Acks {
 		if i == 0 {
 			continue
@@ -111,15 +105,7 @@ func (s *Lattice) SanityCheck(b *types.Block) (err error) {
 			return
 		}
 	}
-	// Check the signer.
-	pubKey, err := crypto.SigToPub(b.Hash, b.Signature)
-	if err != nil {
-		return
-	}
-	if !b.ProposerID.Equal(types.NewNodeID(pubKey)) {
-		err = ErrIncorrectSignature
-		return
-	}
+	// Verify data in application layer.
 	if !s.app.VerifyBlock(b) {
 		err = ErrInvalidBlock
 		return err
@@ -227,8 +213,7 @@ func (s *Lattice) AppendConfig(round uint64, config *types.Config) (err error) {
 	defer s.lock.Unlock()
 
 	s.pool.resize(config.NumChains)
-	if err = s.data.appendConfig(
-		round, newLatticeDataConfig(s.lastConfig, config)); err != nil {
+	if err = s.data.appendConfig(round, config); err != nil {
 		return
 	}
 	if err = s.toModule.appendConfig(round, config); err != nil {
@@ -237,6 +222,5 @@ func (s *Lattice) AppendConfig(round uint64, config *types.Config) (err error) {
 	if err = s.ctModule.appendConfig(round, config); err != nil {
 		return
 	}
-	s.lastConfig = config
 	return
 }

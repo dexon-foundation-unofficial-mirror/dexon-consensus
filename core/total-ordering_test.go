@@ -102,7 +102,15 @@ func (s *TotalOrderingTestSuite) TestBlockRelation() {
 		Acks: common.NewSortedHashes(common.Hashes{blockB.Hash}),
 	}
 
-	to := newTotalOrdering(1, 3, uint32(len(nodes)))
+	genesisConfig := &totalOrderingConfig{
+		roundBasedConfig: roundBasedConfig{
+			roundInterval: 1000 * time.Second,
+		},
+		k:         1,
+		phi:       3,
+		numChains: uint32(len(nodes)),
+	}
+	to := newTotalOrdering(genesisConfig)
 	s.checkNotDeliver(to, blockA)
 	s.checkNotDeliver(to, blockB)
 	s.checkNotDeliver(to, blockC)
@@ -283,7 +291,15 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 	b10.Acks = append(b10.Acks, b10.Hash)
 
 	// Make sure we won't hang when cycle exists.
-	to := newTotalOrdering(1, 3, uint32(len(nodes)))
+	genesisConfig := &totalOrderingConfig{
+		roundBasedConfig: roundBasedConfig{
+			roundInterval: 1000 * time.Second,
+		},
+		k:         1,
+		phi:       3,
+		numChains: uint32(len(nodes)),
+	}
+	to := newTotalOrdering(genesisConfig)
 	s.checkNotDeliver(to, b00)
 	s.checkNotDeliver(to, b01)
 	s.checkNotDeliver(to, b02)
@@ -296,7 +312,15 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 
 func (s *TotalOrderingTestSuite) TestNotValidDAGDetection() {
 	nodes := test.GenerateRandomNodeIDs(5)
-	to := newTotalOrdering(1, 3, uint32(len(nodes)))
+	genesisConfig := &totalOrderingConfig{
+		roundBasedConfig: roundBasedConfig{
+			roundInterval: 1000 * time.Second,
+		},
+		k:         1,
+		phi:       3,
+		numChains: uint32(len(nodes)),
+	}
+	to := newTotalOrdering(genesisConfig)
 
 	b00 := s.genGenesisBlock(nodes, 0, common.Hashes{})
 	b01 := &types.Block{
@@ -328,7 +352,15 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 	//  Even when B is not received, A should
 	//  be able to be delivered.
 	nodes := test.GenerateRandomNodeIDs(5)
-	to := newTotalOrdering(2, 3, uint32(len(nodes)))
+	genesisConfig := &totalOrderingConfig{
+		roundBasedConfig: roundBasedConfig{
+			roundInterval: 1000 * time.Second,
+		},
+		k:         2,
+		phi:       3,
+		numChains: uint32(len(nodes)),
+	}
+	to := newTotalOrdering(genesisConfig)
 	genNextBlock := func(b *types.Block) *types.Block {
 		return &types.Block{
 			ProposerID: b.ProposerID,
@@ -433,7 +465,15 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	// It's a handcrafted test case.
 	nodes := test.GenerateRandomNodeIDs(5)
-	to := newTotalOrdering(2, 3, uint32(len(nodes)))
+	genesisConfig := &totalOrderingConfig{
+		roundBasedConfig: roundBasedConfig{
+			roundInterval: 1000 * time.Second,
+		},
+		k:         2,
+		phi:       3,
+		numChains: uint32(len(nodes)),
+	}
+	to := newTotalOrdering(genesisConfig)
 	// Setup blocks.
 	b00 := s.genGenesisBlock(nodes, 0, common.Hashes{})
 	b10 := s.genGenesisBlock(nodes, 1, common.Hashes{})
@@ -767,9 +807,17 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 	//  v   v   v    v
 	//  o   o   o <- o        Height: 0
 	var (
-		req   = s.Require()
-		nodes = test.GenerateRandomNodeIDs(5)
-		to    = newTotalOrdering(0, 3, uint32(len(nodes)))
+		nodes         = test.GenerateRandomNodeIDs(5)
+		genesisConfig = &totalOrderingConfig{
+			roundBasedConfig: roundBasedConfig{
+				roundInterval: 1000 * time.Second,
+			},
+			k:         0,
+			phi:       3,
+			numChains: uint32(len(nodes)),
+		}
+		req = s.Require()
+		to  = newTotalOrdering(genesisConfig)
 	)
 	// Setup blocks.
 	b00 := s.genGenesisBlock(nodes, 0, common.Hashes{})
@@ -941,43 +989,75 @@ func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 
 func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 	var (
-		chainNum        = uint32(23)
-		phi      uint64 = 10
-		repeat          = 15
+		numChains = uint32(23)
+		phi       = uint64(10)
+		repeat    = 15
 	)
 	if testing.Short() {
-		chainNum = 7
+		numChains = 7
 		repeat = 3
 	}
 
 	ackingCountGenerators := []func() int{
 		nil, // Acking frequency with normal distribution.
-		test.MaxAckingCountGenerator(0),        // Low acking frequency.
-		test.MaxAckingCountGenerator(chainNum), // High acking frequency.
+		test.MaxAckingCountGenerator(0),         // Low acking frequency.
+		test.MaxAckingCountGenerator(numChains), // High acking frequency.
 	}
 
 	// Test based on different acking frequency.
 	for _, gen := range ackingCountGenerators {
 		// Test for K=0.
-		constructor := func(chainNum uint32) *totalOrdering {
-			return newTotalOrdering(0, phi, chainNum)
+		constructor := func(numChains uint32) *totalOrdering {
+			genesisConfig := &totalOrderingConfig{
+				roundBasedConfig: roundBasedConfig{
+					roundInterval: 1000 * time.Second,
+				},
+				k:         0,
+				phi:       phi,
+				numChains: numChains,
+			}
+			return newTotalOrdering(genesisConfig)
 		}
-		s.baseTestRandomlyGeneratedBlocks(constructor, chainNum, gen, repeat)
+		s.baseTestRandomlyGeneratedBlocks(constructor, numChains, gen, repeat)
 		// Test for K=1.
-		constructor = func(chainNum uint32) *totalOrdering {
-			return newTotalOrdering(1, phi, chainNum)
+		constructor = func(numChains uint32) *totalOrdering {
+			genesisConfig := &totalOrderingConfig{
+				roundBasedConfig: roundBasedConfig{
+					roundInterval: 1000 * time.Second,
+				},
+				k:         1,
+				phi:       phi,
+				numChains: numChains,
+			}
+			return newTotalOrdering(genesisConfig)
 		}
-		s.baseTestRandomlyGeneratedBlocks(constructor, chainNum, gen, repeat)
+		s.baseTestRandomlyGeneratedBlocks(constructor, numChains, gen, repeat)
 		// Test for K=2.
-		constructor = func(chainNum uint32) *totalOrdering {
-			return newTotalOrdering(2, phi, chainNum)
+		constructor = func(numChains uint32) *totalOrdering {
+			genesisConfig := &totalOrderingConfig{
+				roundBasedConfig: roundBasedConfig{
+					roundInterval: 1000 * time.Second,
+				},
+				k:         2,
+				phi:       phi,
+				numChains: numChains,
+			}
+			return newTotalOrdering(genesisConfig)
 		}
-		s.baseTestRandomlyGeneratedBlocks(constructor, chainNum, gen, repeat)
+		s.baseTestRandomlyGeneratedBlocks(constructor, numChains, gen, repeat)
 		// Test for K=3.
-		constructor = func(chainNum uint32) *totalOrdering {
-			return newTotalOrdering(3, phi, chainNum)
+		constructor = func(numChains uint32) *totalOrdering {
+			genesisConfig := &totalOrderingConfig{
+				roundBasedConfig: roundBasedConfig{
+					roundInterval: 1000 * time.Second,
+				},
+				k:         3,
+				phi:       phi,
+				numChains: numChains,
+			}
+			return newTotalOrdering(genesisConfig)
 		}
-		s.baseTestRandomlyGeneratedBlocks(constructor, chainNum, gen, repeat)
+		s.baseTestRandomlyGeneratedBlocks(constructor, numChains, gen, repeat)
 	}
 }
 
