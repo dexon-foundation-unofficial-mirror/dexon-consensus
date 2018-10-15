@@ -311,7 +311,7 @@ func (d *dkgProtocol) proposeFinalize() {
 
 func (d *dkgProtocol) recoverShareSecret(qualifyIDs dkg.IDs) (
 	*dkgShareSecret, error) {
-	if len(qualifyIDs) <= d.threshold {
+	if len(qualifyIDs) < d.threshold {
 		return nil, ErrNotReachThreshold
 	}
 	prvKey, err := d.prvShares.RecoverPrivateKey(qualifyIDs)
@@ -455,7 +455,7 @@ func (tsig *tsigProtocol) processPartialSignature(
 }
 
 func (tsig *tsigProtocol) signature() (crypto.Signature, error) {
-	if len(tsig.sigs) <= tsig.groupPublicKey.threshold {
+	if len(tsig.sigs) < tsig.groupPublicKey.threshold {
 		return crypto.Signature{}, ErrNotEnoughtPartialSignatures
 	}
 	ids := make(dkg.IDs, 0, len(tsig.sigs))

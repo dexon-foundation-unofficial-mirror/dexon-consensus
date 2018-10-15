@@ -268,7 +268,7 @@ func NewConsensus(
 		gov)
 	// Register DKG for the initial round. This is a temporary function call for
 	// simulation.
-	cfgModule.registerDKG(round, int(config.DKGSetSize)/3)
+	cfgModule.registerDKG(round, int(config.DKGSetSize)/3+1)
 	// Construct Consensus instance.
 	con := &Consensus{
 		ID:            ID,
@@ -466,7 +466,7 @@ func (con *Consensus) initialRound(startTime time.Time) {
 	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval/2),
 		func(time.Time) {
 			con.cfgModule.registerDKG(
-				con.round+1, int(con.currentConfig.DKGSetSize/3))
+				con.round+1, int(con.currentConfig.DKGSetSize/3)+1)
 		})
 	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval*2/3),
 		func(time.Time) {

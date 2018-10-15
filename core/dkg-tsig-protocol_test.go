@@ -136,7 +136,7 @@ func (s *DKGTSIGProtocolTestSuite) newProtocols(k, n int, round uint64) (
 // recovering threshold signature.
 // All participants are good people in this test.
 func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
-	k := 3
+	k := 2
 	n := 10
 	round := uint64(1)
 	gov, err := test.NewGovernance(5, 100)
@@ -228,7 +228,7 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 		psig.Signature, err = s.prvKeys[nID].Sign(hashDKGPartialSignature(psig))
 		s.Require().NoError(err)
 		s.Require().NoError(tsig.processPartialSignature(psig))
-		if len(tsig.sigs) > k {
+		if len(tsig.sigs) >= k {
 			break
 		}
 	}
