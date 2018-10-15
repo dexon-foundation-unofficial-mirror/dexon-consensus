@@ -145,12 +145,14 @@ func (s *ConsensusTestSuite) prepareGenesisBlock(
 }
 
 func (s *ConsensusTestSuite) prepareConsensus(
-	gov *test.Governance, prvKey crypto.PrivateKey) (*test.App, *Consensus) {
+	dMoment time.Time, gov *test.Governance, prvKey crypto.PrivateKey) (
+	*test.App, *Consensus) {
 
 	app := test.NewApp()
 	db, err := blockdb.NewMemBackedBlockDB()
 	s.Require().Nil(err)
-	con := NewConsensus(app, gov, db, s.conn.join(prvKey.PublicKey()), prvKey)
+	con := NewConsensus(dMoment, app, gov, db,
+		s.conn.join(prvKey.PublicKey()), prvKey)
 	return app, con
 }
 
@@ -181,9 +183,10 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		app *test.App
 		con *Consensus
 	}{}
+	dMoment := time.Now().UTC()
 	for _, key := range prvKeys {
 		nID := types.NewNodeID(key.PublicKey())
-		app, con := s.prepareConsensus(gov, key)
+		app, con := s.prepareConsensus(dMoment, gov, key)
 		objs[nID] = &struct {
 			app *test.App
 			con *Consensus
@@ -393,10 +396,11 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 		prvKeys  = gov.PrivateKeys()
 	)
 	s.Require().Nil(err)
+	dMoment := time.Now().UTC()
 	// Setup core.Consensus and test.App.
 	cons := map[types.NodeID]*Consensus{}
 	for _, key := range prvKeys {
-		_, con := s.prepareConsensus(gov, key)
+		_, con := s.prepareConsensus(dMoment, gov, key)
 		nID := types.NewNodeID(key.PublicKey())
 		cons[nID] = con
 		nodes = append(nodes, nID)
@@ -432,7 +436,7 @@ func (s *ConsensusTestSuite) TestPrepareGenesisBlock() {
 	gov, err := test.NewGovernance(4, time.Second)
 	s.Require().NoError(err)
 	prvKey := gov.PrivateKeys()[0]
-	_, con := s.prepareConsensus(gov, prvKey)
+	_, con := s.prepareConsensus(time.Now().UTC(), gov, prvKey)
 	block := &types.Block{
 		Position: types.Position{ChainID: 0},
 	}
@@ -453,8 +457,9 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 	gov.RoundInterval = 200 * lambda * time.Millisecond
 	prvKeys := gov.PrivateKeys()
 	cons := map[types.NodeID]*Consensus{}
+	dMoment := time.Now().UTC()
 	for _, key := range prvKeys {
-		_, con := s.prepareConsensus(gov, key)
+		_, con := s.prepareConsensus(dMoment, gov, key)
 		nID := types.NewNodeID(key.PublicKey())
 		cons[nID] = con
 		go con.processMsg(con.network.ReceiveChan())

@@ -20,6 +20,7 @@ package simulation
 import (
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core"
@@ -75,7 +76,7 @@ func (n *node) GetID() types.NodeID {
 }
 
 // run starts the node.
-func (n *node) run(serverEndpoint interface{}) {
+func (n *node) run(serverEndpoint interface{}, dMoment time.Time) {
 	// Run network.
 	if err := n.netModule.setup(serverEndpoint); err != nil {
 		panic(err)
@@ -98,7 +99,8 @@ func (n *node) run(serverEndpoint interface{}) {
 			break
 		}
 	}
-	n.consensus = core.NewConsensus(n.app, n.gov, n.db, n.netModule, n.prvKey)
+	n.consensus = core.NewConsensus(
+		dMoment, n.app, n.gov, n.db, n.netModule, n.prvKey)
 	go n.consensus.Run()
 
 	// Blocks forever.

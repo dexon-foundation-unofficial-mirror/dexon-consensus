@@ -225,6 +225,7 @@ type Consensus struct {
 
 // NewConsensus construct an Consensus instance.
 func NewConsensus(
+	dMoment time.Time,
 	app Application,
 	gov Governance,
 	db blockdb.BlockDatabase,
@@ -233,8 +234,7 @@ func NewConsensus(
 
 	// TODO(w): load latest blockHeight from DB, and use config at that height.
 	var (
-		round   uint64
-		dMoment = time.Now().UTC()
+		round uint64
 	)
 	config := gov.Configuration(round)
 	nodeSetCache := NewNodeSetCache(gov)

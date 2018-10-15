@@ -19,6 +19,7 @@ package simulation
 
 import (
 	"sync"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
@@ -33,6 +34,8 @@ func Run(cfg *config.Config) {
 		err         error
 	)
 
+	dMoment := time.Now().UTC().Add(1 * time.Second)
+
 	// init is a function to init a node.
 	init := func(serverEndpoint interface{}) {
 		prv, err := ecdsa.NewPrivateKey()
@@ -43,7 +46,7 @@ func Run(cfg *config.Config) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			v.run(serverEndpoint)
+			v.run(serverEndpoint, dMoment)
 		}()
 	}
 
