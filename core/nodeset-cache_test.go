@@ -19,31 +19,31 @@ package core
 
 import (
 	"testing"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
+	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
 )
 
-type testGov struct {
+type nsIntf struct {
 	s       *NodeSetCacheTestSuite
 	crs     common.Hash
 	curKeys []crypto.PublicKey
 }
 
-func (g *testGov) Configuration(round uint64) (cfg *types.Config) {
+func (g *nsIntf) Configuration(round uint64) (cfg *types.Config) {
 	return &types.Config{
 		NotarySetSize: 7,
 		DKGSetSize:    7,
 		NumChains:     4,
 	}
 }
-func (g *testGov) CRS(round uint64) (b common.Hash)       { return g.crs }
-func (g *testGov) ProposeCRS([]byte)                      {}
-func (g *testGov) NotifyRoundHeight(round, height uint64) {}
-func (g *testGov) NodeSet(round uint64) []crypto.PublicKey {
+func (g *nsIntf) CRS(round uint64) (b common.Hash) { return g.crs }
+func (g *nsIntf) NodeSet(round uint64) []crypto.PublicKey {
 	// Randomly generating keys, and check them for verification.
 	g.curKeys = []crypto.PublicKey{}
 	for i := 0; i < 10; i++ {
@@ -53,32 +53,27 @@ func (g *testGov) NodeSet(round uint64) []crypto.PublicKey {
 	}
 	return g.curKeys
 }
-func (g *testGov) AddDKGComplaint(_ uint64, _ *types.DKGComplaint) {}
-func (g *testGov) DKGComplaints(
-	round uint64) (cs []*types.DKGComplaint) {
-	return
-}
-func (g *testGov) AddDKGMasterPublicKey(
-	_ uint64, _ *types.DKGMasterPublicKey) {
-}
-func (g *testGov) DKGMasterPublicKeys(
-	round uint64) (keys []*types.DKGMasterPublicKey) {
-	return
-}
-func (g *testGov) AddDKGFinalize(_ uint64, _ *types.DKGFinalize) {}
-func (g *testGov) IsDKGFinal(round uint64) bool                  { return true }
 
 type NodeSetCacheTestSuite struct {
 	suite.Suite
 }
 
+func (s *NodeSetCacheTestSuite) TestGovernanceIntf() {
+	// NodeSetCacheInterface should let Governance implement it.
+	var gov Governance
+	gov, err := test.NewGovernance(7, 250*time.Millisecond)
+	s.Require().NoError(err)
+	_, ok := gov.(NodeSetCacheInterface)
+	s.True(ok)
+}
+
 func (s *NodeSetCacheTestSuite) TestBasicUsage() {
 	var (
-		gov = &testGov{
+		nsIntf = &nsIntf{
 			s:   s,
 			crs: common.NewRandomHash(),
 		}
-		cache = NewNodeSetCache(gov)
+		cache = NewNodeSetCache(nsIntf)
 		req   = s.Require()
 	)
 

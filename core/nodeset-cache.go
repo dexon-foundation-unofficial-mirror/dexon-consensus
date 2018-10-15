@@ -21,12 +21,13 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
 var (
-	// ErrRoundNotReady means we got nil config from governance contract.
+	// ErrRoundNotReady means we got nil config.
 	ErrRoundNotReady = errors.New("round is not ready")
 )
 
@@ -36,10 +37,25 @@ type sets struct {
 	dkgSet    map[types.NodeID]struct{}
 }
 
-// NodeSetCache caches node set information from governance contract.
+// NodeSetCacheInterface interface specifies interface used by NodeSetCache.
+type NodeSetCacheInterface interface {
+	// Configuration returns the configuration at a given round.
+	// Return the genesis configuration if round == 0.
+	Configuration(round uint64) *types.Config
+
+	// CRS returns the CRS for a given round.
+	// Return the genesis CRS if round == 0.
+	CRS(round uint64) common.Hash
+
+	// NodeSet returns the node set at a given round.
+	// Return the genesis node set if round == 0.
+	NodeSet(round uint64) []crypto.PublicKey
+}
+
+// NodeSetCache caches node set information.
 type NodeSetCache struct {
 	lock    sync.RWMutex
-	gov     Governance
+	nsIntf  NodeSetCacheInterface
 	rounds  map[uint64]*sets
 	keyPool map[types.NodeID]*struct {
 		pubKey crypto.PublicKey
@@ -48,9 +64,9 @@ type NodeSetCache struct {
 }
 
 // NewNodeSetCache constructs an NodeSetCache instance.
-func NewNodeSetCache(gov Governance) *NodeSetCache {
+func NewNodeSetCache(nsIntf NodeSetCacheInterface) *NodeSetCache {
 	return &NodeSetCache{
-		gov:    gov,
+		nsIntf: nsIntf,
 		rounds: make(map[uint64]*sets),
 		keyPool: make(map[types.NodeID]*struct {
 			pubKey crypto.PublicKey
@@ -154,8 +170,8 @@ func (cache *NodeSetCache) update(
 	cache.lock.Lock()
 	defer cache.lock.Unlock()
 
-	// Get the requested round from governance contract.
-	keySet := cache.gov.NodeSet(round)
+	// Get the requested round.
+	keySet := cache.nsIntf.NodeSet(round)
 	if keySet == nil {
 		// That round is not ready yet.
 		err = ErrRoundNotReady
@@ -175,8 +191,8 @@ func (cache *NodeSetCache) update(
 			}{key, 1}
 		}
 	}
-	cfg := cache.gov.Configuration(round)
-	crs := cache.gov.CRS(round)
+	cfg := cache.nsIntf.Configuration(round)
+	crs := cache.nsIntf.CRS(round)
 	nIDs = &sets{
 		nodeSet:   nodeSet,
 		notarySet: make([]map[types.NodeID]struct{}, cfg.NumChains),
