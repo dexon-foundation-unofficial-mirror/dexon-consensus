@@ -30,6 +30,7 @@ type consensusTimestamp struct {
 
 	// This part keeps configs for each round.
 	numChainsForRounds []uint32
+	numChainsRoundBase uint64
 }
 
 var (
@@ -38,10 +39,11 @@ var (
 	ErrTimestampNotIncrease = errors.New("timestamp is not increasing")
 )
 
-// newConsensusTimestamp create timestamper object.
+// newConsensusTimestamp creates timestamper object.
 func newConsensusTimestamp(numChains uint32) *consensusTimestamp {
 	return &consensusTimestamp{
 		numChainsForRounds: []uint32{numChains},
+		numChainsRoundBase: uint64(0),
 	}
 }
 
@@ -50,7 +52,7 @@ func newConsensusTimestamp(numChains uint32) *consensusTimestamp {
 func (ct *consensusTimestamp) appendConfig(
 	round uint64, config *types.Config) error {
 
-	if round != uint64(len(ct.numChainsForRounds)) {
+	if round != uint64(len(ct.numChainsForRounds))+ct.numChainsRoundBase {
 		return ErrRoundNotIncreasing
 	}
 	ct.numChainsForRounds = append(ct.numChainsForRounds, config.NumChains)
@@ -61,8 +63,9 @@ func (ct *consensusTimestamp) appendConfig(
 func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (err error) {
 	for _, block := range blocks {
 		if !block.IsGenesis() {
-			if block.Finalization.Timestamp, err =
-				getMedianTime(ct.chainTimestamps); err != nil {
+			round := block.Position.Round - ct.numChainsRoundBase
+			ts := ct.chainTimestamps[:ct.numChainsForRounds[round]]
+			if block.Finalization.Timestamp, err = getMedianTime(ts); err != nil {
 				return
 			}
 		} else {
@@ -78,6 +81,11 @@ func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (err error) {
 		}
 
 		ct.chainTimestamps[block.Position.ChainID] = block.Timestamp
+
+		if block.Position.Round > ct.numChainsRoundBase {
+			ct.numChainsRoundBase++
+			ct.numChainsForRounds = ct.numChainsForRounds[1:]
+		}
 	}
 	return
 }
