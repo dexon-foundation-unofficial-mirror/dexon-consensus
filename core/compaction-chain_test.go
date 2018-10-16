@@ -74,6 +74,11 @@ func (s *CompactionChainTestSuite) TestProcessBlock() {
 	for _, block := range blocks {
 		s.Equal(cc.prevBlock, prevBlock)
 		s.Require().NoError(cc.processBlock(block))
+		if prevBlock != nil {
+			s.Equal(prevBlock.Finalization.Height+1, block.Finalization.Height)
+		} else {
+			s.Equal(uint64(1), block.Finalization.Height)
+		}
 		prevBlock = block
 	}
 }

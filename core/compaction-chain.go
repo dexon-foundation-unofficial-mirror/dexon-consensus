@@ -65,6 +65,8 @@ func (cc *compactionChain) processBlock(block *types.Block) error {
 	prevBlock := cc.lastBlock()
 	if prevBlock != nil {
 		block.Finalization.Height = prevBlock.Finalization.Height + 1
+	} else {
+		block.Finalization.Height = 1
 	}
 	cc.prevBlockLock.Lock()
 	defer cc.prevBlockLock.Unlock()
