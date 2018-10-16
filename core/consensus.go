@@ -267,9 +267,6 @@ func NewConsensus(
 			network:      network,
 		},
 		gov)
-	// Register DKG for the initial round. This is a temporary function call for
-	// simulation.
-	cfgModule.registerDKG(round, int(config.DKGSetSize)/3+1)
 	// Construct Consensus instance.
 	con := &Consensus{
 		ID:            ID,
@@ -319,7 +316,11 @@ func NewConsensus(
 // Run starts running DEXON Consensus.
 func (con *Consensus) Run() {
 	go con.processMsg(con.network.ReceiveChan())
-	con.runDKGTSIG(con.round)
+	con.cfgModule.registerDKG(con.round, int(con.currentConfig.DKGSetSize)/3+1)
+	con.event.RegisterTime(con.dMoment.Add(con.currentConfig.RoundInterval/4),
+		func(time.Time) {
+			con.runDKGTSIG(con.round)
+		})
 	round1 := uint64(1)
 	con.lattice.AppendConfig(round1, con.gov.Configuration(round1))
 	con.initialRound(con.dMoment)

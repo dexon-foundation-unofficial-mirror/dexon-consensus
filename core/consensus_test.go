@@ -463,6 +463,7 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 		nID := types.NewNodeID(key.PublicKey())
 		cons[nID] = con
 		go con.processMsg(con.network.ReceiveChan())
+		con.cfgModule.registerDKG(uint64(0), n/3+1)
 	}
 	for _, con := range cons {
 		con.runDKGTSIG(uint64(0))
