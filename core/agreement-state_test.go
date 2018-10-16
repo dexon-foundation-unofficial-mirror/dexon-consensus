@@ -19,7 +19,6 @@ package core
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/suite"
 
@@ -47,9 +46,10 @@ func (r *agreementStateTestReceiver) ProposeVote(vote *types.Vote) {
 	r.s.voteChan <- vote
 }
 
-func (r *agreementStateTestReceiver) ProposeBlock() {
+func (r *agreementStateTestReceiver) ProposeBlock() common.Hash {
 	block := r.s.proposeBlock(r.leader)
 	r.s.blockChan <- block.Hash
+	return block.Hash
 }
 
 func (r *agreementStateTestReceiver) ConfirmBlock(block common.Hash,
@@ -119,61 +119,27 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 	return agreement
 }
 
-func (s *AgreementStateTestSuite) TestPrepareState() {
+func (s *AgreementStateTestSuite) TestInitialState() {
 	a := s.newAgreement(4)
-	state := newPrepareState(a.data)
-	s.Equal(statePrepare, state.state())
+	state := newInitialState(a.data)
+	s.Equal(stateInitial, state.state())
 	s.Equal(0, state.clocks())
 
-	// For period == 1, proposing a new block.
+	// Proposing a new block.
 	a.data.period = 1
 	newState, err := state.nextState()
 	s.Require().Nil(err)
-	s.Require().True(len(s.blockChan) > 0)
+	s.Require().Len(s.blockChan, 1)
 	proposedBlock := <-s.blockChan
 	s.NotEqual(common.Hash{}, proposedBlock)
 	s.Require().Nil(a.processBlock(s.block[proposedBlock]))
-	s.Equal(stateAck, newState.state())
-
-	// For period >= 2, if the pass-vote for block b equal to {}
-	// is more than 2f+1, proposing the block previously proposed.
-	a.data.period = 2
-	_, err = state.nextState()
-	s.Equal(ErrNoEnoughVoteInPrepareState, err)
-
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePass, common.Hash{}, 1)
-		s.Require().Nil(a.processVote(vote))
-	}
-
-	newState, err = state.nextState()
-	s.Require().Nil(err)
-	s.Equal(stateAck, newState.state())
-
-	// For period >= 2, if the pass-vote for block v not equal to {}
-	// is more than 2f+1, proposing the block v.
-	a.data.period = 3
-	block := s.proposeBlock(a.data.leader)
-	prv, err := ecdsa.NewPrivateKey()
-	s.Require().Nil(err)
-	block.ProposerID = types.NewNodeID(prv.PublicKey())
-	s.Require().NoError(
-		NewAuthenticator(prv).SignCRS(block, a.data.leader.hashCRS))
-	s.Require().Nil(a.processBlock(block))
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePass, block.Hash, 2)
-		s.Require().Nil(a.processVote(vote))
-	}
-
-	newState, err = state.nextState()
-	s.Require().Nil(err)
-	s.Equal(stateAck, newState.state())
+	s.Equal(statePreCommit, newState.state())
 }
 
-func (s *AgreementStateTestSuite) TestAckState() {
+func (s *AgreementStateTestSuite) TestPreCommitState() {
 	a := s.newAgreement(4)
-	state := newAckState(a.data)
-	s.Equal(stateAck, state.state())
+	state := newPreCommitState(a.data)
+	s.Equal(statePreCommit, state.state())
 	s.Equal(2, state.clocks())
 
 	blocks := make([]*types.Block, 3)
@@ -187,247 +153,90 @@ func (s *AgreementStateTestSuite) TestAckState() {
 		s.Require().Nil(a.processBlock(blocks[i]))
 	}
 
-	// For period 1, propose ack-vote for the block having largest potential.
+	// If lockvalue == null, propose preCom-vote for the leader block.
+	a.data.lockValue = nullBlockHash
 	a.data.period = 1
 	newState, err := state.nextState()
 	s.Require().Nil(err)
-	s.Require().True(len(s.voteChan) > 0)
+	s.Require().Len(s.voteChan, 1)
 	vote := <-s.voteChan
-	s.Equal(types.VoteAck, vote.Type)
+	s.Equal(types.VotePreCom, vote.Type)
 	s.NotEqual(common.Hash{}, vote.BlockHash)
-	s.Equal(stateConfirm, newState.state())
+	s.Equal(stateCommit, newState.state())
 
-	// For period >= 2, if block v equal to {} has more than 2f+1 pass-vote
-	// in period 1, propose ack-vote for the block having largest potential.
+	// Else, preCom-vote on lockValue.
 	a.data.period = 2
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePass, common.Hash{}, 1)
-		s.Require().Nil(a.processVote(vote))
-	}
+	hash := common.NewRandomHash()
+	a.data.lockValue = hash
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	s.Require().True(len(s.voteChan) > 0)
+	s.Require().Len(s.voteChan, 1)
 	vote = <-s.voteChan
-	s.Equal(types.VoteAck, vote.Type)
-	s.NotEqual(common.Hash{}, vote.BlockHash)
-	s.Equal(stateConfirm, newState.state())
-
-	// For period >= 2, if block v not equal to {} has more than 2f+1 pass-vote
-	// in period 1, propose ack-vote for block v.
-	hash := blocks[0].Hash
-	a.data.period = 3
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePass, hash, 2)
-		s.Require().Nil(a.processVote(vote))
-	}
-	newState, err = state.nextState()
-	s.Require().Nil(err)
-	s.Require().True(len(s.voteChan) > 0)
-	vote = <-s.voteChan
-	s.Equal(types.VoteAck, vote.Type)
+	s.Equal(types.VotePreCom, vote.Type)
 	s.Equal(hash, vote.BlockHash)
-	s.Equal(stateConfirm, newState.state())
+	s.Equal(stateCommit, newState.state())
 }
 
-func (s *AgreementStateTestSuite) TestConfirmState() {
+func (s *AgreementStateTestSuite) TestCommitState() {
 	a := s.newAgreement(4)
-	state := newConfirmState(a.data)
-	s.Equal(stateConfirm, state.state())
+	state := newCommitState(a.data)
+	s.Equal(stateCommit, state.state())
 	s.Equal(2, state.clocks())
 
-	// If there are 2f+1 ack-votes for block v not equal to {},
-	// propose a confirm-vote for block v.
+	// If there are 2f+1 preCom-votes for block v or null,
+	// propose a com-vote for block v.
 	a.data.period = 1
 	block := s.proposeBlock(a.data.leader)
 	s.Require().Nil(a.processBlock(block))
 	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VoteAck, block.Hash, 1)
+		vote := s.prepareVote(nID, types.VotePreCom, block.Hash, 1)
 		s.Require().Nil(a.processVote(vote))
 	}
-	s.Require().Nil(state.receiveVote())
 	newState, err := state.nextState()
 	s.Require().Nil(err)
-	s.Require().True(len(s.voteChan) > 0)
+	s.Require().Len(s.voteChan, 1)
+	s.Equal(block.Hash, a.data.lockValue)
+	s.Equal(uint64(1), a.data.lockRound)
 	vote := <-s.voteChan
-	s.Equal(types.VoteConfirm, vote.Type)
+	s.Equal(types.VoteCom, vote.Type)
 	s.Equal(block.Hash, vote.BlockHash)
-	s.Equal(statePass1, newState.state())
+	s.Equal(stateForward, newState.state())
 
-	// Else, no vote is propose in this state.
+	// Else, com-vote on SKIP.
 	a.data.period = 2
-	s.Require().Nil(state.receiveVote())
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	s.Require().True(len(s.voteChan) == 0)
-	s.Equal(statePass1, newState.state())
+	s.Require().Len(s.voteChan, 1)
+	vote = <-s.voteChan
+	s.Equal(types.VoteCom, vote.Type)
+	s.Equal(skipBlockHash, vote.BlockHash)
+	s.Equal(stateForward, newState.state())
 
-	// If there are 2f+1 ack-vote for block v equal to {},
-	// no vote should be proposed.
+	// If there are 2f+1 preCom-votes for SKIP, it's same as the 'else' condition.
 	a.data.period = 3
 	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VoteAck, common.Hash{}, 3)
+		vote := s.prepareVote(nID, types.VotePreCom, skipBlockHash, 3)
 		s.Require().Nil(a.processVote(vote))
 	}
-	s.Require().Nil(state.receiveVote())
 	newState, err = state.nextState()
 	s.Require().Nil(err)
-	s.Require().True(len(s.voteChan) == 0)
-	s.Equal(statePass1, newState.state())
+	s.Require().Len(s.voteChan, 1)
+	vote = <-s.voteChan
+	s.Equal(types.VoteCom, vote.Type)
+	s.Equal(skipBlockHash, vote.BlockHash)
+	s.Equal(stateForward, newState.state())
 }
 
-func (s *AgreementStateTestSuite) TestPass1State() {
+func (s *AgreementStateTestSuite) TestForwardState() {
 	a := s.newAgreement(4)
-	state := newPass1State(a.data)
-	s.Equal(statePass1, state.state())
-	s.Equal(0, state.clocks())
+	state := newForwardState(a.data)
+	s.Equal(stateForward, state.state())
+	s.True(state.clocks() > 100000)
 
-	// If confirm-vote was proposed in the same period,
-	// propose pass-vote with same block.
-	a.data.period = 1
-	hash := common.NewRandomHash()
-	vote := s.prepareVote(s.ID, types.VoteConfirm, hash, 1)
-	s.Require().Nil(a.processVote(vote))
-	newState, err := state.nextState()
+	// nextState() should return instantly without doing anything.
+	_, err := state.nextState()
 	s.Require().Nil(err)
-	s.Require().True(len(s.voteChan) > 0)
-	vote = <-s.voteChan
-	s.Equal(types.VotePass, vote.Type)
-	s.Equal(hash, vote.BlockHash)
-	s.Equal(statePass2, newState.state())
-
-	// Else if period >= 2 and has 2f+1 pass-vote in period-1 for block {},
-	// propose pass-vote for block {}.
-	a.data.period = 2
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePass, common.Hash{}, 1)
-		s.Require().Nil(a.processVote(vote))
-	}
-	vote = s.prepareVote(s.ID, types.VoteAck, common.Hash{}, 2)
-	s.Require().Nil(a.processVote(vote))
-	newState, err = state.nextState()
-	s.Require().Nil(err)
-	s.Require().True(len(s.voteChan) > 0)
-	vote = <-s.voteChan
-	s.Equal(types.VotePass, vote.Type)
-	s.Equal(common.Hash{}, vote.BlockHash)
-	s.Equal(statePass2, newState.state())
-
-	// Else, propose pass-vote for default block.
-	a.data.period = 3
-	block := s.proposeBlock(a.data.leader)
-	a.data.defaultBlock = block.Hash
-	hash = common.NewRandomHash()
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePass, hash, 2)
-		s.Require().Nil(a.processVote(vote))
-	}
-	vote = s.prepareVote(s.ID, types.VoteAck, common.Hash{}, 3)
-	s.Require().Nil(a.processVote(vote))
-	newState, err = state.nextState()
-	s.Require().Nil(err)
-	s.Require().True(len(s.voteChan) > 0)
-	vote = <-s.voteChan
-	s.Equal(types.VotePass, vote.Type)
-	s.Equal(block.Hash, vote.BlockHash)
-	s.Equal(statePass2, newState.state())
-
-	// Period == 1 is also else condition.
-	a = s.newAgreement(4)
-	state = newPass1State(a.data)
-	a.data.period = 1
-	block = s.proposeBlock(a.data.leader)
-	a.data.defaultBlock = block.Hash
-	hash = common.NewRandomHash()
-	vote = s.prepareVote(s.ID, types.VoteAck, common.Hash{}, 1)
-	s.Require().Nil(a.processVote(vote))
-	newState, err = state.nextState()
-	s.Require().Nil(err)
-	s.Require().True(len(s.voteChan) > 0)
-	vote = <-s.voteChan
-	s.Equal(types.VotePass, vote.Type)
-	s.Equal(block.Hash, vote.BlockHash)
-	s.Equal(statePass2, newState.state())
-
-	// No enought pass-vote for period-1.
-	a.data.period = 4
-	vote = s.prepareVote(s.ID, types.VoteAck, common.Hash{}, 4)
-	s.Require().Nil(a.processVote(vote))
-	newState, err = state.nextState()
-	s.Require().Nil(err)
-	s.Require().True(len(s.voteChan) > 0)
-	vote = <-s.voteChan
-	s.Equal(types.VotePass, vote.Type)
-	s.Equal(block.Hash, vote.BlockHash)
-	s.Equal(statePass2, newState.state())
-}
-
-func (s *AgreementStateTestSuite) TestPass2State() {
-	a := s.newAgreement(4)
-	state := newPass2State(a.data)
-	s.Equal(statePass2, state.state())
-
-	// If there are 2f+1 ack-vote for block v not equal to {},
-	// propose pass-vote for v.
-	block := s.proposeBlock(a.data.leader)
-	s.Require().Nil(a.processBlock(block))
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VoteAck, block.Hash, 1)
-		s.Require().Nil(a.processVote(vote))
-	}
-	s.Require().Nil(state.receiveVote())
-	// Only propose one vote.
-	s.Require().Nil(state.receiveVote())
-	s.Require().True(len(s.voteChan) == 0)
-
-	// If period >= 2 and
-	// there are 2f+1 pass-vote in period-1 for block v equal to {} and
-	// no confirm-vote is proposed, propose pass-vote for {}.
-	a = s.newAgreement(4)
-	state = newPass2State(a.data)
-	a.data.period = 2
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePass, common.Hash{}, 1)
-		s.Require().Nil(a.processVote(vote))
-	}
-	vote := s.prepareVote(s.ID, types.VoteAck, common.Hash{}, 2)
-	s.Require().Nil(a.processVote(vote))
-	s.Require().Nil(state.receiveVote())
-	// Test terminate.
-	ok := make(chan struct{})
-	go func() {
-		go state.terminate()
-		newState, err := state.nextState()
-		s.Require().Nil(err)
-		s.Equal(statePrepare, newState.state())
-		ok <- struct{}{}
-	}()
-	select {
-	case <-ok:
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Terminate fail.\n")
-	}
-
-	// If there are 2f+1 pass-vote, proceed to next period
-	a = s.newAgreement(4)
-	state = newPass2State(a.data)
-	a.data.period = 1
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePass, common.Hash{}, 1)
-		s.Require().Nil(a.processVote(vote))
-	}
-	s.Require().Nil(state.receiveVote())
-	go func() {
-		newState, err := state.nextState()
-		s.Require().Nil(err)
-		s.Equal(statePrepare, newState.state())
-		s.Equal(uint64(2), a.data.period)
-		ok <- struct{}{}
-	}()
-	select {
-	case <-ok:
-	case <-time.After(50 * time.Millisecond):
-		s.FailNow("Unable to proceed to next state.\n")
-	}
+	s.Require().Len(s.voteChan, 0)
 }
 
 func TestAgreementState(t *testing.T) {

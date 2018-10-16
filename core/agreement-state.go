@@ -19,7 +19,7 @@ package core
 
 import (
 	"fmt"
-	"sync"
+	"math"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -36,226 +36,117 @@ type agreementStateType int
 
 // agreementStateType enum.
 const (
-	statePrepare agreementStateType = iota
-	stateAck
-	stateConfirm
-	statePass1
-	statePass2
+	stateInitial agreementStateType = iota
+	statePreCommit
+	stateCommit
+	stateForward
 )
 
 var nullBlockHash = common.Hash{}
+var skipBlockHash common.Hash
+
+func init() {
+	for idx := range skipBlockHash {
+		skipBlockHash[idx] = 0xff
+	}
+}
 
 type agreementState interface {
 	state() agreementStateType
 	nextState() (agreementState, error)
-	receiveVote() error
 	clocks() int
-	terminate()
 }
 
-//----- PrepareState -----
-type prepareState struct {
+//----- InitialState -----
+type initialState struct {
 	a *agreementData
 }
 
-func newPrepareState(a *agreementData) *prepareState {
-	return &prepareState{a: a}
+func newInitialState(a *agreementData) *initialState {
+	return &initialState{a: a}
 }
 
-func (s *prepareState) state() agreementStateType { return statePrepare }
-func (s *prepareState) clocks() int               { return 0 }
-func (s *prepareState) terminate()                {}
-func (s *prepareState) nextState() (agreementState, error) {
-	if s.a.period == 1 {
-		s.a.recv.ProposeBlock()
-	} else {
-		var proposed bool
-		_, proposed = s.a.countVote(s.a.period-1, types.VotePass)
-		if !proposed {
-			return nil, ErrNoEnoughVoteInPrepareState
-		}
-	}
-	return newAckState(s.a), nil
+func (s *initialState) state() agreementStateType { return stateInitial }
+func (s *initialState) clocks() int               { return 0 }
+func (s *initialState) nextState() (agreementState, error) {
+	s.a.lock.Lock()
+	defer s.a.lock.Unlock()
+	hash := s.a.recv.ProposeBlock()
+	s.a.recv.ProposeVote(&types.Vote{
+		Type:      types.VoteInit,
+		BlockHash: hash,
+		Period:    s.a.period,
+	})
+	return newPreCommitState(s.a), nil
 }
-func (s *prepareState) receiveVote() error { return nil }
 
-// ----- AckState -----
-type ackState struct {
+//----- PreCommitState -----
+type preCommitState struct {
 	a *agreementData
 }
 
-func newAckState(a *agreementData) *ackState {
-	return &ackState{a: a}
+func newPreCommitState(a *agreementData) *preCommitState {
+	return &preCommitState{a: a}
 }
 
-func (s *ackState) state() agreementStateType { return stateAck }
-func (s *ackState) clocks() int               { return 2 }
-func (s *ackState) terminate()                {}
-func (s *ackState) nextState() (agreementState, error) {
-	acked := false
-	hash := common.Hash{}
-	if s.a.period == 1 {
-		acked = true
-	} else {
-		hash, acked = s.a.countVote(s.a.period-1, types.VotePass)
-	}
-	if !acked {
-		return nil, ErrNoEnoughVoteInAckState
-	}
+func (s *preCommitState) state() agreementStateType { return statePreCommit }
+func (s *preCommitState) clocks() int               { return 2 }
+func (s *preCommitState) nextState() (agreementState, error) {
+	s.a.lock.RLock()
+	defer s.a.lock.RUnlock()
+	hash := s.a.lockValue
 	if hash == nullBlockHash {
 		hash = s.a.leader.leaderBlockHash()
 	}
 	s.a.recv.ProposeVote(&types.Vote{
-		Type:      types.VoteAck,
+		Type:      types.VotePreCom,
 		BlockHash: hash,
 		Period:    s.a.period,
 	})
-	return newConfirmState(s.a), nil
-}
-func (s *ackState) receiveVote() error { return nil }
-
-// ----- ConfirmState -----
-type confirmState struct {
-	a     *agreementData
-	lock  sync.Mutex
-	voted bool
+	return newCommitState(s.a), nil
 }
 
-func newConfirmState(a *agreementData) *confirmState {
-	return &confirmState{
-		a: a,
-	}
-}
-
-func (s *confirmState) state() agreementStateType { return stateConfirm }
-func (s *confirmState) clocks() int               { return 2 }
-func (s *confirmState) terminate()                {}
-func (s *confirmState) nextState() (agreementState, error) {
-	return newPass1State(s.a), nil
-}
-func (s *confirmState) receiveVote() error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	if s.voted {
-		return nil
-	}
-	hash, ok := s.a.countVote(s.a.period, types.VoteAck)
-	if !ok {
-		return nil
-	}
-	if hash != nullBlockHash {
-		s.a.recv.ProposeVote(&types.Vote{
-			Type:      types.VoteConfirm,
-			BlockHash: hash,
-			Period:    s.a.period,
-		})
-		s.voted = true
-	}
-	return nil
-}
-
-// ----- Pass1State -----
-type pass1State struct {
+//----- CommitState -----
+type commitState struct {
 	a *agreementData
 }
 
-func newPass1State(a *agreementData) *pass1State {
-	return &pass1State{a: a}
+func newCommitState(a *agreementData) *commitState {
+	return &commitState{a: a}
 }
 
-func (s *pass1State) state() agreementStateType { return statePass1 }
-func (s *pass1State) clocks() int               { return 0 }
-func (s *pass1State) terminate()                {}
-func (s *pass1State) nextState() (agreementState, error) {
-	voteDefault := false
-	if vote, exist := func() (*types.Vote, bool) {
-		s.a.votesLock.RLock()
-		defer s.a.votesLock.RUnlock()
-		v, e := s.a.votes[s.a.period][types.VoteConfirm][s.a.ID]
-		return v, e
-	}(); exist {
-		s.a.recv.ProposeVote(&types.Vote{
-			Type:      types.VotePass,
-			BlockHash: vote.BlockHash,
-			Period:    s.a.period,
-		})
-	} else if s.a.period == 1 {
-		voteDefault = true
+func (s *commitState) state() agreementStateType { return stateCommit }
+func (s *commitState) clocks() int               { return 2 }
+func (s *commitState) nextState() (agreementState, error) {
+	hash, ok := s.a.countVote(s.a.period, types.VotePreCom)
+	s.a.lock.Lock()
+	defer s.a.lock.Unlock()
+	if ok && hash != skipBlockHash {
+		s.a.lockValue = hash
+		s.a.lockRound = s.a.period
 	} else {
-		hash, ok := s.a.countVote(s.a.period-1, types.VotePass)
-		if ok {
-			if hash == nullBlockHash {
-				s.a.recv.ProposeVote(&types.Vote{
-					Type:      types.VotePass,
-					BlockHash: hash,
-					Period:    s.a.period,
-				})
-			} else {
-				voteDefault = true
-			}
-		} else {
-			voteDefault = true
-		}
+		hash = skipBlockHash
 	}
-	if voteDefault {
-		s.a.recv.ProposeVote(&types.Vote{
-			Type:      types.VotePass,
-			BlockHash: s.a.defaultBlock,
-			Period:    s.a.period,
-		})
-	}
-	return newPass2State(s.a), nil
-}
-func (s *pass1State) receiveVote() error { return nil }
-
-// ----- Pass2State -----
-type pass2State struct {
-	a              *agreementData
-	lock           sync.Mutex
-	voted          bool
-	enoughPassVote chan common.Hash
-	terminateChan  chan struct{}
+	s.a.recv.ProposeVote(&types.Vote{
+		Type:      types.VoteCom,
+		BlockHash: hash,
+		Period:    s.a.period,
+	})
+	return newForwardState(s.a), nil
 }
 
-func newPass2State(a *agreementData) *pass2State {
-	return &pass2State{
-		a:              a,
-		enoughPassVote: make(chan common.Hash, 1),
-		terminateChan:  make(chan struct{}),
-	}
+// ----- ForwardState -----
+type forwardState struct {
+	a *agreementData
 }
 
-func (s *pass2State) state() agreementStateType { return statePass2 }
-func (s *pass2State) clocks() int               { return 0 }
-func (s *pass2State) terminate() {
-	s.terminateChan <- struct{}{}
+func newForwardState(a *agreementData) *forwardState {
+	return &forwardState{a: a}
 }
-func (s *pass2State) nextState() (agreementState, error) {
-	select {
-	case <-s.terminateChan:
-		break
-	case hash := <-s.enoughPassVote:
-		s.a.votesLock.RLock()
-		defer s.a.votesLock.RUnlock()
-		s.a.defaultBlock = hash
-		s.a.period++
-		oldBlock := s.a.blocks[s.a.ID]
-		s.a.blocks = map[types.NodeID]*types.Block{
-			s.a.ID: oldBlock,
-		}
-	}
-	return newPrepareState(s.a), nil
-}
-func (s *pass2State) receiveVote() error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	if s.voted {
-		return nil
-	}
-	hash, ok := s.a.countVote(s.a.period, types.VotePass)
-	if ok {
-		s.voted = true
-		s.enoughPassVote <- hash
-	}
-	return nil
+
+func (s *forwardState) state() agreementStateType { return stateForward }
+func (s *forwardState) clocks() int               { return math.MaxInt32 }
+
+func (s *forwardState) nextState() (agreementState, error) {
+	return s, nil
 }

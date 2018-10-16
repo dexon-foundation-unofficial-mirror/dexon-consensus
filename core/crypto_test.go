@@ -132,7 +132,7 @@ func (s *CryptoTestSuite) TestVoteSignature() {
 	nID := types.NewNodeID(pub)
 	vote := &types.Vote{
 		ProposerID: nID,
-		Type:       types.VoteAck,
+		Type:       types.VoteInit,
 		BlockHash:  common.NewRandomHash(),
 		Period:     1,
 	}
@@ -141,7 +141,7 @@ func (s *CryptoTestSuite) TestVoteSignature() {
 	ok, err := verifyVoteSignature(vote)
 	s.Require().NoError(err)
 	s.True(ok)
-	vote.Type = types.VoteConfirm
+	vote.Type = types.VoteCom
 	ok, err = verifyVoteSignature(vote)
 	s.Require().NoError(err)
 	s.False(ok)

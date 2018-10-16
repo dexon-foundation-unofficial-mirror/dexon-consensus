@@ -36,9 +36,10 @@ func (r *agreementTestReceiver) ProposeVote(vote *types.Vote) {
 	r.s.voteChan <- vote
 }
 
-func (r *agreementTestReceiver) ProposeBlock() {
+func (r *agreementTestReceiver) ProposeBlock() common.Hash {
 	block := r.s.proposeBlock(r.agreementIndex)
 	r.s.blockChan <- block.Hash
+	return block.Hash
 }
 
 func (r *agreementTestReceiver) ConfirmBlock(block common.Hash,
@@ -116,38 +117,198 @@ func (s *AgreementTestSuite) copyVote(
 	return v
 }
 
+func (s *AgreementTestSuite) prepareVote(
+	nID types.NodeID, voteType types.VoteType, blockHash common.Hash,
+	period uint64) (
+	vote *types.Vote) {
+	vote = &types.Vote{
+		Type:      voteType,
+		BlockHash: blockHash,
+		Period:    period,
+	}
+	s.Require().NoError(s.auths[nID].SignVote(vote))
+	return
+}
+
 func (s *AgreementTestSuite) TestSimpleConfirm() {
 	a := s.newAgreement(4)
-	// PrepareState
+	// InitialState
 	a.nextState()
-	// AckState
+	// PreCommitState
 	s.Require().Len(s.blockChan, 1)
 	blockHash := <-s.blockChan
 	block, exist := s.block[blockHash]
 	s.Require().True(exist)
 	s.Require().NoError(a.processBlock(block))
-	a.nextState()
-	// ConfirmState
 	s.Require().Len(s.voteChan, 1)
 	vote := <-s.voteChan
-	s.Equal(types.VoteAck, vote.Type)
+	s.Equal(types.VoteInit, vote.Type)
+	s.Equal(blockHash, vote.BlockHash)
+	a.nextState()
+	// CommitState
+	s.Require().Len(s.voteChan, 1)
+	vote = <-s.voteChan
+	s.Equal(types.VotePreCom, vote.Type)
+	s.Equal(blockHash, vote.BlockHash)
 	for nID := range s.auths {
 		v := s.copyVote(vote, nID)
 		s.Require().NoError(a.processVote(v))
 	}
 	a.nextState()
-	// Pass1State
+	// ForwardState
 	s.Require().Len(s.voteChan, 1)
 	vote = <-s.voteChan
-	s.Equal(types.VoteConfirm, vote.Type)
+	s.Equal(types.VoteCom, vote.Type)
+	s.Equal(blockHash, vote.BlockHash)
+	s.Equal(blockHash, a.data.lockValue)
+	s.Equal(uint64(1), a.data.lockRound)
 	for nID := range s.auths {
 		v := s.copyVote(vote, nID)
 		s.Require().NoError(a.processVote(v))
 	}
-	// We have enough of Confirm-Votes.
+	// We have enough of Com-Votes.
 	s.Require().Len(s.confirmChan, 1)
 	confirmBlock := <-s.confirmChan
 	s.Equal(blockHash, confirmBlock)
+}
+
+func (s *AgreementTestSuite) TestFastForwardCond1() {
+	votes := 0
+	a := s.newAgreement(4)
+	a.data.lockRound = 1
+	a.data.period = 3
+	hash := common.NewRandomHash()
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VotePreCom, hash, uint64(2))
+		s.Require().NoError(a.processVote(vote))
+		if votes++; votes == 3 {
+			break
+		}
+	}
+
+	select {
+	case <-a.done():
+	default:
+		s.FailNow("Expecting fast forward.")
+	}
+	s.Equal(hash, a.data.lockValue)
+	s.Equal(uint64(2), a.data.lockRound)
+	s.Equal(uint64(4), a.data.period)
+
+	// No fast forward if vote.BlockHash == SKIP
+	a.data.lockRound = 6
+	a.data.period = 8
+	a.data.lockValue = nullBlockHash
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VotePreCom, skipBlockHash, uint64(7))
+		s.Require().NoError(a.processVote(vote))
+	}
+
+	select {
+	case <-a.done():
+		s.FailNow("Unexpected fast forward.")
+	default:
+	}
+
+	// No fast forward if lockValue == vote.BlockHash.
+	a.data.lockRound = 11
+	a.data.period = 13
+	a.data.lockValue = hash
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VotePreCom, hash, uint64(12))
+		s.Require().NoError(a.processVote(vote))
+	}
+
+	select {
+	case <-a.done():
+		s.FailNow("Unexpected fast forward.")
+	default:
+	}
+}
+
+func (s *AgreementTestSuite) TestFastForwardCond2() {
+	votes := 0
+	a := s.newAgreement(4)
+	a.data.period = 1
+	hash := common.NewRandomHash()
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VotePreCom, hash, uint64(2))
+		s.Require().NoError(a.processVote(vote))
+		if votes++; votes == 3 {
+			break
+		}
+	}
+
+	select {
+	case <-a.done():
+	default:
+		s.FailNow("Expecting fast forward.")
+	}
+	s.Equal(hash, a.data.lockValue)
+	s.Equal(uint64(2), a.data.lockRound)
+	s.Equal(uint64(2), a.data.period)
+
+	// No fast forward if vote.BlockHash == SKIP
+	a.data.period = 6
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VotePreCom, skipBlockHash, uint64(7))
+		s.Require().NoError(a.processVote(vote))
+	}
+
+	select {
+	case <-a.done():
+		s.FailNow("Unexpected fast forward.")
+	default:
+	}
+}
+
+func (s *AgreementTestSuite) TestFastForwardCond3() {
+	votes := 0
+	a := s.newAgreement(4)
+	a.data.period = 1
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VoteCom, common.NewRandomHash(), uint64(2))
+		s.Require().NoError(a.processVote(vote))
+		if votes++; votes == 3 {
+			break
+		}
+	}
+
+	select {
+	case <-a.done():
+	default:
+		s.FailNow("Expecting fast forward.")
+	}
+	s.Equal(uint64(3), a.data.period)
+}
+
+func (s *AgreementTestSuite) TestDecide() {
+	votes := 0
+	a := s.newAgreement(4)
+	a.data.period = 5
+
+	// No decide if com-vote on SKIP.
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VoteCom, skipBlockHash, uint64(2))
+		s.Require().NoError(a.processVote(vote))
+		if votes++; votes == 3 {
+			break
+		}
+	}
+	s.Require().Len(s.confirmChan, 0)
+
+	// Normal decide.
+	hash := common.NewRandomHash()
+	for nID := range a.notarySet {
+		vote := s.prepareVote(nID, types.VoteCom, hash, uint64(3))
+		s.Require().NoError(a.processVote(vote))
+		if votes++; votes == 3 {
+			break
+		}
+	}
+	s.Require().Len(s.confirmChan, 1)
+	confirmBlock := <-s.confirmChan
+	s.Equal(hash, confirmBlock)
 }
 
 func TestAgreement(t *testing.T) {

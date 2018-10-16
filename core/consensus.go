@@ -79,14 +79,15 @@ func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {
 	}()
 }
 
-func (recv *consensusBAReceiver) ProposeBlock() {
+func (recv *consensusBAReceiver) ProposeBlock() common.Hash {
 	block := recv.consensus.proposeBlock(recv.chainID, recv.round)
 	recv.consensus.baModules[recv.chainID].addCandidateBlock(block)
 	if err := recv.consensus.preProcessBlock(block); err != nil {
 		log.Println(err)
-		return
+		return common.Hash{}
 	}
 	recv.consensus.network.BroadcastBlock(block)
+	return block.Hash
 }
 
 func (recv *consensusBAReceiver) ConfirmBlock(
@@ -357,9 +358,6 @@ BALoop:
 			break BALoop
 		default:
 		}
-		for i := 0; i < agreement.clocks(); i++ {
-			<-tick
-		}
 		select {
 		case newNotary := <-recv.restartNotary:
 			if newNotary {
@@ -382,6 +380,19 @@ BALoop:
 		if err != nil {
 			log.Printf("[%s] %s\n", con.ID.String(), err)
 			break BALoop
+		}
+		for i := 0; i < agreement.clocks(); i++ {
+			// Priority select for agreement.done().
+			select {
+			case <-agreement.done():
+				continue BALoop
+			default:
+			}
+			select {
+			case <-agreement.done():
+				continue BALoop
+			case <-tick:
+			}
 		}
 	}
 }

@@ -67,7 +67,7 @@ func newVoteListMap() []map[types.NodeID]*types.Vote {
 // agreementReceiver is the interface receiving agreement event.
 type agreementReceiver interface {
 	ProposeVote(vote *types.Vote)
-	ProposeBlock()
+	ProposeBlock() common.Hash
 	ConfirmBlock(common.Hash, map[types.NodeID]*types.Vote)
 }
 
@@ -87,11 +87,12 @@ type agreementData struct {
 
 	ID           types.NodeID
 	leader       *leaderSelector
-	defaultBlock common.Hash
+	lockValue    common.Hash
+	lockRound    uint64
 	period       uint64
 	requiredVote int
 	votes        map[uint64][]map[types.NodeID]*types.Vote
-	votesLock    sync.RWMutex
+	lock         sync.RWMutex
 	blocks       map[types.NodeID]*types.Block
 	blocksLock   sync.Mutex
 }
@@ -107,6 +108,7 @@ type agreement struct {
 	pendingBlock   []pendingBlock
 	pendingVote    []pendingVote
 	candidateBlock map[common.Hash]*types.Block
+	fastForward    chan uint64
 	authModule     *Authenticator
 }
 
@@ -125,19 +127,13 @@ func newAgreement(
 		},
 		aID:            &atomic.Value{},
 		candidateBlock: make(map[common.Hash]*types.Block),
+		fastForward:    make(chan uint64, 1),
 		authModule:     authModule,
 	}
 	agreement.restart(notarySet, types.Position{
 		ChainID: math.MaxUint32,
 	})
 	return agreement
-}
-
-// terminate the current running state.
-func (a *agreement) terminate() {
-	if a.state != nil {
-		a.state.terminate()
-	}
 }
 
 // restart the agreement
@@ -147,8 +143,8 @@ func (a *agreement) restart(
 	func() {
 		a.lock.Lock()
 		defer a.lock.Unlock()
-		a.data.votesLock.Lock()
-		defer a.data.votesLock.Unlock()
+		a.data.lock.Lock()
+		defer a.data.lock.Unlock()
 		a.data.blocksLock.Lock()
 		defer a.data.blocksLock.Unlock()
 		a.data.votes = make(map[uint64][]map[types.NodeID]*types.Vote)
@@ -157,9 +153,11 @@ func (a *agreement) restart(
 		a.data.blocks = make(map[types.NodeID]*types.Block)
 		a.data.requiredVote = len(notarySet)/3*2 + 1
 		a.data.leader.restart()
-		a.data.defaultBlock = common.Hash{}
+		a.data.lockValue = nullBlockHash
+		a.data.lockRound = 1
+		a.fastForward = make(chan uint64, 1)
 		a.hasOutput = false
-		a.state = newPrepareState(a.data)
+		a.state = newInitialState(a.data)
 		a.notarySet = notarySet
 		a.candidateBlock = make(map[common.Hash]*types.Block)
 		a.aID.Store(aID)
@@ -215,11 +213,8 @@ func (a *agreement) agreementID() types.Position {
 	return a.aID.Load().(types.Position)
 }
 
-// nextState is called at the spcifi clock time.
+// nextState is called at the specific clock time.
 func (a *agreement) nextState() (err error) {
-	if err = a.state.receiveVote(); err != nil {
-		return
-	}
 	a.state, err = a.state.nextState()
 	return
 }
@@ -245,8 +240,8 @@ func (a *agreement) sanityCheck(vote *types.Vote) error {
 
 func (a *agreement) checkForkVote(vote *types.Vote) error {
 	if err := func() error {
-		a.data.votesLock.RLock()
-		defer a.data.votesLock.RUnlock()
+		a.data.lock.RLock()
+		defer a.data.lock.RUnlock()
 		if votes, exist := a.data.votes[vote.Period]; exist {
 			if oldVote, exist := votes[vote.Type][vote.ProposerID]; exist {
 				if vote.BlockHash != oldVote.BlockHash {
@@ -286,26 +281,71 @@ func (a *agreement) processVote(vote *types.Vote) error {
 		return err
 	}
 
-	if func() bool {
-		a.data.votesLock.Lock()
-		defer a.data.votesLock.Unlock()
-		if _, exist := a.data.votes[vote.Period]; !exist {
-			a.data.votes[vote.Period] = newVoteListMap()
+	a.data.lock.Lock()
+	defer a.data.lock.Unlock()
+	if _, exist := a.data.votes[vote.Period]; !exist {
+		a.data.votes[vote.Period] = newVoteListMap()
+	}
+	a.data.votes[vote.Period][vote.Type][vote.ProposerID] = vote
+	if !a.hasOutput && vote.Type == types.VoteCom {
+		if hash, ok := a.data.countVoteNoLock(vote.Period, vote.Type); ok &&
+			hash != skipBlockHash {
+			a.hasOutput = true
+			a.data.recv.ConfirmBlock(hash,
+				a.data.votes[vote.Period][types.VoteCom])
+			return nil
 		}
-		a.data.votes[vote.Period][vote.Type][vote.ProposerID] = vote
-		if !a.hasOutput && vote.Type == types.VoteConfirm {
-			if len(a.data.votes[vote.Period][types.VoteConfirm]) >=
-				a.data.requiredVote {
-				a.hasOutput = true
-				a.data.recv.ConfirmBlock(vote.BlockHash,
-					a.data.votes[vote.Period][types.VoteConfirm])
+	} else if a.hasOutput {
+		return nil
+	}
+
+	// Check if the agreement requires fast-forwarding.
+	if vote.Type == types.VotePreCom {
+		if hash, ok := a.data.countVoteNoLock(vote.Period, vote.Type); ok &&
+			hash != skipBlockHash {
+			// Condition 1.
+			if a.data.period >= vote.Period && vote.Period > a.data.lockRound &&
+				vote.BlockHash != a.data.lockValue {
+				a.data.lockValue = hash
+				a.data.lockRound = vote.Period
+				a.fastForward <- a.data.period + 1
+				return nil
+			}
+			// Condition 2.
+			if vote.Period > a.data.period {
+				a.data.lockValue = hash
+				a.data.lockRound = vote.Period
+				a.fastForward <- vote.Period
+				return nil
 			}
 		}
-		return true
-	}() {
-		return a.state.receiveVote()
+	}
+	// Condition 3.
+	if vote.Type == types.VoteCom && vote.Period >= a.data.period &&
+		len(a.data.votes[vote.Period][types.VoteCom]) >= a.data.requiredVote {
+		a.fastForward <- vote.Period + 1
+		return nil
 	}
 	return nil
+}
+
+func (a *agreement) done() <-chan struct{} {
+	ch := make(chan struct{}, 1)
+	if a.hasOutput {
+		ch <- struct{}{}
+	} else {
+		select {
+		case period := <-a.fastForward:
+			if period <= a.data.period {
+				break
+			}
+			a.data.setPeriod(period)
+			a.state = newPreCommitState(a.data)
+			ch <- struct{}{}
+		default:
+		}
+	}
+	return ch
 }
 
 // processBlock is the entry point for processing Block.
@@ -348,8 +388,13 @@ func (a *agreement) findCandidateBlock(hash common.Hash) (*types.Block, bool) {
 
 func (a *agreementData) countVote(period uint64, voteType types.VoteType) (
 	blockHash common.Hash, ok bool) {
-	a.votesLock.RLock()
-	defer a.votesLock.RUnlock()
+	a.lock.RLock()
+	defer a.lock.RUnlock()
+	return a.countVoteNoLock(period, voteType)
+}
+
+func (a *agreementData) countVoteNoLock(
+	period uint64, voteType types.VoteType) (blockHash common.Hash, ok bool) {
 	votes, exist := a.votes[period]
 	if !exist {
 		return
@@ -369,4 +414,13 @@ func (a *agreementData) countVote(period uint64, voteType types.VoteType) (
 		}
 	}
 	return
+}
+
+func (a *agreementData) setPeriod(period uint64) {
+	for i := a.period + 1; i <= period; i++ {
+		if _, exist := a.votes[i]; !exist {
+			a.votes[i] = newVoteListMap()
+		}
+	}
+	a.period = period
 }

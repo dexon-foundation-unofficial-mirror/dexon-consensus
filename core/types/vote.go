@@ -29,9 +29,9 @@ type VoteType byte
 
 // VoteType enum.
 const (
-	VoteAck VoteType = iota
-	VoteConfirm
-	VotePass
+	VoteInit VoteType = iota
+	VotePreCom
+	VoteCom
 	// Do not add any type below MaxVoteType.
 	MaxVoteType
 )

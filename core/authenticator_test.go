@@ -55,7 +55,7 @@ func (s *AuthenticatorTestSuite) TestVote() {
 	k := s.setupAuthenticator()
 	v := &types.Vote{
 		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
-		Type:       types.VoteConfirm,
+		Type:       types.VoteCom,
 		BlockHash:  common.NewRandomHash(),
 		Period:     123,
 		Position: types.Position{
