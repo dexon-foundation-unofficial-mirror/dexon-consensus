@@ -27,6 +27,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
+// slowApp is an Application instance slow things down in every method.
 type slowApp struct {
 	sleep                  time.Duration
 	blockConfirmed         map[common.Hash]struct{}
@@ -80,6 +81,41 @@ func (app *slowApp) BlockDelivered(
 	app.blockDelivered[blockHash] = struct{}{}
 }
 
+// noDebugApp is to make sure nonBlocking works when Debug interface
+// is not implemented by the provided Application instance.
+type noDebugApp struct {
+	blockConfirmed map[common.Hash]struct{}
+	blockDelivered map[common.Hash]struct{}
+}
+
+func newNoDebugApp() *noDebugApp {
+	return &noDebugApp{
+		blockConfirmed: make(map[common.Hash]struct{}),
+		blockDelivered: make(map[common.Hash]struct{}),
+	}
+}
+
+func (app *noDebugApp) PreparePayload(_ types.Position) ([]byte, error) {
+	panic("test")
+}
+
+func (app *noDebugApp) PrepareWitness(_ uint64) (types.Witness, error) {
+	panic("test")
+}
+
+func (app *noDebugApp) VerifyBlock(_ *types.Block) bool {
+	panic("test")
+}
+
+func (app *noDebugApp) BlockConfirmed(block types.Block) {
+	app.blockConfirmed[block.Hash] = struct{}{}
+}
+
+func (app *noDebugApp) BlockDelivered(
+	blockHash common.Hash, _ types.FinalizationResult) {
+	app.blockDelivered[blockHash] = struct{}{}
+}
+
 type NonBlockingTestSuite struct {
 	suite.Suite
 }
@@ -116,6 +152,23 @@ func (s *NonBlockingTestSuite) TestNonBlocking() {
 		s.Contains(app.totalOrderingDelivered, hash)
 		s.Contains(app.blockDelivered, hash)
 	}
+}
+
+func (s *NonBlockingTestSuite) TestNoDebug() {
+	app := newNoDebugApp()
+	nbModule := newNonBlocking(app, nil)
+	hash := common.NewRandomHash()
+	// Test BlockConfirmed.
+	nbModule.BlockConfirmed(types.Block{Hash: hash})
+	// Test BlockDelivered
+	nbModule.BlockDelivered(hash, types.FinalizationResult{})
+	nbModule.wait()
+	s.Contains(app.blockConfirmed, hash)
+	s.Contains(app.blockDelivered, hash)
+	// Test other synchronous methods.
+	s.Panics(func() { nbModule.PreparePayload(types.Position{}) })
+	s.Panics(func() { nbModule.PrepareWitness(0) })
+	s.Panics(func() { nbModule.VerifyBlock(nil) })
 }
 
 func TestNonBlocking(t *testing.T) {

@@ -135,9 +135,7 @@ func (nb *nonBlocking) VerifyBlock(block *types.Block) bool {
 
 // BlockConfirmed is called when a block is confirmed and added to lattice.
 func (nb *nonBlocking) BlockConfirmed(block types.Block) {
-	if nb.debug != nil {
-		nb.addEvent(blockConfirmedEvent{&block})
-	}
+	nb.addEvent(blockConfirmedEvent{&block})
 }
 
 // StronglyAcked is called when a block is strongly acked.
