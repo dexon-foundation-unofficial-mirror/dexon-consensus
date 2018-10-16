@@ -115,6 +115,7 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 		leader,
 		s.auths[s.ID],
 	)
+	agreement.restart(notarySet, types.Position{})
 	return agreement
 }
 

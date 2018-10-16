@@ -104,6 +104,7 @@ func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 		leader,
 		s.auths[s.ID],
 	)
+	agreement.restart(notarySet, types.Position{})
 	s.agreement = append(s.agreement, agreement)
 	return agreement
 }

@@ -97,7 +97,8 @@ func (l *leaderSelector) processBlock(block *types.Block) error {
 		return ErrIncorrectCRSSignature
 	}
 	dist := l.distance(block.CRSSignature)
-	if l.minCRSBlock.Cmp(dist) == 1 {
+	cmp := l.minCRSBlock.Cmp(dist)
+	if cmp > 0 || (cmp == 0 && block.Hash.Less(l.minBlockHash)) {
 		l.minCRSBlock = dist
 		l.minBlockHash = block.Hash
 	}

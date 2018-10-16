@@ -19,6 +19,7 @@ package core
 
 import (
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -126,7 +127,9 @@ func newAgreement(
 		candidateBlock: make(map[common.Hash]*types.Block),
 		authModule:     authModule,
 	}
-	agreement.restart(notarySet, types.Position{})
+	agreement.restart(notarySet, types.Position{
+		ChainID: math.MaxUint32,
+	})
 	return agreement
 }
 
