@@ -65,6 +65,8 @@ func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (err error) {
 				getMedianTime(ct.chainTimestamps); err != nil {
 				return
 			}
+		} else {
+			block.Finalization.Timestamp = time.Time{}
 		}
 
 		for uint32(len(ct.chainTimestamps)) <= block.Position.ChainID {
