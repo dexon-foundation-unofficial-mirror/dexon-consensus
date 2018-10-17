@@ -56,7 +56,7 @@ func (mgr *testLatticeMgr) processBlock(b *types.Block) (err error) {
 		verified  []*types.Block
 		pendings  = []*types.Block{b}
 	)
-	if err = mgr.lattice.SanityCheck(b); err != nil {
+	if err = mgr.lattice.SanityCheck(b, true); err != nil {
 		if err == ErrAckingBlockNotExists {
 			err = nil
 		}
@@ -98,15 +98,18 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 	var req = s.Require()
 	// Setup private key.
 	prvKey, err := ecdsa.NewPrivateKey()
-	req.Nil(err)
+	req.NoError(err)
 	// Setup blockdb.
 	db, err := blockdb.NewMemBackedBlockDB()
-	req.Nil(err)
+	req.NoError(err)
 	// Setup application.
 	app := test.NewApp()
+	// Setup governance.
+	gov, err := test.NewGovernance(int(cfg.NotarySetSize), cfg.LambdaBA)
+	req.NoError(err)
 	// Setup lattice.
 	return &testLatticeMgr{
-		ccModule: newCompactionChain(),
+		ccModule: newCompactionChain(gov),
 		app:      app,
 		db:       db,
 		lattice: NewLattice(
@@ -147,22 +150,22 @@ func (s *LatticeTestSuite) TestBasicUsage() {
 		// or the consensus time would be wrong.
 		b, err := master.prepareBlock(i)
 		req.NotNil(b)
-		req.Nil(err)
+		req.NoError(err)
 		// We've ignored the error for "acking blocks don't exist".
 		req.Nil(master.processBlock(b))
 	}
 	for i := 0; i < (blockNum - int(chainNum)); i++ {
 		b, err := master.prepareBlock(uint32(rand.Intn(int(chainNum))))
 		req.NotNil(b)
-		req.Nil(err)
+		req.NoError(err)
 		// We've ignored the error for "acking blocks don't exist".
 		req.Nil(master.processBlock(b))
 	}
 	// Now we have some blocks, replay them on different lattices.
 	iter, err := master.db.GetAll()
-	req.Nil(err)
+	req.NoError(err)
 	revealer, err := test.NewRandomRevealer(iter)
-	req.Nil(err)
+	req.NoError(err)
 	for i := 0; i < otherLatticeNum; i++ {
 		revealer.Reset()
 		revealed := ""
@@ -175,7 +178,7 @@ func (s *LatticeTestSuite) TestBasicUsage() {
 					break
 				}
 			}
-			req.Nil(err)
+			req.NoError(err)
 			req.Nil(other.processBlock(&b))
 			revealed += b.Hash.String() + ","
 			revealSeq[revealed] = struct{}{}
@@ -218,11 +221,11 @@ func (s *LatticeTestSuite) TestSanityCheck() {
 		Timestamp: time.Now().UTC(),
 	}
 	req.NoError(auth.SignBlock(b))
-	req.NoError(lattice.SanityCheck(b))
+	req.NoError(lattice.SanityCheck(b, true))
 	// A block with incorrect signature should not pass sanity check.
 	b.Signature, err = auth.prvKey.Sign(common.NewRandomHash())
 	req.NoError(err)
-	req.Equal(lattice.SanityCheck(b), ErrIncorrectSignature)
+	req.Equal(lattice.SanityCheck(b, false), ErrIncorrectSignature)
 	// A block with un-sorted acks should not pass sanity check.
 	b.Acks = common.NewSortedHashes(common.Hashes{
 		common.NewRandomHash(),
@@ -233,10 +236,10 @@ func (s *LatticeTestSuite) TestSanityCheck() {
 	})
 	b.Acks[0], b.Acks[1] = b.Acks[1], b.Acks[0]
 	req.NoError(auth.SignBlock(b))
-	req.Equal(lattice.SanityCheck(b), ErrAcksNotSorted)
+	req.Equal(lattice.SanityCheck(b, false), ErrAcksNotSorted)
 	// A block with incorrect hash should not pass sanity check.
 	b.Hash = common.NewRandomHash()
-	req.Equal(lattice.SanityCheck(b), ErrIncorrectHash)
+	req.Equal(lattice.SanityCheck(b, false), ErrIncorrectHash)
 }
 
 func TestLattice(t *testing.T) {

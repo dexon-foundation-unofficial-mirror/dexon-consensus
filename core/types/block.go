@@ -118,6 +118,11 @@ func (b *Block) IsGenesis() bool {
 	return b.Position.Height == 0 && b.ParentHash == common.Hash{}
 }
 
+// IsFinalized checks if the finalization data is ready.
+func (b *Block) IsFinalized() bool {
+	return b.Finalization.Height != 0
+}
+
 // IsAcking checks if a block acking another by it's hash.
 func (b *Block) IsAcking(hash common.Hash) bool {
 	idx := sort.Search(len(b.Acks), func(i int) bool {

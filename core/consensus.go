@@ -269,7 +269,7 @@ func NewConsensus(
 	con := &Consensus{
 		ID:            ID,
 		currentConfig: config,
-		ccModule:      newCompactionChain(),
+		ccModule:      newCompactionChain(gov),
 		lattice:       lattice,
 		nbModule:      nbModule,
 		gov:           gov,
@@ -521,8 +521,15 @@ func (con *Consensus) processMsg(msgChan <-chan interface{}) {
 
 		switch val := msg.(type) {
 		case *types.Block:
-			if err := con.preProcessBlock(val); err != nil {
-				log.Println(err)
+			// For sync mode.
+			if val.IsFinalized() {
+				if err := con.processFinalizedBlock(val); err != nil {
+					log.Println(err)
+				}
+			} else {
+				if err := con.preProcessBlock(val); err != nil {
+					log.Println(err)
+				}
 			}
 		case *types.Vote:
 			if err := con.ProcessVote(val); err != nil {
@@ -683,7 +690,7 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 
 // preProcessBlock performs Byzantine Agreement on the block.
 func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
-	if err = con.lattice.SanityCheck(b); err != nil {
+	if err = con.lattice.SanityCheck(b, true); err != nil {
 		return
 	}
 	if err = con.baModules[b.Position.ChainID].processBlock(b); err != nil {
@@ -725,6 +732,15 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		con.nbModule.BlockDelivered(b.Hash, b.Finalization)
 	}
 	if err = con.lattice.PurgeBlocks(deliveredBlocks); err != nil {
+		return
+	}
+	return
+}
+
+// processFinalizedBlock is the entry point for syncing blocks.
+func (con *Consensus) processFinalizedBlock(block *types.Block) (err error) {
+	// TODO(jimmy-dexon): drop block that is already in compaction chain.
+	if err = con.lattice.SanityCheck(block, false); err != nil {
 		return
 	}
 	return

@@ -86,11 +86,12 @@ func (s *Lattice) PrepareBlock(
 	return
 }
 
-// SanityCheck check if a block is valid based on current lattice status.
+// SanityCheck check if a block is valid.
+// If checkRelation is true, it also checks with current lattice status.
 //
 // If some acking blocks don't exists, Lattice would help to cache this block
 // and retry when lattice updated in Lattice.ProcessBlock.
-func (s *Lattice) SanityCheck(b *types.Block) (err error) {
+func (s *Lattice) SanityCheck(b *types.Block, checkRelation bool) (err error) {
 	// Verify block's signature.
 	if err = s.authModule.VerifyBlock(b); err != nil {
 		return
@@ -109,6 +110,9 @@ func (s *Lattice) SanityCheck(b *types.Block) (err error) {
 	if !s.app.VerifyBlock(b) {
 		err = ErrInvalidBlock
 		return err
+	}
+	if !checkRelation {
+		return
 	}
 	s.lock.RLock()
 	defer s.lock.RUnlock()

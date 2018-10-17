@@ -187,7 +187,7 @@ func (n *Node) processBlock(b *types.Block) (err error) {
 		verified  []*types.Block
 		pendings  = []*types.Block{b}
 	)
-	if err = n.lattice.SanityCheck(b); err != nil {
+	if err = n.lattice.SanityCheck(b, true); err != nil {
 		if err == core.ErrAckingBlockNotExists {
 			err = nil
 		}

@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
@@ -32,15 +33,18 @@ var (
 )
 
 type compactionChain struct {
-	blocks        map[common.Hash]*types.Block
-	pendingBlocks []*types.Block
-	blocksLock    sync.RWMutex
-	prevBlockLock sync.RWMutex
-	prevBlock     *types.Block
+	gov                    Governance
+	blocks                 map[common.Hash]*types.Block
+	pendingBlocks          []*types.Block
+	pendingFinalizedBlocks []*types.Block
+	blocksLock             sync.RWMutex
+	prevBlockLock          sync.RWMutex
+	prevBlock              *types.Block
 }
 
-func newCompactionChain() *compactionChain {
+func newCompactionChain(gov Governance) *compactionChain {
 	return &compactionChain{
+		gov:    gov,
 		blocks: make(map[common.Hash]*types.Block),
 	}
 }
@@ -75,6 +79,51 @@ func (cc *compactionChain) processBlock(block *types.Block) error {
 	defer cc.blocksLock.Unlock()
 	cc.pendingBlocks = append(cc.pendingBlocks, block)
 	return nil
+}
+
+func (cc *compactionChain) processFinalizedBlock(block *types.Block) (
+	[]*types.Block, error) {
+	blocks := func() []*types.Block {
+		cc.blocksLock.Lock()
+		defer cc.blocksLock.Unlock()
+		blocks := cc.pendingFinalizedBlocks
+		cc.pendingFinalizedBlocks = []*types.Block{}
+		return blocks
+	}()
+	threshold := make(map[uint64]int)
+	gpks := make(map[uint64]*DKGGroupPublicKey)
+	toPending := []*types.Block{}
+	confirmed := []*types.Block{}
+	blocks = append(blocks, block)
+	for _, b := range blocks {
+		if !cc.gov.IsDKGFinal(b.Position.Round) {
+			toPending = append(toPending, b)
+			continue
+		}
+		round := b.Position.Round
+		if _, exist := gpks[round]; !exist {
+			threshold[round] = int(cc.gov.Configuration(round).DKGSetSize)/3 + 1
+			var err error
+			gpks[round], err = NewDKGGroupPublicKey(
+				round,
+				cc.gov.DKGMasterPublicKeys(round), cc.gov.DKGComplaints(round),
+				threshold[round])
+			if err != nil {
+				continue
+			}
+		}
+		gpk := gpks[round]
+		if ok := gpk.VerifySignature(b.Hash, crypto.Signature{
+			Type:      "bls",
+			Signature: b.Finalization.Randomness}); !ok {
+			continue
+		}
+		confirmed = append(confirmed, b)
+	}
+	cc.blocksLock.Lock()
+	defer cc.blocksLock.Unlock()
+	cc.pendingFinalizedBlocks = append(cc.pendingFinalizedBlocks, toPending...)
+	return confirmed, nil
 }
 
 func (cc *compactionChain) extractBlocks() []*types.Block {

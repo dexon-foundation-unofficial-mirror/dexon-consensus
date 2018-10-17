@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -34,7 +35,9 @@ func (s *CompactionChainTestSuite) SetupTest() {
 }
 
 func (s *CompactionChainTestSuite) newCompactionChain() *compactionChain {
-	return newCompactionChain()
+	gov, err := test.NewGovernance(4, 100*time.Millisecond)
+	s.Require().NoError(err)
+	return newCompactionChain(gov)
 }
 
 func (s *CompactionChainTestSuite) generateBlocks(
