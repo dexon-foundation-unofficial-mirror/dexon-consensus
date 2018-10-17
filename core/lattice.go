@@ -58,7 +58,7 @@ func NewLattice(
 		pool:       newBlockPool(cfg.NumChains),
 		data:       newLatticeData(db, dataConfig),
 		toModule:   newTotalOrdering(toConfig),
-		ctModule:   newConsensusTimestamp(cfg.NumChains),
+		ctModule:   newConsensusTimestamp(dMoment, cfg.NumChains),
 	}
 	return
 }
@@ -140,6 +140,8 @@ func (s *Lattice) ProcessBlock(
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	if inLattice, err = s.data.addBlock(input); err != nil {
+		// TODO(mission): if sanity check failed with "acking block doesn't
+		//                exists", we should keep it in a pool.
 		return
 	}
 	// TODO(mission): remove this hack, BA related stuffs should not

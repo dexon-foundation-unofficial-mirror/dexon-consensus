@@ -81,11 +81,11 @@ func NewNode(
 	gov core.Governance,
 	db blockdb.BlockDatabase,
 	privateKey crypto.PrivateKey,
+	dMoment time.Time,
 	networkLatency test.LatencyModel,
 	proposingLatency test.LatencyModel) *Node {
 
 	var (
-		dMoment          = time.Now().UTC()
 		chainID          = uint32(math.MaxUint32)
 		governanceConfig = gov.Configuration(0)
 		nodeSetKeys      = gov.NodeSet(0)

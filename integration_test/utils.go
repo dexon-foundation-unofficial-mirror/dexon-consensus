@@ -25,6 +25,7 @@ func PrepareNodes(
 	if err != nil {
 		return
 	}
+	dMoment := time.Now().UTC()
 	for _, prvKey := range gov.PrivateKeys() {
 		nID := types.NewNodeID(prvKey.PublicKey())
 		apps[nID] = test.NewApp()
@@ -37,6 +38,7 @@ func PrepareNodes(
 			gov,
 			dbs[nID],
 			prvKey,
+			dMoment,
 			networkLatency,
 			proposingLatency,
 		)

@@ -135,8 +135,8 @@ type ConsensusTestSuite struct {
 	conn *networkConnection
 }
 
-func (s *ConsensusTestSuite) SetupTest() {
-	s.conn = &networkConnection{
+func (s *ConsensusTestSuite) newNetworkConnection() *networkConnection {
+	return &networkConnection{
 		s:    s,
 		cons: make(map[types.NodeID]*Consensus),
 	}
@@ -157,17 +157,20 @@ func (s *ConsensusTestSuite) prepareGenesisBlock(
 }
 
 func (s *ConsensusTestSuite) prepareConsensus(
-	dMoment time.Time, gov *test.Governance, prvKey crypto.PrivateKey) (
+	dMoment time.Time,
+	gov *test.Governance,
+	prvKey crypto.PrivateKey,
+	conn *networkConnection) (
 	*test.App, *Consensus) {
 
 	app := test.NewApp()
 	db, err := blockdb.NewMemBackedBlockDB()
 	s.Require().Nil(err)
 	nID := types.NewNodeID(prvKey.PublicKey())
-	network := s.conn.newNetwork(nID)
+	network := conn.newNetwork(nID)
 	con := NewConsensus(dMoment, app, gov, db,
 		network, prvKey)
-	s.conn.setCon(nID, con)
+	conn.setCon(nID, con)
 	return app, con
 }
 
@@ -191,6 +194,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		req         = s.Require()
 		prvKeys     = gov.PrivateKeys()
 		nodes       []types.NodeID
+		conn        = s.newNetworkConnection()
 	)
 	s.Require().Nil(err)
 	// Setup core.Consensus and test.App.
@@ -201,7 +205,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	dMoment := time.Now().UTC()
 	for _, key := range prvKeys {
 		nID := types.NewNodeID(key.PublicKey())
-		app, con := s.prepareConsensus(dMoment, gov, key)
+		app, con := s.prepareConsensus(dMoment, gov, key, conn)
 		objs[nID] = &struct {
 			app *test.App
 			con *Consensus
@@ -409,13 +413,14 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 		req      = s.Require()
 		nodes    []types.NodeID
 		prvKeys  = gov.PrivateKeys()
+		conn     = s.newNetworkConnection()
 	)
 	s.Require().Nil(err)
 	dMoment := time.Now().UTC()
 	// Setup core.Consensus and test.App.
 	cons := map[types.NodeID]*Consensus{}
 	for _, key := range prvKeys {
-		_, con := s.prepareConsensus(dMoment, gov, key)
+		_, con := s.prepareConsensus(dMoment, gov, key, conn)
 		nID := types.NewNodeID(key.PublicKey())
 		cons[nID] = con
 		nodes = append(nodes, nID)
@@ -448,10 +453,11 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 }
 
 func (s *ConsensusTestSuite) TestPrepareGenesisBlock() {
+	conn := s.newNetworkConnection()
 	gov, err := test.NewGovernance(4, time.Second)
 	s.Require().NoError(err)
 	prvKey := gov.PrivateKeys()[0]
-	_, con := s.prepareConsensus(time.Now().UTC(), gov, prvKey)
+	_, con := s.prepareConsensus(time.Now().UTC(), gov, prvKey, conn)
 	block := &types.Block{
 		Position: types.Position{ChainID: 0},
 	}
@@ -467,6 +473,7 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 		n = 7
 		lambda = 100
 	}
+	conn := s.newNetworkConnection()
 	gov, err := test.NewGovernance(n, lambda*time.Millisecond)
 	s.Require().Nil(err)
 	gov.RoundInterval = 200 * lambda * time.Millisecond
@@ -474,7 +481,7 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 	cons := map[types.NodeID]*Consensus{}
 	dMoment := time.Now().UTC()
 	for _, key := range prvKeys {
-		_, con := s.prepareConsensus(dMoment, gov, key)
+		_, con := s.prepareConsensus(dMoment, gov, key, conn)
 		nID := types.NewNodeID(key.PublicKey())
 		cons[nID] = con
 		con.cfgModule.registerDKG(uint64(0), n/3+1)

@@ -31,6 +31,9 @@ type consensusTimestamp struct {
 	// This part keeps configs for each round.
 	numChainsForRounds []uint32
 	numChainsRoundBase uint64
+
+	// dMoment represents the genesis time.
+	dMoment time.Time
 }
 
 var (
@@ -40,10 +43,12 @@ var (
 )
 
 // newConsensusTimestamp creates timestamper object.
-func newConsensusTimestamp(numChains uint32) *consensusTimestamp {
+func newConsensusTimestamp(
+	dMoment time.Time, numChains uint32) *consensusTimestamp {
 	return &consensusTimestamp{
 		numChainsForRounds: []uint32{numChains},
 		numChainsRoundBase: uint64(0),
+		dMoment:            dMoment,
 	}
 }
 
@@ -59,29 +64,31 @@ func (ct *consensusTimestamp) appendConfig(
 	return nil
 }
 
+func (ct *consensusTimestamp) getNumChains(round uint64) uint32 {
+	roundIndex := round - ct.numChainsRoundBase
+	return ct.numChainsForRounds[roundIndex]
+}
+
 // ProcessBlocks is the entry function.
 func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (err error) {
 	for _, block := range blocks {
-		if !block.IsGenesis() {
-			round := block.Position.Round - ct.numChainsRoundBase
-			ts := ct.chainTimestamps[:ct.numChainsForRounds[round]]
-			if block.Finalization.Timestamp, err = getMedianTime(ts); err != nil {
-				return
-			}
-		} else {
-			block.Finalization.Timestamp = time.Time{}
+		numChains := ct.getNumChains(block.Position.Round)
+		// Fulfill empty time slots with d-moment. This part also means
+		// each time we increasing number of chains, we can't increase over
+		// 49% of previous number of chains.
+		for uint32(len(ct.chainTimestamps)) < numChains {
+			ct.chainTimestamps = append(ct.chainTimestamps, ct.dMoment)
 		}
-
-		for uint32(len(ct.chainTimestamps)) <= block.Position.ChainID {
-			ct.chainTimestamps = append(ct.chainTimestamps, time.Time{})
+		ts := ct.chainTimestamps[:numChains]
+		if block.Finalization.Timestamp, err = getMedianTime(ts); err != nil {
+			return
 		}
-
 		if !block.Timestamp.After(ct.chainTimestamps[block.Position.ChainID]) {
 			return ErrTimestampNotIncrease
 		}
-
 		ct.chainTimestamps[block.Position.ChainID] = block.Timestamp
-
+		// Purge configs for older rounds, rounds of blocks from total ordering
+		// would increase.
 		if block.Position.Round > ct.numChainsRoundBase {
 			ct.numChainsRoundBase++
 			ct.numChainsForRounds = ct.numChainsForRounds[1:]
