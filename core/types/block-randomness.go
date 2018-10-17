@@ -24,7 +24,6 @@ import (
 // AgreementResult describes an agremeent result.
 type AgreementResult struct {
 	BlockHash common.Hash `json:"block_hash"`
-	Round     uint64      `json:"round"`
 	Position  Position    `json:"position"`
 	Votes     []Vote      `json:"votes"`
 }
@@ -32,6 +31,6 @@ type AgreementResult struct {
 // BlockRandomnessResult describes a block randomness result
 type BlockRandomnessResult struct {
 	BlockHash  common.Hash `json:"block_hash"`
-	Round      uint64      `json:"round"`
+	Position   Position    `json:"position"`
 	Randomness []byte      `json:"randomness"`
 }

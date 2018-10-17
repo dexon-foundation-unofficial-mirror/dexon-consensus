@@ -39,16 +39,17 @@ var (
 )
 
 type configurationChain struct {
-	ID        types.NodeID
-	recv      dkgReceiver
-	gov       Governance
-	dkg       *dkgProtocol
-	dkgLock   sync.RWMutex
-	dkgSigner map[uint64]*dkgShareSecret
-	gpk       map[uint64]*DKGGroupPublicKey
-	dkgResult sync.RWMutex
-	tsig      map[common.Hash]*tsigProtocol
-	tsigReady *sync.Cond
+	ID          types.NodeID
+	recv        dkgReceiver
+	gov         Governance
+	dkg         *dkgProtocol
+	dkgLock     sync.RWMutex
+	dkgSigner   map[uint64]*dkgShareSecret
+	gpk         map[uint64]*DKGGroupPublicKey
+	dkgResult   sync.RWMutex
+	tsig        map[common.Hash]*tsigProtocol
+	tsigTouched map[common.Hash]struct{}
+	tsigReady   *sync.Cond
 	// TODO(jimmy-dexon): add timeout to pending psig.
 	pendingPsig map[common.Hash][]*types.DKGPartialSignature
 	prevHash    common.Hash
@@ -182,6 +183,14 @@ func (cc *configurationChain) preparePartialSignature(
 	}, nil
 }
 
+func (cc *configurationChain) touchTSigHash(hash common.Hash) (first bool) {
+	cc.tsigReady.L.Lock()
+	defer cc.tsigReady.L.Unlock()
+	_, exist := cc.tsigTouched[hash]
+	cc.tsigTouched[hash] = struct{}{}
+	return !exist
+}
+
 func (cc *configurationChain) runTSig(
 	round uint64, hash common.Hash) (
 	crypto.Signature, error) {
@@ -218,6 +227,7 @@ func (cc *configurationChain) runTSig(
 		cc.tsigReady.Wait()
 	}
 	delete(cc.tsig, hash)
+	delete(cc.tsigTouched, hash)
 	if err != nil {
 		return crypto.Signature{}, err
 	}
