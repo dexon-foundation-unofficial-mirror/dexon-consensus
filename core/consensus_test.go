@@ -32,7 +32,6 @@ import (
 
 // network implements core.Network.
 type network struct {
-	ch   <-chan interface{}
 	nID  types.NodeID
 	conn *networkConnection
 }
@@ -80,43 +79,55 @@ func (n *network) BroadcastDKGPartialSignature(
 
 // ReceiveChan returns a channel to receive messages from DEXON network.
 func (n *network) ReceiveChan() <-chan interface{} {
-	return n.ch
-}
-
-type networkConnection struct {
-	channels map[types.NodeID]chan interface{}
+	return make(chan interface{})
 }
 
 func (nc *networkConnection) broadcast(from types.NodeID, msg interface{}) {
-	for pk, ch := range nc.channels {
-		if pk == from {
+	for nID := range nc.cons {
+		if nID == from {
 			continue
 		}
-		go func(ch chan interface{}) {
-			ch <- msg
-		}(ch)
+		nc.send(nID, msg)
 	}
 }
 
 func (nc *networkConnection) send(to types.NodeID, msg interface{}) {
-	ch, exist := nc.channels[to]
+	con, exist := nc.cons[to]
 	if !exist {
 		return
 	}
 	go func() {
-		ch <- msg
+		switch val := msg.(type) {
+		case *types.Block:
+			nc.s.Require().NoError(con.preProcessBlock(val))
+		case *types.Vote:
+			nc.s.Require().NoError(con.ProcessVote(val))
+		case *types.AgreementResult:
+			nc.s.Require().NoError(con.ProcessAgreementResult(val))
+		case *types.BlockRandomnessResult:
+			nc.s.Require().NoError(con.ProcessBlockRandomnessResult(val))
+		case *types.DKGPrivateShare:
+			nc.s.Require().NoError(con.cfgModule.processPrivateShare(val))
+		case *types.DKGPartialSignature:
+			nc.s.Require().NoError(con.cfgModule.processPartialSignature(val))
+		}
 	}()
 }
 
-func (nc *networkConnection) join(pk crypto.PublicKey) *network {
-	ch := make(chan interface{}, 300)
-	nID := types.NewNodeID(pk)
-	nc.channels[nID] = ch
+type networkConnection struct {
+	s    *ConsensusTestSuite
+	cons map[types.NodeID]*Consensus
+}
+
+func (nc *networkConnection) newNetwork(nID types.NodeID) *network {
 	return &network{
-		ch:   ch,
 		nID:  nID,
 		conn: nc,
 	}
+}
+
+func (nc *networkConnection) setCon(nID types.NodeID, con *Consensus) {
+	nc.cons[nID] = con
 }
 
 type ConsensusTestSuite struct {
@@ -126,7 +137,8 @@ type ConsensusTestSuite struct {
 
 func (s *ConsensusTestSuite) SetupTest() {
 	s.conn = &networkConnection{
-		channels: make(map[types.NodeID]chan interface{}),
+		s:    s,
+		cons: make(map[types.NodeID]*Consensus),
 	}
 }
 
@@ -151,8 +163,11 @@ func (s *ConsensusTestSuite) prepareConsensus(
 	app := test.NewApp()
 	db, err := blockdb.NewMemBackedBlockDB()
 	s.Require().Nil(err)
+	nID := types.NewNodeID(prvKey.PublicKey())
+	network := s.conn.newNetwork(nID)
 	con := NewConsensus(dMoment, app, gov, db,
-		s.conn.join(prvKey.PublicKey()), prvKey)
+		network, prvKey)
+	s.conn.setCon(nID, con)
 	return app, con
 }
 
@@ -462,7 +477,6 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 		_, con := s.prepareConsensus(dMoment, gov, key)
 		nID := types.NewNodeID(key.PublicKey())
 		cons[nID] = con
-		go con.processMsg(con.network.ReceiveChan())
 		con.cfgModule.registerDKG(uint64(0), n/3+1)
 	}
 	for _, con := range cons {

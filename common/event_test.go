@@ -87,6 +87,25 @@ func (s *EventTestSuite) TestTimeEvent() {
 	}
 }
 
+func (s *EventTestSuite) TestReset() {
+	event := NewEvent()
+	now := time.Now()
+	triggered := make(chan int, 100)
+	trigger := func(id int) func(t time.Time) {
+		return func(t time.Time) {
+			triggered <- id
+		}
+	}
+	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
+	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
+	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
+	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
+	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
+	event.Reset()
+	event.NotifyTime(now.Add(150 * time.Millisecond))
+	s.Len(triggered, 0)
+}
+
 func TestEvent(t *testing.T) {
 	suite.Run(t, new(EventTestSuite))
 }

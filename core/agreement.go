@@ -130,9 +130,7 @@ func newAgreement(
 		fastForward:    make(chan uint64, 1),
 		authModule:     authModule,
 	}
-	agreement.restart(notarySet, types.Position{
-		ChainID: math.MaxUint32,
-	})
+	agreement.stop()
 	return agreement
 }
 
@@ -201,6 +199,12 @@ func (a *agreement) restart(
 	for _, vote := range replayVote {
 		a.processVote(vote)
 	}
+}
+
+func (a *agreement) stop() {
+	a.restart(make(map[types.NodeID]struct{}), types.Position{
+		ChainID: math.MaxUint32,
+	})
 }
 
 // clocks returns how many time this state is required.

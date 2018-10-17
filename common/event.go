@@ -93,3 +93,10 @@ func (e *Event) NotifyTime(t time.Time) {
 		fn(t)
 	}
 }
+
+// Reset clears all pending event
+func (e *Event) Reset() {
+	e.timeEventsLock.Lock()
+	defer e.timeEventsLock.Unlock()
+	e.timeEvents = timeEvents{}
+}

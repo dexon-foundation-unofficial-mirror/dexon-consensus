@@ -246,8 +246,6 @@ func NewConsensus(
 	if err != nil {
 		panic(err)
 	}
-	// Setup context.
-	ctx, ctxCancel := context.WithCancel(context.Background())
 	// Setup auth module.
 	authModule := NewAuthenticator(prv)
 	// Check if the application implement Debug interface.
@@ -283,8 +281,6 @@ func NewConsensus(
 		cfgModule:     cfgModule,
 		dMoment:       dMoment,
 		nodeSetCache:  nodeSetCache,
-		ctx:           ctx,
-		ctxCancel:     ctxCancel,
 		authModule:    authModule,
 		event:         common.NewEvent(),
 	}
@@ -316,6 +312,8 @@ func NewConsensus(
 
 // Run starts running DEXON Consensus.
 func (con *Consensus) Run() {
+	// Setup context.
+	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
 	go con.processMsg(con.network.ReceiveChan())
 	con.cfgModule.registerDKG(con.round, int(con.currentConfig.DKGSetSize)/3+1)
 	con.event.RegisterTime(con.dMoment.Add(con.currentConfig.RoundInterval/4),
@@ -471,6 +469,11 @@ func (con *Consensus) runCRS() {
 }
 
 func (con *Consensus) initialRound(startTime time.Time) {
+	select {
+	case <-con.ctx.Done():
+		return
+	default:
+	}
 	con.currentConfig = con.gov.Configuration(con.round)
 
 	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval/2),
@@ -501,6 +504,10 @@ func (con *Consensus) initialRound(startTime time.Time) {
 
 // Stop the Consensus core.
 func (con *Consensus) Stop() {
+	for _, a := range con.baModules {
+		a.stop()
+	}
+	con.event.Reset()
 	con.ctxCancel()
 }
 
