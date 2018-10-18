@@ -94,7 +94,7 @@ func (s *ConsensusTimestampTest) TestTimestampPartition() {
 	chainNum := 19
 	sigma := 100 * time.Millisecond
 	totalTimestamps := make([]time.Time, 0)
-	ct := newConsensusTimestamp(time.Time{}, uint32(chainNum))
+	ct := newConsensusTimestamp(time.Time{}, 0, uint32(chainNum))
 	totalBlockNum := 0
 	for _, blockNum := range blockNums {
 		totalBlockNum += blockNum
@@ -110,7 +110,7 @@ func (s *ConsensusTimestampTest) TestTimestampPartition() {
 		totalChain = append(totalChain, chain...)
 		totalTimestamps = append(totalTimestamps, timestamps...)
 	}
-	ct2 := newConsensusTimestamp(time.Time{}, uint32(chainNum))
+	ct2 := newConsensusTimestamp(time.Time{}, 0, uint32(chainNum))
 	err := ct2.processBlocks(totalChain)
 	s.Require().NoError(err)
 	timestamps2 := s.extractTimestamps(totalChain)
@@ -120,7 +120,7 @@ func (s *ConsensusTimestampTest) TestTimestampPartition() {
 func (s *ConsensusTimestampTest) TestTimestampIncrease() {
 	chainNum := 19
 	sigma := 100 * time.Millisecond
-	ct := newConsensusTimestamp(time.Time{}, uint32(chainNum))
+	ct := newConsensusTimestamp(time.Time{}, 0, uint32(chainNum))
 	chain := s.generateBlocksWithTimestamp(1000, chainNum, time.Second, sigma)
 	err := ct.processBlocks(chain)
 	s.Require().NoError(err)
@@ -129,11 +129,69 @@ func (s *ConsensusTimestampTest) TestTimestampIncrease() {
 		s.False(timestamps[i].Before(timestamps[i-1]))
 	}
 	// Test if the processBlocks is stable.
-	ct2 := newConsensusTimestamp(time.Time{}, uint32(chainNum))
+	ct2 := newConsensusTimestamp(time.Time{}, 0, uint32(chainNum))
 	ct2.processBlocks(chain)
 	s.Require().NoError(err)
 	timestamps2 := s.extractTimestamps(chain)
 	s.Equal(timestamps, timestamps2)
+}
+
+func (s *ConsensusTimestampTest) TestTimestampConfigChange() {
+	chainNum := 19
+	sigma := 100 * time.Millisecond
+	ct := newConsensusTimestamp(time.Time{}, 20, uint32(chainNum))
+	chain := s.generateBlocksWithTimestamp(1000, chainNum, time.Second, sigma)
+	blocks := make([]*types.Block, 0, 1000)
+	ct.appendConfig(21, &types.Config{NumChains: uint32(16)})
+	ct.appendConfig(22, &types.Config{NumChains: uint32(19)})
+	// Blocks 0 to 299 is in round 20, blocks 300 to 599 is in round 21 and ignore
+	// blocks which ChainID is 16 to 18, blocks 600 to 999 is in round 22.
+	for i := 0; i < 1000; i++ {
+		add := true
+		if i < 300 {
+			chain[i].Position.Round = 20
+		} else if i < 600 {
+			chain[i].Position.Round = 21
+			add = chain[i].Position.ChainID < 16
+		} else {
+			chain[i].Position.Round = 22
+		}
+		if add {
+			blocks = append(blocks, chain[i])
+		}
+	}
+	err := ct.processBlocks(blocks)
+	s.Require().NoError(err)
+}
+
+func (s *ConsensusTimestampTest) TestRoundInterleave() {
+	chainNum := 9
+	sigma := 100 * time.Millisecond
+	ct := newConsensusTimestamp(time.Time{}, 0, uint32(chainNum))
+	ct.appendConfig(1, &types.Config{NumChains: uint32(chainNum)})
+	chain := s.generateBlocksWithTimestamp(100, chainNum, time.Second, sigma)
+	for i := 50; i < 100; i++ {
+		chain[i].Position.Round = 1
+	}
+	chain[48].Position.Round = 1
+	chain[49].Position.Round = 1
+	chain[50].Position.Round = 0
+	chain[51].Position.Round = 0
+	err := ct.processBlocks(chain)
+	s.Require().NoError(err)
+}
+
+func (s *ConsensusTimestampTest) TestTimestampSync() {
+	chainNum := 19
+	sigma := 100 * time.Millisecond
+	ct := newConsensusTimestamp(time.Time{}, 0, uint32(chainNum))
+	chain := s.generateBlocksWithTimestamp(100, chainNum, time.Second, sigma)
+	err := ct.processBlocks(chain[:chainNum-1])
+	s.Require().NoError(err)
+	s.Require().False(ct.isSynced())
+	err = ct.processBlocks(chain[chainNum-1:])
+	s.Require().NoError(err)
+	s.Require().True(ct.isSynced())
 }
 
 func TestConsensusTimestamp(t *testing.T) {

@@ -29,8 +29,8 @@ type consensusTimestamp struct {
 	chainTimestamps []time.Time
 
 	// This part keeps configs for each round.
-	numChainsForRounds []uint32
-	numChainsRoundBase uint64
+	numChainsOfRounds []uint32
+	numChainsBase     uint64
 
 	// dMoment represents the genesis time.
 	dMoment time.Time
@@ -40,15 +40,22 @@ var (
 	// ErrTimestampNotIncrease would be reported if the timestamp is not strickly
 	// increasing on the same chain.
 	ErrTimestampNotIncrease = errors.New("timestamp is not increasing")
+	// ErrNoRoundConfig for no round config found.
+	ErrNoRoundConfig = errors.New("no round config found")
 )
 
 // newConsensusTimestamp creates timestamper object.
 func newConsensusTimestamp(
-	dMoment time.Time, numChains uint32) *consensusTimestamp {
+	dMoment time.Time, round uint64, numChains uint32) *consensusTimestamp {
+	ts := make([]time.Time, 0, numChains)
+	for i := uint32(0); i < numChains; i++ {
+		ts = append(ts, dMoment)
+	}
 	return &consensusTimestamp{
-		numChainsForRounds: []uint32{numChains},
-		numChainsRoundBase: uint64(0),
-		dMoment:            dMoment,
+		numChainsOfRounds: []uint32{numChains},
+		numChainsBase:     round,
+		dMoment:           dMoment,
+		chainTimestamps:   ts,
 	}
 }
 
@@ -57,29 +64,49 @@ func newConsensusTimestamp(
 func (ct *consensusTimestamp) appendConfig(
 	round uint64, config *types.Config) error {
 
-	if round != uint64(len(ct.numChainsForRounds))+ct.numChainsRoundBase {
+	if round != uint64(len(ct.numChainsOfRounds))+ct.numChainsBase {
 		return ErrRoundNotIncreasing
 	}
-	ct.numChainsForRounds = append(ct.numChainsForRounds, config.NumChains)
+	ct.numChainsOfRounds = append(ct.numChainsOfRounds, config.NumChains)
 	return nil
 }
 
-func (ct *consensusTimestamp) getNumChains(round uint64) uint32 {
-	roundIndex := round - ct.numChainsRoundBase
-	return ct.numChainsForRounds[roundIndex]
+func (ct *consensusTimestamp) resizeChainTimetamps(numChain uint32) {
+	l := uint32(len(ct.chainTimestamps))
+	if numChain > l {
+		for i := l; i < numChain; i++ {
+			ct.chainTimestamps = append(ct.chainTimestamps, ct.dMoment)
+		}
+	} else if numChain < l {
+		ct.chainTimestamps = ct.chainTimestamps[:numChain]
+	}
 }
 
 // ProcessBlocks is the entry function.
 func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (err error) {
 	for _, block := range blocks {
-		numChains := ct.getNumChains(block.Position.Round)
-		// Fulfill empty time slots with d-moment. This part also means
-		// each time we increasing number of chains, we can't increase over
-		// 49% of previous number of chains.
-		for uint32(len(ct.chainTimestamps)) < numChains {
-			ct.chainTimestamps = append(ct.chainTimestamps, ct.dMoment)
+		// Rounds might interleave within rounds if no configuration change
+		// occurs. And it is limited to one round, that is, round r can only
+		// interleave with r-1 and r+1.
+		round := block.Position.Round
+		if ct.numChainsBase == round || ct.numChainsBase+1 == round {
+			// Normal case, no need to modify chainTimestamps.
+		} else if ct.numChainsBase+2 == round {
+			if len(ct.numChainsOfRounds) < 2 {
+				return ErrNoRoundConfig
+			}
+			if ct.numChainsOfRounds[0] > ct.numChainsOfRounds[1] {
+				ct.resizeChainTimetamps(ct.numChainsOfRounds[0])
+			} else {
+				ct.resizeChainTimetamps(ct.numChainsOfRounds[1])
+			}
+			ct.numChainsBase++
+			ct.numChainsOfRounds = ct.numChainsOfRounds[1:]
+		} else {
+			// Error if round < base or round > base + 2.
+			return ErrInvalidRoundID
 		}
-		ts := ct.chainTimestamps[:numChains]
+		ts := ct.chainTimestamps[:ct.numChainsOfRounds[round-ct.numChainsBase]]
 		if block.Finalization.Timestamp, err = getMedianTime(ts); err != nil {
 			return
 		}
@@ -87,12 +114,16 @@ func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (err error) {
 			return ErrTimestampNotIncrease
 		}
 		ct.chainTimestamps[block.Position.ChainID] = block.Timestamp
-		// Purge configs for older rounds, rounds of blocks from total ordering
-		// would increase.
-		if block.Position.Round > ct.numChainsRoundBase {
-			ct.numChainsRoundBase++
-			ct.numChainsForRounds = ct.numChainsForRounds[1:]
-		}
 	}
 	return
+}
+
+func (ct *consensusTimestamp) isSynced() bool {
+	numChain := ct.numChainsOfRounds[0]
+	for i := uint32(0); i < numChain; i++ {
+		if ct.chainTimestamps[i].Equal(ct.dMoment) {
+			return false
+		}
+	}
+	return true
 }

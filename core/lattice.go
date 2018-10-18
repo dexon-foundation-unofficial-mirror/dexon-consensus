@@ -58,7 +58,7 @@ func NewLattice(
 		pool:       newBlockPool(cfg.NumChains),
 		data:       newLatticeData(db, dataConfig),
 		toModule:   newTotalOrdering(toConfig),
-		ctModule:   newConsensusTimestamp(dMoment, cfg.NumChains),
+		ctModule:   newConsensusTimestamp(dMoment, 0, cfg.NumChains),
 	}
 	return
 }
