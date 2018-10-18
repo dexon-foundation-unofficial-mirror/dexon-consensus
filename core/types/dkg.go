@@ -18,6 +18,7 @@
 package types
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
@@ -57,6 +58,13 @@ func NewDKGMasterPublicKey() *DKGMasterPublicKey {
 	return &DKGMasterPublicKey{
 		PublicKeyShares: *dkg.NewEmptyPublicKeyShares(),
 	}
+}
+
+// UnmarshalJSON implements json.Unmarshaller.
+func (d *DKGMasterPublicKey) UnmarshalJSON(data []byte) error {
+	type innertDKGMasterPublicKey DKGMasterPublicKey
+	d.PublicKeyShares = *dkg.NewEmptyPublicKeyShares()
+	return json.Unmarshal(data, (*innertDKGMasterPublicKey)(d))
 }
 
 // DKGComplaint describe a complaint in DKG protocol.
