@@ -314,6 +314,13 @@ func (con *Consensus) Run(initBlock *types.Block) {
 	// Setup context.
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
 	con.ccModule.init(initBlock)
+	// TODO(jimmy-dexon): change AppendConfig to add config for specific round.
+	for i := uint64(0); i < initBlock.Position.Round; i++ {
+		cfg := con.gov.Configuration(i + 1)
+		if err := con.lattice.AppendConfig(i+1, cfg); err != nil {
+			panic(err)
+		}
+	}
 	go con.processMsg(con.network.ReceiveChan())
 	con.cfgModule.registerDKG(con.round, int(con.currentConfig.DKGSetSize)/3+1)
 	con.event.RegisterTime(con.dMoment.Add(con.currentConfig.RoundInterval/4),
