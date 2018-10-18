@@ -30,6 +30,8 @@ import (
 var (
 	ErrBlockNotRegistered = fmt.Errorf(
 		"block not registered")
+	ErrNotInitiazlied = fmt.Errorf(
+		"not initialized")
 )
 
 type compactionChain struct {
@@ -47,6 +49,12 @@ func newCompactionChain(gov Governance) *compactionChain {
 		gov:    gov,
 		blocks: make(map[common.Hash]*types.Block),
 	}
+}
+
+func (cc *compactionChain) init(initBlock *types.Block) {
+	cc.prevBlockLock.Lock()
+	defer cc.prevBlockLock.Unlock()
+	cc.prevBlock = initBlock
 }
 
 func (cc *compactionChain) registerBlock(block *types.Block) {
@@ -67,11 +75,10 @@ func (cc *compactionChain) blockRegistered(hash common.Hash) (exist bool) {
 
 func (cc *compactionChain) processBlock(block *types.Block) error {
 	prevBlock := cc.lastBlock()
-	if prevBlock != nil {
-		block.Finalization.Height = prevBlock.Finalization.Height + 1
-	} else {
-		block.Finalization.Height = 1
+	if prevBlock == nil {
+		return ErrNotInitiazlied
 	}
+	block.Finalization.Height = prevBlock.Finalization.Height + 1
 	cc.prevBlockLock.Lock()
 	defer cc.prevBlockLock.Unlock()
 	cc.prevBlock = block

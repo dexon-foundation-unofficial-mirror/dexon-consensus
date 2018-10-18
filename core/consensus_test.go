@@ -170,6 +170,7 @@ func (s *ConsensusTestSuite) prepareConsensus(
 	network := conn.newNetwork(nID)
 	con := NewConsensus(dMoment, app, gov, db,
 		network, prvKey)
+	con.ccModule.init(&types.Block{})
 	conn.setCon(nID, con)
 	return app, con
 }

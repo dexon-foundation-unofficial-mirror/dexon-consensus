@@ -37,7 +37,9 @@ func (s *CompactionChainTestSuite) SetupTest() {
 func (s *CompactionChainTestSuite) newCompactionChain() *compactionChain {
 	gov, err := test.NewGovernance(4, 100*time.Millisecond)
 	s.Require().NoError(err)
-	return newCompactionChain(gov)
+	cc := newCompactionChain(gov)
+	cc.init(&types.Block{})
+	return cc
 }
 
 func (s *CompactionChainTestSuite) generateBlocks(
@@ -73,15 +75,11 @@ func (s *CompactionChainTestSuite) TestProcessBlock() {
 		}
 		now = now.Add(100 * time.Millisecond)
 	}
-	var prevBlock *types.Block
+	prevBlock := &types.Block{}
 	for _, block := range blocks {
 		s.Equal(cc.prevBlock, prevBlock)
 		s.Require().NoError(cc.processBlock(block))
-		if prevBlock != nil {
-			s.Equal(prevBlock.Finalization.Height+1, block.Finalization.Height)
-		} else {
-			s.Equal(uint64(1), block.Finalization.Height)
-		}
+		s.Equal(prevBlock.Finalization.Height+1, block.Finalization.Height)
 		prevBlock = block
 	}
 }

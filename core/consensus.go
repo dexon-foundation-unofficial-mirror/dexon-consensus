@@ -310,9 +310,10 @@ func NewConsensus(
 }
 
 // Run starts running DEXON Consensus.
-func (con *Consensus) Run() {
+func (con *Consensus) Run(initBlock *types.Block) {
 	// Setup context.
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
+	con.ccModule.init(initBlock)
 	go con.processMsg(con.network.ReceiveChan())
 	con.cfgModule.registerDKG(con.round, int(con.currentConfig.DKGSetSize)/3+1)
 	con.event.RegisterTime(con.dMoment.Add(con.currentConfig.RoundInterval/4),
