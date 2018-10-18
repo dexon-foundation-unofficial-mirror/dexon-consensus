@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
@@ -196,6 +197,112 @@ func (s *CompactionChainTestSuite) TestExtractBlocksRound0() {
 	for i, block := range delivered {
 		s.Equal(block.Hash, blocks[i].Hash)
 	}
+}
+
+type mockTSigVerifier struct {
+	defaultRet bool
+	ret        map[common.Hash]bool
+}
+
+func newMockTSigVerifier(defaultRet bool) *mockTSigVerifier {
+	return &mockTSigVerifier{
+		defaultRet: defaultRet,
+		ret:        make(map[common.Hash]bool),
+	}
+}
+
+func (m *mockTSigVerifier) VerifySignature(
+	hash common.Hash, _ crypto.Signature) bool {
+	if ret, exist := m.ret[hash]; exist {
+		return ret
+	}
+	return m.defaultRet
+}
+
+func (s *CompactionChainTestSuite) TestSyncFinalizedBlock() {
+	cc := s.newCompactionChain()
+	mock := newMockTSigVerifier(true)
+	for i := 0; i < cc.tsigVerifier.cacheSize; i++ {
+		cc.tsigVerifier.verifier[uint64(i)] = mock
+	}
+	now := time.Now().UTC()
+	blocks := make([]*types.Block, 10)
+	for idx := range blocks {
+		blocks[idx] = &types.Block{
+			Hash: common.NewRandomHash(),
+			Finalization: types.FinalizationResult{
+				Timestamp: now,
+				Height:    uint64(idx + 1),
+			},
+		}
+		now = now.Add(100 * time.Millisecond)
+	}
+	cc.processFinalizedBlock(blocks[1])
+	cc.processFinalizedBlock(blocks[3])
+	s.Len(cc.extractFinalizedBlocks(), 0)
+
+	cc.processFinalizedBlock(blocks[0])
+	confirmed := cc.extractFinalizedBlocks()
+	s.Equal(blocks[1].Hash, cc.lastBlock().Hash)
+	s.Require().Len(confirmed, 2)
+	s.Equal(confirmed[0].Hash, blocks[0].Hash)
+	s.Equal(confirmed[1].Hash, blocks[1].Hash)
+	hash := common.NewRandomHash()
+	cc.processFinalizedBlock(&types.Block{
+		Hash: hash,
+		Finalization: types.FinalizationResult{
+			Height: uint64(3),
+		},
+	})
+	// Should not deliver block with error tsig
+	mock.ret[hash] = false
+	s.Len(cc.extractFinalizedBlocks(), 0)
+	// The error block should be discarded.
+	s.Len(cc.extractFinalizedBlocks(), 0)
+
+	// Shuold not deliver block if dkg is not final
+	round99 := uint64(99)
+	s.Require().False(cc.gov.IsDKGFinal(round99))
+	blocks[2].Position.Round = round99
+	cc.processFinalizedBlock(blocks[2])
+	s.Len(cc.extractFinalizedBlocks(), 0)
+
+	// Deliver blocks.
+	blocks[3].Position.Round = round99
+	cc.tsigVerifier.verifier[round99] = mock
+	confirmed = cc.extractFinalizedBlocks()
+	s.Equal(blocks[3].Hash, cc.lastBlock().Hash)
+	s.Require().Len(confirmed, 2)
+	s.Equal(confirmed[0].Hash, blocks[2].Hash)
+	s.Equal(confirmed[1].Hash, blocks[3].Hash)
+
+	// Inserting a bad block. The later block should not be discarded.
+	cc.processFinalizedBlock(blocks[5])
+	cc.processFinalizedBlock(&types.Block{
+		Hash: hash,
+		Finalization: types.FinalizationResult{
+			Height: uint64(5),
+		},
+	})
+	s.Len(cc.extractFinalizedBlocks(), 0)
+	// Good block is inserted, the later block should be delivered.
+	cc.processFinalizedBlock(blocks[4])
+	confirmed = cc.extractFinalizedBlocks()
+	s.Equal(blocks[5].Hash, cc.lastBlock().Hash)
+	s.Require().Len(confirmed, 2)
+	s.Equal(confirmed[0].Hash, blocks[4].Hash)
+	s.Equal(confirmed[1].Hash, blocks[5].Hash)
+
+	// Ignore finalized block if it already confirmed.
+	cc.processFinalizedBlock(blocks[6])
+	s.Require().NoError(cc.processBlock(blocks[6]))
+	s.Equal(blocks[6].Hash, cc.lastBlock().Hash)
+	s.Require().Len(cc.extractFinalizedBlocks(), 0)
+	s.Require().NoError(cc.processBlock(blocks[7]))
+	cc.processFinalizedBlock(blocks[7])
+	s.Len(*cc.pendingFinalizedBlocks, 0)
+	s.Equal(blocks[7].Hash, cc.lastBlock().Hash)
+	s.Require().Len(cc.extractFinalizedBlocks(), 0)
 }
 
 func TestCompactionChain(t *testing.T) {

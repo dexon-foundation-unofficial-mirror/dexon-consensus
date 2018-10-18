@@ -18,6 +18,7 @@
 package core
 
 import (
+	"container/heap"
 	"fmt"
 	"sync"
 
@@ -34,20 +35,27 @@ var (
 		"not initialized")
 )
 
+type finalizedBlockHeap = types.ByFinalizationHeight
+
 type compactionChain struct {
 	gov                    Governance
+	tsigVerifier           *TSigVerifierCache
 	blocks                 map[common.Hash]*types.Block
 	pendingBlocks          []*types.Block
-	pendingFinalizedBlocks []*types.Block
+	pendingFinalizedBlocks *finalizedBlockHeap
 	blocksLock             sync.RWMutex
 	prevBlockLock          sync.RWMutex
 	prevBlock              *types.Block
 }
 
 func newCompactionChain(gov Governance) *compactionChain {
+	pendingFinalizedBlocks := &finalizedBlockHeap{}
+	heap.Init(pendingFinalizedBlocks)
 	return &compactionChain{
-		gov:    gov,
-		blocks: make(map[common.Hash]*types.Block),
+		gov:                    gov,
+		tsigVerifier:           NewTSigVerifierCache(gov, 7),
+		blocks:                 make(map[common.Hash]*types.Block),
+		pendingFinalizedBlocks: pendingFinalizedBlocks,
 	}
 }
 
@@ -88,49 +96,103 @@ func (cc *compactionChain) processBlock(block *types.Block) error {
 	return nil
 }
 
-func (cc *compactionChain) processFinalizedBlock(block *types.Block) (
-	[]*types.Block, error) {
+func (cc *compactionChain) processFinalizedBlock(block *types.Block) {
+	if block.Finalization.Height <= cc.lastBlock().Finalization.Height {
+		return
+	}
+
+	cc.blocksLock.Lock()
+	defer cc.blocksLock.Unlock()
+	heap.Push(cc.pendingFinalizedBlocks, block)
+
+	return
+}
+
+func (cc *compactionChain) extractFinalizedBlocks() []*types.Block {
+	prevBlock := cc.lastBlock()
+
 	blocks := func() []*types.Block {
 		cc.blocksLock.Lock()
 		defer cc.blocksLock.Unlock()
-		blocks := cc.pendingFinalizedBlocks
-		cc.pendingFinalizedBlocks = []*types.Block{}
+		blocks := []*types.Block{}
+		prevHeight := prevBlock.Finalization.Height
+		for cc.pendingFinalizedBlocks.Len() != 0 {
+			tip := (*cc.pendingFinalizedBlocks)[0]
+			// Pop blocks that are already confirmed.
+			if tip.Finalization.Height <= prevBlock.Finalization.Height {
+				heap.Pop(cc.pendingFinalizedBlocks)
+				continue
+			}
+			// Since we haven't verified the finalized block,
+			// it is possible to be forked.
+			if tip.Finalization.Height == prevHeight ||
+				tip.Finalization.Height == prevHeight+1 {
+				prevHeight = tip.Finalization.Height
+				blocks = append(blocks, tip)
+				heap.Pop(cc.pendingFinalizedBlocks)
+			} else {
+				break
+			}
+		}
 		return blocks
 	}()
-	threshold := make(map[uint64]int)
-	gpks := make(map[uint64]*DKGGroupPublicKey)
 	toPending := []*types.Block{}
 	confirmed := []*types.Block{}
-	blocks = append(blocks, block)
 	for _, b := range blocks {
-		if !cc.gov.IsDKGFinal(b.Position.Round) {
-			toPending = append(toPending, b)
+		if b.Hash == prevBlock.Hash &&
+			b.Finalization.Height == prevBlock.Finalization.Height {
 			continue
 		}
 		round := b.Position.Round
-		if _, exist := gpks[round]; !exist {
-			threshold[round] = int(cc.gov.Configuration(round).DKGSetSize)/3 + 1
-			var err error
-			gpks[round], err = NewDKGGroupPublicKey(
-				round,
-				cc.gov.DKGMasterPublicKeys(round), cc.gov.DKGComplaints(round),
-				threshold[round])
-			if err != nil {
-				continue
-			}
+		v, ok, err := cc.tsigVerifier.UpdateAndGet(round)
+		if err != nil {
+			continue
 		}
-		gpk := gpks[round]
-		if ok := gpk.VerifySignature(b.Hash, crypto.Signature{
+		if !ok {
+			toPending = append(toPending, b)
+			continue
+		}
+		if ok := v.VerifySignature(b.Hash, crypto.Signature{
 			Type:      "bls",
 			Signature: b.Finalization.Randomness}); !ok {
 			continue
 		}
+		// Fork resolution: choose block with smaller hash.
+		if prevBlock.Finalization.Height ==
+			b.Finalization.Height {
+			//TODO(jimmy-dexon): remove this panic after test.
+			if true {
+				// workaround to `go vet` error
+				panic(fmt.Errorf(
+					"forked finalized block %s,%s", prevBlock.Hash, b.Hash))
+			}
+			if b.Hash.Less(prevBlock.Hash) {
+				confirmed = confirmed[:len(confirmed)-1]
+			} else {
+				continue
+			}
+		}
+		if b.Finalization.Height-prevBlock.Finalization.Height > 1 {
+			toPending = append(toPending, b)
+			continue
+		}
 		confirmed = append(confirmed, b)
+		prevBlock = b
 	}
+	func() {
+		if len(confirmed) == 0 {
+			return
+		}
+		cc.prevBlockLock.Lock()
+		defer cc.prevBlockLock.Unlock()
+		cc.prevBlock = prevBlock
+	}()
 	cc.blocksLock.Lock()
 	defer cc.blocksLock.Unlock()
-	cc.pendingFinalizedBlocks = append(cc.pendingFinalizedBlocks, toPending...)
-	return confirmed, nil
+	for _, b := range toPending {
+		heap.Push(cc.pendingFinalizedBlocks, b)
+	}
+	return confirmed
 }
 
 func (cc *compactionChain) extractBlocks() []*types.Block {

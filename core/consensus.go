@@ -740,9 +740,27 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 
 // processFinalizedBlock is the entry point for syncing blocks.
 func (con *Consensus) processFinalizedBlock(block *types.Block) (err error) {
-	// TODO(jimmy-dexon): drop block that is already in compaction chain.
 	if err = con.lattice.SanityCheck(block, false); err != nil {
 		return
+	}
+	con.ccModule.processFinalizedBlock(block)
+	for {
+		confirmed := con.ccModule.extractFinalizedBlocks()
+		if len(confirmed) == 0 {
+			break
+		}
+		if err = con.lattice.ctModule.processBlocks(confirmed); err != nil {
+			return
+		}
+		for _, b := range confirmed {
+			if err = con.db.Put(*b); err != nil {
+				if err != blockdb.ErrBlockExists {
+					return
+				}
+				err = nil
+			}
+			con.nbModule.BlockDelivered(b.Hash, b.Finalization)
+		}
 	}
 	return
 }

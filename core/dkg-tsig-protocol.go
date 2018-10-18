@@ -19,6 +19,7 @@ package core
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
@@ -46,6 +47,8 @@ var (
 		"incorrect partialSignature")
 	ErrNotEnoughtPartialSignatures = fmt.Errorf(
 		"not enough of partial signatures")
+	ErrRoundAlreadyPurged = fmt.Errorf(
+		"cache of round already been purged")
 )
 
 type dkgReceiver interface {
@@ -93,6 +96,20 @@ type DKGGroupPublicKey struct {
 	publicKeys     map[types.NodeID]*dkg.PublicKey
 	groupPublicKey *dkg.PublicKey
 	threshold      int
+}
+
+// TSigVerifier is the interface verifying threshold signature.
+type TSigVerifier interface {
+	VerifySignature(hash common.Hash, sig crypto.Signature) bool
+}
+
+// TSigVerifierCache is the cache for TSigVerifier.
+type TSigVerifierCache struct {
+	gov       Governance
+	verifier  map[uint64]TSigVerifier
+	minRound  uint64
+	cacheSize int
+	lock      sync.RWMutex
 }
 
 type tsigProtocol struct {
@@ -403,6 +420,74 @@ func NewDKGGroupPublicKey(
 func (gpk *DKGGroupPublicKey) VerifySignature(
 	hash common.Hash, sig crypto.Signature) bool {
 	return gpk.groupPublicKey.VerifySignature(hash, sig)
+}
+
+// NewTSigVerifierCache creats a DKGGroupPublicKey instance.
+func NewTSigVerifierCache(gov Governance, cacheSize int) *TSigVerifierCache {
+	return &TSigVerifierCache{
+		gov:       gov,
+		verifier:  make(map[uint64]TSigVerifier),
+		cacheSize: cacheSize,
+	}
+}
+
+// UpdateAndGet calls Update and then Get.
+func (tc *TSigVerifierCache) UpdateAndGet(round uint64) (
+	TSigVerifier, bool, error) {
+	ok, err := tc.Update(round)
+	if err != nil {
+		return nil, false, err
+	}
+	if !ok {
+		return nil, false, nil
+	}
+	v, ok := tc.Get(round)
+	return v, ok, nil
+}
+
+// Update the cache and returns if success.
+func (tc *TSigVerifierCache) Update(round uint64) (bool, error) {
+	tc.lock.Lock()
+	defer tc.lock.Unlock()
+	if round < tc.minRound {
+		return false, ErrRoundAlreadyPurged
+	}
+	if _, exist := tc.verifier[round]; exist {
+		return true, nil
+	}
+	if !tc.gov.IsDKGFinal(round) {
+		return false, nil
+	}
+	gpk, err := NewDKGGroupPublicKey(round,
+		tc.gov.DKGMasterPublicKeys(round),
+		tc.gov.DKGComplaints(round),
+		int(tc.gov.Configuration(round).DKGSetSize/3)+1)
+	if err != nil {
+		return false, err
+	}
+	if len(tc.verifier) == 0 {
+		tc.minRound = round
+	}
+	tc.verifier[round] = gpk
+	if len(tc.verifier) > tc.cacheSize {
+		delete(tc.verifier, tc.minRound)
+	}
+	for {
+		if _, exist := tc.verifier[tc.minRound]; !exist {
+			tc.minRound++
+		} else {
+			break
+		}
+	}
+	return true, nil
+}
+
+// Get the TSigVerifier of round and returns if it exists.
+func (tc *TSigVerifierCache) Get(round uint64) (TSigVerifier, bool) {
+	tc.lock.RLock()
+	defer tc.lock.RUnlock()
+	verifier, exist := tc.verifier[round]
+	return verifier, exist
 }
 
 func newTSigProtocol(

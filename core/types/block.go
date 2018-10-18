@@ -175,3 +175,34 @@ func (bs *ByHeight) Pop() (ret interface{}) {
 	*bs, ret = (*bs)[0:n-1], (*bs)[n-1]
 	return
 }
+
+// ByFinalizationHeight is the helper type for sorting slice of blocks by
+// finalization height.
+type ByFinalizationHeight []*Block
+
+// Len implements Len method in sort.Sort interface.
+func (bs ByFinalizationHeight) Len() int {
+	return len(bs)
+}
+
+// Less implements Less method in sort.Sort interface.
+func (bs ByFinalizationHeight) Less(i int, j int) bool {
+	return bs[i].Finalization.Height < bs[j].Finalization.Height
+}
+
+// Swap implements Swap method in sort.Sort interface.
+func (bs ByFinalizationHeight) Swap(i int, j int) {
+	bs[i], bs[j] = bs[j], bs[i]
+}
+
+// Push implements Push method in heap interface.
+func (bs *ByFinalizationHeight) Push(x interface{}) {
+	*bs = append(*bs, x.(*Block))
+}
+
+// Pop implements Pop method in heap interface.
+func (bs *ByFinalizationHeight) Pop() (ret interface{}) {
+	n := len(*bs)
+	*bs, ret = (*bs)[0:n-1], (*bs)[n-1]
+	return
+}

@@ -635,6 +635,67 @@ func (s *DKGTSIGProtocolTestSuite) TestProposeFinalize() {
 		Round:      1,
 	}, final)
 }
+
+func (s *DKGTSIGProtocolTestSuite) TestTSigVerifierCache() {
+	k := 3
+	n := 10
+	gov, err := test.NewGovernance(n, 100)
+	s.Require().NoError(err)
+	for i := 0; i < 10; i++ {
+		round := uint64(i + 1)
+		receivers, protocols := s.newProtocols(k, n, round)
+
+		for _, receiver := range receivers {
+			gov.AddDKGMasterPublicKey(round, receiver.mpk)
+		}
+
+		for _, protocol := range protocols {
+			protocol.proposeFinalize()
+		}
+
+		for _, recv := range receivers {
+			s.Require().Len(recv.final, 1)
+			gov.AddDKGFinalize(recv.final[0].Round, recv.final[0])
+		}
+		s.Require().True(gov.IsDKGFinal(round))
+	}
+
+	cache := NewTSigVerifierCache(gov, 3)
+	for i := 0; i < 5; i++ {
+		round := uint64(i + 1)
+		ok, err := cache.Update(round)
+		s.Require().NoError(err)
+		s.True(ok)
+	}
+	s.Len(cache.verifier, 3)
+
+	for i := 0; i < 2; i++ {
+		round := uint64(i + 1)
+		_, exist := cache.Get(round)
+		s.False(exist)
+	}
+
+	for i := 3; i < 5; i++ {
+		round := uint64(i + 1)
+		_, exist := cache.Get(round)
+		s.True(exist)
+	}
+
+	ok, err := cache.Update(uint64(1))
+	s.Require().Equal(ErrRoundAlreadyPurged, err)
+
+	cache = NewTSigVerifierCache(gov, 1)
+	ok, err = cache.Update(uint64(3))
+	s.Require().NoError(err)
+	s.Require().True(ok)
+	s.Equal(uint64(3), cache.minRound)
+
+	ok, err = cache.Update(uint64(5))
+	s.Require().NoError(err)
+	s.Require().True(ok)
+	s.Equal(uint64(5), cache.minRound)
+}
+
 func TestDKGTSIGProtocol(t *testing.T) {
 	suite.Run(t, new(DKGTSIGProtocolTestSuite))
 }
