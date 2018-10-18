@@ -174,7 +174,8 @@ func (s *Lattice) ProcessBlock(
 	for _, b = range inLattice {
 		toDelivered, earlyDelivered, err = s.toModule.processBlock(b)
 		if err != nil {
-			return
+			// All errors from total ordering is serious, should panic.
+			panic(err)
 		}
 		if len(toDelivered) == 0 {
 			continue

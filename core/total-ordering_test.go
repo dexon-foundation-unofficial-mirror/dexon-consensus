@@ -51,6 +51,54 @@ func (s *TotalOrderingTestSuite) genGenesisBlock(
 	}
 }
 
+func (s *TotalOrderingTestSuite) performOneRun(
+	to *totalOrdering, revealer test.Revealer) (revealed, ordered string) {
+	revealer.Reset()
+	curRound := uint64(0)
+	for {
+		// Reveal next block.
+		b, err := revealer.Next()
+		if err != nil {
+			if err == blockdb.ErrIterationFinished {
+				err = nil
+				break
+			}
+		}
+		s.Require().NoError(err)
+		revealed += b.Hash.String() + ","
+		// Perform total ordering.
+		blocks, _, err := to.processBlock(&b)
+		s.Require().NoError(err)
+		for _, b := range blocks {
+			ordered += b.Hash.String() + ","
+			// Make sure the round ID is increasing, and no interleave.
+			s.Require().True(b.Position.Round >= curRound)
+			curRound = b.Position.Round
+		}
+	}
+	return
+}
+
+func (s *TotalOrderingTestSuite) checkRandomResult(
+	revealingSequence, orderingSequence map[string]struct{}) {
+	// Make sure we test at least two different
+	// revealing sequence.
+	s.True(len(revealingSequence) > 1)
+	// Make sure all ordering are equal or prefixed
+	// to another one.
+	for orderFrom := range orderingSequence {
+		s.True(len(orderFrom) > 0)
+		for orderTo := range orderingSequence {
+			if orderFrom == orderTo {
+				continue
+			}
+			ok := strings.HasPrefix(orderFrom, orderTo) ||
+				strings.HasPrefix(orderTo, orderFrom)
+			s.True(ok)
+		}
+	}
+}
+
 func (s *TotalOrderingTestSuite) checkNotDeliver(to *totalOrdering, b *types.Block) {
 	blocks, eqrly, err := to.processBlock(b)
 	s.Empty(blocks)
@@ -204,9 +252,9 @@ func (s *TotalOrderingTestSuite) TestCreateAckingNodeSetFromHeightVector() {
 			&totalOrderingHeightRecord{minHeight: 0, count: 0},
 			&totalOrderingHeightRecord{minHeight: 0, count: 0},
 		}}
-	s.Equal(local.getAckingNodeSetLength(global, 1), uint64(1))
-	s.Equal(local.getAckingNodeSetLength(global, 2), uint64(1))
-	s.Equal(local.getAckingNodeSetLength(global, 3), uint64(0))
+	s.Equal(local.getAckingNodeSetLength(global, 1, 5), uint64(1))
+	s.Equal(local.getAckingNodeSetLength(global, 2, 5), uint64(1))
+	s.Equal(local.getAckingNodeSetLength(global, 3, 5), uint64(0))
 }
 
 func (s *TotalOrderingTestSuite) TestGrade() {
@@ -234,16 +282,16 @@ func (s *TotalOrderingTestSuite) TestGrade() {
 		1, 1, infinity, infinity, infinity}
 
 	candidate2.updateWinRecord(
-		0, candidate1, dirtyNodes, cache)
+		0, candidate1, dirtyNodes, cache, 5)
 	s.Equal(candidate2.winRecords[0].grade(5, 3, ansLength), 1)
 	candidate1.updateWinRecord(
-		1, candidate2, dirtyNodes, cache)
+		1, candidate2, dirtyNodes, cache, 5)
 	s.Equal(candidate1.winRecords[1].grade(5, 3, ansLength), 0)
 	candidate2.updateWinRecord(
-		2, candidate3, dirtyNodes, cache)
+		2, candidate3, dirtyNodes, cache, 5)
 	s.Equal(candidate2.winRecords[2].grade(5, 3, ansLength), -1)
 	candidate3.updateWinRecord(
-		1, candidate2, dirtyNodes, cache)
+		1, candidate2, dirtyNodes, cache, 5)
 	s.Equal(candidate3.winRecords[1].grade(5, 3, ansLength), 0)
 }
 
@@ -308,36 +356,6 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 	s.checkNotDeliver(to, b03)
 	// Should not hang in this line
 	s.checkNotDeliver(to, b10)
-}
-
-func (s *TotalOrderingTestSuite) TestNotValidDAGDetection() {
-	nodes := test.GenerateRandomNodeIDs(5)
-	genesisConfig := &totalOrderingConfig{
-		roundBasedConfig: roundBasedConfig{
-			roundInterval: 1000 * time.Second,
-		},
-		k:         1,
-		phi:       3,
-		numChains: uint32(len(nodes)),
-	}
-	to := newTotalOrdering(genesisConfig)
-
-	b00 := s.genGenesisBlock(nodes, 0, common.Hashes{})
-	b01 := &types.Block{
-		ProposerID: nodes[0],
-		ParentHash: b00.Hash,
-		Position: types.Position{
-			Height:  1,
-			ChainID: 0,
-		},
-		Hash: common.NewRandomHash(),
-	}
-
-	// When submit to block with lower height to totalOrdering,
-	// caller should receive an error.
-	s.checkNotDeliver(to, b01)
-	_, _, err := to.processBlock(b00)
-	s.Equal(err, ErrNotValidDAG)
 }
 
 func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
@@ -791,8 +809,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	s.checkNotInWorkingSet(to, b30)
 
 	// Make sure b21, b40 are candidates of next round.
-	s.Contains(to.candidateChainMapping, b21.Hash)
-	s.Contains(to.candidateChainMapping, b40.Hash)
+	s.Equal(to.candidateChainMapping[b21.Position.ChainID], b21.Hash)
+	s.Equal(to.candidateChainMapping[b40.Position.ChainID], b40.Hash)
 }
 
 func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
@@ -907,9 +925,9 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 	s.checkNotInWorkingSet(to, b20)
 
 	// Make sure b10, b30 are candidates for next round.
-	req.Contains(to.candidateChainMapping, b00.Hash)
-	req.Contains(to.candidateChainMapping, b10.Hash)
-	req.Contains(to.candidateChainMapping, b30.Hash)
+	req.Equal(to.candidateChainMapping[b00.Position.ChainID], b00.Hash)
+	req.Equal(to.candidateChainMapping[b10.Position.ChainID], b10.Hash)
+	req.Equal(to.candidateChainMapping[b30.Position.ChainID], b30.Hash)
 }
 
 func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
@@ -943,58 +961,23 @@ func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 	req.NoError(err)
 	// TODO (mission): make this part run concurrently.
 	for i := 0; i < repeat; i++ {
-		revealed := ""
-		ordered := ""
-		revealer.Reset()
-		to := totalOrderingConstructor(chainNum)
-		for {
-			// Reveal next block.
-			b, err := revealer.Next()
-			if err != nil {
-				if err == blockdb.ErrIterationFinished {
-					err = nil
-					break
-				}
-			}
-			s.Require().Nil(err)
-			revealed += b.Hash.String() + ","
-
-			// Perform total ordering.
-			hashes, _, err := to.processBlock(&b)
-			s.Require().Nil(err)
-			for _, h := range hashes {
-				ordered += h.String() + ","
-			}
-		}
+		revealed, ordered := s.performOneRun(
+			totalOrderingConstructor(chainNum), revealer)
 		revealingSequence[revealed] = struct{}{}
 		orderingSequence[ordered] = struct{}{}
 	}
-
-	// Make sure we test at least two different
-	// revealing sequence.
-	s.True(len(revealingSequence) > 1)
-	// Make sure all ordering are equal or prefixed
-	// to another one.
-	for orderFrom := range orderingSequence {
-		for orderTo := range orderingSequence {
-			if orderFrom == orderTo {
-				continue
-			}
-			ok := strings.HasPrefix(orderFrom, orderTo) ||
-				strings.HasPrefix(orderTo, orderFrom)
-			s.True(ok)
-		}
-	}
+	s.checkRandomResult(revealingSequence, orderingSequence)
 }
 
 func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 	var (
-		numChains = uint32(23)
+		numChains = uint32(20)
 		phi       = uint64(10)
 		repeat    = 15
 	)
 	if testing.Short() {
-		numChains = 7
+		numChains = 10
+		phi = 5
 		repeat = 3
 	}
 
@@ -1016,7 +999,14 @@ func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 				phi:       phi,
 				numChains: numChains,
 			}
-			return newTotalOrdering(genesisConfig)
+			to := newTotalOrdering(genesisConfig)
+			// Add config for next round.
+			s.Require().NoError(to.appendConfig(1, &types.Config{
+				K:         0,
+				PhiRatio:  0.5,
+				NumChains: numChains,
+			}))
+			return to
 		}
 		s.baseTestRandomlyGeneratedBlocks(constructor, numChains, gen, repeat)
 		// Test for K=1.
@@ -1029,7 +1019,14 @@ func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 				phi:       phi,
 				numChains: numChains,
 			}
-			return newTotalOrdering(genesisConfig)
+			to := newTotalOrdering(genesisConfig)
+			// Add config for next round.
+			s.Require().NoError(to.appendConfig(1, &types.Config{
+				K:         1,
+				PhiRatio:  0.5,
+				NumChains: numChains,
+			}))
+			return to
 		}
 		s.baseTestRandomlyGeneratedBlocks(constructor, numChains, gen, repeat)
 		// Test for K=2.
@@ -1042,7 +1039,13 @@ func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 				phi:       phi,
 				numChains: numChains,
 			}
-			return newTotalOrdering(genesisConfig)
+			to := newTotalOrdering(genesisConfig)
+			s.Require().NoError(to.appendConfig(1, &types.Config{
+				K:         2,
+				PhiRatio:  0.5,
+				NumChains: numChains,
+			}))
+			return to
 		}
 		s.baseTestRandomlyGeneratedBlocks(constructor, numChains, gen, repeat)
 		// Test for K=3.
@@ -1055,10 +1058,148 @@ func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 				phi:       phi,
 				numChains: numChains,
 			}
-			return newTotalOrdering(genesisConfig)
+			to := newTotalOrdering(genesisConfig)
+			s.Require().NoError(to.appendConfig(1, &types.Config{
+				K:         3,
+				PhiRatio:  0.5,
+				NumChains: numChains,
+			}))
+			return to
 		}
 		s.baseTestRandomlyGeneratedBlocks(constructor, numChains, gen, repeat)
 	}
+}
+
+func (s *TotalOrderingTestSuite) baseTestForRoundChange(
+	repeat int, configs []*types.Config) {
+	var (
+		req         = s.Require()
+		genesisTime = time.Now().UTC()
+	)
+	db, err := blockdb.NewMemBackedBlockDB()
+	req.NoError(err)
+	// Generate DAG for rounds.
+	// NOTE: the last config won't be tested, just avoid panic
+	//       when round switching.
+	begin := genesisTime
+	for roundID, config := range configs[:len(configs)-1] {
+		gen := test.NewBlocksGenerator(
+			test.NewBlocksGeneratorConfig(config), nil, hashBlock)
+		end := begin.Add(config.RoundInterval)
+		req.NoError(gen.Generate(uint64(roundID), begin, end, db))
+		begin = end
+	}
+	// Test, just dump the whole DAG to total ordering and make sure
+	// repeating it won't change it delivered sequence.
+	iter, err := db.GetAll()
+	req.NoError(err)
+	revealer, err := test.NewRandomDAGRevealer(iter)
+	req.NoError(err)
+	revealingSequence := make(map[string]struct{})
+	orderingSequence := make(map[string]struct{})
+	for i := 0; i < repeat; i++ {
+		to := newTotalOrdering(
+			newGenesisTotalOrderingConfig(genesisTime, configs[0]))
+		for roundID, config := range configs[1:] {
+			req.NoError(to.appendConfig(uint64(roundID+1), config))
+		}
+		revealed, ordered := s.performOneRun(to, revealer)
+		revealingSequence[revealed] = struct{}{}
+		orderingSequence[ordered] = struct{}{}
+	}
+	s.checkRandomResult(revealingSequence, orderingSequence)
+}
+
+func (s *TotalOrderingTestSuite) TestNumChainsChanged() {
+	// This test fixes K, Phi, and changes 'numChains' for each round.
+	fix := func(c *types.Config) *types.Config {
+		c.K = 1
+		c.PhiRatio = 0.5
+		c.MinBlockInterval = 0
+		c.MaxBlockInterval = 500 * time.Millisecond
+		c.RoundInterval = 10 * time.Second
+		return c
+	}
+	var (
+		repeat  = 7
+		configs = []*types.Config{
+			fix(&types.Config{NumChains: 7}),
+			fix(&types.Config{NumChains: 10}),
+			fix(&types.Config{NumChains: 4}),
+			fix(&types.Config{NumChains: 13}),
+			fix(&types.Config{NumChains: 4}),
+		}
+	)
+	s.baseTestForRoundChange(repeat, configs)
+}
+
+func (s *TotalOrderingTestSuite) TestPhiChanged() {
+	// This test fixes K, numChains, and changes Phi each round.
+	fix := func(c *types.Config) *types.Config {
+		c.K = 1
+		c.NumChains = 10
+		c.MinBlockInterval = 0
+		c.MaxBlockInterval = 500 * time.Millisecond
+		c.RoundInterval = 10 * time.Second
+		return c
+	}
+	var (
+		repeat  = 7
+		configs = []*types.Config{
+			fix(&types.Config{PhiRatio: 0.5}),
+			fix(&types.Config{PhiRatio: 0.7}),
+			fix(&types.Config{PhiRatio: 1}),
+			fix(&types.Config{PhiRatio: 0.5}),
+			fix(&types.Config{PhiRatio: 0.7}),
+		}
+	)
+	s.baseTestForRoundChange(repeat, configs)
+}
+
+func (s *TotalOrderingTestSuite) TestKChanged() {
+	// This test fixes phi, numChains, and changes K each round.
+	fix := func(c *types.Config) *types.Config {
+		c.NumChains = 10
+		c.PhiRatio = 0.7
+		c.MinBlockInterval = 0
+		c.MaxBlockInterval = 500 * time.Millisecond
+		c.RoundInterval = 10 * time.Second
+		return c
+	}
+	var (
+		repeat  = 7
+		configs = []*types.Config{
+			fix(&types.Config{K: 0}),
+			fix(&types.Config{K: 4}),
+			fix(&types.Config{K: 1}),
+			fix(&types.Config{K: 2}),
+			fix(&types.Config{K: 0}),
+		}
+	)
+	s.baseTestForRoundChange(repeat, configs)
+}
+
+func (s *TotalOrderingTestSuite) TestRoundChanged() {
+	// This test changes everything when round changed.
+	fix := func(c *types.Config) *types.Config {
+		c.MinBlockInterval = 0
+		c.MaxBlockInterval = 500 * time.Millisecond
+		c.RoundInterval = 10 * time.Second
+		return c
+	}
+	var (
+		repeat  = 7
+		configs = []*types.Config{
+			fix(&types.Config{K: 0, NumChains: 4, PhiRatio: 0.5}),
+			fix(&types.Config{K: 1, NumChains: 10, PhiRatio: 0.7}),
+			fix(&types.Config{K: 2, NumChains: 7, PhiRatio: 0.8}),
+			fix(&types.Config{K: 0, NumChains: 4, PhiRatio: 0.5}),
+			fix(&types.Config{K: 3, NumChains: 10, PhiRatio: 0.8}),
+			fix(&types.Config{K: 0, NumChains: 7, PhiRatio: 0.5}),
+			fix(&types.Config{K: 2, NumChains: 13, PhiRatio: 0.7}),
+		}
+	)
+	s.baseTestForRoundChange(repeat, configs)
 }
 
 func TestTotalOrdering(t *testing.T) {

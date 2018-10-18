@@ -104,18 +104,22 @@ func (s *BlockTestSuite) TestSortByHash() {
 	s.Equal(blocks[3].Hash, b3.Hash)
 }
 
-func (s *BlockTestSuite) TestSortByHeight() {
-	b0 := &Block{Position: Position{Height: 0}}
-	b1 := &Block{Position: Position{Height: 1}}
-	b2 := &Block{Position: Position{Height: 2}}
-	b3 := &Block{Position: Position{Height: 3}}
+func (s *BlockTestSuite) TestSortByPosition() {
+	b00 := &Block{Position: Position{Height: 0}}
+	b01 := &Block{Position: Position{Height: 1}}
+	b02 := &Block{Position: Position{Height: 2}}
+	b10 := &Block{Position: Position{Round: 1, Height: 0}}
+	b11 := &Block{Position: Position{Round: 1, Height: 1}}
+	b12 := &Block{Position: Position{Round: 1, Height: 2}}
 
-	blocks := []*Block{b3, b2, b1, b0}
-	sort.Sort(ByHeight(blocks))
-	s.Equal(blocks[0].Hash, b0.Hash)
-	s.Equal(blocks[1].Hash, b1.Hash)
-	s.Equal(blocks[2].Hash, b2.Hash)
-	s.Equal(blocks[3].Hash, b3.Hash)
+	blocks := []*Block{b12, b11, b10, b02, b01, b00}
+	sort.Sort(ByPosition(blocks))
+	s.Equal(blocks[0].Hash, b00.Hash)
+	s.Equal(blocks[1].Hash, b01.Hash)
+	s.Equal(blocks[2].Hash, b02.Hash)
+	s.Equal(blocks[3].Hash, b10.Hash)
+	s.Equal(blocks[4].Hash, b11.Hash)
+	s.Equal(blocks[5].Hash, b12.Hash)
 }
 
 func (s *BlockTestSuite) TestGenesisBlock() {

@@ -66,7 +66,7 @@ func (s *BlocksGeneratorTestSuite) TestGenerate() {
 		req.Equal(block.Position.Round, uint64(1))
 		blocksByNode[block.ProposerID] =
 			append(blocksByNode[block.ProposerID], &block)
-		sort.Sort(types.ByHeight(blocksByNode[block.ProposerID]))
+		sort.Sort(types.ByPosition(blocksByNode[block.ProposerID]))
 		blocksByHash[block.Hash] = &block
 	}
 	// Make sure these two rules are hold for these blocks:

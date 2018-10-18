@@ -25,7 +25,7 @@ import (
 
 // blockPool is a slice of heap of blocks, indexed by chainID,
 // and the heap is sorted based on heights of blocks.
-type blockPool []types.ByHeight
+type blockPool []types.ByPosition
 
 // newBlockPool constructs a blockPool.
 func newBlockPool(chainNum uint32) (pool blockPool) {
@@ -41,10 +41,10 @@ func (p *blockPool) resize(num uint32) {
 	if uint32(len(*p)) < num {
 		return
 	}
-	newPool := make([]types.ByHeight, num)
+	newPool := make([]types.ByPosition, num)
 	copy(newPool, *p)
 	for i := uint32(len(*p)); i < num; i++ {
-		newChain := types.ByHeight{}
+		newChain := types.ByPosition{}
 		heap.Init(&newChain)
 		newPool[i] = newChain
 	}

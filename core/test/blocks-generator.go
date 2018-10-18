@@ -263,6 +263,15 @@ type BlocksGeneratorConfig struct {
 	MaxBlockTimeInterval time.Duration
 }
 
+// NewBlocksGeneratorConfig construct a BlocksGeneratorConfig instance.
+func NewBlocksGeneratorConfig(c *types.Config) *BlocksGeneratorConfig {
+	return &BlocksGeneratorConfig{
+		NumChains:            c.NumChains,
+		MinBlockTimeInterval: c.MinBlockInterval,
+		MaxBlockTimeInterval: c.MaxBlockInterval,
+	}
+}
+
 // BlocksGenerator could generate blocks forming valid DAGs.
 type BlocksGenerator struct {
 	config               *BlocksGeneratorConfig
