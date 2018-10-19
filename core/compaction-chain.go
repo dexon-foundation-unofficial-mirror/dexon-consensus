@@ -39,12 +39,12 @@ type finalizedBlockHeap = types.ByFinalizationHeight
 
 type compactionChain struct {
 	gov                    Governance
+	chainUnsynced          uint32
 	tsigVerifier           *TSigVerifierCache
 	blocks                 map[common.Hash]*types.Block
 	pendingBlocks          []*types.Block
 	pendingFinalizedBlocks *finalizedBlockHeap
-	blocksLock             sync.RWMutex
-	prevBlockLock          sync.RWMutex
+	lock                   sync.RWMutex
 	prevBlock              *types.Block
 }
 
@@ -60,23 +60,28 @@ func newCompactionChain(gov Governance) *compactionChain {
 }
 
 func (cc *compactionChain) init(initBlock *types.Block) {
-	cc.prevBlockLock.Lock()
-	defer cc.prevBlockLock.Unlock()
+	cc.lock.Lock()
+	defer cc.lock.Unlock()
 	cc.prevBlock = initBlock
+	cc.pendingBlocks = []*types.Block{}
+	if initBlock.Finalization.Height == 0 {
+		cc.chainUnsynced = cc.gov.Configuration(uint64(0)).NumChains
+		cc.pendingBlocks = append(cc.pendingBlocks, initBlock)
+	}
 }
 
 func (cc *compactionChain) registerBlock(block *types.Block) {
 	if cc.blockRegistered(block.Hash) {
 		return
 	}
-	cc.blocksLock.Lock()
-	defer cc.blocksLock.Unlock()
+	cc.lock.Lock()
+	defer cc.lock.Unlock()
 	cc.blocks[block.Hash] = block
 }
 
 func (cc *compactionChain) blockRegistered(hash common.Hash) (exist bool) {
-	cc.blocksLock.RLock()
-	defer cc.blocksLock.RUnlock()
+	cc.lock.RLock()
+	defer cc.lock.RUnlock()
 	_, exist = cc.blocks[hash]
 	return
 }
@@ -86,14 +91,55 @@ func (cc *compactionChain) processBlock(block *types.Block) error {
 	if prevBlock == nil {
 		return ErrNotInitiazlied
 	}
-	block.Finalization.Height = prevBlock.Finalization.Height + 1
-	cc.prevBlockLock.Lock()
-	defer cc.prevBlockLock.Unlock()
-	cc.prevBlock = block
-	cc.blocksLock.Lock()
-	defer cc.blocksLock.Unlock()
+	cc.lock.Lock()
+	defer cc.lock.Unlock()
+	if prevBlock.Finalization.Height == 0 && block.Position.Height == 0 {
+		cc.chainUnsynced--
+	}
 	cc.pendingBlocks = append(cc.pendingBlocks, block)
 	return nil
+}
+
+func (cc *compactionChain) extractBlocks() []*types.Block {
+	prevBlock := cc.lastBlock()
+
+	// Check if we're synced.
+	if !func() bool {
+		cc.lock.RLock()
+		defer cc.lock.RUnlock()
+		if len(cc.pendingBlocks) == 0 {
+			return false
+		}
+		// Finalization.Height == 0 is syncing from bootstrap.
+		if prevBlock.Finalization.Height == 0 {
+			return cc.chainUnsynced == 0
+		}
+		if prevBlock.Hash != cc.pendingBlocks[0].Hash {
+			return false
+		}
+		return true
+	}() {
+		return []*types.Block{}
+	}
+	deliveringBlocks := make([]*types.Block, 0)
+	cc.lock.Lock()
+	defer cc.lock.Unlock()
+	// cc.pendingBlocks[0] will not be popped and will equal to cc.prevBlock.
+	for len(cc.pendingBlocks) > 1 &&
+		(len(cc.pendingBlocks[1].Finalization.Randomness) != 0 ||
+			cc.pendingBlocks[1].Position.Round == 0) {
+		delete(cc.blocks, cc.pendingBlocks[0].Hash)
+		cc.pendingBlocks = cc.pendingBlocks[1:]
+
+		block := cc.pendingBlocks[0]
+		block.Finalization.Height = prevBlock.Finalization.Height + 1
+		deliveringBlocks = append(deliveringBlocks, block)
+		prevBlock = block
+	}
+
+	cc.prevBlock = prevBlock
+
+	return deliveringBlocks
 }
 
 func (cc *compactionChain) processFinalizedBlock(block *types.Block) {
@@ -101,8 +147,8 @@ func (cc *compactionChain) processFinalizedBlock(block *types.Block) {
 		return
 	}
 
-	cc.blocksLock.Lock()
-	defer cc.blocksLock.Unlock()
+	cc.lock.Lock()
+	defer cc.lock.Unlock()
 	heap.Push(cc.pendingFinalizedBlocks, block)
 
 	return
@@ -112,8 +158,8 @@ func (cc *compactionChain) extractFinalizedBlocks() []*types.Block {
 	prevBlock := cc.lastBlock()
 
 	blocks := func() []*types.Block {
-		cc.blocksLock.Lock()
-		defer cc.blocksLock.Unlock()
+		cc.lock.Lock()
+		defer cc.lock.Unlock()
 		blocks := []*types.Block{}
 		prevHeight := prevBlock.Finalization.Height
 		for cc.pendingFinalizedBlocks.Len() != 0 {
@@ -179,35 +225,17 @@ func (cc *compactionChain) extractFinalizedBlocks() []*types.Block {
 		confirmed = append(confirmed, b)
 		prevBlock = b
 	}
-	func() {
-		if len(confirmed) == 0 {
-			return
-		}
-		cc.prevBlockLock.Lock()
-		defer cc.prevBlockLock.Unlock()
-		cc.prevBlock = prevBlock
-	}()
-	cc.blocksLock.Lock()
-	defer cc.blocksLock.Unlock()
+	cc.lock.Lock()
+	defer cc.lock.Unlock()
+	if len(confirmed) != 0 && cc.prevBlock.Finalization.Height == 0 {
+		// Pop the initBlock inserted when bootstrapping.
+		cc.pendingBlocks = cc.pendingBlocks[1:]
+	}
+	cc.prevBlock = prevBlock
 	for _, b := range toPending {
 		heap.Push(cc.pendingFinalizedBlocks, b)
 	}
 	return confirmed
-}
-
-func (cc *compactionChain) extractBlocks() []*types.Block {
-	deliveringBlocks := make([]*types.Block, 0)
-	cc.blocksLock.Lock()
-	defer cc.blocksLock.Unlock()
-	for len(cc.pendingBlocks) != 0 &&
-		(len(cc.pendingBlocks[0].Finalization.Randomness) != 0 ||
-			cc.pendingBlocks[0].Position.Round == 0) {
-		var block *types.Block
-		block, cc.pendingBlocks = cc.pendingBlocks[0], cc.pendingBlocks[1:]
-		delete(cc.blocks, block.Hash)
-		deliveringBlocks = append(deliveringBlocks, block)
-	}
-	return deliveringBlocks
 }
 
 func (cc *compactionChain) processBlockRandomnessResult(
@@ -215,14 +243,14 @@ func (cc *compactionChain) processBlockRandomnessResult(
 	if !cc.blockRegistered(rand.BlockHash) {
 		return ErrBlockNotRegistered
 	}
-	cc.blocksLock.Lock()
-	defer cc.blocksLock.Unlock()
+	cc.lock.Lock()
+	defer cc.lock.Unlock()
 	cc.blocks[rand.BlockHash].Finalization.Randomness = rand.Randomness
 	return nil
 }
 
 func (cc *compactionChain) lastBlock() *types.Block {
-	cc.prevBlockLock.RLock()
-	defer cc.prevBlockLock.RUnlock()
+	cc.lock.RLock()
+	defer cc.lock.RUnlock()
 	return cc.prevBlock
 }

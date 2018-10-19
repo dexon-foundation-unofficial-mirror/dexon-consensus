@@ -76,23 +76,22 @@ func (s *CompactionChainTestSuite) TestProcessBlock() {
 		}
 		now = now.Add(100 * time.Millisecond)
 	}
-	prevBlock := &types.Block{}
 	for _, block := range blocks {
-		s.Equal(cc.prevBlock, prevBlock)
 		s.Require().NoError(cc.processBlock(block))
-		s.Equal(prevBlock.Finalization.Height+1, block.Finalization.Height)
-		prevBlock = block
 	}
+	s.Len(cc.pendingBlocks, len(blocks)+1)
 }
 
 func (s *CompactionChainTestSuite) TestExtractBlocks() {
 	cc := s.newCompactionChain()
+	s.Require().Equal(uint32(4), cc.gov.Configuration(uint64(0)).NumChains)
 	blocks := make([]*types.Block, 10)
 	for idx := range blocks {
 		blocks[idx] = &types.Block{
 			Hash: common.NewRandomHash(),
 			Position: types.Position{
-				Round: 1,
+				Round:   1,
+				ChainID: uint32(idx % 4),
 			},
 		}
 		s.Require().False(cc.blockRegistered(blocks[idx].Hash))
@@ -100,7 +99,7 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 		s.Require().True(cc.blockRegistered(blocks[idx].Hash))
 	}
 	// Randomness is ready for extract.
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 4; i++ {
 		s.Require().NoError(cc.processBlock(blocks[i]))
 		h := common.NewRandomHash()
 		s.Require().NoError(cc.processBlockRandomnessResult(
@@ -110,17 +109,18 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 			}))
 	}
 	delivered := cc.extractBlocks()
-	s.Require().Len(delivered, 3)
+	s.Require().Len(delivered, 4)
+	s.Require().Equal(uint32(0), cc.chainUnsynced)
 
 	// Randomness is not yet ready for extract.
-	for i := 3; i < 6; i++ {
+	for i := 4; i < 6; i++ {
 		s.Require().NoError(cc.processBlock(blocks[i]))
 	}
 	delivered = append(delivered, cc.extractBlocks()...)
-	s.Require().Len(delivered, 3)
+	s.Require().Len(delivered, 4)
 
 	// Make some randomness ready.
-	for i := 3; i < 6; i++ {
+	for i := 4; i < 6; i++ {
 		h := common.NewRandomHash()
 		s.Require().NoError(cc.processBlockRandomnessResult(
 			&types.BlockRandomnessResult{
@@ -161,12 +161,17 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 
 	// The delivered order should be the same as processing order.
 	for i, block := range delivered {
+		if i > 1 {
+			s.Equal(delivered[i-1].Finalization.Height+1,
+				delivered[i].Finalization.Height)
+		}
 		s.Equal(block.Hash, blocks[i].Hash)
 	}
 }
 
 func (s *CompactionChainTestSuite) TestExtractBlocksRound0() {
 	cc := s.newCompactionChain()
+	s.Require().Equal(uint32(4), cc.gov.Configuration(uint64(0)).NumChains)
 	blocks := make([]*types.Block, 10)
 	for idx := range blocks {
 		blocks[idx] = &types.Block{
@@ -180,14 +185,14 @@ func (s *CompactionChainTestSuite) TestExtractBlocksRound0() {
 		s.Require().True(cc.blockRegistered(blocks[idx].Hash))
 	}
 	// Round 0 should be able to be extracted without randomness.
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 4; i++ {
 		s.Require().NoError(cc.processBlock(blocks[i]))
 	}
 	delivered := cc.extractBlocks()
-	s.Require().Len(delivered, 3)
+	s.Require().Len(delivered, 4)
 
 	// Round 0 should be able to be extracted without randomness.
-	for i := 3; i < 10; i++ {
+	for i := 4; i < 10; i++ {
 		s.Require().NoError(cc.processBlock(blocks[i]))
 	}
 	delivered = append(delivered, cc.extractBlocks()...)
@@ -294,15 +299,117 @@ func (s *CompactionChainTestSuite) TestSyncFinalizedBlock() {
 	s.Equal(confirmed[1].Hash, blocks[5].Hash)
 
 	// Ignore finalized block if it already confirmed.
+	cc.init(blocks[5])
 	cc.processFinalizedBlock(blocks[6])
+	s.Require().NoError(cc.processBlock(blocks[5]))
 	s.Require().NoError(cc.processBlock(blocks[6]))
+	confirmed = cc.extractBlocks()
+	s.Require().Len(confirmed, 1)
+	s.Equal(confirmed[0].Hash, blocks[6].Hash)
 	s.Equal(blocks[6].Hash, cc.lastBlock().Hash)
 	s.Require().Len(cc.extractFinalizedBlocks(), 0)
-	s.Require().NoError(cc.processBlock(blocks[7]))
-	cc.processFinalizedBlock(blocks[7])
-	s.Len(*cc.pendingFinalizedBlocks, 0)
-	s.Equal(blocks[7].Hash, cc.lastBlock().Hash)
+	s.Require().Len(*cc.pendingFinalizedBlocks, 0)
+}
+
+func (s *CompactionChainTestSuite) TestSync() {
+	cc := s.newCompactionChain()
+	mock := newMockTSigVerifier(true)
+	for i := 0; i < cc.tsigVerifier.cacheSize; i++ {
+		cc.tsigVerifier.verifier[uint64(i)] = mock
+	}
+	now := time.Now().UTC()
+	blocks := make([]*types.Block, 20)
+	for idx := range blocks {
+		blocks[idx] = &types.Block{
+			Hash: common.NewRandomHash(),
+			Finalization: types.FinalizationResult{
+				Timestamp: now,
+				Height:    uint64(idx + 1),
+			},
+		}
+		now = now.Add(100 * time.Millisecond)
+		if idx > 10 {
+			blocks[idx].Finalization.Height = 0
+		}
+	}
+	cc.init(blocks[1])
+	s.Require().NoError(cc.processBlock(blocks[11]))
+	s.Len(cc.extractBlocks(), 0)
+	for i := 2; i <= 10; i++ {
+		cc.processFinalizedBlock(blocks[i])
+	}
+	s.Require().Len(cc.extractFinalizedBlocks(), 9)
+	// Syncing is almost done here. The finalized block matches the first block
+	// processed.
+	b11 := blocks[11].Clone()
+	b11.Finalization.Height = uint64(12)
+	cc.processFinalizedBlock(b11)
+	s.Require().Len(cc.extractFinalizedBlocks(), 1)
+	s.Len(cc.extractBlocks(), 0)
+	// Sync is done.
+	s.Require().NoError(cc.processBlock(blocks[12]))
+	confirmed := cc.extractBlocks()
+	s.Require().Len(confirmed, 1)
+	s.Equal(confirmed[0].Hash, blocks[12].Hash)
+	s.Equal(uint64(13), blocks[12].Finalization.Height)
+	for i := 13; i < 20; i++ {
+		s.Require().NoError(cc.processBlock(blocks[i]))
+	}
+	confirmed = cc.extractBlocks()
+	s.Require().Len(confirmed, 7)
+	offset := 13
+	for i, b := range confirmed {
+		s.Equal(blocks[offset+i].Hash, b.Hash)
+		s.Equal(uint64(offset+i+1), b.Finalization.Height)
+	}
+}
+
+func (s *CompactionChainTestSuite) TestBootstrapSync() {
+	cc := s.newCompactionChain()
+	numChains := cc.gov.Configuration(uint64(0)).NumChains
+	s.Require().Equal(uint32(4), numChains)
+	mock := newMockTSigVerifier(true)
+	for i := 0; i < cc.tsigVerifier.cacheSize; i++ {
+		cc.tsigVerifier.verifier[uint64(i)] = mock
+	}
+	now := time.Now().UTC()
+	blocks := make([]*types.Block, 20)
+	for idx := range blocks {
+		blocks[idx] = &types.Block{
+			Hash: common.NewRandomHash(),
+			Position: types.Position{
+				Height: uint64(idx) / uint64(numChains),
+			},
+			Finalization: types.FinalizationResult{
+				Timestamp: now,
+				Height:    uint64(idx + 1),
+			},
+		}
+		now = now.Add(100 * time.Millisecond)
+		if idx > 2 {
+			blocks[idx].Finalization.Height = 0
+		}
+	}
+	cc.init(&types.Block{})
+	b2 := blocks[2].Clone()
+	b2.Finalization.Height = 0
+	s.Require().NoError(cc.processBlock(b2))
+	s.Require().NoError(cc.processBlock(blocks[3]))
+	s.Len(cc.extractBlocks(), 0)
+	cc.processFinalizedBlock(blocks[2])
+	cc.processFinalizedBlock(blocks[1])
 	s.Require().Len(cc.extractFinalizedBlocks(), 0)
+	s.Require().Len(cc.extractBlocks(), 0)
+	cc.processFinalizedBlock(blocks[0])
+	confirmed := cc.extractFinalizedBlocks()
+	s.Require().Len(confirmed, 3)
+	s.Equal(confirmed[0].Hash, blocks[0].Hash)
+	s.Equal(confirmed[1].Hash, blocks[1].Hash)
+	s.Equal(confirmed[2].Hash, blocks[2].Hash)
+	confirmed = cc.extractBlocks()
+	s.Require().Len(confirmed, 1)
+	s.Equal(confirmed[0].Hash, blocks[3].Hash)
+	s.Equal(uint64(4), blocks[3].Finalization.Height)
 }
 
 func TestCompactionChain(t *testing.T) {
