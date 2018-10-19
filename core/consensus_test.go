@@ -168,8 +168,8 @@ func (s *ConsensusTestSuite) prepareConsensus(
 	s.Require().Nil(err)
 	nID := types.NewNodeID(prvKey.PublicKey())
 	network := conn.newNetwork(nID)
-	con := NewConsensus(dMoment, app, gov, db,
-		network, prvKey)
+	con := NewConsensus(
+		dMoment, app, gov, db, network, prvKey, &common.NullLogger{})
 	con.ccModule.init(&types.Block{})
 	conn.setCon(nID, con)
 	return app, con

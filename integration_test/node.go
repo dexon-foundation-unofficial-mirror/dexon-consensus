@@ -121,7 +121,8 @@ func NewNode(
 			core.NewAuthenticator(privateKey),
 			app,
 			app,
-			db),
+			db,
+			&common.NullLogger{}),
 	}
 }
 

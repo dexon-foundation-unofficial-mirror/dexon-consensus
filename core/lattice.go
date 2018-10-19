@@ -37,6 +37,7 @@ type Lattice struct {
 	data       *latticeData
 	toModule   *totalOrdering
 	ctModule   *consensusTimestamp
+	logger     common.Logger
 }
 
 // NewLattice constructs an Lattice instance.
@@ -46,7 +47,8 @@ func NewLattice(
 	authModule *Authenticator,
 	app Application,
 	debug Debug,
-	db blockdb.BlockDatabase) (s *Lattice) {
+	db blockdb.BlockDatabase,
+	logger common.Logger) (s *Lattice) {
 	// Create genesis latticeDataConfig.
 	dataConfig := newGenesisLatticeDataConfig(dMoment, cfg)
 	toConfig := newGenesisTotalOrderingConfig(dMoment, cfg)
@@ -59,6 +61,7 @@ func NewLattice(
 		data:       newLatticeData(db, dataConfig),
 		toModule:   newTotalOrdering(toConfig),
 		ctModule:   newConsensusTimestamp(dMoment, 0, cfg.NumChains),
+		logger:     logger,
 	}
 	return
 }
@@ -74,9 +77,12 @@ func (s *Lattice) PrepareBlock(
 	if err = s.data.prepareBlock(b); err != nil {
 		return
 	}
+	s.logger.Debug("Calling Application.PreparePayload", "position", b.Position)
 	if b.Payload, err = s.app.PreparePayload(b.Position); err != nil {
 		return
 	}
+	s.logger.Debug("Calling Application.PrepareWitness",
+		"height", b.Witness.Height)
 	if b.Witness, err = s.app.PrepareWitness(b.Witness.Height); err != nil {
 		return
 	}
@@ -107,6 +113,7 @@ func (s *Lattice) SanityCheck(b *types.Block, checkRelation bool) (err error) {
 		}
 	}
 	// Verify data in application layer.
+	s.logger.Debug("Calling Application.VerifyBlock", "block", b)
 	if !s.app.VerifyBlock(b) {
 		err = ErrInvalidBlock
 		return err
@@ -122,6 +129,7 @@ func (s *Lattice) SanityCheck(b *types.Block, checkRelation bool) (err error) {
 		if err == ErrAckingBlockNotExists {
 			s.pool.addBlock(b)
 		}
+		s.logger.Error("Sanity Check failed", "error", err)
 		return
 	}
 	return
@@ -146,6 +154,7 @@ func (s *Lattice) ProcessBlock(
 	if inLattice, err = s.data.addBlock(input); err != nil {
 		// TODO(mission): if sanity check failed with "acking block doesn't
 		//                exists", we should keep it in a pool.
+		s.logger.Error("Sanity Check failed when adding blocks", "error", err)
 		return
 	}
 	// TODO(mission): remove this hack, BA related stuffs should not
@@ -153,6 +162,7 @@ func (s *Lattice) ProcessBlock(
 	if s.debug != nil {
 		s.debug.StronglyAcked(input.Hash)
 	}
+	s.logger.Debug("Calling Application.BlockConfirmed", "block", input)
 	s.app.BlockConfirmed(*input.Clone())
 	// Purge blocks in pool with the same chainID and lower height.
 	s.pool.purgeBlocks(input.Position.ChainID, input.Position.Height)

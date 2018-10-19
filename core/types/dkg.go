@@ -53,6 +53,12 @@ type DKGMasterPublicKey struct {
 	Signature       crypto.Signature    `json:"signature"`
 }
 
+func (d *DKGMasterPublicKey) String() string {
+	return fmt.Sprintf("MasterPublicKey[%s:%d]",
+		d.ProposerID.String()[:6],
+		d.Round)
+}
+
 // NewDKGMasterPublicKey returns a new DKGMasterPublicKey instance.
 func NewDKGMasterPublicKey() *DKGMasterPublicKey {
 	return &DKGMasterPublicKey{
@@ -75,6 +81,11 @@ type DKGComplaint struct {
 	Signature    crypto.Signature `json:"signature"`
 }
 
+func (c *DKGComplaint) String() string {
+	return fmt.Sprintf("DKGComplaint[%s:%d]%s",
+		c.ProposerID.String()[:6], c.Round, &c.PrivateShare)
+}
+
 // DKGPartialSignature describe a partial signature in DKG protocol.
 type DKGPartialSignature struct {
 	ProposerID       NodeID               `json:"proposer_id"`
@@ -89,6 +100,12 @@ type DKGFinalize struct {
 	ProposerID NodeID           `json:"proposer_id"`
 	Round      uint64           `json:"round"`
 	Signature  crypto.Signature `json:"signature"`
+}
+
+func (final *DKGFinalize) String() string {
+	return fmt.Sprintf("DKGFinal[%s:%d]",
+		final.ProposerID.String()[:6],
+		final.Round)
 }
 
 // IsNack returns true if it's a nack complaint in DKG protocol.

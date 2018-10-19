@@ -17,7 +17,10 @@
 
 package types
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // ErrComparePositionOnDifferentChains raised when attempting to
 // compare two positions with different chain ID.
@@ -29,6 +32,10 @@ type Position struct {
 	ChainID uint32 `json:"chain_id"`
 	Round   uint64 `json:"round"`
 	Height  uint64 `json:"height"`
+}
+
+func (pos *Position) String() string {
+	return fmt.Sprintf("pos[%d:%d:%d]", pos.ChainID, pos.Round, pos.Height)
 }
 
 // Equal checks if two positions are equal, it panics when their chainIDs

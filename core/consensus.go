@@ -20,7 +20,6 @@ package core
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -42,8 +41,6 @@ var (
 		"genesis block should be empty")
 	ErrUnknownBlockProposed = fmt.Errorf(
 		"unknown block is proposed")
-	ErrUnknownBlockConfirmed = fmt.Errorf(
-		"unknown block is confirmed")
 	ErrIncorrectAgreementResultPosition = fmt.Errorf(
 		"incorrect agreement result position")
 	ErrNotEnoughVotes = fmt.Errorf(
@@ -67,14 +64,16 @@ type consensusBAReceiver struct {
 
 func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {
 	if err := recv.agreementModule.prepareVote(vote); err != nil {
-		log.Println(err)
+		recv.consensus.logger.Error("Failed to prepare vote", "error", err)
 		return
 	}
 	go func() {
 		if err := recv.agreementModule.processVote(vote); err != nil {
-			log.Println(err)
+			recv.consensus.logger.Error("Failed to process vote", "error", err)
 			return
 		}
+		recv.consensus.logger.Debug("Calling Network.BroadcastVote",
+			"vote", vote)
 		recv.consensus.network.BroadcastVote(vote)
 	}()
 }
@@ -83,9 +82,10 @@ func (recv *consensusBAReceiver) ProposeBlock() common.Hash {
 	block := recv.consensus.proposeBlock(recv.chainID, recv.round)
 	recv.consensus.baModules[recv.chainID].addCandidateBlock(block)
 	if err := recv.consensus.preProcessBlock(block); err != nil {
-		log.Println(err)
+		recv.consensus.logger.Error("Failed to pre-process block", "error", err)
 		return common.Hash{}
 	}
+	recv.consensus.logger.Debug("Calling Network.BroadcastBlock", "block", block)
 	recv.consensus.network.BroadcastBlock(block)
 	return block.Hash
 }
@@ -95,7 +95,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 	block, exist := recv.consensus.baModules[recv.chainID].
 		findCandidateBlock(hash)
 	if !exist {
-		log.Println(ErrUnknownBlockConfirmed, hash)
+		recv.consensus.logger.Error("Unknown block confirmed", "hash", hash)
 		return
 	}
 	recv.consensus.ccModule.registerBlock(block)
@@ -103,13 +103,16 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 	for _, vote := range votes {
 		voteList = append(voteList, *vote)
 	}
-	recv.consensus.network.BroadcastAgreementResult(&types.AgreementResult{
+	result := &types.AgreementResult{
 		BlockHash: hash,
 		Position:  block.Position,
 		Votes:     voteList,
-	})
+	}
+	recv.consensus.logger.Debug("Calling Network.BroadcastAgreementResult",
+		"result", result)
+	recv.consensus.network.BroadcastAgreementResult(result)
 	if err := recv.consensus.processBlock(block); err != nil {
-		log.Println(err)
+		recv.consensus.logger.Error("Failed to process block", "error", err)
 		return
 	}
 	if block.Timestamp.After(recv.changeNotaryTime) {
@@ -127,15 +130,18 @@ type consensusDKGReceiver struct {
 	authModule   *Authenticator
 	nodeSetCache *NodeSetCache
 	network      Network
+	logger       common.Logger
 }
 
 // ProposeDKGComplaint proposes a DKGComplaint.
 func (recv *consensusDKGReceiver) ProposeDKGComplaint(
 	complaint *types.DKGComplaint) {
 	if err := recv.authModule.SignDKGComplaint(complaint); err != nil {
-		log.Println(err)
+		recv.logger.Error("Failed to sign DKG complaint", "error", err)
 		return
 	}
+	recv.logger.Debug("Calling Governace.AddDKGComplaint",
+		"complaint", complaint)
 	recv.gov.AddDKGComplaint(complaint.Round, complaint)
 }
 
@@ -143,9 +149,10 @@ func (recv *consensusDKGReceiver) ProposeDKGComplaint(
 func (recv *consensusDKGReceiver) ProposeDKGMasterPublicKey(
 	mpk *types.DKGMasterPublicKey) {
 	if err := recv.authModule.SignDKGMasterPublicKey(mpk); err != nil {
-		log.Println(err)
+		recv.logger.Error("Failed to sign DKG master public key", "error", err)
 		return
 	}
+	recv.logger.Debug("Calling Governance.AddDKGMasterPublicKey", "key", mpk)
 	recv.gov.AddDKGMasterPublicKey(mpk.Round, mpk)
 }
 
@@ -153,14 +160,17 @@ func (recv *consensusDKGReceiver) ProposeDKGMasterPublicKey(
 func (recv *consensusDKGReceiver) ProposeDKGPrivateShare(
 	prv *types.DKGPrivateShare) {
 	if err := recv.authModule.SignDKGPrivateShare(prv); err != nil {
-		log.Println(err)
+		recv.logger.Error("Failed to sign DKG private share", "error", err)
 		return
 	}
 	receiverPubKey, exists := recv.nodeSetCache.GetPublicKey(prv.ReceiverID)
 	if !exists {
-		log.Println("public key for receiver not found")
+		recv.logger.Error("Public key for receiver not found",
+			"receiver", prv.ReceiverID.String()[:6])
 		return
 	}
+	recv.logger.Debug("Calling Network.SendDKGPrivateShare",
+		"receiver", string(receiverPubKey.Bytes()))
 	recv.network.SendDKGPrivateShare(receiverPubKey, prv)
 }
 
@@ -169,19 +179,21 @@ func (recv *consensusDKGReceiver) ProposeDKGAntiNackComplaint(
 	prv *types.DKGPrivateShare) {
 	if prv.ProposerID == recv.ID {
 		if err := recv.authModule.SignDKGPrivateShare(prv); err != nil {
-			log.Println(err)
+			recv.logger.Error("Failed sign DKG private share", "error", err)
 			return
 		}
 	}
+	recv.logger.Debug("Calling Network.BroadcastDKGPrivateShare", "share", prv)
 	recv.network.BroadcastDKGPrivateShare(prv)
 }
 
 // ProposeDKGFinalize propose a DKGFinalize message.
 func (recv *consensusDKGReceiver) ProposeDKGFinalize(final *types.DKGFinalize) {
 	if err := recv.authModule.SignDKGFinalize(final); err != nil {
-		log.Println(err)
+		recv.logger.Error("Faield to sign DKG finalize", "error", err)
 		return
 	}
+	recv.logger.Debug("Calling Governance.AddDKGFinalize", "final", final)
 	recv.gov.AddDKGFinalize(final.Round, final)
 }
 
@@ -222,6 +234,7 @@ type Consensus struct {
 	ctx          context.Context
 	ctxCancel    context.CancelFunc
 	event        *common.Event
+	logger       common.Logger
 }
 
 // NewConsensus construct an Consensus instance.
@@ -231,14 +244,17 @@ func NewConsensus(
 	gov Governance,
 	db blockdb.BlockDatabase,
 	network Network,
-	prv crypto.PrivateKey) *Consensus {
+	prv crypto.PrivateKey,
+	logger common.Logger) *Consensus {
 
 	// TODO(w): load latest blockHeight from DB, and use config at that height.
 	var (
 		round uint64
 	)
+	logger.Debug("Calling Governance.Configuration", "round", round)
 	config := gov.Configuration(round)
 	nodeSetCache := NewNodeSetCache(gov)
+	logger.Debug("Calling Governance.CRS", "round", round)
 	crs := gov.CRS(round)
 	// Setup acking by information returned from Governace.
 	nodes, err := nodeSetCache.GetNodeSet(round)
@@ -252,7 +268,8 @@ func NewConsensus(
 	// Setup nonblocking module.
 	nbModule := newNonBlocking(app, debugApp)
 	// Init lattice.
-	lattice := NewLattice(dMoment, config, authModule, nbModule, nbModule, db)
+	lattice := NewLattice(
+		dMoment, config, authModule, nbModule, nbModule, db, logger)
 	// Init configuration chain.
 	ID := types.NewNodeID(prv.PublicKey())
 	cfgModule := newConfigurationChain(
@@ -263,8 +280,10 @@ func NewConsensus(
 			authModule:   authModule,
 			nodeSetCache: nodeSetCache,
 			network:      network,
+			logger:       logger,
 		},
-		gov)
+		gov,
+		logger)
 	// Construct Consensus instance.
 	con := &Consensus{
 		ID:            ID,
@@ -282,6 +301,7 @@ func NewConsensus(
 		nodeSetCache:  nodeSetCache,
 		authModule:    authModule,
 		event:         common.NewEvent(),
+		logger:        logger,
 	}
 
 	con.baModules = make([]*agreement, config.NumChains)
@@ -316,11 +336,13 @@ func (con *Consensus) Run(initBlock *types.Block) {
 	con.ccModule.init(initBlock)
 	// TODO(jimmy-dexon): change AppendConfig to add config for specific round.
 	for i := uint64(0); i < initBlock.Position.Round; i++ {
+		con.logger.Debug("Calling Governance.Configuration", "round", i+1)
 		cfg := con.gov.Configuration(i + 1)
 		if err := con.lattice.AppendConfig(i+1, cfg); err != nil {
 			panic(err)
 		}
 	}
+	con.logger.Debug("Calling Network.ReceiveChan")
 	go con.processMsg(con.network.ReceiveChan())
 	con.cfgModule.registerDKG(con.round, int(con.currentConfig.DKGSetSize)/3+1)
 	con.event.RegisterTime(con.dMoment.Add(con.currentConfig.RoundInterval/4),
@@ -328,6 +350,7 @@ func (con *Consensus) Run(initBlock *types.Block) {
 			con.runDKGTSIG(con.round)
 		})
 	round1 := uint64(1)
+	con.logger.Debug("Calling Governance.Configuration", "round", round1)
 	con.lattice.AppendConfig(round1, con.gov.Configuration(round1))
 	con.initialRound(con.dMoment)
 	ticks := make([]chan struct{}, 0, con.currentConfig.NumChains)
@@ -372,6 +395,9 @@ BALoop:
 				if err != nil {
 					panic(err)
 				}
+				con.logger.Debug("Calling Governance.Configuration",
+					"round", recv.round)
+				con.logger.Debug("Calling Governance.CRS", "round", recv.round)
 				nIDs = nodes.GetSubSet(
 					int(con.gov.Configuration(recv.round).NotarySetSize),
 					types.NewNotarySetTarget(con.gov.CRS(recv.round), chainID))
@@ -383,7 +409,9 @@ BALoop:
 		}
 		err := agreement.nextState()
 		if err != nil {
-			log.Printf("[%s] %s\n", con.ID.String(), err)
+			con.logger.Error("Failed to proceed to next state",
+				"nodeID", con.ID.String(),
+				"error", err)
 			break BALoop
 		}
 		for i := 0; i < agreement.clocks(); i++ {
@@ -420,8 +448,8 @@ func (con *Consensus) runDKGTSIG(round uint64) {
 			DKGTime := time.Now().Sub(startTime)
 			if DKGTime.Nanoseconds() >=
 				con.currentConfig.RoundInterval.Nanoseconds()/2 {
-				log.Printf("[%s] WARNING!!! Your computer cannot finish DKG on time!\n",
-					con.ID)
+				con.logger.Warn("Your computer cannot finish DKG on time!",
+					"nodeID", con.ID.String())
 			}
 		}()
 		if err := con.cfgModule.runDKG(round); err != nil {
@@ -431,6 +459,7 @@ func (con *Consensus) runDKGTSIG(round uint64) {
 		if err != nil {
 			panic(err)
 		}
+		con.logger.Debug("Calling Governance.Configuration", "round", round)
 		hash := HashConfigurationBlock(
 			nodes.IDs,
 			con.gov.Configuration(round),
@@ -447,6 +476,10 @@ func (con *Consensus) runDKGTSIG(round uint64) {
 		if err = con.cfgModule.processPartialSignature(psig); err != nil {
 			panic(err)
 		}
+		con.logger.Debug("Calling Network.BroadcastDKGPartialSignature",
+			"proposer", psig.ProposerID,
+			"round", psig.Round,
+			"hash", psig.Hash)
 		con.network.BroadcastDKGPartialSignature(psig)
 		if _, err = con.cfgModule.runBlockTSig(round, hash); err != nil {
 			panic(err)
@@ -456,20 +489,29 @@ func (con *Consensus) runDKGTSIG(round uint64) {
 
 func (con *Consensus) runCRS() {
 	// Start running next round CRS.
+	con.logger.Debug("Calling Governance.CRS", "round", con.round)
 	psig, err := con.cfgModule.preparePartialSignature(
 		con.round, con.gov.CRS(con.round))
 	if err != nil {
-		log.Println(err)
+		con.logger.Error("Failed to prepare partial signature", "error", err)
 	} else if err = con.authModule.SignDKGPartialSignature(psig); err != nil {
-		log.Println(err)
+		con.logger.Error("Failed to sign DKG partial signature", "error", err)
 	} else if err = con.cfgModule.processPartialSignature(psig); err != nil {
-		log.Println(err)
+		con.logger.Error("Failed to process partial signature", "error", err)
 	} else {
+		con.logger.Debug("Calling Network.BroadcastDKGPartialSignature",
+			"proposer", psig.ProposerID,
+			"round", psig.Round,
+			"hash", psig.Hash)
 		con.network.BroadcastDKGPartialSignature(psig)
+		con.logger.Debug("Calling Governance.CRS", "round", con.round)
 		crs, err := con.cfgModule.runCRSTSig(con.round, con.gov.CRS(con.round))
 		if err != nil {
-			log.Println(err)
+			con.logger.Error("Failed to run CRS Tsig", "error", err)
 		} else {
+			con.logger.Debug("Calling Governance.ProposeCRS",
+				"round", con.round,
+				"crs", crs)
 			con.gov.ProposeCRS(crs)
 		}
 	}
@@ -481,6 +523,7 @@ func (con *Consensus) initialRound(startTime time.Time) {
 		return
 	default:
 	}
+	con.logger.Debug("Calling Governance.Configuration", "round", con.round)
 	con.currentConfig = con.gov.Configuration(con.round)
 
 	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval/2),
@@ -532,33 +575,40 @@ func (con *Consensus) processMsg(msgChan <-chan interface{}) {
 			// For sync mode.
 			if val.IsFinalized() {
 				if err := con.processFinalizedBlock(val); err != nil {
-					log.Println(err)
+					con.logger.Error("Failed to process finalized block",
+						"error", err)
 				}
 			} else {
 				if err := con.preProcessBlock(val); err != nil {
-					log.Println(err)
+					con.logger.Error("Failed to pre process block",
+						"error", err)
 				}
 			}
 		case *types.Vote:
 			if err := con.ProcessVote(val); err != nil {
-				log.Println(err)
+				con.logger.Error("Failed to process vote",
+					"error", err)
 			}
 		case *types.AgreementResult:
 			if err := con.ProcessAgreementResult(val); err != nil {
-				log.Println(err)
+				con.logger.Error("Failed to process agreement result",
+					"error", err)
 			}
 		case *types.BlockRandomnessResult:
 			if err := con.ProcessBlockRandomnessResult(val); err != nil {
-				log.Println(err)
+				con.logger.Error("Failed to process block randomness result",
+					"error", err)
 			}
 		case *types.DKGPrivateShare:
 			if err := con.cfgModule.processPrivateShare(val); err != nil {
-				log.Println(err)
+				con.logger.Error("Failed to process private share",
+					"error", err)
 			}
 
 		case *types.DKGPartialSignature:
 			if err := con.cfgModule.processPartialSignature(val); err != nil {
-				log.Println(err)
+				con.logger.Error("Failed to process partial signature",
+					"error", err)
 			}
 		}
 	}
@@ -572,7 +622,7 @@ func (con *Consensus) proposeBlock(chainID uint32, round uint64) *types.Block {
 		},
 	}
 	if err := con.prepareBlock(block, time.Now().UTC()); err != nil {
-		log.Println(err)
+		con.logger.Error("Failed to prepare block", "error", err)
 		return nil
 	}
 	return block
@@ -624,6 +674,7 @@ func (con *Consensus) ProcessAgreementResult(
 	if !con.cfgModule.touchTSigHash(rand.BlockHash) {
 		return nil
 	}
+	con.logger.Debug("Calling Network.BroadcastAgreementResult", "result", rand)
 	con.network.BroadcastAgreementResult(rand)
 	dkgSet, err := con.nodeSetCache.GetDKGSet(rand.Position.Round)
 	if err != nil {
@@ -642,12 +693,16 @@ func (con *Consensus) ProcessAgreementResult(
 	if err = con.cfgModule.processPartialSignature(psig); err != nil {
 		return err
 	}
+	con.logger.Debug("Calling Network.BroadcastDKGPartialSignature",
+		"proposer", psig.ProposerID,
+		"round", psig.Round,
+		"hash", psig.Hash)
 	con.network.BroadcastDKGPartialSignature(psig)
 	go func() {
 		tsig, err := con.cfgModule.runTSig(rand.Position.Round, rand.BlockHash)
 		if err != nil {
 			if err != ErrTSigAlreadyRunning {
-				log.Println(err)
+				con.logger.Error("Faield to run TSIG", "error", err)
 			}
 			return
 		}
@@ -657,9 +712,14 @@ func (con *Consensus) ProcessAgreementResult(
 			Randomness: tsig.Signature,
 		}
 		if err := con.ProcessBlockRandomnessResult(result); err != nil {
-			log.Println(err)
+			con.logger.Error("Failed to process randomness result",
+				"error", err)
 			return
 		}
+		con.logger.Debug("Calling Network.BroadcastRandomnessResult",
+			"hash", result.BlockHash,
+			"position", result.Position,
+			"randomness", string(result.Randomness))
 		con.network.BroadcastRandomnessResult(result)
 	}()
 	return nil
@@ -676,6 +736,10 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 	}
 	// TODO(jimmy-dexon): reuse the GPK.
 	round := rand.Position.Round
+	con.logger.Debug("Calling Governance.DKGMasterPublicKeys",
+		"round", con.round)
+	con.logger.Debug("Calling Governance.DKGComplaints", "round", con.round)
+	con.logger.Debug("Calling Governance.Configuration", "round", con.round)
 	gpk, err := NewDKGGroupPublicKey(round,
 		con.gov.DKGMasterPublicKeys(round),
 		con.gov.DKGComplaints(round),
@@ -687,6 +751,10 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 		rand.BlockHash, crypto.Signature{Signature: rand.Randomness}) {
 		return ErrIncorrectBlockRandomnessResult
 	}
+	con.logger.Debug("Calling Network.BroadcastRandomnessResult",
+		"hash", rand.BlockHash,
+		"position", rand.Position,
+		"randomness", string(rand.Randomness))
 	con.network.BroadcastRandomnessResult(rand)
 	if err := con.ccModule.processBlockRandomnessResult(rand); err != nil {
 		if err != ErrBlockNotRegistered {
@@ -734,6 +802,8 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		}
 		if b.Position.Round > con.round {
 			con.round++
+			con.logger.Debug("Calling Governance.Configuration",
+				"round", con.round+1)
 			con.lattice.AppendConfig(con.round+1, con.gov.Configuration(con.round+1))
 		}
 		// TODO(mission): clone types.FinalizationResult
@@ -780,6 +850,7 @@ func (con *Consensus) prepareBlock(b *types.Block,
 	}
 	// TODO(mission): decide CRS by block's round, which could be determined by
 	//                block's info (ex. position, timestamp).
+	con.logger.Debug("Calling Governance.CRS", "round", 0)
 	if err = con.authModule.SignCRS(b, con.gov.CRS(0)); err != nil {
 		return
 	}

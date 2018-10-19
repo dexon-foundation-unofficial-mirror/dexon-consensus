@@ -121,7 +121,8 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 			NewAuthenticator(prvKey),
 			app,
 			app,
-			db)}
+			db,
+			&common.NullLogger{})}
 }
 
 func (s *LatticeTestSuite) TestBasicUsage() {

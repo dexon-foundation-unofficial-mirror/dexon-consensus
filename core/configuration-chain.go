@@ -19,7 +19,6 @@ package core
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -43,6 +42,7 @@ type configurationChain struct {
 	recv        dkgReceiver
 	gov         Governance
 	dkg         *dkgProtocol
+	logger      common.Logger
 	dkgLock     sync.RWMutex
 	dkgSigner   map[uint64]*dkgShareSecret
 	gpk         map[uint64]*DKGGroupPublicKey
@@ -58,11 +58,13 @@ type configurationChain struct {
 func newConfigurationChain(
 	ID types.NodeID,
 	recv dkgReceiver,
-	gov Governance) *configurationChain {
+	gov Governance,
+	logger common.Logger) *configurationChain {
 	return &configurationChain{
 		ID:          ID,
 		recv:        recv,
 		gov:         gov,
+		logger:      logger,
 		dkgSigner:   make(map[uint64]*dkgShareSecret),
 		gpk:         make(map[uint64]*DKGGroupPublicKey),
 		tsig:        make(map[common.Hash]*tsigProtocol),
@@ -101,6 +103,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	<-ticker.Tick()
 	cc.dkgLock.Lock()
 	// Phase 2(T = 0): Exchange DKG secret key share.
+	cc.logger.Debug("Calling Governance.DKGMasterPublicKeys", "round", round)
 	cc.dkg.processMasterPublicKeys(cc.gov.DKGMasterPublicKeys(round))
 	// Phase 3(T = 0~λ): Propose complaint.
 	// Propose complaint is done in `processMasterPublicKeys`.
@@ -113,6 +116,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	<-ticker.Tick()
 	cc.dkgLock.Lock()
 	// Phase 5(T = 2λ): Propose Anti nack complaint.
+	cc.logger.Debug("Calling Governance.DKGComplaints", "round", round)
 	cc.dkg.processNackComplaints(cc.gov.DKGComplaints(round))
 	cc.dkgLock.Unlock()
 	<-ticker.Tick()
@@ -123,6 +127,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	<-ticker.Tick()
 	cc.dkgLock.Lock()
 	// Phase 7(T = 4λ): Enforce complaints and nack complaints.
+	cc.logger.Debug("Calling Governance.DKGComplaints", "round", round)
 	cc.dkg.enforceNackComplaints(cc.gov.DKGComplaints(round))
 	// Enforce complaint is done in `processPrivateShare`.
 	// Phase 8(T = 5λ): DKG finalize.
@@ -136,10 +141,14 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	cc.dkgLock.Lock()
 	// Normally, IsDKGFinal would return true here. Use this for in case of
 	// unexpected network fluctuation and ensure the robustness of DKG protocol.
+	cc.logger.Debug("Calling Governance.IsDKGFinal", "round", round)
 	for !cc.gov.IsDKGFinal(round) {
-		log.Printf("[%s] DKG is not ready yet. Try again later...\n", cc.ID)
+		cc.logger.Info("DKG is not ready yet. Try again later...",
+			"nodeID", cc.ID)
 		time.Sleep(500 * time.Millisecond)
 	}
+	cc.logger.Debug("Calling Governance.DKGMasterPublicKeys", "round", round)
+	cc.logger.Debug("Calling Governance.DKGComplaints", "round", round)
 	gpk, err := NewDKGGroupPublicKey(round,
 		cc.gov.DKGMasterPublicKeys(round),
 		cc.gov.DKGComplaints(round),
@@ -155,8 +164,11 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	for nID := range gpk.qualifyNodeIDs {
 		qualifies += fmt.Sprintf("%s ", nID.String()[:6])
 	}
-	log.Printf("[%s] Qualify Nodes(%d): (%d) %s\n",
-		cc.ID, round, len(gpk.qualifyIDs), qualifies)
+	cc.logger.Info("Qualify Nodes",
+		"nodeID", cc.ID,
+		"round", round,
+		"count", len(gpk.qualifyIDs),
+		"qualifies", qualifies)
 	cc.dkgResult.Lock()
 	defer cc.dkgResult.Unlock()
 	cc.dkgSigner[round] = signer
@@ -214,7 +226,9 @@ func (cc *configurationChain) runTSig(
 	go func() {
 		for _, psig := range pendingPsig {
 			if err := cc.processPartialSignature(psig); err != nil {
-				log.Printf("[%s] %s", cc.ID, err)
+				cc.logger.Error("failed to process partial signature",
+					"nodeID", cc.ID,
+					"error", err)
 			}
 		}
 	}()
@@ -240,14 +254,20 @@ func (cc *configurationChain) runBlockTSig(
 	if err != nil {
 		return crypto.Signature{}, err
 	}
-	log.Printf("[%s] Block TSIG(%d): %s\n", cc.ID, round, sig)
+	cc.logger.Info("Block TSIG",
+		"nodeID", cc.ID,
+		"round", round,
+		"signature", sig)
 	return sig, nil
 }
 
 func (cc *configurationChain) runCRSTSig(
 	round uint64, crs common.Hash) ([]byte, error) {
 	sig, err := cc.runTSig(round, crs)
-	log.Printf("[%s] CRS(%d): %s\n", cc.ID, round+1, sig)
+	cc.logger.Info("CRS",
+		"nodeID", cc.ID,
+		"round", round+1,
+		"signature", sig)
 	return sig.Signature[:], err
 }
 

@@ -18,6 +18,8 @@
 package types
 
 import (
+	"fmt"
+
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 )
 
@@ -26,6 +28,11 @@ type AgreementResult struct {
 	BlockHash common.Hash `json:"block_hash"`
 	Position  Position    `json:"position"`
 	Votes     []Vote      `json:"votes"`
+}
+
+func (r *AgreementResult) String() string {
+	return fmt.Sprintf(
+		"agreementResult[%s:%s]", r.BlockHash, &r.Position)
 }
 
 // BlockRandomnessResult describes a block randomness result

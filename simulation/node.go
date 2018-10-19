@@ -100,7 +100,13 @@ func (n *node) run(serverEndpoint interface{}, dMoment time.Time) {
 		}
 	}
 	n.consensus = core.NewConsensus(
-		dMoment, n.app, n.gov, n.db, n.netModule, n.prvKey)
+		dMoment,
+		n.app,
+		n.gov,
+		n.db,
+		n.netModule,
+		n.prvKey,
+		&common.SimpleLogger{})
 	go n.consensus.Run(&types.Block{})
 
 	// Blocks forever.
