@@ -55,7 +55,7 @@ func (s *ETHCryptoTestSuite) TestSignature() {
 	s.NotEqual(sig11, sig12)
 
 	// Test VerifySignature with correct public key.
-	pub1, ok := prv1.PublicKey().(publicKey)
+	pub1, ok := prv1.PublicKey().(*PublicKey)
 	s.Require().True(ok)
 	s.True(pub1.VerifySignature(hash1, sig11))
 
@@ -66,13 +66,6 @@ func (s *ETHCryptoTestSuite) TestSignature() {
 	// Test VerifySignature with wrong public key.
 	pub2 := prv2.PublicKey()
 	s.False(pub2.VerifySignature(hash1, sig11))
-
-	// Test compress and decompress of public key.
-	compressPub1 := pub1.Compress()
-	decompressPub1, err := decompressPubkey(compressPub1)
-	s.Require().Nil(err)
-	s.Equal(pub1, decompressPub1)
-	s.True(decompressPub1.VerifySignature(hash1, sig11))
 }
 
 func (s *ETHCryptoTestSuite) TestSigToPub() {

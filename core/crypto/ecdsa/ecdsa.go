@@ -20,7 +20,7 @@ package ecdsa
 import (
 	"crypto/ecdsa"
 
-	ethcrypto "github.com/dexon-foundation/dexon/crypto"
+	dexCrypto "github.com/dexon-foundation/dexon/crypto"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
@@ -35,61 +35,49 @@ func init() {
 // PrivateKey represents a private key structure used in geth and implments
 // Crypto.PrivateKey interface.
 type PrivateKey struct {
-	privateKey ecdsa.PrivateKey
-	publicKey  publicKey
+	privateKey *ecdsa.PrivateKey
 }
 
-// publicKey represents a public key structure used in geth and implements
+// PublicKey represents a public key structure used in geth and implements
 // Crypto.PublicKey interface.
-type publicKey struct {
-	publicKey []byte
+type PublicKey struct {
+	publicKey *ecdsa.PublicKey
 }
 
 // NewPrivateKey creates a new PrivateKey structure.
 func NewPrivateKey() (*PrivateKey, error) {
-	key, err := ethcrypto.GenerateKey()
+	key, err := dexCrypto.GenerateKey()
 	if err != nil {
 		return nil, err
 	}
-	return &PrivateKey{
-		privateKey: *key,
-		publicKey:  *newPublicKey(key),
-	}, nil
+	return &PrivateKey{privateKey: key}, nil
 }
 
 // NewPrivateKeyFromECDSA creates a new PrivateKey structure from
 // ecdsa.PrivateKey.
 func NewPrivateKeyFromECDSA(key *ecdsa.PrivateKey) *PrivateKey {
-	return &PrivateKey{
-		privateKey: *key,
-		publicKey:  *newPublicKey(key),
-	}
+	return &PrivateKey{privateKey: key}
 }
 
-// newPublicKey creates a new PublicKey structure.
-func newPublicKey(prvKey *ecdsa.PrivateKey) *publicKey {
-	return &publicKey{
-		publicKey: ethcrypto.CompressPubkey(&prvKey.PublicKey),
-	}
+// NewPublicKeyFromECDSA creates a new PublicKey structure from
+// ecdsa.PublicKey.
+func NewPublicKeyFromECDSA(key *ecdsa.PublicKey) *PublicKey {
+	return &PublicKey{publicKey: key}
 }
 
 // NewPublicKeyFromByteSlice constructs an eth.publicKey instance from
 // a byte slice.
-func NewPublicKeyFromByteSlice(b []byte) crypto.PublicKey {
-	return publicKey{publicKey: b}
-}
-
-// decompressPubkey parses a public key in the 33-byte compressed format.
-func decompressPubkey(pubkey []byte) (publicKey, error) {
-	_, err := ethcrypto.DecompressPubkey(pubkey)
-	return publicKey{
-		publicKey: pubkey,
-	}, err
+func NewPublicKeyFromByteSlice(b []byte) (crypto.PublicKey, error) {
+	pub, err := dexCrypto.UnmarshalPubkey(b)
+	if err != nil {
+		return &PublicKey{}, err
+	}
+	return &PublicKey{publicKey: pub}, nil
 }
 
 // PublicKey returns the public key associate this private key.
 func (prv *PrivateKey) PublicKey() crypto.PublicKey {
-	return prv.publicKey
+	return NewPublicKeyFromECDSA(&(prv.privateKey.PublicKey))
 }
 
 // Sign calculates an ECDSA signature.
@@ -102,7 +90,7 @@ func (prv *PrivateKey) PublicKey() crypto.PublicKey {
 // The produced signature is in the [R || S || V] format where V is 0 or 1.
 func (prv *PrivateKey) Sign(hash common.Hash) (
 	sig crypto.Signature, err error) {
-	s, err := ethcrypto.Sign(hash[:], &prv.privateKey)
+	s, err := dexCrypto.Sign(hash[:], prv.privateKey)
 	sig = crypto.Signature{
 		Type:      cryptoType,
 		Signature: s,
@@ -114,32 +102,32 @@ func (prv *PrivateKey) Sign(hash common.Hash) (
 // The public key should be in compressed (33 bytes) or uncompressed (65 bytes)
 // format.
 // The signature should have the 64 byte [R || S] format.
-func (pub publicKey) VerifySignature(
+func (pub *PublicKey) VerifySignature(
 	hash common.Hash, signature crypto.Signature) bool {
 	sig := signature.Signature
 	if len(sig) == 65 {
 		// The last byte is for ecrecover.
 		sig = sig[:64]
 	}
-	return ethcrypto.VerifySignature(pub.publicKey, hash[:], sig)
+	return dexCrypto.VerifySignature(pub.Bytes(), hash[:], sig)
 }
 
 // Compress encodes a public key to the 33-byte compressed format.
-func (pub publicKey) Compress() []byte {
-	return pub.publicKey
+func (pub *PublicKey) Compress() []byte {
+	return dexCrypto.CompressPubkey(pub.publicKey)
 }
 
-// Bytes returns the []byte representation of public key.
-func (pub publicKey) Bytes() []byte {
-	return pub.Compress()
+// Bytes returns the []byte representation of uncompressed public key. (65 bytes)
+func (pub *PublicKey) Bytes() []byte {
+	return dexCrypto.FromECDSAPub(pub.publicKey)
 }
 
 // SigToPub returns the PublicKey that created the given signature.
 func SigToPub(
 	hash common.Hash, signature crypto.Signature) (crypto.PublicKey, error) {
-	key, err := ethcrypto.SigToPub(hash[:], signature.Signature[:])
+	key, err := dexCrypto.SigToPub(hash[:], signature.Signature[:])
 	if err != nil {
-		return publicKey{}, err
+		return &PublicKey{}, err
 	}
-	return publicKey{publicKey: ethcrypto.CompressPubkey(key)}, nil
+	return &PublicKey{publicKey: key}, nil
 }

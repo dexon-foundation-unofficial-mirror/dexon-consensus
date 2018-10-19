@@ -68,7 +68,10 @@ func parsePeerInfo(info string) (key crypto.PublicKey, conn string) {
 	if err != nil {
 		panic(err)
 	}
-	key = ecdsa.NewPublicKeyFromByteSlice(data)
+	key, err = ecdsa.NewPublicKeyFromByteSlice(data)
+	if err != nil {
+		panic(err)
+	}
 	return
 }
 
