@@ -68,7 +68,7 @@ func (app *slowApp) StronglyAcked(blockHash common.Hash) {
 	app.stronglyAcked[blockHash] = struct{}{}
 }
 
-func (app *slowApp) TotalOrderingDelivered(blockHashes common.Hashes, early bool) {
+func (app *slowApp) TotalOrderingDelivered(blockHashes common.Hashes, mode uint32) {
 	time.Sleep(app.sleep)
 	for _, hash := range blockHashes {
 		app.totalOrderingDelivered[hash] = struct{}{}
@@ -140,7 +140,7 @@ func (s *NonBlockingTestSuite) TestNonBlocking() {
 		nbModule.StronglyAcked(hash)
 		nbModule.BlockDelivered(hash, types.FinalizationResult{})
 	}
-	nbModule.TotalOrderingDelivered(hashes, true)
+	nbModule.TotalOrderingDelivered(hashes, TotalOrderingModeEarly)
 
 	// nonBlocking should be non-blocking.
 	s.True(shouldFinish.After(time.Now().UTC()))

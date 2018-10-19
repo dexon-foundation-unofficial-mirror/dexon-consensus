@@ -52,7 +52,7 @@ type Debug interface {
 
 	// TotalOrderingDelivered is called when the total ordering algorithm deliver
 	// a set of block.
-	TotalOrderingDelivered(common.Hashes, bool)
+	TotalOrderingDelivered(common.Hashes, uint32)
 }
 
 // Network describs the network interface that interacts with DEXON consensus

@@ -62,7 +62,7 @@ type AppAckedRecord struct {
 // a total-ordering deliver notification.
 type AppTotalOrderRecord struct {
 	BlockHashes common.Hashes
-	Early       bool
+	Mode        uint32
 	When        time.Time
 }
 
@@ -126,13 +126,13 @@ func (app *App) StronglyAcked(blockHash common.Hash) {
 }
 
 // TotalOrderingDelivered implements Application interface.
-func (app *App) TotalOrderingDelivered(blockHashes common.Hashes, early bool) {
+func (app *App) TotalOrderingDelivered(blockHashes common.Hashes, mode uint32) {
 	app.totalOrderedLock.Lock()
 	defer app.totalOrderedLock.Unlock()
 
 	rec := &AppTotalOrderRecord{
 		BlockHashes: blockHashes,
-		Early:       early,
+		Mode:        mode,
 		When:        time.Now().UTC(),
 	}
 	app.TotalOrdered = append(app.TotalOrdered, rec)

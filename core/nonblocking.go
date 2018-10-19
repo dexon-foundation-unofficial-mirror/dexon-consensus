@@ -35,7 +35,7 @@ type stronglyAckedEvent struct {
 
 type totalOrderingDeliveredEvent struct {
 	blockHashes common.Hashes
-	early       bool
+	mode        uint32
 }
 
 type blockDeliveredEvent struct {
@@ -97,7 +97,7 @@ func (nb *nonBlocking) run() {
 		case blockConfirmedEvent:
 			nb.app.BlockConfirmed(*e.block)
 		case totalOrderingDeliveredEvent:
-			nb.debug.TotalOrderingDelivered(e.blockHashes, e.early)
+			nb.debug.TotalOrderingDelivered(e.blockHashes, e.mode)
 		case blockDeliveredEvent:
 			nb.app.BlockDelivered(e.blockHash, *e.result)
 		default:
@@ -148,9 +148,9 @@ func (nb *nonBlocking) StronglyAcked(blockHash common.Hash) {
 // TotalOrderingDelivered is called when the total ordering algorithm deliver
 // a set of block.
 func (nb *nonBlocking) TotalOrderingDelivered(
-	blockHashes common.Hashes, early bool) {
+	blockHashes common.Hashes, mode uint32) {
 	if nb.debug != nil {
-		nb.addEvent(totalOrderingDeliveredEvent{blockHashes, early})
+		nb.addEvent(totalOrderingDeliveredEvent{blockHashes, mode})
 	}
 }
 

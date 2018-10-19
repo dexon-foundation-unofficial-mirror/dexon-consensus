@@ -361,22 +361,22 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		sort.Sort(delivered0)
 		req.Len(app.TotalOrdered, 4)
 		req.Equal(app.TotalOrdered[0].BlockHashes, delivered0)
-		req.False(app.TotalOrdered[0].Early)
+		req.Equal(app.TotalOrdered[0].Mode, TotalOrderingModeNormal)
 		// b11 is the sencond set delivered by total ordering.
 		delivered1 := common.Hashes{b11.Hash}
 		sort.Sort(delivered1)
 		req.Equal(app.TotalOrdered[1].BlockHashes, delivered1)
-		req.False(app.TotalOrdered[1].Early)
+		req.Equal(app.TotalOrdered[1].Mode, TotalOrderingModeNormal)
 		// b01, b21, b31 are the third set delivered by total ordering.
 		delivered2 := common.Hashes{b01.Hash, b21.Hash, b31.Hash}
 		sort.Sort(delivered2)
 		req.Equal(app.TotalOrdered[2].BlockHashes, delivered2)
-		req.False(app.TotalOrdered[2].Early)
+		req.Equal(app.TotalOrdered[2].Mode, TotalOrderingModeNormal)
 		// b02, b12, b22, b32 are the fourth set delivered by total ordering.
 		delivered3 := common.Hashes{b02.Hash, b12.Hash, b22.Hash, b32.Hash}
 		sort.Sort(delivered3)
 		req.Equal(app.TotalOrdered[3].BlockHashes, delivered3)
-		req.False(app.TotalOrdered[3].Early)
+		req.Equal(app.TotalOrdered[3].Mode, TotalOrderingModeNormal)
 		// Check generated timestamps.
 		req.Contains(app.Delivered, b00.Hash)
 		req.Contains(app.Delivered, b10.Hash)

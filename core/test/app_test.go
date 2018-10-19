@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -38,7 +39,7 @@ func (s *AppTestSuite) SetupSuite() {
 			common.NewRandomHash(),
 			common.NewRandomHash(),
 		},
-		Early: false,
+		Mode: core.TotalOrderingModeNormal,
 	}
 	s.to2 = &AppTotalOrderRecord{
 		BlockHashes: common.Hashes{
@@ -46,13 +47,13 @@ func (s *AppTestSuite) SetupSuite() {
 			common.NewRandomHash(),
 			common.NewRandomHash(),
 		},
-		Early: false,
+		Mode: core.TotalOrderingModeNormal,
 	}
 	s.to3 = &AppTotalOrderRecord{
 		BlockHashes: common.Hashes{
 			common.NewRandomHash(),
 		},
-		Early: false,
+		Mode: core.TotalOrderingModeNormal,
 	}
 }
 
@@ -62,7 +63,7 @@ func (s *AppTestSuite) setupAppByTotalOrderDeliver(
 	for _, h := range to.BlockHashes {
 		app.StronglyAcked(h)
 	}
-	app.TotalOrderingDelivered(to.BlockHashes, to.Early)
+	app.TotalOrderingDelivered(to.BlockHashes, to.Mode)
 	for _, h := range to.BlockHashes {
 		// To make it simpler, use the index of hash sequence
 		// as the time.
@@ -98,7 +99,7 @@ func (s *AppTestSuite) TestCompare() {
 	s.setupAppByTotalOrderDeliver(app2, s.to2)
 	hash := common.NewRandomHash()
 	app2.StronglyAcked(hash)
-	app2.TotalOrderingDelivered(common.Hashes{hash}, false)
+	app2.TotalOrderingDelivered(common.Hashes{hash}, core.TotalOrderingModeNormal)
 	s.deliverBlockWithTimeFromSequenceLength(app2, hash)
 	req.Equal(ErrMismatchBlockHashSequence, app1.Compare(app2))
 	// An App with different consensus time for the same block.
@@ -108,7 +109,7 @@ func (s *AppTestSuite) TestCompare() {
 	for _, h := range s.to3.BlockHashes {
 		app3.StronglyAcked(h)
 	}
-	app3.TotalOrderingDelivered(s.to3.BlockHashes, s.to3.Early)
+	app3.TotalOrderingDelivered(s.to3.BlockHashes, s.to3.Mode)
 	wrongTime := time.Time{}.Add(
 		time.Duration(len(app3.DeliverSequence)) * time.Second)
 	wrongTime = wrongTime.Add(1 * time.Second)
@@ -139,7 +140,7 @@ func (s *AppTestSuite) TestVerify() {
 	for _, h := range s.to2.BlockHashes {
 		app2.StronglyAcked(h)
 	}
-	app2.TotalOrderingDelivered(s.to2.BlockHashes, s.to2.Early)
+	app2.TotalOrderingDelivered(s.to2.BlockHashes, s.to2.Mode)
 	s.deliverBlock(app2, s.to2.BlockHashes[0], time.Time{})
 	req.Equal(ErrConsensusTimestampOutOfOrder, app2.Verify())
 	// A delivered block is not found in total ordering delivers.
@@ -155,10 +156,10 @@ func (s *AppTestSuite) TestVerify() {
 	for _, h := range s.to2.BlockHashes {
 		app4.StronglyAcked(h)
 	}
-	app4.TotalOrderingDelivered(s.to2.BlockHashes, s.to2.Early)
+	app4.TotalOrderingDelivered(s.to2.BlockHashes, s.to2.Mode)
 	hash = common.NewRandomHash()
 	app4.StronglyAcked(hash)
-	app4.TotalOrderingDelivered(common.Hashes{hash}, false)
+	app4.TotalOrderingDelivered(common.Hashes{hash}, core.TotalOrderingModeNormal)
 	s.deliverBlockWithTimeFromSequenceLength(app4, hash)
 	// Witness ack on unknown block.
 	app5 := NewApp()

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
+	"github.com/dexon-foundation/dexon-consensus-core/core"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
@@ -59,7 +60,7 @@ func (s *StopperTestSuite) TestStopByConfirmedBlocks() {
 			for _, h := range hashes {
 				app.StronglyAcked(h)
 			}
-			app.TotalOrderingDelivered(hashes, false)
+			app.TotalOrderingDelivered(hashes, core.TotalOrderingModeNormal)
 			for _, h := range hashes {
 				app.BlockDelivered(h, types.FinalizationResult{
 					Timestamp: time.Time{},

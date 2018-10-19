@@ -32,6 +32,17 @@ const (
 	infinity uint64 = math.MaxUint64
 )
 
+const (
+	// TotalOrderingModeError returns mode error.
+	TotalOrderingModeError uint32 = iota
+	// TotalOrderingModeNormal returns mode normal.
+	TotalOrderingModeNormal
+	// TotalOrderingModeEarly returns mode early.
+	TotalOrderingModeEarly
+	// TotalOrderingModeFlush returns mode flush.
+	TotalOrderingModeFlush
+)
+
 var (
 	// ErrNotValidDAG would be reported when block subbmitted to totalOrdering
 	// didn't form a DAG.
@@ -1040,13 +1051,14 @@ func (to *totalOrdering) output(
 //  - generate preceding set
 //  - check if the preceding set deliverable by checking potential function
 func (to *totalOrdering) generateDeliverSet() (
-	delivered map[common.Hash]struct{}, early bool) {
+	delivered map[common.Hash]struct{}, mode uint32) {
 	var (
 		chainID, otherChainID uint32
 		info, otherInfo       *totalOrderingCandidateInfo
 		precedings            = make(map[uint32]struct{})
 		cfg                   = to.configs[to.curRound]
 	)
+	mode = TotalOrderingModeNormal
 	to.globalVector.updateCandidateInfo(to.dirtyChainIDs, to.objCache)
 	globalInfo := to.globalVector.cachedCandidateInfo
 	for _, chainID = range to.candidateChainIDs {
@@ -1173,7 +1185,7 @@ CheckNextCandidateLoop:
 		// The whole picture is not ready, we need to check if
 		// exteranl stability is met, and we can deliver earlier.
 		if checkAHV() && checkANS() {
-			early = true
+			mode = TotalOrderingModeEarly
 		} else {
 			return
 		}
@@ -1187,8 +1199,9 @@ CheckNextCandidateLoop:
 
 // flushBlocks flushes blocks.
 func (to *totalOrdering) flushBlocks(
-	b *types.Block) (flushed []*types.Block, early bool, err error) {
+	b *types.Block) (flushed []*types.Block, mode uint32, err error) {
 	cfg := to.configs[to.curRound]
+	mode = TotalOrderingModeFlush
 	if cfg.isValidLastBlock(b) {
 		to.flushReadyChains[b.Position.ChainID] = struct{}{}
 	}
@@ -1252,8 +1265,8 @@ func (to *totalOrdering) flushBlocks(
 
 // deliverBlocks delivers blocks by DEXON total ordering algorithm.
 func (to *totalOrdering) deliverBlocks() (
-	delivered []*types.Block, early bool, err error) {
-	hashes, early := to.generateDeliverSet()
+	delivered []*types.Block, mode uint32, err error) {
+	hashes, mode := to.generateDeliverSet()
 	cfg := to.configs[to.curRound]
 	// output precedings
 	delivered = to.output(hashes, cfg.numChains)
@@ -1293,7 +1306,7 @@ func (to *totalOrdering) deliverBlocks() (
 
 // processBlock is the entry point of totalOrdering.
 func (to *totalOrdering) processBlock(
-	b *types.Block) ([]*types.Block, bool, error) {
+	b *types.Block) ([]*types.Block, uint32, error) {
 	// NOTE: I assume the block 'b' is already safe for total ordering.
 	//       That means, all its acking blocks are during/after
 	//       total ordering stage.
@@ -1302,7 +1315,7 @@ func (to *totalOrdering) processBlock(
 	to.buildBlockRelation(b)
 	pos, err := to.updateVectors(b)
 	if err != nil {
-		return nil, false, err
+		return nil, uint32(0), err
 	}
 	// Mark the proposer of incoming block as dirty.
 	if b.Position.ChainID < cfg.numChains {

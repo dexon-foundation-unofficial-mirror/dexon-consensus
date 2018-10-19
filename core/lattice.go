@@ -136,10 +136,10 @@ func (s *Lattice) ProcessBlock(
 	input *types.Block) (verified, delivered []*types.Block, err error) {
 
 	var (
-		tip, b         *types.Block
-		toDelivered    []*types.Block
-		inLattice      []*types.Block
-		earlyDelivered bool
+		tip, b        *types.Block
+		toDelivered   []*types.Block
+		inLattice     []*types.Block
+		deliveredMode uint32
 	)
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -172,7 +172,7 @@ func (s *Lattice) ProcessBlock(
 	}
 	// Perform total ordering for each block added to lattice.
 	for _, b = range inLattice {
-		toDelivered, earlyDelivered, err = s.toModule.processBlock(b)
+		toDelivered, deliveredMode, err = s.toModule.processBlock(b)
 		if err != nil {
 			// All errors from total ordering is serious, should panic.
 			panic(err)
@@ -185,7 +185,7 @@ func (s *Lattice) ProcessBlock(
 			hashes[idx] = toDelivered[idx].Hash
 		}
 		if s.debug != nil {
-			s.debug.TotalOrderingDelivered(hashes, earlyDelivered)
+			s.debug.TotalOrderingDelivered(hashes, deliveredMode)
 		}
 		// Perform timestamp generation.
 		if err = s.ctModule.processBlocks(toDelivered); err != nil {

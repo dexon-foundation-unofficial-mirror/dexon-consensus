@@ -100,9 +100,9 @@ func (s *TotalOrderingTestSuite) checkRandomResult(
 }
 
 func (s *TotalOrderingTestSuite) checkNotDeliver(to *totalOrdering, b *types.Block) {
-	blocks, eqrly, err := to.processBlock(b)
+	blocks, mode, err := to.processBlock(b)
 	s.Empty(blocks)
-	s.False(eqrly)
+	s.Equal(mode, TotalOrderingModeNormal)
 	s.Nil(err)
 }
 
@@ -443,9 +443,9 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 	s.Equal(candidate.ackedStatus[3].minHeight, b30.Position.Height)
 	s.Equal(candidate.ackedStatus[3].count, uint64(2))
 
-	blocks, early, err := to.processBlock(b32)
+	blocks, mode, err := to.processBlock(b32)
 	s.Require().Len(blocks, 1)
-	s.True(early)
+	s.Equal(mode, TotalOrderingModeEarly)
 	s.Nil(err)
 	s.checkHashSequence(blocks, common.Hashes{b00.Hash})
 
@@ -706,8 +706,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	s.Equal(candidate.ackedStatus[4].count, uint64(0))
 
 	// Check the first deliver.
-	blocks, early, err := to.processBlock(b02)
-	s.True(early)
+	blocks, mode, err := to.processBlock(b02)
+	s.Equal(mode, TotalOrderingModeEarly)
 	s.Nil(err)
 	s.checkHashSequence(blocks, common.Hashes{b00.Hash, b10.Hash})
 
@@ -747,8 +747,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	s.checkNotDeliver(to, b13)
 
 	// Check the second deliver.
-	blocks, early, err = to.processBlock(b03)
-	s.True(early)
+	blocks, mode, err = to.processBlock(b03)
+	s.Equal(mode, TotalOrderingModeEarly)
 	s.Nil(err)
 	s.checkHashSequence(blocks, common.Hashes{b11.Hash, b20.Hash})
 
@@ -799,8 +799,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 
 	// Make 'Acking Node Set' contains blocks from all chains,
 	// this should trigger not-early deliver.
-	blocks, early, err = to.processBlock(b23)
-	s.False(early)
+	blocks, mode, err = to.processBlock(b23)
+	s.Equal(mode, TotalOrderingModeNormal)
 	s.Nil(err)
 	s.checkHashSequence(blocks, common.Hashes{b01.Hash, b30.Hash})
 
@@ -916,8 +916,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 	req.Equal(candidate.ackedStatus[3].count, uint64(2))
 
 	// This new block should trigger non-early deliver.
-	blocks, early, err := to.processBlock(b40)
-	req.False(early)
+	blocks, mode, err := to.processBlock(b40)
+	req.Equal(mode, TotalOrderingModeNormal)
 	req.Nil(err)
 	s.checkHashSequence(blocks, common.Hashes{b20.Hash})
 
