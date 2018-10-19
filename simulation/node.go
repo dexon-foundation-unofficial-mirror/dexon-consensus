@@ -32,7 +32,7 @@ import (
 
 // node represents a node in DexCon.
 type node struct {
-	app *simApp
+	app core.Application
 	gov *simGovernance
 	db  blockdb.BlockDatabase
 

@@ -110,7 +110,7 @@ func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (err error) {
 		if block.Finalization.Timestamp, err = getMedianTime(ts); err != nil {
 			return
 		}
-		if !block.Timestamp.After(ct.chainTimestamps[block.Position.ChainID]) {
+		if block.Timestamp.Before(ct.chainTimestamps[block.Position.ChainID]) {
 			return ErrTimestampNotIncrease
 		}
 		ct.chainTimestamps[block.Position.ChainID] = block.Timestamp

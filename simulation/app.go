@@ -61,9 +61,9 @@ func newSimApp(id types.NodeID, netModule *network) *simApp {
 func (a *simApp) BlockConfirmed(block types.Block) {
 	a.blockByHashMutex.Lock()
 	defer a.blockByHashMutex.Unlock()
-
 	// TODO(jimmy-dexon) : Remove block in this hash if it's no longer needed.
 	a.blockByHash[block.Hash] = &block
+	a.blockSeen[block.Hash] = time.Now().UTC()
 }
 
 // VerifyBlock implements core.Application.
@@ -119,8 +119,9 @@ func (a *simApp) StronglyAcked(blockHash common.Hash) {
 
 // TotalOrderingDelivered is called when blocks are delivered by the total
 // ordering algorithm.
-func (a *simApp) TotalOrderingDelivered(blockHashes common.Hashes, early bool) {
-	fmt.Println("OUTPUT", a.NodeID, early, blockHashes)
+func (a *simApp) TotalOrderingDelivered(
+	blockHashes common.Hashes, mode uint32) {
+	fmt.Println("OUTPUT", a.NodeID, mode, blockHashes)
 	blockList := &BlockList{
 		ID:        a.DeliverID,
 		BlockHash: blockHashes,

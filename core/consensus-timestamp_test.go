@@ -34,6 +34,7 @@ type ConsensusTimestampTest struct {
 }
 
 func (s *ConsensusTimestampTest) generateBlocksWithTimestamp(
+	now time.Time,
 	blockNum, chainNum int,
 	step, sigma time.Duration) []*types.Block {
 	blocks := make([]*types.Block, blockNum)
@@ -54,7 +55,7 @@ func (s *ConsensusTimestampTest) generateBlocksWithTimestamp(
 			block.ParentHash = common.Hash{}
 			block.Position.Height = 0
 			s.Require().True(block.IsGenesis())
-			chainTimestamps[uint32(idx)] = time.Now().UTC()
+			chainTimestamps[uint32(idx)] = now
 		} else {
 			block.Position.ChainID = chainIDs[idx]
 			// Assign 1 to height to make this block non-genesis.
@@ -94,12 +95,13 @@ func (s *ConsensusTimestampTest) TestTimestampPartition() {
 	chainNum := 19
 	sigma := 100 * time.Millisecond
 	totalTimestamps := make([]time.Time, 0)
-	ct := newConsensusTimestamp(time.Time{}, 0, uint32(chainNum))
+	now := time.Now().UTC()
+	ct := newConsensusTimestamp(now, 0, uint32(chainNum))
 	totalBlockNum := 0
 	for _, blockNum := range blockNums {
 		totalBlockNum += blockNum
 	}
-	totalChain := s.generateBlocksWithTimestamp(
+	totalChain := s.generateBlocksWithTimestamp(now,
 		totalBlockNum, chainNum, time.Second, sigma)
 	for _, blockNum := range blockNums {
 		var chain []*types.Block
@@ -110,7 +112,7 @@ func (s *ConsensusTimestampTest) TestTimestampPartition() {
 		totalChain = append(totalChain, chain...)
 		totalTimestamps = append(totalTimestamps, timestamps...)
 	}
-	ct2 := newConsensusTimestamp(time.Time{}, 0, uint32(chainNum))
+	ct2 := newConsensusTimestamp(now, 0, uint32(chainNum))
 	err := ct2.processBlocks(totalChain)
 	s.Require().NoError(err)
 	timestamps2 := s.extractTimestamps(totalChain)
@@ -120,8 +122,10 @@ func (s *ConsensusTimestampTest) TestTimestampPartition() {
 func (s *ConsensusTimestampTest) TestTimestampIncrease() {
 	chainNum := 19
 	sigma := 100 * time.Millisecond
-	ct := newConsensusTimestamp(time.Time{}, 0, uint32(chainNum))
-	chain := s.generateBlocksWithTimestamp(1000, chainNum, time.Second, sigma)
+	now := time.Now().UTC()
+	ct := newConsensusTimestamp(now, 0, uint32(chainNum))
+	chain := s.generateBlocksWithTimestamp(
+		now, 1000, chainNum, time.Second, sigma)
 	err := ct.processBlocks(chain)
 	s.Require().NoError(err)
 	timestamps := s.extractTimestamps(chain)
@@ -129,7 +133,7 @@ func (s *ConsensusTimestampTest) TestTimestampIncrease() {
 		s.False(timestamps[i].Before(timestamps[i-1]))
 	}
 	// Test if the processBlocks is stable.
-	ct2 := newConsensusTimestamp(time.Time{}, 0, uint32(chainNum))
+	ct2 := newConsensusTimestamp(now, 0, uint32(chainNum))
 	ct2.processBlocks(chain)
 	s.Require().NoError(err)
 	timestamps2 := s.extractTimestamps(chain)
@@ -139,8 +143,10 @@ func (s *ConsensusTimestampTest) TestTimestampIncrease() {
 func (s *ConsensusTimestampTest) TestTimestampConfigChange() {
 	chainNum := 19
 	sigma := 100 * time.Millisecond
-	ct := newConsensusTimestamp(time.Time{}, 20, uint32(chainNum))
-	chain := s.generateBlocksWithTimestamp(1000, chainNum, time.Second, sigma)
+	now := time.Now().UTC()
+	ct := newConsensusTimestamp(now, 20, uint32(chainNum))
+	chain := s.generateBlocksWithTimestamp(now,
+		1000, chainNum, time.Second, sigma)
 	blocks := make([]*types.Block, 0, 1000)
 	ct.appendConfig(21, &types.Config{NumChains: uint32(16)})
 	ct.appendConfig(22, &types.Config{NumChains: uint32(19)})
@@ -167,9 +173,11 @@ func (s *ConsensusTimestampTest) TestTimestampConfigChange() {
 func (s *ConsensusTimestampTest) TestRoundInterleave() {
 	chainNum := 9
 	sigma := 100 * time.Millisecond
-	ct := newConsensusTimestamp(time.Time{}, 0, uint32(chainNum))
+	now := time.Now().UTC()
+	ct := newConsensusTimestamp(now, 0, uint32(chainNum))
 	ct.appendConfig(1, &types.Config{NumChains: uint32(chainNum)})
-	chain := s.generateBlocksWithTimestamp(100, chainNum, time.Second, sigma)
+	chain := s.generateBlocksWithTimestamp(now,
+		100, chainNum, time.Second, sigma)
 	for i := 50; i < 100; i++ {
 		chain[i].Position.Round = 1
 	}
@@ -184,8 +192,10 @@ func (s *ConsensusTimestampTest) TestRoundInterleave() {
 func (s *ConsensusTimestampTest) TestTimestampSync() {
 	chainNum := 19
 	sigma := 100 * time.Millisecond
-	ct := newConsensusTimestamp(time.Time{}, 0, uint32(chainNum))
-	chain := s.generateBlocksWithTimestamp(100, chainNum, time.Second, sigma)
+	now := time.Now().UTC()
+	ct := newConsensusTimestamp(now, 0, uint32(chainNum))
+	chain := s.generateBlocksWithTimestamp(now,
+		100, chainNum, time.Second, sigma)
 	err := ct.processBlocks(chain[:chainNum-1])
 	s.Require().NoError(err)
 	s.Require().False(ct.isSynced())
