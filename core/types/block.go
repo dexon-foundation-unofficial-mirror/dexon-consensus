@@ -22,9 +22,12 @@ package types
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/dexon-foundation/dexon/rlp"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
@@ -39,6 +42,25 @@ var (
 	}
 )
 
+type rlpTimestamp struct {
+	time.Time
+}
+
+func (t *rlpTimestamp) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, uint64(t.UTC().UnixNano()))
+}
+
+func (t *rlpTimestamp) DecodeRLP(s *rlp.Stream) error {
+	var nano uint64
+	err := s.Decode(&nano)
+	if err == nil {
+		sec := int64(nano) / 1000000000
+		nsec := int64(nano) % 1000000000
+		t.Time = time.Unix(sec, nsec).UTC()
+	}
+	return err
+}
+
 // FinalizationResult represents the result of DEXON consensus algorithm.
 type FinalizationResult struct {
 	Randomness []byte    `json:"randomness"`
@@ -46,11 +68,69 @@ type FinalizationResult struct {
 	Height     uint64    `json:"height"`
 }
 
+type rlpFinalizationResult struct {
+	Randomness []byte
+	Timestamp  *rlpTimestamp
+	Height     uint64
+}
+
+// EncodeRLP implements rlp.Encoder
+func (f *FinalizationResult) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, &rlpFinalizationResult{
+		Randomness: f.Randomness,
+		Timestamp:  &rlpTimestamp{f.Timestamp},
+		Height:     f.Height,
+	})
+}
+
+// DecodeRLP implements rlp.Decoder
+func (f *FinalizationResult) DecodeRLP(s *rlp.Stream) error {
+	var dec rlpFinalizationResult
+	err := s.Decode(&dec)
+	if err == nil {
+		*f = FinalizationResult{
+			Randomness: dec.Randomness,
+			Timestamp:  dec.Timestamp.Time,
+			Height:     dec.Height,
+		}
+	}
+	return err
+}
+
 // Witness represents the consensus information on the compaction chain.
 type Witness struct {
 	Timestamp time.Time `json:"timestamp"`
 	Height    uint64    `json:"height"`
 	Data      []byte    `json:"data"`
+}
+
+type rlpWitness struct {
+	Timestamp *rlpTimestamp
+	Height    uint64
+	Data      []byte
+}
+
+// EncodeRLP implements rlp.Encoder
+func (w *Witness) EncodeRLP(writer io.Writer) error {
+	return rlp.Encode(writer, rlpWitness{
+		Timestamp: &rlpTimestamp{w.Timestamp},
+		Height:    w.Height,
+		Data:      w.Data,
+	})
+}
+
+// DecodeRLP implements rlp.Decoder
+func (w *Witness) DecodeRLP(s *rlp.Stream) error {
+	var dec rlpWitness
+	err := s.Decode(&dec)
+	if err == nil {
+		*w = Witness{
+			Timestamp: dec.Timestamp.Time,
+			Height:    dec.Height,
+			Data:      dec.Data,
+		}
+	}
+	return err
 }
 
 // RecycleBlock put unused block into cache, which might be reused if
@@ -80,6 +160,60 @@ type Block struct {
 	Signature    crypto.Signature    `json:"signature"`
 
 	CRSSignature crypto.Signature `json:"crs_signature"`
+}
+
+type rlpBlock struct {
+	ProposerID   NodeID
+	ParentHash   common.Hash
+	Hash         common.Hash
+	Position     Position
+	Timestamp    *rlpTimestamp
+	Acks         common.SortedHashes
+	Payload      []byte
+	Witness      *Witness
+	Finalization *FinalizationResult
+	Signature    crypto.Signature
+
+	CRSSignature crypto.Signature
+}
+
+// EncodeRLP implements rlp.Encoder
+func (b *Block) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, rlpBlock{
+		ProposerID:   b.ProposerID,
+		ParentHash:   b.ParentHash,
+		Hash:         b.Hash,
+		Position:     b.Position,
+		Timestamp:    &rlpTimestamp{b.Timestamp},
+		Acks:         b.Acks,
+		Payload:      b.Payload,
+		Witness:      &b.Witness,
+		Finalization: &b.Finalization,
+		Signature:    b.Signature,
+		CRSSignature: b.CRSSignature,
+	})
+}
+
+// DecodeRLP implements rlp.Decoder
+func (b *Block) DecodeRLP(s *rlp.Stream) error {
+	var dec rlpBlock
+	err := s.Decode(&dec)
+	if err == nil {
+		*b = Block{
+			ProposerID:   dec.ProposerID,
+			ParentHash:   dec.ParentHash,
+			Hash:         dec.Hash,
+			Position:     dec.Position,
+			Timestamp:    dec.Timestamp.Time,
+			Acks:         dec.Acks,
+			Payload:      dec.Payload,
+			Witness:      *dec.Witness,
+			Finalization: *dec.Finalization,
+			Signature:    dec.Signature,
+			CRSSignature: dec.CRSSignature,
+		}
+	}
+	return err
 }
 
 func (b *Block) String() string {

@@ -20,8 +20,10 @@ package dkg
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/Spiderpowa/bls/ffi/go/bls"
+	"github.com/dexon-foundation/dexon/rlp"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
@@ -92,6 +94,72 @@ type PublicKeyShares struct {
 	masterPublicKey []bls.PublicKey
 }
 
+type rlpPublicKeyShares struct {
+	Shares          [][]byte
+	ShareIndexK     [][]byte
+	ShareIndexV     []uint32
+	MasterPublicKey [][]byte
+}
+
+// EncodeRLP implements rlp.Encoder
+func (pubs *PublicKeyShares) EncodeRLP(w io.Writer) error {
+	var rps rlpPublicKeyShares
+	for _, share := range pubs.shares {
+		rps.Shares = append(rps.Shares, share.Serialize())
+	}
+
+	for id, v := range pubs.shareIndex {
+		rps.ShareIndexK = append(rps.ShareIndexK, id.GetLittleEndian())
+		rps.ShareIndexV = append(rps.ShareIndexV, uint32(v))
+	}
+
+	for _, m := range pubs.masterPublicKey {
+		rps.MasterPublicKey = append(rps.MasterPublicKey, m.Serialize())
+	}
+
+	return rlp.Encode(w, rps)
+}
+
+// DecodeRLP implements rlp.Decoder
+func (pubs *PublicKeyShares) DecodeRLP(s *rlp.Stream) error {
+	var dec rlpPublicKeyShares
+	if err := s.Decode(&dec); err != nil {
+		return err
+	}
+
+	if len(dec.ShareIndexK) != len(dec.ShareIndexV) {
+		return fmt.Errorf("invalid shareIndex")
+	}
+
+	ps := NewEmptyPublicKeyShares()
+	for _, share := range dec.Shares {
+		var publicKey PublicKey
+		if err := publicKey.Deserialize(share); err != nil {
+			return err
+		}
+		ps.shares = append(ps.shares, publicKey)
+	}
+
+	for i, k := range dec.ShareIndexK {
+		id, err := BytesID(k)
+		if err != nil {
+			return err
+		}
+		ps.shareIndex[id] = int(dec.ShareIndexV[i])
+	}
+
+	for _, k := range dec.MasterPublicKey {
+		var key bls.PublicKey
+		if err := key.Deserialize(k); err != nil {
+			return err
+		}
+		ps.masterPublicKey = append(ps.masterPublicKey, key)
+	}
+
+	*pubs = *ps
+	return nil
+}
+
 // MarshalJSON implements json.Marshaller.
 func (pubs *PublicKeyShares) MarshalJSON() ([]byte, error) {
 	type Alias PublicKeyShares
@@ -128,6 +196,14 @@ func NewID(id []byte) ID {
 	var blsID bls.ID
 	blsID.SetLittleEndian(id)
 	return blsID
+}
+
+// BytesID creates a new ID structure,
+// It returns err if the byte slice is not valid.
+func BytesID(id []byte) (ID, error) {
+	var blsID bls.ID
+	err := blsID.SetLittleEndian(id)
+	return blsID, err
 }
 
 // NewPrivateKey creates a new PrivateKey structure.
@@ -327,6 +403,14 @@ func newPublicKey(prvKey *bls.SecretKey) *PublicKey {
 	}
 }
 
+// newPublicKeyFromBytes create a new PublicKey structure
+// from bytes representation of bls.PublicKey
+func newPublicKeyFromBytes(b []byte) (*PublicKey, error) {
+	var pub PublicKey
+	err := pub.publicKey.Deserialize(b)
+	return &pub, err
+}
+
 // PublicKey returns the public key associate this private key.
 func (prv *PrivateKey) PublicKey() crypto.PublicKey {
 	return prv.publicKey
@@ -380,7 +464,15 @@ func (pub PublicKey) VerifySignature(
 
 // Bytes returns []byte representation of public key.
 func (pub PublicKey) Bytes() []byte {
-	var bytes []byte
-	pub.publicKey.Deserialize(bytes)
-	return bytes
+	return pub.publicKey.Serialize()
+}
+
+// Serialize return bytes representation of public key.
+func (pub *PublicKey) Serialize() []byte {
+	return pub.publicKey.Serialize()
+}
+
+// Deserialize parses bytes representation of public key.
+func (pub *PublicKey) Deserialize(b []byte) error {
+	return pub.publicKey.Deserialize(b)
 }

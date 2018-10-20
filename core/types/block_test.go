@@ -24,9 +24,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/suite"
+
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
-	"github.com/stretchr/testify/suite"
+	"github.com/dexon-foundation/dexon/rlp"
 )
 
 type BlockTestSuite struct {
@@ -51,14 +53,14 @@ func (s *BlockTestSuite) createRandomBlock() *Block {
 			common.NewRandomHash(),
 			common.NewRandomHash(),
 		}),
-		Timestamp: time.Now().Add(time.Duration(rand.Int())),
+		Timestamp: time.Now().UTC(),
 		Witness: Witness{
 			Height:    rand.Uint64(),
-			Timestamp: time.Now().Add(time.Duration(rand.Int())),
+			Timestamp: time.Now().UTC(),
 			Data:      s.randomBytes(),
 		},
 		Finalization: FinalizationResult{
-			Timestamp:  time.Now().Add(time.Duration(rand.Int())),
+			Timestamp:  time.Now().UTC(),
 			Height:     rand.Uint64(),
 			Randomness: s.randomBytes(),
 		},
@@ -66,6 +68,7 @@ func (s *BlockTestSuite) createRandomBlock() *Block {
 		Signature:    crypto.Signature{Signature: s.randomBytes()},
 		CRSSignature: crypto.Signature{Signature: s.randomBytes()},
 	}
+
 	return b
 }
 
@@ -176,6 +179,18 @@ func (s *BlockTestSuite) TestClone() {
 				f1, f2)
 		}
 	}
+}
+
+func (s *BlockTestSuite) TestRLPEncodeDecode() {
+	block := s.createRandomBlock()
+	b, err := rlp.EncodeToBytes(block)
+	s.Require().NoError(err)
+
+	var dec Block
+	err = rlp.DecodeBytes(b, &dec)
+	s.Require().NoError(err)
+
+	s.Require().True(reflect.DeepEqual(block, &dec))
 }
 
 func TestBlock(t *testing.T) {

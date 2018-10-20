@@ -20,6 +20,9 @@ package types
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+
+	"github.com/dexon-foundation/dexon/rlp"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
@@ -57,6 +60,47 @@ func (d *DKGMasterPublicKey) String() string {
 	return fmt.Sprintf("MasterPublicKey[%s:%d]",
 		d.ProposerID.String()[:6],
 		d.Round)
+}
+
+type rlpDKGMasterPublicKey struct {
+	ProposerID      NodeID
+	Round           uint64
+	DKGID           []byte
+	PublicKeyShares *dkg.PublicKeyShares
+	Signature       crypto.Signature
+}
+
+// EncodeRLP implements rlp.Encoder
+func (d *DKGMasterPublicKey) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, rlpDKGMasterPublicKey{
+		ProposerID:      d.ProposerID,
+		Round:           d.Round,
+		DKGID:           d.DKGID.GetLittleEndian(),
+		PublicKeyShares: &d.PublicKeyShares,
+		Signature:       d.Signature,
+	})
+}
+
+// DecodeRLP implements rlp.Decoder
+func (d *DKGMasterPublicKey) DecodeRLP(s *rlp.Stream) error {
+	var dec rlpDKGMasterPublicKey
+	if err := s.Decode(&dec); err != nil {
+		return err
+	}
+
+	id, err := dkg.BytesID(dec.DKGID)
+	if err != nil {
+		return err
+	}
+
+	*d = DKGMasterPublicKey{
+		ProposerID:      dec.ProposerID,
+		Round:           dec.Round,
+		DKGID:           id,
+		PublicKeyShares: *dec.PublicKeyShares,
+		Signature:       dec.Signature,
+	}
+	return err
 }
 
 // NewDKGMasterPublicKey returns a new DKGMasterPublicKey instance.

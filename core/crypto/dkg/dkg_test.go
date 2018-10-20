@@ -20,10 +20,12 @@ package dkg
 import (
 	"encoding/binary"
 	"math/rand"
+	"reflect"
 	"sort"
 	"sync"
 	"testing"
 
+	"github.com/dexon-foundation/dexon/rlp"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
@@ -288,6 +290,29 @@ func (s *DKGTestSuite) TestSignature() {
 	s.False(pubKey.VerifySignature(hash, sig))
 	sig = crypto.Signature{}
 	s.False(pubKey.VerifySignature(hash, sig))
+}
+
+func (s *DKGTestSuite) TestPublicKeySharesRLPEncodeDecode() {
+	p := NewEmptyPublicKeyShares()
+	for i, id := range s.genID(1) {
+		privkey := NewPrivateKey()
+		pubkey := privkey.PublicKey().(PublicKey)
+		p.shares = append(p.shares, pubkey)
+		p.shareIndex[id] = i
+		p.masterPublicKey = append(p.masterPublicKey, pubkey.publicKey)
+	}
+
+	b, err := rlp.EncodeToBytes(p)
+	s.Require().NoError(err)
+
+	var pp PublicKeyShares
+	err = rlp.DecodeBytes(b, &pp)
+	s.Require().NoError(err)
+
+	bb, err := rlp.EncodeToBytes(&pp)
+	s.Require().NoError(err)
+
+	s.Require().True(reflect.DeepEqual(b, bb))
 }
 
 func TestDKG(t *testing.T) {
