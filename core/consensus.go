@@ -19,6 +19,7 @@ package core
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"sync"
 	"time"
@@ -170,7 +171,7 @@ func (recv *consensusDKGReceiver) ProposeDKGPrivateShare(
 		return
 	}
 	recv.logger.Debug("Calling Network.SendDKGPrivateShare",
-		"receiver", string(receiverPubKey.Bytes()))
+		"receiver", hex.EncodeToString(receiverPubKey.Bytes()))
 	recv.network.SendDKGPrivateShare(receiverPubKey, prv)
 }
 
