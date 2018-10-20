@@ -58,6 +58,20 @@ type PrivateKey struct {
 	publicKey  PublicKey
 }
 
+// EncodeRLP implements rlp.Encoder
+func (prv *PrivateKey) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, prv.Bytes())
+}
+
+// DecodeRLP implements rlp.Decoder
+func (prv *PrivateKey) DecodeRLP(s *rlp.Stream) error {
+	var b []byte
+	if err := s.Decode(&b); err != nil {
+		return err
+	}
+	return prv.SetBytes(b)
+}
+
 // MarshalJSON implements json.Marshaller.
 func (prv *PrivateKey) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&prv.privateKey)

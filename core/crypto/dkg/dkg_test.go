@@ -292,6 +292,18 @@ func (s *DKGTestSuite) TestSignature() {
 	s.False(pubKey.VerifySignature(hash, sig))
 }
 
+func (s *DKGTestSuite) TestPrivateKeyRLPEncodeDecode() {
+	k := NewPrivateKey()
+	b, err := rlp.EncodeToBytes(k)
+	s.Require().NoError(err)
+
+	var kk PrivateKey
+	err = rlp.DecodeBytes(b, &kk)
+	s.Require().NoError(err)
+
+	s.Require().True(reflect.DeepEqual(*k, kk))
+}
+
 func (s *DKGTestSuite) TestPublicKeySharesRLPEncodeDecode() {
 	p := NewEmptyPublicKeyShares()
 	for i, id := range s.genID(1) {
