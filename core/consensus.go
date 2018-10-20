@@ -344,6 +344,8 @@ func (con *Consensus) Run(initBlock *types.Block) {
 	}
 	con.logger.Debug("Calling Network.ReceiveChan")
 	go con.processMsg(con.network.ReceiveChan())
+	// Sleep until dMoment come.
+	time.Sleep(con.dMoment.Sub(time.Now().UTC()))
 	con.cfgModule.registerDKG(con.round, int(con.currentConfig.DKGSetSize)/3+1)
 	con.event.RegisterTime(con.dMoment.Add(con.currentConfig.RoundInterval/4),
 		func(time.Time) {
