@@ -297,8 +297,8 @@ func NewBlocksGenerator(
 	if ackingCountGenerator == nil {
 		ackingCountGenerator = normalAckingCountGenerator(
 			config.NumChains,
-			float64(config.NumChains/2),
-			float64(config.NumChains/4+1))
+			float64(config.NumChains/5),
+			float64(config.NumChains/7+1))
 	}
 	timePicker := generateTimePicker(
 		config.MinBlockTimeInterval, config.MaxBlockTimeInterval)

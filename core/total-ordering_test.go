@@ -1202,6 +1202,85 @@ func (s *TotalOrderingTestSuite) TestRoundChanged() {
 	s.baseTestForRoundChange(repeat, configs)
 }
 
+func (s *TotalOrderingTestSuite) TestRunFromNonGenesis() {
+	var (
+		req         = s.Require()
+		numChains   = uint32(19)
+		genesisTime = time.Now().UTC()
+	)
+	gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
+		NumChains:            numChains,
+		MinBlockTimeInterval: 0,
+		MaxBlockTimeInterval: 500 * time.Millisecond,
+	}, nil, hashBlock)
+	db, err := blockdb.NewMemBackedBlockDB()
+	req.NoError(err)
+	err = gen.Generate(0, genesisTime, genesisTime.Add(20*time.Second), db)
+	req.NoError(err)
+	iter, err := db.GetAll()
+	req.NoError(err)
+
+	revealer, err := test.NewRandomDAGRevealer(iter)
+	req.NoError(err)
+
+	genesisConfig := &totalOrderingConfig{
+		roundBasedConfig: roundBasedConfig{
+			roundInterval: 1000 * time.Second,
+		},
+		k:         0,
+		phi:       uint64(numChains * 2 / 3),
+		numChains: numChains,
+	}
+	genesisConfig.setRoundBeginTime(genesisTime)
+	to1 := newTotalOrdering(genesisConfig)
+	s.Require().NoError(to1.appendConfig(1, &types.Config{
+		K:         0,
+		PhiRatio:  0.5,
+		NumChains: numChains,
+	}))
+	deliveredBlocks1 := [][]*types.Block{}
+	for {
+		b, err := revealer.Next()
+		if err != nil {
+			if err == blockdb.ErrIterationFinished {
+				err = nil
+				break
+			}
+		}
+		s.Require().NoError(err)
+		bs, _, err := to1.processBlock(&b)
+		s.Require().Nil(err)
+		if len(bs) > 0 {
+			deliveredBlocks1 = append(deliveredBlocks1, bs)
+		}
+	}
+	// Run new total ordering again.
+	offset := len(deliveredBlocks1) / 2
+	to2 := newTotalOrdering(genesisConfig)
+	s.Require().NoError(to2.appendConfig(1, &types.Config{
+		K:         0,
+		PhiRatio:  0.5,
+		NumChains: numChains,
+	}))
+	deliveredBlocks2 := [][]*types.Block{}
+	for i := offset; i < len(deliveredBlocks1); i++ {
+		for _, b := range deliveredBlocks1[i] {
+			bs, _, err := to2.processBlock(b)
+			req.NoError(err)
+			if len(bs) > 0 {
+				deliveredBlocks2 = append(deliveredBlocks2, bs)
+			}
+		}
+	}
+	// Check deliver1 and deliver2.
+	for i := 0; i < len(deliveredBlocks2); i++ {
+		req.Equal(len(deliveredBlocks1[offset+i]), len(deliveredBlocks2[i]))
+		for j := 0; j < len(deliveredBlocks2[i]); j++ {
+			req.Equal(deliveredBlocks1[offset+i][j], deliveredBlocks2[i][j])
+		}
+	}
+}
+
 func TestTotalOrdering(t *testing.T) {
 	suite.Run(t, new(TotalOrderingTestSuite))
 }

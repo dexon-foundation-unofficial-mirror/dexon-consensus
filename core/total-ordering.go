@@ -688,13 +688,6 @@ func (global *totalOrderingGlobalVector) addBlock(
 			}
 		}
 	} else {
-		// Assume we run from round 0 (genesis round). Newly added chains
-		// would go into this case. Make sure blocks from those chains
-		// are safe to use.
-		if curPosition.Height != 0 {
-			err = ErrNotValidDAG
-			return
-		}
 		if curPosition.Round < global.curRound {
 			err = ErrBlockFromPastRound
 			return
@@ -829,21 +822,22 @@ type totalOrdering struct {
 }
 
 // newTotalOrdering constructs an totalOrdering instance.
-func newTotalOrdering(genesisConfig *totalOrderingConfig) *totalOrdering {
-	globalVector := newTotalOrderingGlobalVector(genesisConfig.numChains)
-	objCache := newTotalOrderingObjectCache(genesisConfig.numChains)
-	candidates := make([]*totalOrderingCandidateInfo, genesisConfig.numChains)
+func newTotalOrdering(config *totalOrderingConfig) *totalOrdering {
+	globalVector := newTotalOrderingGlobalVector(config.numChains)
+	objCache := newTotalOrderingObjectCache(config.numChains)
+	candidates := make([]*totalOrderingCandidateInfo, config.numChains)
 	to := &totalOrdering{
 		pendings:              make(map[common.Hash]*types.Block),
 		globalVector:          globalVector,
-		dirtyChainIDs:         make([]int, 0, genesisConfig.numChains),
+		dirtyChainIDs:         make([]int, 0, config.numChains),
 		acked:                 make(map[common.Hash]map[common.Hash]struct{}),
 		objCache:              objCache,
 		candidateChainMapping: make(map[uint32]common.Hash),
 		candidates:            candidates,
-		candidateChainIDs:     make([]uint32, 0, genesisConfig.numChains),
+		candidateChainIDs:     make([]uint32, 0, config.numChains),
+		curRound:              config.roundID,
 	}
-	to.configs = []*totalOrderingConfig{genesisConfig}
+	to.configs = []*totalOrderingConfig{config}
 	return to
 }
 
@@ -851,7 +845,7 @@ func newTotalOrdering(genesisConfig *totalOrderingConfig) *totalOrdering {
 // round R, next time you can only add the config for round R+1.
 func (to *totalOrdering) appendConfig(
 	round uint64, config *types.Config) error {
-	if round != uint64(len(to.configs)) {
+	if round != uint64(len(to.configs))+to.configs[0].roundID {
 		return ErrRoundNotIncreasing
 	}
 	to.configs = append(
@@ -1056,7 +1050,7 @@ func (to *totalOrdering) generateDeliverSet() (
 		chainID, otherChainID uint32
 		info, otherInfo       *totalOrderingCandidateInfo
 		precedings            = make(map[uint32]struct{})
-		cfg                   = to.configs[to.curRound]
+		cfg                   = to.configs[to.curRound-to.configs[0].roundID]
 	)
 	mode = TotalOrderingModeNormal
 	to.globalVector.updateCandidateInfo(to.dirtyChainIDs, to.objCache)
@@ -1200,7 +1194,7 @@ CheckNextCandidateLoop:
 // flushBlocks flushes blocks.
 func (to *totalOrdering) flushBlocks(
 	b *types.Block) (flushed []*types.Block, mode uint32, err error) {
-	cfg := to.configs[to.curRound]
+	cfg := to.configs[to.curRound-to.configs[0].roundID]
 	mode = TotalOrderingModeFlush
 	if cfg.isValidLastBlock(b) {
 		to.flushReadyChains[b.Position.ChainID] = struct{}{}
@@ -1259,7 +1253,8 @@ func (to *totalOrdering) flushBlocks(
 	to.globalVector.cachedCandidateInfo = nil
 	to.switchRound()
 	// Force to pick new candidates.
-	to.output(map[common.Hash]struct{}{}, to.configs[to.curRound].numChains)
+	numChains := to.configs[to.curRound-to.configs[0].roundID].numChains
+	to.output(map[common.Hash]struct{}{}, numChains)
 	return
 }
 
@@ -1267,7 +1262,7 @@ func (to *totalOrdering) flushBlocks(
 func (to *totalOrdering) deliverBlocks() (
 	delivered []*types.Block, mode uint32, err error) {
 	hashes, mode := to.generateDeliverSet()
-	cfg := to.configs[to.curRound]
+	cfg := to.configs[to.curRound-to.configs[0].roundID]
 	// output precedings
 	delivered = to.output(hashes, cfg.numChains)
 	// Check if any block in delivered set are the last block in this round
@@ -1310,7 +1305,7 @@ func (to *totalOrdering) processBlock(
 	// NOTE: I assume the block 'b' is already safe for total ordering.
 	//       That means, all its acking blocks are during/after
 	//       total ordering stage.
-	cfg := to.configs[to.curRound]
+	cfg := to.configs[to.curRound-to.configs[0].roundID]
 	to.pendings[b.Hash] = b
 	to.buildBlockRelation(b)
 	pos, err := to.updateVectors(b)
