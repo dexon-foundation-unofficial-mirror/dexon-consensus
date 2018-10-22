@@ -68,6 +68,7 @@ func newConfigurationChain(
 		dkgSigner:   make(map[uint64]*dkgShareSecret),
 		gpk:         make(map[uint64]*DKGGroupPublicKey),
 		tsig:        make(map[common.Hash]*tsigProtocol),
+		tsigTouched: make(map[common.Hash]struct{}),
 		tsigReady:   sync.NewCond(&sync.Mutex{}),
 		pendingPsig: make(map[common.Hash][]*types.DKGPartialSignature),
 	}

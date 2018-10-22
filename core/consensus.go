@@ -733,7 +733,7 @@ func (con *Consensus) ProcessAgreementResult(
 		con.logger.Debug("Calling Network.BroadcastRandomnessResult",
 			"hash", result.BlockHash,
 			"position", result.Position,
-			"randomness", string(result.Randomness))
+			"randomness", hex.EncodeToString(result.Randomness))
 		con.network.BroadcastRandomnessResult(result)
 	}()
 	return nil
