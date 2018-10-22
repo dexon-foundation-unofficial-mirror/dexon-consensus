@@ -130,6 +130,7 @@ type consensusDKGReceiver struct {
 	gov          Governance
 	authModule   *Authenticator
 	nodeSetCache *NodeSetCache
+	cfgModule    *configurationChain
 	network      Network
 	logger       common.Logger
 }
@@ -170,9 +171,17 @@ func (recv *consensusDKGReceiver) ProposeDKGPrivateShare(
 			"receiver", prv.ReceiverID.String()[:6])
 		return
 	}
-	recv.logger.Debug("Calling Network.SendDKGPrivateShare",
-		"receiver", hex.EncodeToString(receiverPubKey.Bytes()))
-	recv.network.SendDKGPrivateShare(receiverPubKey, prv)
+	if prv.ReceiverID == recv.ID {
+		go func() {
+			if err := recv.cfgModule.processPrivateShare(prv); err != nil {
+				recv.logger.Error("Failed to process self private share", "prvShare", prv)
+			}
+		}()
+	} else {
+		recv.logger.Debug("Calling Network.SendDKGPrivateShare",
+			"receiver", hex.EncodeToString(receiverPubKey.Bytes()))
+		recv.network.SendDKGPrivateShare(receiverPubKey, prv)
+	}
 }
 
 // ProposeDKGAntiNackComplaint propose a DKGPrivateShare as an anti complaint.
@@ -273,18 +282,20 @@ func NewConsensus(
 		dMoment, config, authModule, nbModule, nbModule, db, logger)
 	// Init configuration chain.
 	ID := types.NewNodeID(prv.PublicKey())
+	recv := &consensusDKGReceiver{
+		ID:           ID,
+		gov:          gov,
+		authModule:   authModule,
+		nodeSetCache: nodeSetCache,
+		network:      network,
+		logger:       logger,
+	}
 	cfgModule := newConfigurationChain(
 		ID,
-		&consensusDKGReceiver{
-			ID:           ID,
-			gov:          gov,
-			authModule:   authModule,
-			nodeSetCache: nodeSetCache,
-			network:      network,
-			logger:       logger,
-		},
+		recv,
 		gov,
 		logger)
+	recv.cfgModule = cfgModule
 	// Construct Consensus instance.
 	con := &Consensus{
 		ID:            ID,

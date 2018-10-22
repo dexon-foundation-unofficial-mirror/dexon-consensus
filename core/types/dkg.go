@@ -38,15 +38,6 @@ type DKGPrivateShare struct {
 	Signature    crypto.Signature `json:"signature"`
 }
 
-func (p *DKGPrivateShare) String() string {
-	return fmt.Sprintf("prvShare(%d:%s->%s:%s:%s)",
-		p.Round,
-		p.ProposerID.String()[:6],
-		p.ReceiverID.String()[:6],
-		p.PrivateShare.String(),
-		p.Signature.String()[:6])
-}
-
 // DKGMasterPublicKey decrtibe a master public key in DKG protocol.
 type DKGMasterPublicKey struct {
 	ProposerID      NodeID              `json:"proposer_id"`
@@ -126,8 +117,13 @@ type DKGComplaint struct {
 }
 
 func (c *DKGComplaint) String() string {
-	return fmt.Sprintf("DKGComplaint[%s:%d]%s",
-		c.ProposerID.String()[:6], c.Round, &c.PrivateShare)
+	if c.IsNack() {
+		return fmt.Sprintf("DKGNackComplaint[%s:%d]%s",
+			c.ProposerID.String()[:6], c.Round,
+			c.PrivateShare.ProposerID.String()[:6])
+	}
+	return fmt.Sprintf("DKGComplaint[%s:%d]%v",
+		c.ProposerID.String()[:6], c.Round, c.PrivateShare)
 }
 
 // DKGPartialSignature describe a partial signature in DKG protocol.

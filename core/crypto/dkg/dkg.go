@@ -388,15 +388,15 @@ func (pubs *PublicKeyShares) RecoverPublicKey(qualifyIDs IDs) (
 		return nil, ErrNoIDToRecover
 	}
 	for i, ID := range qualifyIDs {
-		idx, exist := pubs.shareIndex[ID]
-		if !exist {
-			return nil, ErrShareNotFound
+		pk, err := pubs.Share(ID)
+		if err != nil {
+			return nil, err
 		}
 		if i == 0 {
-			pub.publicKey = pubs.shares[idx].publicKey
+			pub.publicKey = pk.publicKey
 			continue
 		}
-		pub.publicKey.Add(&pubs.shares[idx].publicKey)
+		pub.publicKey.Add(&pk.publicKey)
 	}
 	return &pub, nil
 }
