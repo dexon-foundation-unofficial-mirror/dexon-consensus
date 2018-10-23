@@ -25,7 +25,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Spiderpowa/bls/ffi/go/bls"
+	"github.com/dexon-foundation/bls/ffi/go/bls"
 	"github.com/dexon-foundation/dexon/rlp"
 	"github.com/stretchr/testify/suite"
 

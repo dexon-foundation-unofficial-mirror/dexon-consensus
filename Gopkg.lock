@@ -2,14 +2,6 @@
 
 
 [[projects]]
-  branch = "dev"
-  digest = "1:e1b678344fe7ac9b92facf33893ca3ce4f8e62b00c798c9efdd7e2a2d7b488f8"
-  name = "github.com/Spiderpowa/bls"
-  packages = ["ffi/go/bls"]
-  pruneopts = "UT"
-  revision = "32fbf283dfdcf1224c57fbf7cf9db5f290cda1d1"
-
-[[projects]]
   branch = "master"
   digest = "1:c0decf632843204d2b8781de7b26e7038584e2dcccc7e2f401e88ae85b1df2b7"
   name = "github.com/btcsuite/btcd"
@@ -24,6 +16,14 @@
   pruneopts = "UT"
   revision = "8991bc29aa16c548c550c7ff78260e27b9ab7c73"
   version = "v1.1.1"
+
+[[projects]]
+  branch = "dev"
+  digest = "1:c331891ab345659ad4e3e6af2c0b2ba262dd2c83867b2928f4c89455a429cb79"
+  name = "github.com/dexon-foundation/bls"
+  packages = ["ffi/go/bls"]
+  pruneopts = "UT"
+  revision = "1208495d2fd3e5a69edaf7f429607e7ef431a5dd"
 
 [[projects]]
   branch = "dev"
@@ -113,8 +113,9 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/Spiderpowa/bls/ffi/go/bls",
+    "github.com/dexon-foundation/bls/ffi/go/bls",
     "github.com/dexon-foundation/dexon/crypto",
+    "github.com/dexon-foundation/dexon/rlp",
     "github.com/naoina/toml",
     "github.com/stretchr/testify/suite",
     "github.com/syndtr/goleveldb/leveldb",

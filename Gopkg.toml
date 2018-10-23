@@ -27,7 +27,7 @@
 
 [[constraint]]
   branch = "dev"
-  name = "github.com/Spiderpowa/bls"
+  name = "github.com/dexon-foundation/bls"
 
 [[constraint]]
   branch = "dev"

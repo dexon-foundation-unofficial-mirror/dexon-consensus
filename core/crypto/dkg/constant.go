@@ -18,7 +18,7 @@
 package dkg
 
 import (
-	"github.com/Spiderpowa/bls/ffi/go/bls"
+	"github.com/dexon-foundation/bls/ffi/go/bls"
 )
 
 const (
