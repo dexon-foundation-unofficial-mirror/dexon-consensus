@@ -129,7 +129,7 @@ func (nb *nonBlocking) PrepareWitness(height uint64) (types.Witness, error) {
 }
 
 // VerifyBlock cannot be non-blocking.
-func (nb *nonBlocking) VerifyBlock(block *types.Block) bool {
+func (nb *nonBlocking) VerifyBlock(block *types.Block) types.BlockVerifyStatus {
 	return nb.app.VerifyBlock(block)
 }
 

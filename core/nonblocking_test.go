@@ -54,8 +54,8 @@ func (app *slowApp) PrepareWitness(_ uint64) (types.Witness, error) {
 	return types.Witness{}, nil
 }
 
-func (app *slowApp) VerifyBlock(_ *types.Block) bool {
-	return true
+func (app *slowApp) VerifyBlock(_ *types.Block) types.BlockVerifyStatus {
+	return types.VerifyOK
 }
 
 func (app *slowApp) BlockConfirmed(block types.Block) {
@@ -103,7 +103,7 @@ func (app *noDebugApp) PrepareWitness(_ uint64) (types.Witness, error) {
 	panic("test")
 }
 
-func (app *noDebugApp) VerifyBlock(_ *types.Block) bool {
+func (app *noDebugApp) VerifyBlock(_ *types.Block) types.BlockVerifyStatus {
 	panic("test")
 }
 

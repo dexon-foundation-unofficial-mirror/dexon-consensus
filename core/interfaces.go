@@ -35,7 +35,7 @@ type Application interface {
 	PrepareWitness(consensusHeight uint64) (types.Witness, error)
 
 	// VerifyBlock verifies if the block is valid.
-	VerifyBlock(block *types.Block) bool
+	VerifyBlock(block *types.Block) types.BlockVerifyStatus
 
 	// BlockConfirmed is called when a block is confirmed and added to lattice.
 	BlockConfirmed(block types.Block)

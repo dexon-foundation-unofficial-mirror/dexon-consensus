@@ -67,8 +67,8 @@ func (a *simApp) BlockConfirmed(block types.Block) {
 }
 
 // VerifyBlock implements core.Application.
-func (a *simApp) VerifyBlock(block *types.Block) bool {
-	return true
+func (a *simApp) VerifyBlock(block *types.Block) types.BlockVerifyStatus {
+	return types.VerifyOK
 }
 
 // getAckedBlocks will return all unconfirmed blocks' hash with lower Height

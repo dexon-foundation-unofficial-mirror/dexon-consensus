@@ -33,6 +33,20 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 )
 
+// BlockVerifyStatus is the return code for core.Application.VerifyBlock
+type BlockVerifyStatus int
+
+// Enums for return value of core.Application.VerifyBlock.
+const (
+	// VerifyOK: Block is verified.
+	VerifyOK BlockVerifyStatus = iota
+	// VerifyRetryLater: Block is unable to be verified at this moment.
+	// Try again later.
+	VerifyRetryLater
+	// VerifyInvalidBlock: Block is an invalid one.
+	VerifyInvalidBlock
+)
+
 var (
 	// blockPool is the blocks cache to reuse allocated blocks.
 	blockPool = sync.Pool{

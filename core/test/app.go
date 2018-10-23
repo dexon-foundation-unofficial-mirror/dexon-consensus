@@ -109,8 +109,8 @@ func (app *App) PrepareWitness(height uint64) (types.Witness, error) {
 }
 
 // VerifyBlock implements Application.
-func (app *App) VerifyBlock(block *types.Block) bool {
-	return true
+func (app *App) VerifyBlock(block *types.Block) types.BlockVerifyStatus {
+	return types.VerifyOK
 }
 
 // BlockConfirmed implements Application interface.

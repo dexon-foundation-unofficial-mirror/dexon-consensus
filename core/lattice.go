@@ -136,7 +136,8 @@ func (s *Lattice) SanityCheck(b *types.Block, checkRelation bool) (err error) {
 	}
 	// Verify data in application layer.
 	s.logger.Debug("Calling Application.VerifyBlock", "block", b)
-	if !s.app.VerifyBlock(b) {
+	// TODO(jimmy-dexon): handle types.VerifyRetryLater.
+	if s.app.VerifyBlock(b) == types.VerifyInvalidBlock {
 		err = ErrInvalidBlock
 		return err
 	}
