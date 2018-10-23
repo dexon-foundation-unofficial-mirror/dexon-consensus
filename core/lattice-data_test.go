@@ -577,6 +577,18 @@ func (s *LatticeDataTestSuite) TestNextPosition() {
 	s.Equal(data.nextPosition(0), types.Position{ChainID: 0, Height: 0})
 }
 
+func (s *LatticeDataTestSuite) TestPrepareEmptyBlock() {
+	data, _ := s.genTestCase1()
+	b := &types.Block{
+		Position: types.Position{
+			ChainID: 0,
+		},
+	}
+	data.prepareEmptyBlock(b)
+	s.True(b.IsEmpty())
+	s.Equal(uint64(4), b.Position.Height)
+}
+
 func (s *LatticeDataTestSuite) TestNumChainsChange() {
 	// This test case verify the behavior when NumChains
 	// changes. We only reply on methods of latticeData

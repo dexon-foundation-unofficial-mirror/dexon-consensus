@@ -93,19 +93,35 @@ func (recv *consensusBAReceiver) ProposeBlock() common.Hash {
 
 func (recv *consensusBAReceiver) ConfirmBlock(
 	hash common.Hash, votes map[types.NodeID]*types.Vote) {
-	block, exist := recv.consensus.baModules[recv.chainID].
-		findCandidateBlock(hash)
-	if !exist {
-		recv.consensus.logger.Error("Unknown block confirmed", "hash", hash)
-		return
+	var block *types.Block
+	if (hash == common.Hash{}) {
+		recv.consensus.logger.Info("Empty block is confirmed",
+			"position", recv.agreementModule.agreementID())
+		var err error
+		block, err = recv.consensus.proposeEmptyBlock(recv.chainID)
+		if err != nil {
+			recv.consensus.logger.Error("Propose empty block failed", "error", err)
+			return
+		}
+	} else {
+		var exist bool
+		block, exist = recv.consensus.baModules[recv.chainID].
+			findCandidateBlock(hash)
+		if !exist {
+			recv.consensus.logger.Error("Unknown block confirmed", "hash", hash)
+			return
+		}
 	}
 	recv.consensus.ccModule.registerBlock(block)
 	voteList := make([]types.Vote, 0, len(votes))
 	for _, vote := range votes {
+		if vote.BlockHash != hash {
+			continue
+		}
 		voteList = append(voteList, *vote)
 	}
 	result := &types.AgreementResult{
-		BlockHash: hash,
+		BlockHash: block.Hash,
 		Position:  block.Position,
 		Votes:     voteList,
 	}
@@ -640,6 +656,19 @@ func (con *Consensus) proposeBlock(chainID uint32, round uint64) *types.Block {
 		return nil
 	}
 	return block
+}
+
+func (con *Consensus) proposeEmptyBlock(
+	chainID uint32) (*types.Block, error) {
+	block := &types.Block{
+		Position: types.Position{
+			ChainID: chainID,
+		},
+	}
+	if err := con.lattice.PrepareEmptyBlock(block); err != nil {
+		return nil, err
+	}
+	return block, nil
 }
 
 // ProcessVote is the entry point to submit ont vote to a Consensus instance.

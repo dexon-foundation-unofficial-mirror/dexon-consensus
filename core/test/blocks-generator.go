@@ -190,26 +190,34 @@ func (ns *nodeSetStatus) proposeBlock(
 		blockHeight = status.tip.Position.Height + 1
 		acks = append(acks, parentHash)
 	}
+	// 10% of chance to produce empty block.
+	empty := ns.randGen.Float32() < 0.1 && blockHeight > 0
 	chainID := ns.proposerChain[proposerID]
 	newBlock := &types.Block{
-		ProposerID: proposerID,
 		ParentHash: parentHash,
 		Position: types.Position{
 			Round:   ns.round,
 			Height:  blockHeight,
 			ChainID: chainID,
 		},
-		Acks:      common.NewSortedHashes(acks),
 		Timestamp: status.getNextBlockTime(ns.timePicker),
+	}
+	if empty {
+		newBlock.Acks = common.NewSortedHashes(common.Hashes{parentHash})
+	} else {
+		newBlock.ProposerID = proposerID
+		newBlock.Acks = common.NewSortedHashes(acks)
 	}
 	var err error
 	newBlock.Hash, err = ns.hashBlock(newBlock)
 	if err != nil {
 		return nil, err
 	}
-	newBlock.Signature, err = status.prvKey.Sign(newBlock.Hash)
-	if err != nil {
-		return nil, err
+	if !empty {
+		newBlock.Signature, err = status.prvKey.Sign(newBlock.Hash)
+		if err != nil {
+			return nil, err
+		}
 	}
 	status.blocks = append(status.blocks, newBlock)
 	status.tip = newBlock

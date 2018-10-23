@@ -412,6 +412,40 @@ func (data *latticeData) prepareBlock(b *types.Block) error {
 	return nil
 }
 
+// prepareEmptyBlock helps to setup fields of block based on its ChainID.
+// including:
+//  - Acks only acking its parent
+//  - Timestamp with parent.Timestamp + minBlockProposeInterval
+//  - ParentHash and Height from parent block. If there is no valid parent block
+//    (ex. Newly added chain or bootstrap ), these fields would be setup as
+//    genesis block.
+func (data *latticeData) prepareEmptyBlock(b *types.Block) {
+	// emptyBlock has no proposer.
+	b.ProposerID = types.NodeID{}
+	var acks common.Hashes
+	// Reset fields to make sure we got these information from parent block.
+	b.Position.Height = 0
+	b.Position.Round = 0
+	b.ParentHash = common.Hash{}
+	b.Timestamp = time.Time{}
+	// Decide valid timestamp range.
+	homeChain := data.chains[b.Position.ChainID]
+	if homeChain.tip != nil {
+		chainTip := homeChain.tip
+		b.ParentHash = chainTip.Hash
+		chainTipConfig := data.getConfig(chainTip.Position.Round)
+		if chainTip.Timestamp.After(chainTipConfig.roundEndTime) {
+			b.Position.Round = chainTip.Position.Round + 1
+		} else {
+			b.Position.Round = chainTip.Position.Round
+		}
+		b.Position.Height = chainTip.Position.Height + 1
+		b.Timestamp = chainTip.Timestamp.Add(chainTipConfig.minBlockTimeInterval)
+		acks = append(acks, chainTip.Hash)
+	}
+	b.Acks = common.NewSortedHashes(acks)
+}
+
 // TODO(mission): make more abstraction for this method.
 // nextHeight returns the next height for the chain.
 func (data *latticeData) nextPosition(chainID uint32) types.Position {

@@ -257,6 +257,11 @@ func (b *Block) IsFinalized() bool {
 	return b.Finalization.Height != 0
 }
 
+// IsEmpty checks if the block is an 'empty block'.
+func (b *Block) IsEmpty() bool {
+	return b.ProposerID.Hash == common.Hash{}
+}
+
 // IsAcking checks if a block acking another by it's hash.
 func (b *Block) IsAcking(hash common.Hash) bool {
 	idx := sort.Search(len(b.Acks), func(i int) bool {

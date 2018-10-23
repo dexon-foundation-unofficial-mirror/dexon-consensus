@@ -51,7 +51,7 @@ func (s *BlocksGeneratorTestSuite) TestGenerate() {
 	// Load all blocks in that database for further checking.
 	iter, err := db.GetAll()
 	req.NoError(err)
-	blocksByNode := make(map[types.NodeID][]*types.Block)
+	blocksByChain := make(map[uint32][]*types.Block)
 	blocksByHash := make(map[common.Hash]*types.Block)
 	for {
 		block, err := iter.Next()
@@ -62,11 +62,13 @@ func (s *BlocksGeneratorTestSuite) TestGenerate() {
 		// TODO(mission): Make sure each block is correctly signed once
 		//                we have a way to access core.hashBlock.
 		req.NotEqual(block.Hash, common.Hash{})
-		req.NotEmpty(block.Signature)
+		if !block.IsEmpty() {
+			req.NotEmpty(block.Signature)
+		}
 		req.Equal(block.Position.Round, uint64(1))
-		blocksByNode[block.ProposerID] =
-			append(blocksByNode[block.ProposerID], &block)
-		sort.Sort(types.ByPosition(blocksByNode[block.ProposerID]))
+		blocksByChain[block.Position.ChainID] =
+			append(blocksByChain[block.Position.ChainID], &block)
+		sort.Sort(types.ByPosition(blocksByChain[block.Position.ChainID]))
 		blocksByHash[block.Hash] = &block
 	}
 	// Make sure these two rules are hold for these blocks:
@@ -77,8 +79,8 @@ func (s *BlocksGeneratorTestSuite) TestGenerate() {
 	//               previous block.
 	//  - The last block of each chain should pass endTime.
 	//  - No Acks in genesis bloc
-	for _, blocks := range blocksByNode {
-		lastAckingHeights := map[types.NodeID]uint64{}
+	for _, blocks := range blocksByChain {
+		lastAckingHeights := map[uint32]uint64{}
 		req.NotEmpty(blocks)
 		// Check genesis block.
 		genesisBlock := blocks[0]
@@ -95,11 +97,12 @@ func (s *BlocksGeneratorTestSuite) TestGenerate() {
 				ackedBlock := blocksByHash[ack]
 				req.NotNil(ackedBlock)
 				prevAckingHeight, exists :=
-					lastAckingHeights[ackedBlock.ProposerID]
+					lastAckingHeights[ackedBlock.Position.ChainID]
 				if exists {
 					s.True(prevAckingHeight < ackedBlock.Position.Height)
 				}
-				lastAckingHeights[ackedBlock.ProposerID] = ackedBlock.Position.Height
+				lastAckingHeights[ackedBlock.Position.ChainID] =
+					ackedBlock.Position.Height
 				// Block Height should always incremental by 1.
 				//
 				// Because we iterate blocks slice from 1,

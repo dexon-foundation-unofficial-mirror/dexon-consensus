@@ -92,15 +92,37 @@ func (s *Lattice) PrepareBlock(
 	return
 }
 
+// PrepareEmptyBlock setup block's field based on current lattice status.
+func (s *Lattice) PrepareEmptyBlock(b *types.Block) (err error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	s.data.prepareEmptyBlock(b)
+	if b.Hash, err = hashBlock(b); err != nil {
+		return
+	}
+	return
+}
+
 // SanityCheck check if a block is valid.
 // If checkRelation is true, it also checks with current lattice status.
 //
 // If some acking blocks don't exists, Lattice would help to cache this block
 // and retry when lattice updated in Lattice.ProcessBlock.
 func (s *Lattice) SanityCheck(b *types.Block, checkRelation bool) (err error) {
-	// Verify block's signature.
-	if err = s.authModule.VerifyBlock(b); err != nil {
-		return
+	if b.IsEmpty() {
+		// Only need to verify block's hash.
+		var hash common.Hash
+		if hash, err = hashBlock(b); err != nil {
+			return
+		}
+		if b.Hash != hash {
+			return ErrInvalidBlock
+		}
+	} else {
+		// Verify block's signature.
+		if err = s.authModule.VerifyBlock(b); err != nil {
+			return
+		}
 	}
 	// Make sure acks are sorted.
 	for i := range b.Acks {
