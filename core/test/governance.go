@@ -120,7 +120,7 @@ func (g *Governance) NotifyRoundHeight(round, height uint64) {
 }
 
 // ProposeCRS propose a CRS.
-func (g *Governance) ProposeCRS(signedCRS []byte) {
+func (g *Governance) ProposeCRS(round uint64, signedCRS []byte) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 	crs := crypto.Keccak256Hash(signedCRS)

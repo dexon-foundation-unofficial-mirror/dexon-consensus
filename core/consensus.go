@@ -540,9 +540,9 @@ func (con *Consensus) runCRS() {
 			con.logger.Error("Failed to run CRS Tsig", "error", err)
 		} else {
 			con.logger.Debug("Calling Governance.ProposeCRS",
-				"round", con.round,
+				"round", con.round+1,
 				"crs", crs)
-			con.gov.ProposeCRS(crs)
+			con.gov.ProposeCRS(con.round+1, crs)
 		}
 	}
 }

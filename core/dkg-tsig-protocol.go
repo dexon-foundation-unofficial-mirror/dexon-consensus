@@ -37,6 +37,8 @@ var (
 		"private share not found for specific ID")
 	ErrNotReachThreshold = fmt.Errorf(
 		"threshold not reach")
+	ErrInvalidThreshold = fmt.Errorf(
+		"invalid threshold")
 	ErrIncorrectPrivateShareSignature = fmt.Errorf(
 		"incorrect private share signature")
 	ErrMismatchPartialSignatureHash = fmt.Errorf(
@@ -352,6 +354,11 @@ func NewDKGGroupPublicKey(
 	mpks []*types.DKGMasterPublicKey, complaints []*types.DKGComplaint,
 	threshold int) (
 	*DKGGroupPublicKey, error) {
+
+	if len(mpks) < threshold {
+		return nil, ErrInvalidThreshold
+	}
+
 	// Calculate qualify members.
 	disqualifyIDs := map[types.NodeID]struct{}{}
 	complaintsByID := map[types.NodeID]int{}

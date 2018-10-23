@@ -120,7 +120,7 @@ func (g *simGovernance) NotifyRoundHeight(round, height uint64) {
 }
 
 // ProposeCRS proposes a CRS of round.
-func (g *simGovernance) ProposeCRS(signedCRS []byte) {
+func (g *simGovernance) ProposeCRS(round uint64, signedCRS []byte) {
 	crs := crypto.Keccak256Hash(signedCRS)
 	if g.crs[len(g.crs)-1].Equal(crs) {
 		return
