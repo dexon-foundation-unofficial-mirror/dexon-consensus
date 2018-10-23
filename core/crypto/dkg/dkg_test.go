@@ -25,6 +25,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Spiderpowa/bls/ffi/go/bls"
 	"github.com/dexon-foundation/dexon/rlp"
 	"github.com/stretchr/testify/suite"
 
@@ -309,8 +310,8 @@ func (s *DKGTestSuite) TestPublicKeySharesRLPEncodeDecode() {
 	for i, id := range s.genID(1) {
 		privkey := NewPrivateKey()
 		pubkey := privkey.PublicKey().(PublicKey)
-		p.shares = append(p.shares, pubkey)
-		p.shareIndex[id] = i
+		p.shareCaches = append(p.shareCaches, pubkey)
+		p.shareCacheIndex[id] = i
 		p.masterPublicKey = append(p.masterPublicKey, pubkey.publicKey)
 	}
 
@@ -325,6 +326,66 @@ func (s *DKGTestSuite) TestPublicKeySharesRLPEncodeDecode() {
 	s.Require().NoError(err)
 
 	s.Require().True(reflect.DeepEqual(b, bb))
+}
+
+func (s *DKGTestSuite) TestPublicKeySharesEquality() {
+	var req = s.Require()
+	IDs := s.genID(2)
+	_, pubShares1 := NewPrivateKeyShares(4)
+	// Make a copy from an empty share.
+	pubShares2 := pubShares1.Clone()
+	req.True(pubShares1.Equal(pubShares2))
+	// Add two shares.
+	prvKey1 := NewPrivateKey()
+	pubKey1 := prvKey1.PublicKey().(PublicKey)
+	req.NoError(pubShares1.AddShare(IDs[0], &pubKey1))
+	prvKey2 := NewPrivateKey()
+	pubKey2 := prvKey2.PublicKey().(PublicKey)
+	req.True(pubShares1.Equal(pubShares2))
+	// Clone the shares.
+	req.NoError(pubShares2.AddShare(IDs[0], &pubKey1))
+	req.NoError(pubShares2.AddShare(IDs[1], &pubKey2))
+	// They should be equal now.
+	req.True(pubShares1.Equal(pubShares2))
+	req.True(pubShares2.Equal(pubShares1))
+}
+
+func (s *DKGTestSuite) TestPrivateKeySharesEquality() {
+	var req = s.Require()
+	IDs := s.genID(2)
+	prvShares1, _ := NewPrivateKeyShares(4)
+	// Make a copy of empty share.
+	prvShares2 := NewEmptyPrivateKeyShares()
+	req.False(prvShares1.Equal(prvShares2))
+	// Clone the master private key.
+	for _, m := range prvShares1.masterPrivateKey {
+		var key bls.SecretKey
+		req.NoError(key.SetLittleEndian(m.GetLittleEndian()))
+		prvShares2.masterPrivateKey = append(prvShares2.masterPrivateKey, key)
+	}
+	// Add two shares.
+	prvKey1 := NewPrivateKey()
+	req.NoError(prvShares1.AddShare(IDs[0], prvKey1))
+	prvKey2 := NewPrivateKey()
+	req.NoError(prvShares1.AddShare(IDs[1], prvKey2))
+	// They are not equal now.
+	req.False(prvShares1.Equal(prvShares2))
+	// Clone the shares.
+	req.NoError(prvShares2.AddShare(IDs[0], prvKey1))
+	req.NoError(prvShares2.AddShare(IDs[1], prvKey2))
+	// They should be equal now.
+	req.True(prvShares1.Equal(prvShares2))
+	req.True(prvShares2.Equal(prvShares1))
+}
+
+func (s *DKGTestSuite) TestPublicKeySharesClone() {
+	_, pubShares1 := NewPrivateKeyShares(4)
+	IDs := s.genID(2)
+	prvKey1 := NewPrivateKey()
+	pubKey1 := prvKey1.PublicKey().(PublicKey)
+	s.Require().NoError(pubShares1.AddShare(IDs[0], &pubKey1))
+	pubShares2 := pubShares1.Clone()
+	s.Require().True(pubShares1.Equal(pubShares2))
 }
 
 func TestDKG(t *testing.T) {

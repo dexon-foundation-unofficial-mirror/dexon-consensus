@@ -18,6 +18,7 @@
 package types
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -38,6 +39,17 @@ type DKGPrivateShare struct {
 	Signature    crypto.Signature `json:"signature"`
 }
 
+// Equal checks equality between two DKGPrivateShare instances.
+func (p *DKGPrivateShare) Equal(other *DKGPrivateShare) bool {
+	return p.ProposerID.Equal(other.ProposerID) &&
+		p.ReceiverID.Equal(other.ReceiverID) &&
+		p.Round == other.Round &&
+		p.Signature.Type == other.Signature.Type &&
+		bytes.Compare(p.Signature.Signature, other.Signature.Signature) == 0 &&
+		bytes.Compare(
+			p.PrivateShare.Bytes(), other.PrivateShare.Bytes()) == 0
+}
+
 // DKGMasterPublicKey decrtibe a master public key in DKG protocol.
 type DKGMasterPublicKey struct {
 	ProposerID      NodeID              `json:"proposer_id"`
@@ -51,6 +63,16 @@ func (d *DKGMasterPublicKey) String() string {
 	return fmt.Sprintf("MasterPublicKey[%s:%d]",
 		d.ProposerID.String()[:6],
 		d.Round)
+}
+
+// Equal check equality of two DKG master public keys.
+func (d *DKGMasterPublicKey) Equal(other *DKGMasterPublicKey) bool {
+	return d.ProposerID.Equal(other.ProposerID) &&
+		d.Round == other.Round &&
+		d.DKGID.GetHexString() == other.DKGID.GetHexString() &&
+		d.PublicKeyShares.Equal(&other.PublicKeyShares) &&
+		d.Signature.Type == other.Signature.Type &&
+		bytes.Compare(d.Signature.Signature, other.Signature.Signature) == 0
 }
 
 type rlpDKGMasterPublicKey struct {
@@ -126,6 +148,15 @@ func (c *DKGComplaint) String() string {
 		c.ProposerID.String()[:6], c.Round, c.PrivateShare)
 }
 
+// Equal checks equality between two DKGComplaint instances.
+func (c *DKGComplaint) Equal(other *DKGComplaint) bool {
+	return c.ProposerID.Equal(other.ProposerID) &&
+		c.Round == other.Round &&
+		c.PrivateShare.Equal(&other.PrivateShare) &&
+		c.Signature.Type == other.Signature.Type &&
+		bytes.Compare(c.Signature.Signature, other.Signature.Signature) == 0
+}
+
 // DKGPartialSignature describe a partial signature in DKG protocol.
 type DKGPartialSignature struct {
 	ProposerID       NodeID               `json:"proposer_id"`
@@ -146,6 +177,14 @@ func (final *DKGFinalize) String() string {
 	return fmt.Sprintf("DKGFinal[%s:%d]",
 		final.ProposerID.String()[:6],
 		final.Round)
+}
+
+// Equal check equality of two DKGFinalize instances.
+func (final *DKGFinalize) Equal(other *DKGFinalize) bool {
+	return final.ProposerID.Equal(other.ProposerID) &&
+		final.Round == other.Round &&
+		final.Signature.Type == other.Signature.Type &&
+		bytes.Compare(final.Signature.Signature, other.Signature.Signature) == 0
 }
 
 // IsNack returns true if it's a nack complaint in DKG protocol.

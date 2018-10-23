@@ -101,30 +101,84 @@ type PrivateKeyShares struct {
 	masterPrivateKey []bls.SecretKey
 }
 
+// Equal check equality between two PrivateKeyShares instances.
+func (prvs *PrivateKeyShares) Equal(other *PrivateKeyShares) bool {
+	// Check shares.
+	if len(prvs.shareIndex) != len(other.shareIndex) {
+		return false
+	}
+	for dID, idx := range prvs.shareIndex {
+		otherIdx, exists := other.shareIndex[dID]
+		if !exists {
+			return false
+		}
+		if !prvs.shares[idx].privateKey.IsEqual(
+			&other.shares[otherIdx].privateKey) {
+			return false
+		}
+	}
+	// Check master private keys.
+	if len(prvs.masterPrivateKey) != len(other.masterPrivateKey) {
+		return false
+	}
+	for idx, m := range prvs.masterPrivateKey {
+		if m.GetHexString() != other.masterPrivateKey[idx].GetHexString() {
+			return false
+		}
+	}
+	return true
+}
+
 // PublicKeyShares represents a public key shares for DKG protocol.
 type PublicKeyShares struct {
-	shares          []PublicKey
-	shareIndex      map[ID]int
+	shareCaches     []PublicKey
+	shareCacheIndex map[ID]int
 	masterPublicKey []bls.PublicKey
 }
 
 type rlpPublicKeyShares struct {
-	Shares          [][]byte
-	ShareIndexK     [][]byte
-	ShareIndexV     []uint32
-	MasterPublicKey [][]byte
+	ShareCaches      [][]byte
+	ShareCacheIndexK [][]byte
+	ShareCacheIndexV []uint32
+	MasterPublicKey  [][]byte
+}
+
+// Equal checks equality of two PublicKeyShares instance.
+func (pubs *PublicKeyShares) Equal(other *PublicKeyShares) bool {
+	// Check shares.
+	for dID, idx := range pubs.shareCacheIndex {
+		otherIdx, exists := other.shareCacheIndex[dID]
+		if !exists {
+			continue
+		}
+		if !pubs.shareCaches[idx].publicKey.IsEqual(
+			&other.shareCaches[otherIdx].publicKey) {
+			return false
+		}
+	}
+	// Check master public keys.
+	if len(pubs.masterPublicKey) != len(other.masterPublicKey) {
+		return false
+	}
+	for idx, m := range pubs.masterPublicKey {
+		if m.GetHexString() != other.masterPublicKey[idx].GetHexString() {
+			return false
+		}
+	}
+	return true
 }
 
 // EncodeRLP implements rlp.Encoder
 func (pubs *PublicKeyShares) EncodeRLP(w io.Writer) error {
 	var rps rlpPublicKeyShares
-	for _, share := range pubs.shares {
-		rps.Shares = append(rps.Shares, share.Serialize())
+	for _, share := range pubs.shareCaches {
+		rps.ShareCaches = append(rps.ShareCaches, share.Serialize())
 	}
 
-	for id, v := range pubs.shareIndex {
-		rps.ShareIndexK = append(rps.ShareIndexK, id.GetLittleEndian())
-		rps.ShareIndexV = append(rps.ShareIndexV, uint32(v))
+	for id, v := range pubs.shareCacheIndex {
+		rps.ShareCacheIndexK = append(
+			rps.ShareCacheIndexK, id.GetLittleEndian())
+		rps.ShareCacheIndexV = append(rps.ShareCacheIndexV, uint32(v))
 	}
 
 	for _, m := range pubs.masterPublicKey {
@@ -141,25 +195,25 @@ func (pubs *PublicKeyShares) DecodeRLP(s *rlp.Stream) error {
 		return err
 	}
 
-	if len(dec.ShareIndexK) != len(dec.ShareIndexV) {
+	if len(dec.ShareCacheIndexK) != len(dec.ShareCacheIndexV) {
 		return fmt.Errorf("invalid shareIndex")
 	}
 
 	ps := NewEmptyPublicKeyShares()
-	for _, share := range dec.Shares {
+	for _, share := range dec.ShareCaches {
 		var publicKey PublicKey
 		if err := publicKey.Deserialize(share); err != nil {
 			return err
 		}
-		ps.shares = append(ps.shares, publicKey)
+		ps.shareCaches = append(ps.shareCaches, publicKey)
 	}
 
-	for i, k := range dec.ShareIndexK {
+	for i, k := range dec.ShareCacheIndexK {
 		id, err := BytesID(k)
 		if err != nil {
 			return err
 		}
-		ps.shareIndex[id] = int(dec.ShareIndexV[i])
+		ps.shareCacheIndex[id] = int(dec.ShareCacheIndexV[i])
 	}
 
 	for _, k := range dec.MasterPublicKey {
@@ -205,6 +259,20 @@ func (pubs *PublicKeyShares) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Clone clones every fields of PublicKeyShares. This method is mainly
+// for testing purpose thus would panic when error.
+func (pubs *PublicKeyShares) Clone() *PublicKeyShares {
+	b, err := rlp.EncodeToBytes(pubs)
+	if err != nil {
+		panic(err)
+	}
+	pubsCopy := NewEmptyPublicKeyShares()
+	if err := rlp.DecodeBytes(b, pubsCopy); err != nil {
+		panic(err)
+	}
+	return pubsCopy
+}
+
 // NewID creates a ew ID structure.
 func NewID(id []byte) ID {
 	var blsID bls.ID
@@ -240,7 +308,7 @@ func NewPrivateKeyShares(t int) (*PrivateKeyShares, *PublicKeyShares) {
 			masterPrivateKey: msk,
 			shareIndex:       make(map[ID]int),
 		}, &PublicKeyShares{
-			shareIndex:      make(map[ID]int),
+			shareCacheIndex: make(map[ID]int),
 			masterPublicKey: mpk,
 		}
 }
@@ -329,15 +397,15 @@ func (prvs *PrivateKeyShares) Share(ID ID) (*PrivateKey, bool) {
 // NewEmptyPublicKeyShares creates an empty public key shares.
 func NewEmptyPublicKeyShares() *PublicKeyShares {
 	return &PublicKeyShares{
-		shareIndex: make(map[ID]int),
+		shareCacheIndex: make(map[ID]int),
 	}
 }
 
 // Share returns the share for the ID.
 func (pubs *PublicKeyShares) Share(ID ID) (*PublicKey, error) {
-	idx, exist := pubs.shareIndex[ID]
+	idx, exist := pubs.shareCacheIndex[ID]
 	if exist {
-		return &pubs.shares[idx], nil
+		return &pubs.shareCaches[idx], nil
 	}
 	var pk PublicKey
 	if err := pk.publicKey.Set(pubs.masterPublicKey, &ID); err != nil {
@@ -349,14 +417,14 @@ func (pubs *PublicKeyShares) Share(ID ID) (*PublicKey, error) {
 
 // AddShare adds a share.
 func (pubs *PublicKeyShares) AddShare(ID ID, share *PublicKey) error {
-	if idx, exist := pubs.shareIndex[ID]; exist {
-		if !share.publicKey.IsEqual(&pubs.shares[idx].publicKey) {
+	if idx, exist := pubs.shareCacheIndex[ID]; exist {
+		if !share.publicKey.IsEqual(&pubs.shareCaches[idx].publicKey) {
 			return ErrDuplicatedShare
 		}
 		return nil
 	}
-	pubs.shareIndex[ID] = len(pubs.shares)
-	pubs.shares = append(pubs.shares, *share)
+	pubs.shareCacheIndex[ID] = len(pubs.shareCaches)
+	pubs.shareCaches = append(pubs.shareCaches, *share)
 	return nil
 }
 
