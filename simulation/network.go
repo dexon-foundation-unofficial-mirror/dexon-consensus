@@ -78,13 +78,15 @@ type infoMessage struct {
 // network implements core.Network interface and other methods for simulation
 // based on test.TransportClient.
 type network struct {
-	cfg           config.Networking
-	ctx           context.Context
-	ctxCancel     context.CancelFunc
-	trans         test.TransportClient
-	fromTransport <-chan *test.TransportEnvelope
-	toConsensus   chan interface{}
-	toNode        chan interface{}
+	cfg            config.Networking
+	ctx            context.Context
+	ctxCancel      context.CancelFunc
+	trans          test.TransportClient
+	fromTransport  <-chan *test.TransportEnvelope
+	toConsensus    chan interface{}
+	toNode         chan interface{}
+	sentRandomness map[common.Hash]struct{}
+	sentAgreement  map[common.Hash]struct{}
 }
 
 // newNetwork setup network stuffs for nodes, which provides an
@@ -97,9 +99,11 @@ func newNetwork(pubKey crypto.PublicKey, cfg config.Networking) (n *network) {
 	}
 	// Construct basic network instance.
 	n = &network{
-		cfg:         cfg,
-		toNode:      make(chan interface{}, 1000),
-		toConsensus: make(chan interface{}, 1000),
+		cfg:            cfg,
+		toNode:         make(chan interface{}, 1000),
+		toConsensus:    make(chan interface{}, 1000),
+		sentRandomness: make(map[common.Hash]struct{}),
+		sentAgreement:  make(map[common.Hash]struct{}),
 	}
 	n.ctx, n.ctxCancel = context.WithCancel(context.Background())
 	// Construct transport layer.
@@ -135,6 +139,17 @@ func (n *network) BroadcastBlock(block *types.Block) {
 // BroadcastAgreementResult implements core.Network interface.
 func (n *network) BroadcastAgreementResult(
 	randRequest *types.AgreementResult) {
+	if _, exist := n.sentAgreement[randRequest.BlockHash]; exist {
+		return
+	}
+	if len(n.sentAgreement) > 1000 {
+		// Randomly drop one entry.
+		for k := range n.sentAgreement {
+			delete(n.sentAgreement, k)
+			break
+		}
+	}
+	n.sentAgreement[randRequest.BlockHash] = struct{}{}
 	if err := n.trans.Broadcast(randRequest); err != nil {
 		panic(err)
 	}
@@ -143,6 +158,17 @@ func (n *network) BroadcastAgreementResult(
 // BroadcastRandomnessResult implements core.Network interface.
 func (n *network) BroadcastRandomnessResult(
 	randResult *types.BlockRandomnessResult) {
+	if _, exist := n.sentRandomness[randResult.BlockHash]; exist {
+		return
+	}
+	if len(n.sentRandomness) > 1000 {
+		// Randomly drop one entry.
+		for k := range n.sentRandomness {
+			delete(n.sentRandomness, k)
+			break
+		}
+	}
+	n.sentRandomness[randResult.BlockHash] = struct{}{}
 	if err := n.trans.Broadcast(randResult); err != nil {
 		panic(err)
 	}

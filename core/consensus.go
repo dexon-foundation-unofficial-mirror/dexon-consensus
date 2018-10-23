@@ -783,20 +783,15 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 	if !con.ccModule.blockRegistered(rand.BlockHash) {
 		return nil
 	}
-	// TODO(jimmy-dexon): reuse the GPK.
 	round := rand.Position.Round
-	con.logger.Debug("Calling Governance.DKGMasterPublicKeys",
-		"round", con.round)
-	con.logger.Debug("Calling Governance.DKGComplaints", "round", con.round)
-	con.logger.Debug("Calling Governance.Configuration", "round", con.round)
-	gpk, err := NewDKGGroupPublicKey(round,
-		con.gov.DKGMasterPublicKeys(round),
-		con.gov.DKGComplaints(round),
-		int(con.gov.Configuration(round).DKGSetSize/3)+1)
+	v, ok, err := con.ccModule.tsigVerifier.UpdateAndGet(round)
 	if err != nil {
 		return err
 	}
-	if !gpk.VerifySignature(
+	if !ok {
+		return nil
+	}
+	if !v.VerifySignature(
 		rand.BlockHash, crypto.Signature{Signature: rand.Randomness}) {
 		return ErrIncorrectBlockRandomnessResult
 	}
