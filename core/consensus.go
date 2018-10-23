@@ -558,12 +558,20 @@ func (con *Consensus) initialRound(startTime time.Time) {
 
 	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval/2),
 		func(time.Time) {
-			go con.runCRS()
-		})
-	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval/2),
-		func(time.Time) {
-			con.cfgModule.registerDKG(
-				con.round+1, int(con.currentConfig.DKGSetSize/3)+1)
+			go func() {
+				con.runCRS()
+				ticker := newTicker(con.gov, con.round, TickerDKG)
+				<-ticker.Tick()
+				// Normally, gov.CRS would return non-nil. Use this for in case of
+				// unexpected network fluctuation and ensure the robustness.
+				for (con.gov.CRS(con.round+1) == common.Hash{}) {
+					con.logger.Info("CRS is not ready yet. Try again later...",
+						"nodeID", con.ID)
+					time.Sleep(500 * time.Millisecond)
+				}
+				con.cfgModule.registerDKG(
+					con.round+1, int(con.currentConfig.DKGSetSize/3)+1)
+			}()
 		})
 	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval*2/3),
 		func(time.Time) {
@@ -578,6 +586,9 @@ func (con *Consensus) initialRound(startTime time.Time) {
 		func(time.Time) {
 			// Change round.
 			con.round++
+			con.logger.Debug("Calling Governance.Configuration",
+				"round", con.round+1)
+			con.lattice.AppendConfig(con.round+1, con.gov.Configuration(con.round+1))
 			con.initialRound(startTime.Add(con.currentConfig.RoundInterval))
 		})
 }
@@ -837,12 +848,6 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 	for _, b := range deliveredBlocks {
 		if err = con.db.Put(*b); err != nil {
 			return
-		}
-		if b.Position.Round > con.round {
-			con.round++
-			con.logger.Debug("Calling Governance.Configuration",
-				"round", con.round+1)
-			con.lattice.AppendConfig(con.round+1, con.gov.Configuration(con.round+1))
 		}
 		// TODO(mission): clone types.FinalizationResult
 		con.nbModule.BlockDelivered(b.Hash, b.Finalization)
