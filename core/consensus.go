@@ -253,14 +253,15 @@ type Consensus struct {
 	tickerObj Ticker
 
 	// Misc.
-	dMoment      time.Time
-	nodeSetCache *NodeSetCache
-	round        uint64
-	lock         sync.RWMutex
-	ctx          context.Context
-	ctxCancel    context.CancelFunc
-	event        *common.Event
-	logger       common.Logger
+	dMoment       time.Time
+	nodeSetCache  *NodeSetCache
+	round         uint64
+	roundToNotify uint64
+	lock          sync.RWMutex
+	ctx           context.Context
+	ctxCancel     context.CancelFunc
+	event         *common.Event
+	logger        common.Logger
 }
 
 // NewConsensus construct an Consensus instance.
@@ -276,6 +277,8 @@ func NewConsensus(
 	// TODO(w): load latest blockHeight from DB, and use config at that height.
 	var (
 		round uint64
+		// round 0 and 1 are decided at beginning.
+		roundToNotify = round + 2
 	)
 	logger.Debug("Calling Governance.Configuration", "round", round)
 	config := gov.Configuration(round)
@@ -330,6 +333,7 @@ func NewConsensus(
 		authModule:    authModule,
 		event:         common.NewEvent(),
 		logger:        logger,
+		roundToNotify: roundToNotify,
 	}
 
 	con.baModules = make([]*agreement, config.NumChains)
@@ -875,6 +879,13 @@ func (con *Consensus) processFinalizedBlock(block *types.Block) (err error) {
 				err = nil
 			}
 			con.nbModule.BlockDelivered(b.Hash, b.Finalization)
+			if b.Position.Round+2 == con.roundToNotify {
+				// Only the first block delivered of that round would
+				// trigger this noitification.
+				con.gov.NotifyRoundHeight(
+					con.roundToNotify, b.Finalization.Height)
+				con.roundToNotify++
+			}
 		}
 	}
 	return
