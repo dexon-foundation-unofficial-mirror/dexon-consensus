@@ -759,11 +759,6 @@ func (con *Consensus) ProcessAgreementResult(
 				"error", err)
 			return
 		}
-		con.logger.Debug("Calling Network.BroadcastRandomnessResult",
-			"hash", result.BlockHash,
-			"position", result.Position,
-			"randomness", hex.EncodeToString(result.Randomness))
-		con.network.BroadcastRandomnessResult(result)
 	}()
 	return nil
 }
@@ -797,7 +792,7 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 	con.logger.Debug("Calling Network.BroadcastRandomnessResult",
 		"hash", rand.BlockHash,
 		"position", rand.Position,
-		"randomness", string(rand.Randomness))
+		"randomness", hex.EncodeToString(rand.Randomness))
 	con.network.BroadcastRandomnessResult(rand)
 	if err := con.ccModule.processBlockRandomnessResult(rand); err != nil {
 		if err != ErrBlockNotRegistered {
