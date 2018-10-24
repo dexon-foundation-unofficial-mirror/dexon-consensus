@@ -81,6 +81,10 @@ func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {
 
 func (recv *consensusBAReceiver) ProposeBlock() common.Hash {
 	block := recv.consensus.proposeBlock(recv.chainID, recv.round)
+	if block == nil {
+		recv.consensus.logger.Error("unable to propose block")
+		return nullBlockHash
+	}
 	recv.consensus.baModules[recv.chainID].addCandidateBlock(block)
 	if err := recv.consensus.preProcessBlock(block); err != nil {
 		recv.consensus.logger.Error("Failed to pre-process block", "error", err)
