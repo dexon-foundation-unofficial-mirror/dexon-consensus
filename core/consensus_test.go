@@ -396,7 +396,6 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		req.Equal(t, app.Delivered[b11.Hash].ConsensusTime)
 	}
 	for _, obj := range objs {
-		obj.con.nbModule.wait()
 		verify(obj.app)
 	}
 }

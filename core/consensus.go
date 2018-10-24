@@ -234,9 +234,6 @@ type Consensus struct {
 	authModule    *Authenticator
 	currentConfig *types.Config
 
-	// Modules.
-	nbModule *nonBlocking
-
 	// BA.
 	baModules []*agreement
 	receivers []*consensusBAReceiver
@@ -252,6 +249,7 @@ type Consensus struct {
 
 	// Interfaces.
 	db        blockdb.BlockDatabase
+	app       Application
 	gov       Governance
 	network   Network
 	tickerObj Ticker
@@ -298,11 +296,9 @@ func NewConsensus(
 	authModule := NewAuthenticator(prv)
 	// Check if the application implement Debug interface.
 	debugApp, _ := app.(Debug)
-	// Setup nonblocking module.
-	nbModule := newNonBlocking(app, debugApp)
 	// Init lattice.
 	lattice := NewLattice(
-		dMoment, config, authModule, nbModule, nbModule, db, logger)
+		dMoment, config, authModule, app, debugApp, db, logger)
 	// Init configuration chain.
 	ID := types.NewNodeID(prv.PublicKey())
 	recv := &consensusDKGReceiver{
@@ -325,7 +321,7 @@ func NewConsensus(
 		currentConfig: config,
 		ccModule:      newCompactionChain(gov),
 		lattice:       lattice,
-		nbModule:      nbModule,
+		app:           app,
 		gov:           gov,
 		db:            db,
 		network:       network,
@@ -853,7 +849,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 			return
 		}
 		// TODO(mission): clone types.FinalizationResult
-		con.nbModule.BlockDelivered(b.Hash, b.Finalization)
+		con.app.BlockDelivered(b.Hash, b.Finalization)
 	}
 	if err = con.lattice.PurgeBlocks(deliveredBlocks); err != nil {
 		return
@@ -882,7 +878,7 @@ func (con *Consensus) processFinalizedBlock(block *types.Block) (err error) {
 				}
 				err = nil
 			}
-			con.nbModule.BlockDelivered(b.Hash, b.Finalization)
+			con.app.BlockDelivered(b.Hash, b.Finalization)
 			if b.Position.Round+2 == con.roundToNotify {
 				// Only the first block delivered of that round would
 				// trigger this noitification.
