@@ -139,7 +139,9 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 	k := 2
 	n := 10
 	round := uint64(1)
-	gov, err := test.NewGovernance(5, 100)
+	_, pubKeys, err := test.NewKeys(5)
+	s.Require().NoError(err)
+	gov, err := test.NewGovernance(pubKeys, 100)
 	s.Require().NoError(err)
 
 	receivers, protocols := s.newProtocols(k, n, round)
@@ -242,7 +244,9 @@ func (s *DKGTSIGProtocolTestSuite) TestNackComplaint() {
 	k := 3
 	n := 10
 	round := uint64(1)
-	gov, err := test.NewGovernance(5, 100)
+	_, pubKeys, err := test.NewKeys(5)
+	s.Require().NoError(err)
+	gov, err := test.NewGovernance(pubKeys, 100)
 	s.Require().NoError(err)
 
 	receivers, protocols := s.newProtocols(k, n, round)
@@ -286,7 +290,9 @@ func (s *DKGTSIGProtocolTestSuite) TestComplaint() {
 	k := 3
 	n := 10
 	round := uint64(1)
-	gov, err := test.NewGovernance(5, 100)
+	_, pubKeys, err := test.NewKeys(5)
+	s.Require().NoError(err)
+	gov, err := test.NewGovernance(pubKeys, 100)
 	s.Require().NoError(err)
 
 	receivers, protocols := s.newProtocols(k, n, round)
@@ -349,7 +355,9 @@ func (s *DKGTSIGProtocolTestSuite) TestAntiComplaint() {
 	k := 3
 	n := 10
 	round := uint64(1)
-	gov, err := test.NewGovernance(5, 100)
+	_, pubKeys, err := test.NewKeys(5)
+	s.Require().NoError(err)
+	gov, err := test.NewGovernance(pubKeys, 100)
 	s.Require().NoError(err)
 
 	receivers, protocols := s.newProtocols(k, n, round)
@@ -404,7 +412,9 @@ func (s *DKGTSIGProtocolTestSuite) TestEncorceNackComplaint() {
 	k := 3
 	n := 10
 	round := uint64(1)
-	gov, err := test.NewGovernance(5, 100)
+	_, pubKeys, err := test.NewKeys(5)
+	s.Require().NoError(err)
+	gov, err := test.NewGovernance(pubKeys, 100)
 	s.Require().NoError(err)
 
 	receivers, protocols := s.newProtocols(k, n, round)
@@ -456,7 +466,9 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 	k := 3
 	n := 10
 	round := uint64(1)
-	gov, err := test.NewGovernance(5, 100)
+	_, pubKeys, err := test.NewKeys(5)
+	s.Require().NoError(err)
+	gov, err := test.NewGovernance(pubKeys, 100)
 	s.Require().NoError(err)
 
 	receivers, _ := s.newProtocols(k, n, round)
@@ -519,7 +531,9 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 	k := 3
 	n := 10
 	round := uint64(1)
-	gov, err := test.NewGovernance(5, 100)
+	_, pubKeys, err := test.NewKeys(5)
+	s.Require().NoError(err)
+	gov, err := test.NewGovernance(pubKeys, 100)
 	s.Require().NoError(err)
 
 	receivers, protocols := s.newProtocols(k, n, round)
@@ -639,8 +653,11 @@ func (s *DKGTSIGProtocolTestSuite) TestProposeFinalize() {
 func (s *DKGTSIGProtocolTestSuite) TestTSigVerifierCache() {
 	k := 3
 	n := 10
-	gov, err := test.NewGovernance(n, 100)
+	_, pubKeys, err := test.NewKeys(n)
 	s.Require().NoError(err)
+	gov, err := test.NewGovernance(pubKeys, 100)
+	s.Require().NoError(err)
+	gov.CatchUpWithRound(10)
 	for i := 0; i < 10; i++ {
 		round := uint64(i + 1)
 		receivers, protocols := s.newProtocols(k, n, round)

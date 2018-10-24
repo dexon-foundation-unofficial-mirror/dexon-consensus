@@ -165,7 +165,7 @@ func (s *ConsensusTestSuite) prepareConsensus(
 
 	app := test.NewApp()
 	db, err := blockdb.NewMemBackedBlockDB()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	nID := types.NewNodeID(prvKey.PublicKey())
 	network := conn.newNetwork(nID)
 	con := NewConsensus(
@@ -190,14 +190,15 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	// - Byzantine Agreement layer is not taken into consideration, every
 	//   block is passed to lattice module directly.
 	var (
-		gov, err    = test.NewGovernance(4, time.Second)
-		minInterval = gov.Configuration(0).MinBlockInterval
-		req         = s.Require()
-		prvKeys     = gov.PrivateKeys()
-		nodes       []types.NodeID
-		conn        = s.newNetworkConnection()
+		req   = s.Require()
+		nodes []types.NodeID
+		conn  = s.newNetworkConnection()
 	)
-	s.Require().Nil(err)
+	prvKeys, pubKeys, err := test.NewKeys(4)
+	s.Require().NoError(err)
+	gov, err := test.NewGovernance(pubKeys, time.Second)
+	s.Require().NoError(err)
+	minInterval := gov.Configuration(0).MinBlockInterval
 	// Setup core.Consensus and test.App.
 	objs := map[types.NodeID]*struct {
 		app *test.App
@@ -409,13 +410,14 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 	//  - Make sure Consensus.prepareBlock would only attempt to
 	//    ack the prepared block.
 	var (
-		gov, err = test.NewGovernance(4, time.Second)
-		req      = s.Require()
-		nodes    []types.NodeID
-		prvKeys  = gov.PrivateKeys()
-		conn     = s.newNetworkConnection()
+		req   = s.Require()
+		nodes []types.NodeID
+		conn  = s.newNetworkConnection()
 	)
-	s.Require().Nil(err)
+	prvKeys, pubKeys, err := test.NewKeys(4)
+	s.Require().NoError(err)
+	gov, err := test.NewGovernance(pubKeys, time.Second)
+	s.Require().NoError(err)
 	dMoment := time.Now().UTC()
 	// Setup core.Consensus and test.App.
 	cons := map[types.NodeID]*Consensus{}
@@ -454,9 +456,11 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 
 func (s *ConsensusTestSuite) TestPrepareGenesisBlock() {
 	conn := s.newNetworkConnection()
-	gov, err := test.NewGovernance(4, time.Second)
+	prvKeys, pubKeys, err := test.NewKeys(4)
 	s.Require().NoError(err)
-	prvKey := gov.PrivateKeys()[0]
+	gov, err := test.NewGovernance(pubKeys, time.Second)
+	s.Require().NoError(err)
+	prvKey := prvKeys[0]
 	_, con := s.prepareConsensus(time.Now().UTC(), gov, prvKey, conn)
 	block := &types.Block{
 		Position: types.Position{ChainID: 0},
@@ -468,16 +472,17 @@ func (s *ConsensusTestSuite) TestPrepareGenesisBlock() {
 
 func (s *ConsensusTestSuite) TestDKGCRS() {
 	n := 21
-	lambda := time.Duration(200)
+	lambda := 200 * time.Millisecond
 	if testing.Short() {
 		n = 7
-		lambda = 100
+		lambda = 100 * time.Millisecond
 	}
 	conn := s.newNetworkConnection()
-	gov, err := test.NewGovernance(n, lambda*time.Millisecond)
-	s.Require().Nil(err)
-	gov.RoundInterval = 200 * lambda * time.Millisecond
-	prvKeys := gov.PrivateKeys()
+	prvKeys, pubKeys, err := test.NewKeys(n)
+	s.Require().NoError(err)
+	gov, err := test.NewGovernance(pubKeys, lambda)
+	s.Require().NoError(err)
+	gov.State().RequestChange(test.StateChangeRoundInterval, 200*lambda)
 	cons := map[types.NodeID]*Consensus{}
 	dMoment := time.Now().UTC()
 	for _, key := range prvKeys {

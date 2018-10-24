@@ -102,3 +102,17 @@ func FindMyIP() (ip string, err error) {
 	err = fmt.Errorf("unable to find IP")
 	return
 }
+
+// NewKeys creates private keys and corresponding public keys as slice.
+func NewKeys(count int) (
+	prvKeys []crypto.PrivateKey, pubKeys []crypto.PublicKey, err error) {
+	for i := 0; i < count; i++ {
+		var prvKey crypto.PrivateKey
+		if prvKey, err = ecdsa.NewPrivateKey(); err != nil {
+			return
+		}
+		prvKeys = append(prvKeys, prvKey)
+		pubKeys = append(pubKeys, prvKey.PublicKey())
+	}
+	return
+}

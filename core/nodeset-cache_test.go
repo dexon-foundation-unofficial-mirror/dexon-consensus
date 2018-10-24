@@ -61,7 +61,9 @@ type NodeSetCacheTestSuite struct {
 func (s *NodeSetCacheTestSuite) TestGovernanceIntf() {
 	// NodeSetCacheInterface should let Governance implement it.
 	var gov Governance
-	gov, err := test.NewGovernance(7, 250*time.Millisecond)
+	_, pubKeys, err := test.NewKeys(7)
+	s.Require().NoError(err)
+	gov, err = test.NewGovernance(pubKeys, 250*time.Millisecond)
 	s.Require().NoError(err)
 	_, ok := gov.(NodeSetCacheInterface)
 	s.True(ok)

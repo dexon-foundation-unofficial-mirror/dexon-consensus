@@ -105,7 +105,9 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 	// Setup application.
 	app := test.NewApp()
 	// Setup governance.
-	gov, err := test.NewGovernance(int(cfg.NotarySetSize), cfg.LambdaBA)
+	_, pubKeys, err := test.NewKeys(int(cfg.NotarySetSize))
+	req.NoError(err)
+	gov, err := test.NewGovernance(pubKeys, cfg.LambdaBA)
 	req.NoError(err)
 	// Setup compaction chain.
 	cc := newCompactionChain(gov)

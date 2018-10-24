@@ -16,18 +16,20 @@ func PrepareNodes(
 	dbs map[types.NodeID]blockdb.BlockDatabase,
 	nodes map[types.NodeID]*Node,
 	err error) {
-
 	apps = make(map[types.NodeID]*test.App)
 	dbs = make(map[types.NodeID]blockdb.BlockDatabase)
 	nodes = make(map[types.NodeID]*Node)
-
-	gov, err := test.NewGovernance(nodeCount, 700*time.Millisecond)
+	prvKeys, pubKeys, err := test.NewKeys(nodeCount)
+	if err != nil {
+		return
+	}
+	gov, err := test.NewGovernance(pubKeys, 700*time.Millisecond)
 	if err != nil {
 		return
 	}
 	dMoment := time.Now().UTC()
-	for _, prvKey := range gov.PrivateKeys() {
-		nID := types.NewNodeID(prvKey.PublicKey())
+	for idx, prvKey := range prvKeys {
+		nID := types.NewNodeID(pubKeys[idx])
 		apps[nID] = test.NewApp()
 		dbs[nID], err = blockdb.NewMemBackedBlockDB()
 		if err != nil {
