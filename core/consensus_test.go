@@ -97,19 +97,25 @@ func (nc *networkConnection) send(to types.NodeID, msg interface{}) {
 		return
 	}
 	go func() {
+		var err error
+		// Testify package does not support concurrent call.
+		// Use panic() to detact error.
 		switch val := msg.(type) {
 		case *types.Block:
-			nc.s.Require().NoError(con.preProcessBlock(val))
+			err = con.preProcessBlock(val)
 		case *types.Vote:
-			nc.s.Require().NoError(con.ProcessVote(val))
+			err = con.ProcessVote(val)
 		case *types.AgreementResult:
-			nc.s.Require().NoError(con.ProcessAgreementResult(val))
+			err = con.ProcessAgreementResult(val)
 		case *types.BlockRandomnessResult:
-			nc.s.Require().NoError(con.ProcessBlockRandomnessResult(val))
+			err = con.ProcessBlockRandomnessResult(val)
 		case *types.DKGPrivateShare:
-			nc.s.Require().NoError(con.cfgModule.processPrivateShare(val))
+			err = con.cfgModule.processPrivateShare(val)
 		case *types.DKGPartialSignature:
-			nc.s.Require().NoError(con.cfgModule.processPartialSignature(val))
+			err = con.cfgModule.processPartialSignature(val)
+		}
+		if err != nil {
+			panic(err)
 		}
 	}()
 }
