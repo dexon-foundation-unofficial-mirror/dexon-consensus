@@ -26,15 +26,10 @@ import (
 )
 
 func hashWitness(witness *types.Witness) (common.Hash, error) {
-	binaryTimestamp, err := witness.Timestamp.UTC().MarshalBinary()
-	if err != nil {
-		return common.Hash{}, err
-	}
 	binaryHeight := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryHeight, witness.Height)
 	return crypto.Keccak256Hash(
 		binaryHeight,
-		binaryTimestamp,
 		witness.Data), nil
 }
 

@@ -77,12 +77,14 @@ func (t *rlpTimestamp) DecodeRLP(s *rlp.Stream) error {
 
 // FinalizationResult represents the result of DEXON consensus algorithm.
 type FinalizationResult struct {
-	Randomness []byte    `json:"randomness"`
-	Timestamp  time.Time `json:"timestamp"`
-	Height     uint64    `json:"height"`
+	ParentHash common.Hash `json:"parent_hash"`
+	Randomness []byte      `json:"randomness"`
+	Timestamp  time.Time   `json:"timestamp"`
+	Height     uint64      `json:"height"`
 }
 
 type rlpFinalizationResult struct {
+	ParentHash common.Hash
 	Randomness []byte
 	Timestamp  *rlpTimestamp
 	Height     uint64
@@ -91,6 +93,7 @@ type rlpFinalizationResult struct {
 // EncodeRLP implements rlp.Encoder
 func (f *FinalizationResult) EncodeRLP(w io.Writer) error {
 	return rlp.Encode(w, &rlpFinalizationResult{
+		ParentHash: f.ParentHash,
 		Randomness: f.Randomness,
 		Timestamp:  &rlpTimestamp{f.Timestamp},
 		Height:     f.Height,
@@ -103,6 +106,7 @@ func (f *FinalizationResult) DecodeRLP(s *rlp.Stream) error {
 	err := s.Decode(&dec)
 	if err == nil {
 		*f = FinalizationResult{
+			ParentHash: dec.ParentHash,
 			Randomness: dec.Randomness,
 			Timestamp:  dec.Timestamp.Time,
 			Height:     dec.Height,
@@ -113,38 +117,8 @@ func (f *FinalizationResult) DecodeRLP(s *rlp.Stream) error {
 
 // Witness represents the consensus information on the compaction chain.
 type Witness struct {
-	Timestamp time.Time `json:"timestamp"`
-	Height    uint64    `json:"height"`
-	Data      []byte    `json:"data"`
-}
-
-type rlpWitness struct {
-	Timestamp *rlpTimestamp
-	Height    uint64
-	Data      []byte
-}
-
-// EncodeRLP implements rlp.Encoder
-func (w *Witness) EncodeRLP(writer io.Writer) error {
-	return rlp.Encode(writer, rlpWitness{
-		Timestamp: &rlpTimestamp{w.Timestamp},
-		Height:    w.Height,
-		Data:      w.Data,
-	})
-}
-
-// DecodeRLP implements rlp.Decoder
-func (w *Witness) DecodeRLP(s *rlp.Stream) error {
-	var dec rlpWitness
-	err := s.Decode(&dec)
-	if err == nil {
-		*w = Witness{
-			Timestamp: dec.Timestamp.Time,
-			Height:    dec.Height,
-			Data:      dec.Data,
-		}
-	}
-	return err
+	Height uint64 `json:"height"`
+	Data   []byte `json:"data"`
 }
 
 // RecycleBlock put unused block into cache, which might be reused if
@@ -245,9 +219,9 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.Position.Height = b.Position.Height
 	bcopy.Signature = b.Signature.Clone()
 	bcopy.CRSSignature = b.CRSSignature.Clone()
+	bcopy.Finalization.ParentHash = b.Finalization.ParentHash
 	bcopy.Finalization.Timestamp = b.Finalization.Timestamp
 	bcopy.Finalization.Height = b.Finalization.Height
-	bcopy.Witness.Timestamp = b.Witness.Timestamp
 	bcopy.Witness.Height = b.Witness.Height
 	bcopy.Witness.Data = make([]byte, len(b.Witness.Data))
 	copy(bcopy.Witness.Data, b.Witness.Data)

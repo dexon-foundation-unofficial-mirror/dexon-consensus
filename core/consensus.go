@@ -545,7 +545,7 @@ func (con *Consensus) runCRS() {
 		} else {
 			con.logger.Debug("Calling Governance.ProposeCRS",
 				"round", con.round+1,
-				"crs", crs)
+				"crs", hex.EncodeToString(crs))
 			con.gov.ProposeCRS(con.round+1, crs)
 		}
 	}
@@ -846,7 +846,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 	deliveredBlocks = con.ccModule.extractBlocks()
 	for _, b := range deliveredBlocks {
 		if err = con.db.Put(*b); err != nil {
-			return
+			panic(err)
 		}
 		// TODO(mission): clone types.FinalizationResult
 		con.app.BlockDelivered(b.Hash, b.Finalization)

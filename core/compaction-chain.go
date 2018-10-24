@@ -132,6 +132,7 @@ func (cc *compactionChain) extractBlocks() []*types.Block {
 		cc.pendingBlocks = cc.pendingBlocks[1:]
 
 		block := cc.pendingBlocks[0]
+		block.Finalization.ParentHash = prevBlock.Hash
 		block.Finalization.Height = prevBlock.Finalization.Height + 1
 		deliveringBlocks = append(deliveringBlocks, block)
 		prevBlock = block
@@ -204,8 +205,7 @@ func (cc *compactionChain) extractFinalizedBlocks() []*types.Block {
 			continue
 		}
 		// Fork resolution: choose block with smaller hash.
-		if prevBlock.Finalization.Height ==
-			b.Finalization.Height {
+		if prevBlock.Finalization.Height == b.Finalization.Height {
 			//TODO(jimmy-dexon): remove this panic after test.
 			if true {
 				// workaround to `go vet` error

@@ -147,8 +147,7 @@ func (a *simApp) BlockDelivered(
 		a.latestWitnessReady.L.Lock()
 		defer a.latestWitnessReady.L.Unlock()
 		a.latestWitness = types.Witness{
-			Timestamp: result.Timestamp,
-			Height:    result.Height,
+			Height: result.Height,
 		}
 		a.latestWitnessReady.Broadcast()
 	}()

@@ -135,7 +135,7 @@ func (s *NonBlockingTestSuite) TestNonBlocking() {
 	for _, hash := range hashes {
 		nbModule.BlockConfirmed(types.Block{
 			Hash:    hash,
-			Witness: types.Witness{Timestamp: time.Now().UTC()},
+			Witness: types.Witness{},
 		})
 		nbModule.StronglyAcked(hash)
 		nbModule.BlockDelivered(hash, types.FinalizationResult{})

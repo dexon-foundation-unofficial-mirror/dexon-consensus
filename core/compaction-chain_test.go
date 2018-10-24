@@ -166,6 +166,8 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 		if i > 1 {
 			s.Equal(delivered[i-1].Finalization.Height+1,
 				delivered[i].Finalization.Height)
+			s.Equal(delivered[i-1].Hash,
+				delivered[i].Finalization.ParentHash)
 		}
 		s.Equal(block.Hash, blocks[i].Hash)
 	}
@@ -243,6 +245,9 @@ func (s *CompactionChainTestSuite) TestSyncFinalizedBlock() {
 			},
 		}
 		now = now.Add(100 * time.Millisecond)
+		if idx > 0 {
+			blocks[idx].Finalization.ParentHash = blocks[idx-1].Hash
+		}
 	}
 	cc.processFinalizedBlock(blocks[1])
 	cc.processFinalizedBlock(blocks[3])
@@ -330,6 +335,9 @@ func (s *CompactionChainTestSuite) TestSync() {
 			},
 		}
 		now = now.Add(100 * time.Millisecond)
+		if idx > 0 {
+			blocks[idx].Finalization.ParentHash = blocks[idx-1].Hash
+		}
 		if idx > 10 {
 			blocks[idx].Finalization.Height = 0
 		}
@@ -353,6 +361,7 @@ func (s *CompactionChainTestSuite) TestSync() {
 	confirmed := cc.extractBlocks()
 	s.Require().Len(confirmed, 1)
 	s.Equal(confirmed[0].Hash, blocks[12].Hash)
+	s.Equal(blocks[11].Hash, blocks[12].Finalization.ParentHash)
 	s.Equal(uint64(13), blocks[12].Finalization.Height)
 	for i := 13; i < 20; i++ {
 		s.Require().NoError(cc.processBlock(blocks[i]))
@@ -362,6 +371,7 @@ func (s *CompactionChainTestSuite) TestSync() {
 	offset := 13
 	for i, b := range confirmed {
 		s.Equal(blocks[offset+i].Hash, b.Hash)
+		s.Equal(blocks[offset+i-1].Hash, b.Finalization.ParentHash)
 		s.Equal(uint64(offset+i+1), b.Finalization.Height)
 	}
 }
@@ -388,6 +398,9 @@ func (s *CompactionChainTestSuite) TestBootstrapSync() {
 			},
 		}
 		now = now.Add(100 * time.Millisecond)
+		if idx > 0 {
+			blocks[idx].Finalization.ParentHash = blocks[idx-1].Hash
+		}
 		if idx > 2 {
 			blocks[idx].Finalization.Height = 0
 		}
@@ -411,6 +424,7 @@ func (s *CompactionChainTestSuite) TestBootstrapSync() {
 	confirmed = cc.extractBlocks()
 	s.Require().Len(confirmed, 1)
 	s.Equal(confirmed[0].Hash, blocks[3].Hash)
+	s.Equal(blocks[2].Hash, blocks[3].Finalization.ParentHash)
 	s.Equal(uint64(4), blocks[3].Finalization.Height)
 }
 

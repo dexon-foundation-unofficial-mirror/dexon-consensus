@@ -55,9 +55,8 @@ func (s *BlockTestSuite) createRandomBlock() *Block {
 		}),
 		Timestamp: time.Now().UTC(),
 		Witness: Witness{
-			Height:    rand.Uint64(),
-			Timestamp: time.Now().UTC(),
-			Data:      s.randomBytes(),
+			Height: rand.Uint64(),
+			Data:   s.randomBytes(),
 		},
 		Finalization: FinalizationResult{
 			Timestamp:  time.Now().UTC(),
