@@ -104,11 +104,10 @@ func (s *Lattice) PrepareEmptyBlock(b *types.Block) (err error) {
 }
 
 // SanityCheck check if a block is valid.
-// If checkRelation is true, it also checks with current lattice status.
 //
 // If some acking blocks don't exists, Lattice would help to cache this block
 // and retry when lattice updated in Lattice.ProcessBlock.
-func (s *Lattice) SanityCheck(b *types.Block, checkRelation bool) (err error) {
+func (s *Lattice) SanityCheck(b *types.Block) (err error) {
 	if b.IsEmpty() {
 		// Only need to verify block's hash.
 		var hash common.Hash
@@ -134,26 +133,28 @@ func (s *Lattice) SanityCheck(b *types.Block, checkRelation bool) (err error) {
 			return
 		}
 	}
+	if err = func() (err error) {
+		s.lock.RLock()
+		defer s.lock.RUnlock()
+		if err = s.data.sanityCheck(b); err != nil {
+			// Add to block pool, once the lattice updated,
+			// would be checked again.
+			if err == ErrAckingBlockNotExists {
+				s.pool.addBlock(b)
+			}
+			s.logger.Error("Sanity Check failed", "error", err)
+			return
+		}
+		return
+	}(); err != nil {
+		return
+	}
 	// Verify data in application layer.
 	s.logger.Debug("Calling Application.VerifyBlock", "block", b)
 	// TODO(jimmy-dexon): handle types.VerifyRetryLater.
 	if s.app.VerifyBlock(b) == types.VerifyInvalidBlock {
 		err = ErrInvalidBlock
 		return err
-	}
-	if !checkRelation {
-		return
-	}
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	if err = s.data.sanityCheck(b); err != nil {
-		// Add to block pool, once the lattice updated,
-		// would be checked again.
-		if err == ErrAckingBlockNotExists {
-			s.pool.addBlock(b)
-		}
-		s.logger.Error("Sanity Check failed", "error", err)
-		return
 	}
 	return
 }

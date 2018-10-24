@@ -818,7 +818,7 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 
 // preProcessBlock performs Byzantine Agreement on the block.
 func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
-	if err = con.lattice.SanityCheck(b, true); err != nil {
+	if err = con.lattice.SanityCheck(b); err != nil {
 		return
 	}
 	if err = con.baModules[b.Position.ChainID].processBlock(b); err != nil {
@@ -863,7 +863,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 
 // processFinalizedBlock is the entry point for syncing blocks.
 func (con *Consensus) processFinalizedBlock(block *types.Block) (err error) {
-	if err = con.lattice.SanityCheck(block, false); err != nil {
+	if err = con.lattice.SanityCheck(block); err != nil {
 		return
 	}
 	con.ccModule.processFinalizedBlock(block)

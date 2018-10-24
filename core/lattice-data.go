@@ -268,11 +268,6 @@ func (data *latticeData) addBlock(
 		bAck    *types.Block
 		updated bool
 	)
-	// TODO(mission): sanity check twice, might hurt performance.
-	// If a block does not pass sanity check, report error.
-	if err = data.sanityCheck(block); err != nil {
-		return
-	}
 	if err = data.chains[block.Position.ChainID].addBlock(block); err != nil {
 		return
 	}
