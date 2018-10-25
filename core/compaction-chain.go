@@ -148,6 +148,11 @@ func (cc *compactionChain) processFinalizedBlock(block *types.Block) {
 		return
 	}
 
+	// Block of round 0 should not have randomness.
+	if block.Position.Round == 0 && len(block.Finalization.Randomness) != 0 {
+		return
+	}
+
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
 	heap.Push(cc.pendingFinalizedBlocks, block)
@@ -191,18 +196,21 @@ func (cc *compactionChain) extractFinalizedBlocks() []*types.Block {
 			continue
 		}
 		round := b.Position.Round
-		v, ok, err := cc.tsigVerifier.UpdateAndGet(round)
-		if err != nil {
-			continue
-		}
-		if !ok {
-			toPending = append(toPending, b)
-			continue
-		}
-		if ok := v.VerifySignature(b.Hash, crypto.Signature{
-			Type:      "bls",
-			Signature: b.Finalization.Randomness}); !ok {
-			continue
+		if round != 0 {
+			// Randomness is not available at round 0.
+			v, ok, err := cc.tsigVerifier.UpdateAndGet(round)
+			if err != nil {
+				continue
+			}
+			if !ok {
+				toPending = append(toPending, b)
+				continue
+			}
+			if ok := v.VerifySignature(b.Hash, crypto.Signature{
+				Type:      "bls",
+				Signature: b.Finalization.Randomness}); !ok {
+				continue
+			}
 		}
 		// Fork resolution: choose block with smaller hash.
 		if prevBlock.Finalization.Height == b.Finalization.Height {

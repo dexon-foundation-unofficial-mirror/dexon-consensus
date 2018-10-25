@@ -262,6 +262,9 @@ func (s *CompactionChainTestSuite) TestSyncFinalizedBlock() {
 	hash := common.NewRandomHash()
 	cc.processFinalizedBlock(&types.Block{
 		Hash: hash,
+		Position: types.Position{
+			Round: uint64(1),
+		},
 		Finalization: types.FinalizationResult{
 			Height: uint64(3),
 		},
@@ -292,6 +295,9 @@ func (s *CompactionChainTestSuite) TestSyncFinalizedBlock() {
 	cc.processFinalizedBlock(blocks[5])
 	cc.processFinalizedBlock(&types.Block{
 		Hash: hash,
+		Position: types.Position{
+			Round: uint64(1),
+		},
 		Finalization: types.FinalizationResult{
 			Height: uint64(5),
 		},
