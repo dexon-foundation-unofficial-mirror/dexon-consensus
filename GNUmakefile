@@ -93,7 +93,7 @@ test-short:
 
 test:
 	@for pkg in `go list ./... | grep -v 'vendor'`; do \
-		if ! go test -race $$pkg; then \
+		if ! go test -timeout 15m -race $$pkg; then \
 			echo 'Some test failed, abort'; \
 			exit 1; \
 		fi; \

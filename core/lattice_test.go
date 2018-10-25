@@ -216,18 +216,24 @@ func (s *LatticeTestSuite) TestSync() {
 	// and process it. Those generated blocks and kept into a buffer, and
 	// process by other Lattice instances with random order.
 	var (
+		chainNum        = uint32(19)
+		otherLatticeNum = 50
+	)
+	if testing.Short() {
+		chainNum = 13
+		otherLatticeNum = 20
+	}
+	var (
 		blockNum = 500
 		// The first `desyncNum` blocks revealed are considered "desynced" and will
 		// not be delivered to lattice. After `syncNum` blocks have revealed, the
 		// system is considered "synced" and start feeding blocks that are desynced
 		// to processFinalizedBlock.
-		desyncNum       = 50
-		syncNum         = 150
-		chainNum        = uint32(19)
-		otherLatticeNum = 50
-		req             = s.Require()
-		err             error
-		cfg             = types.Config{
+		desyncNum = 50
+		syncNum   = 150
+		req       = s.Require()
+		err       error
+		cfg       = types.Config{
 			NumChains:        chainNum,
 			NotarySetSize:    chainNum,
 			PhiRatio:         float32(2) / float32(3),
