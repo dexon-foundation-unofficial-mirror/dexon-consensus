@@ -29,6 +29,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
 
@@ -183,7 +184,7 @@ func (n *network) broadcast(message interface{}) {
 
 // SendDKGPrivateShare implements core.Network interface.
 func (n *network) SendDKGPrivateShare(
-	recv crypto.PublicKey, prvShare *types.DKGPrivateShare) {
+	recv crypto.PublicKey, prvShare *typesDKG.PrivateShare) {
 	if err := n.trans.Send(types.NewNodeID(recv), prvShare); err != nil {
 		panic(err)
 	}
@@ -191,7 +192,7 @@ func (n *network) SendDKGPrivateShare(
 
 // BroadcastDKGPrivateShare implements core.Network interface.
 func (n *network) BroadcastDKGPrivateShare(
-	prvShare *types.DKGPrivateShare) {
+	prvShare *typesDKG.PrivateShare) {
 	if err := n.trans.Broadcast(prvShare); err != nil {
 		panic(err)
 	}
@@ -199,7 +200,7 @@ func (n *network) BroadcastDKGPrivateShare(
 
 // BroadcastDKGPartialSignature implements core.Network interface.
 func (n *network) BroadcastDKGPartialSignature(
-	psig *types.DKGPartialSignature) {
+	psig *typesDKG.PartialSignature) {
 	if err := n.trans.Broadcast(psig); err != nil {
 		panic(err)
 	}
@@ -242,7 +243,7 @@ func (n *network) run() {
 		switch e.Msg.(type) {
 		case *types.Block, *types.Vote,
 			*types.AgreementResult, *types.BlockRandomnessResult,
-			*types.DKGPrivateShare, *types.DKGPartialSignature:
+			*typesDKG.PrivateShare, *typesDKG.PartialSignature:
 			n.toConsensus <- e.Msg
 		default:
 			n.toNode <- e.Msg

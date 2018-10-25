@@ -31,6 +31,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 )
 
 type ConfigurationChainTestSuite struct {
@@ -57,7 +58,7 @@ func newTestCCReceiver(
 	}
 }
 
-func (r *testCCReceiver) ProposeDKGComplaint(complaint *types.DKGComplaint) {
+func (r *testCCReceiver) ProposeDKGComplaint(complaint *typesDKG.Complaint) {
 	prvKey, exist := r.s.prvKeys[complaint.ProposerID]
 	r.s.Require().True(exist)
 	var err error
@@ -67,14 +68,14 @@ func (r *testCCReceiver) ProposeDKGComplaint(complaint *types.DKGComplaint) {
 		// Use Marshal/Unmarshal to do deep copy.
 		data, err := json.Marshal(complaint)
 		r.s.Require().NoError(err)
-		complaintCopy := &types.DKGComplaint{}
+		complaintCopy := &typesDKG.Complaint{}
 		r.s.Require().NoError(json.Unmarshal(data, complaintCopy))
 		gov.AddDKGComplaint(complaintCopy.Round, complaintCopy)
 	}
 }
 
 func (r *testCCReceiver) ProposeDKGMasterPublicKey(
-	mpk *types.DKGMasterPublicKey) {
+	mpk *typesDKG.MasterPublicKey) {
 	prvKey, exist := r.s.prvKeys[mpk.ProposerID]
 	r.s.Require().True(exist)
 	var err error
@@ -84,14 +85,14 @@ func (r *testCCReceiver) ProposeDKGMasterPublicKey(
 		// Use Marshal/Unmarshal to do deep copy.
 		data, err := json.Marshal(mpk)
 		r.s.Require().NoError(err)
-		mpkCopy := types.NewDKGMasterPublicKey()
+		mpkCopy := typesDKG.NewMasterPublicKey()
 		r.s.Require().NoError(json.Unmarshal(data, mpkCopy))
 		gov.AddDKGMasterPublicKey(mpkCopy.Round, mpkCopy)
 	}
 }
 
 func (r *testCCReceiver) ProposeDKGPrivateShare(
-	prv *types.DKGPrivateShare) {
+	prv *typesDKG.PrivateShare) {
 	go func() {
 		prvKey, exist := r.s.prvKeys[prv.ProposerID]
 		r.s.Require().True(exist)
@@ -106,7 +107,7 @@ func (r *testCCReceiver) ProposeDKGPrivateShare(
 }
 
 func (r *testCCReceiver) ProposeDKGAntiNackComplaint(
-	prv *types.DKGPrivateShare) {
+	prv *typesDKG.PrivateShare) {
 	go func() {
 		prvKey, exist := r.s.prvKeys[prv.ProposerID]
 		r.s.Require().True(exist)
@@ -117,7 +118,7 @@ func (r *testCCReceiver) ProposeDKGAntiNackComplaint(
 			// Use Marshal/Unmarshal to do deep copy.
 			data, err := json.Marshal(prv)
 			r.s.Require().NoError(err)
-			prvCopy := &types.DKGPrivateShare{}
+			prvCopy := &typesDKG.PrivateShare{}
 			r.s.Require().NoError(json.Unmarshal(data, prvCopy))
 			err = cc.processPrivateShare(prvCopy)
 			r.s.Require().NoError(err)
@@ -125,7 +126,7 @@ func (r *testCCReceiver) ProposeDKGAntiNackComplaint(
 	}()
 }
 
-func (r *testCCReceiver) ProposeDKGFinalize(final *types.DKGFinalize) {
+func (r *testCCReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
 	prvKey, exist := r.s.prvKeys[final.ProposerID]
 	r.s.Require().True(exist)
 	var err error
@@ -135,7 +136,7 @@ func (r *testCCReceiver) ProposeDKGFinalize(final *types.DKGFinalize) {
 		// Use Marshal/Unmarshal to do deep copy.
 		data, err := json.Marshal(final)
 		r.s.Require().NoError(err)
-		finalCopy := &types.DKGFinalize{}
+		finalCopy := &typesDKG.Finalize{}
 		r.s.Require().NoError(json.Unmarshal(data, finalCopy))
 		gov.AddDKGFinalize(finalCopy.Round, finalCopy)
 	}
@@ -202,8 +203,8 @@ func (s *ConfigurationChainTestSuite) preparePartialSignature(
 	hash common.Hash,
 	round uint64,
 	cfgChains map[types.NodeID]*configurationChain) (
-	psigs []*types.DKGPartialSignature) {
-	psigs = make([]*types.DKGPartialSignature, 0, len(cfgChains))
+	psigs []*typesDKG.PartialSignature) {
+	psigs = make([]*typesDKG.PartialSignature, 0, len(cfgChains))
 	for nID, cc := range cfgChains {
 		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
 			continue

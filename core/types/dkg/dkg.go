@@ -15,7 +15,7 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package types
+package dkg
 
 import (
 	"bytes"
@@ -27,20 +27,21 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/dkg"
+	cryptoDKG "github.com/dexon-foundation/dexon-consensus-core/core/crypto/dkg"
+	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
 
-// DKGPrivateShare describe a secret share in DKG protocol.
-type DKGPrivateShare struct {
-	ProposerID   NodeID           `json:"proposer_id"`
-	ReceiverID   NodeID           `json:"receiver_id"`
-	Round        uint64           `json:"round"`
-	PrivateShare dkg.PrivateKey   `json:"private_share"`
-	Signature    crypto.Signature `json:"signature"`
+// PrivateShare describe a secret share in DKG protocol.
+type PrivateShare struct {
+	ProposerID   types.NodeID         `json:"proposer_id"`
+	ReceiverID   types.NodeID         `json:"receiver_id"`
+	Round        uint64               `json:"round"`
+	PrivateShare cryptoDKG.PrivateKey `json:"private_share"`
+	Signature    crypto.Signature     `json:"signature"`
 }
 
-// Equal checks equality between two DKGPrivateShare instances.
-func (p *DKGPrivateShare) Equal(other *DKGPrivateShare) bool {
+// Equal checks equality between two PrivateShare instances.
+func (p *PrivateShare) Equal(other *PrivateShare) bool {
 	return p.ProposerID.Equal(other.ProposerID) &&
 		p.ReceiverID.Equal(other.ReceiverID) &&
 		p.Round == other.Round &&
@@ -50,23 +51,23 @@ func (p *DKGPrivateShare) Equal(other *DKGPrivateShare) bool {
 			p.PrivateShare.Bytes(), other.PrivateShare.Bytes()) == 0
 }
 
-// DKGMasterPublicKey decrtibe a master public key in DKG protocol.
-type DKGMasterPublicKey struct {
-	ProposerID      NodeID              `json:"proposer_id"`
-	Round           uint64              `json:"round"`
-	DKGID           dkg.ID              `json:"dkg_id"`
-	PublicKeyShares dkg.PublicKeyShares `json:"public_key_shares"`
-	Signature       crypto.Signature    `json:"signature"`
+// MasterPublicKey decrtibe a master public key in DKG protocol.
+type MasterPublicKey struct {
+	ProposerID      types.NodeID              `json:"proposer_id"`
+	Round           uint64                    `json:"round"`
+	DKGID           cryptoDKG.ID              `json:"dkg_id"`
+	PublicKeyShares cryptoDKG.PublicKeyShares `json:"public_key_shares"`
+	Signature       crypto.Signature          `json:"signature"`
 }
 
-func (d *DKGMasterPublicKey) String() string {
+func (d *MasterPublicKey) String() string {
 	return fmt.Sprintf("MasterPublicKey[%s:%d]",
 		d.ProposerID.String()[:6],
 		d.Round)
 }
 
 // Equal check equality of two DKG master public keys.
-func (d *DKGMasterPublicKey) Equal(other *DKGMasterPublicKey) bool {
+func (d *MasterPublicKey) Equal(other *MasterPublicKey) bool {
 	return d.ProposerID.Equal(other.ProposerID) &&
 		d.Round == other.Round &&
 		d.DKGID.GetHexString() == other.DKGID.GetHexString() &&
@@ -75,17 +76,17 @@ func (d *DKGMasterPublicKey) Equal(other *DKGMasterPublicKey) bool {
 		bytes.Compare(d.Signature.Signature, other.Signature.Signature) == 0
 }
 
-type rlpDKGMasterPublicKey struct {
-	ProposerID      NodeID
+type rlpMasterPublicKey struct {
+	ProposerID      types.NodeID
 	Round           uint64
 	DKGID           []byte
-	PublicKeyShares *dkg.PublicKeyShares
+	PublicKeyShares *cryptoDKG.PublicKeyShares
 	Signature       crypto.Signature
 }
 
 // EncodeRLP implements rlp.Encoder
-func (d *DKGMasterPublicKey) EncodeRLP(w io.Writer) error {
-	return rlp.Encode(w, rlpDKGMasterPublicKey{
+func (d *MasterPublicKey) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, rlpMasterPublicKey{
 		ProposerID:      d.ProposerID,
 		Round:           d.Round,
 		DKGID:           d.DKGID.GetLittleEndian(),
@@ -95,18 +96,18 @@ func (d *DKGMasterPublicKey) EncodeRLP(w io.Writer) error {
 }
 
 // DecodeRLP implements rlp.Decoder
-func (d *DKGMasterPublicKey) DecodeRLP(s *rlp.Stream) error {
-	var dec rlpDKGMasterPublicKey
+func (d *MasterPublicKey) DecodeRLP(s *rlp.Stream) error {
+	var dec rlpMasterPublicKey
 	if err := s.Decode(&dec); err != nil {
 		return err
 	}
 
-	id, err := dkg.BytesID(dec.DKGID)
+	id, err := cryptoDKG.BytesID(dec.DKGID)
 	if err != nil {
 		return err
 	}
 
-	*d = DKGMasterPublicKey{
+	*d = MasterPublicKey{
 		ProposerID:      dec.ProposerID,
 		Round:           dec.Round,
 		DKGID:           id,
@@ -116,40 +117,40 @@ func (d *DKGMasterPublicKey) DecodeRLP(s *rlp.Stream) error {
 	return err
 }
 
-// NewDKGMasterPublicKey returns a new DKGMasterPublicKey instance.
-func NewDKGMasterPublicKey() *DKGMasterPublicKey {
-	return &DKGMasterPublicKey{
-		PublicKeyShares: *dkg.NewEmptyPublicKeyShares(),
+// NewMasterPublicKey returns a new MasterPublicKey instance.
+func NewMasterPublicKey() *MasterPublicKey {
+	return &MasterPublicKey{
+		PublicKeyShares: *cryptoDKG.NewEmptyPublicKeyShares(),
 	}
 }
 
 // UnmarshalJSON implements json.Unmarshaller.
-func (d *DKGMasterPublicKey) UnmarshalJSON(data []byte) error {
-	type innertDKGMasterPublicKey DKGMasterPublicKey
-	d.PublicKeyShares = *dkg.NewEmptyPublicKeyShares()
-	return json.Unmarshal(data, (*innertDKGMasterPublicKey)(d))
+func (d *MasterPublicKey) UnmarshalJSON(data []byte) error {
+	type innertMasterPublicKey MasterPublicKey
+	d.PublicKeyShares = *cryptoDKG.NewEmptyPublicKeyShares()
+	return json.Unmarshal(data, (*innertMasterPublicKey)(d))
 }
 
-// DKGComplaint describe a complaint in DKG protocol.
-type DKGComplaint struct {
-	ProposerID   NodeID           `json:"proposer_id"`
+// Complaint describe a complaint in DKG protocol.
+type Complaint struct {
+	ProposerID   types.NodeID     `json:"proposer_id"`
 	Round        uint64           `json:"round"`
-	PrivateShare DKGPrivateShare  `json:"private_share"`
+	PrivateShare PrivateShare     `json:"private_share"`
 	Signature    crypto.Signature `json:"signature"`
 }
 
-func (c *DKGComplaint) String() string {
+func (c *Complaint) String() string {
 	if c.IsNack() {
 		return fmt.Sprintf("DKGNackComplaint[%s:%d]%s",
 			c.ProposerID.String()[:6], c.Round,
 			c.PrivateShare.ProposerID.String()[:6])
 	}
-	return fmt.Sprintf("DKGComplaint[%s:%d]%v",
+	return fmt.Sprintf("Complaint[%s:%d]%v",
 		c.ProposerID.String()[:6], c.Round, c.PrivateShare)
 }
 
-// Equal checks equality between two DKGComplaint instances.
-func (c *DKGComplaint) Equal(other *DKGComplaint) bool {
+// Equal checks equality between two Complaint instances.
+func (c *Complaint) Equal(other *Complaint) bool {
 	return c.ProposerID.Equal(other.ProposerID) &&
 		c.Round == other.Round &&
 		c.PrivateShare.Equal(&other.PrivateShare) &&
@@ -157,30 +158,30 @@ func (c *DKGComplaint) Equal(other *DKGComplaint) bool {
 		bytes.Compare(c.Signature.Signature, other.Signature.Signature) == 0
 }
 
-// DKGPartialSignature describe a partial signature in DKG protocol.
-type DKGPartialSignature struct {
-	ProposerID       NodeID               `json:"proposer_id"`
-	Round            uint64               `json:"round"`
-	Hash             common.Hash          `json:"hash"`
-	PartialSignature dkg.PartialSignature `json:"partial_signature"`
-	Signature        crypto.Signature     `json:"signature"`
+// PartialSignature describe a partial signature in DKG protocol.
+type PartialSignature struct {
+	ProposerID       types.NodeID               `json:"proposer_id"`
+	Round            uint64                     `json:"round"`
+	Hash             common.Hash                `json:"hash"`
+	PartialSignature cryptoDKG.PartialSignature `json:"partial_signature"`
+	Signature        crypto.Signature           `json:"signature"`
 }
 
-// DKGFinalize describe a dig finalize message in DKG protocol.
-type DKGFinalize struct {
-	ProposerID NodeID           `json:"proposer_id"`
+// Finalize describe a dig finalize message in DKG protocol.
+type Finalize struct {
+	ProposerID types.NodeID     `json:"proposer_id"`
 	Round      uint64           `json:"round"`
 	Signature  crypto.Signature `json:"signature"`
 }
 
-func (final *DKGFinalize) String() string {
+func (final *Finalize) String() string {
 	return fmt.Sprintf("DKGFinal[%s:%d]",
 		final.ProposerID.String()[:6],
 		final.Round)
 }
 
-// Equal check equality of two DKGFinalize instances.
-func (final *DKGFinalize) Equal(other *DKGFinalize) bool {
+// Equal check equality of two Finalize instances.
+func (final *Finalize) Equal(other *Finalize) bool {
 	return final.ProposerID.Equal(other.ProposerID) &&
 		final.Round == other.Round &&
 		final.Signature.Type == other.Signature.Type &&
@@ -188,6 +189,6 @@ func (final *DKGFinalize) Equal(other *DKGFinalize) bool {
 }
 
 // IsNack returns true if it's a nack complaint in DKG protocol.
-func (c *DKGComplaint) IsNack() bool {
+func (c *Complaint) IsNack() bool {
 	return len(c.PrivateShare.Signature.Signature) == 0
 }

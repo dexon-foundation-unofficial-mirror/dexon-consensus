@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 )
 
 // jsonMarshaller implements test.Marshaller to marshal simulation related
@@ -76,31 +77,31 @@ func (m *jsonMarshaller) Unmarshal(
 		}
 		msg = result
 	case "dkg-private-share":
-		privateShare := &types.DKGPrivateShare{}
+		privateShare := &typesDKG.PrivateShare{}
 		if err = json.Unmarshal(payload, privateShare); err != nil {
 			break
 		}
 		msg = privateShare
 	case "dkg-master-public-key":
-		masterPublicKey := types.NewDKGMasterPublicKey()
+		masterPublicKey := typesDKG.NewMasterPublicKey()
 		if err = json.Unmarshal(payload, masterPublicKey); err != nil {
 			break
 		}
 		msg = masterPublicKey
 	case "dkg-complaint":
-		complaint := &types.DKGComplaint{}
+		complaint := &typesDKG.Complaint{}
 		if err = json.Unmarshal(payload, complaint); err != nil {
 			break
 		}
 		msg = complaint
 	case "dkg-partial-signature":
-		psig := &types.DKGPartialSignature{}
+		psig := &typesDKG.PartialSignature{}
 		if err = json.Unmarshal(payload, psig); err != nil {
 			break
 		}
 		msg = psig
 	case "dkg-finalize":
-		final := &types.DKGFinalize{}
+		final := &typesDKG.Finalize{}
 		if err = json.Unmarshal(payload, final); err != nil {
 			break
 		}
@@ -133,15 +134,15 @@ func (m *jsonMarshaller) Marshal(msg interface{}) (
 		msgType = "block-randomness-request"
 	case *types.BlockRandomnessResult:
 		msgType = "block-randomness-result"
-	case *types.DKGPrivateShare:
+	case *typesDKG.PrivateShare:
 		msgType = "dkg-private-share"
-	case *types.DKGMasterPublicKey:
+	case *typesDKG.MasterPublicKey:
 		msgType = "dkg-master-public-key"
-	case *types.DKGComplaint:
+	case *typesDKG.Complaint:
 		msgType = "dkg-complaint"
-	case *types.DKGPartialSignature:
+	case *typesDKG.PartialSignature:
 		msgType = "dkg-partial-signature"
-	case *types.DKGFinalize:
+	case *typesDKG.Finalize:
 		msgType = "dkg-finalize"
 	default:
 		err = fmt.Errorf("unknwon message type: %v", msg)

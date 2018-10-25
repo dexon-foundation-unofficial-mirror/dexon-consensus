@@ -27,6 +27,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 	"github.com/dexon-foundation/dexon/rlp"
 )
 
@@ -102,9 +103,9 @@ type State struct {
 	// Nodes
 	nodes map[types.NodeID]crypto.PublicKey
 	// DKG & CRS
-	dkgComplaints       map[uint64]map[types.NodeID][]*types.DKGComplaint
-	dkgMasterPublicKeys map[uint64]map[types.NodeID]*types.DKGMasterPublicKey
-	dkgFinals           map[uint64]map[types.NodeID]*types.DKGFinalize
+	dkgComplaints       map[uint64]map[types.NodeID][]*typesDKG.Complaint
+	dkgMasterPublicKeys map[uint64]map[types.NodeID]*typesDKG.MasterPublicKey
+	dkgFinals           map[uint64]map[types.NodeID]*typesDKG.Finalize
 	crs                 []common.Hash
 	// Other stuffs
 	local bool
@@ -114,9 +115,9 @@ type State struct {
 	// applied.
 	pendingChangedConfigs      map[StateChangeType]interface{}
 	pendingNodes               [][]byte
-	pendingDKGComplaints       []*types.DKGComplaint
-	pendingDKGFinals           []*types.DKGFinalize
-	pendingDKGMasterPublicKeys []*types.DKGMasterPublicKey
+	pendingDKGComplaints       []*typesDKG.Complaint
+	pendingDKGFinals           []*typesDKG.Finalize
+	pendingDKGMasterPublicKeys []*typesDKG.MasterPublicKey
 	pendingCRS                 []*crsAdditionRequest
 	pendingChangesLock         sync.Mutex
 }
@@ -147,11 +148,11 @@ func NewState(
 		dkgSetSize:            uint32(len(nodes)),
 		pendingChangedConfigs: make(map[StateChangeType]interface{}),
 		dkgFinals: make(
-			map[uint64]map[types.NodeID]*types.DKGFinalize),
+			map[uint64]map[types.NodeID]*typesDKG.Finalize),
 		dkgComplaints: make(
-			map[uint64]map[types.NodeID][]*types.DKGComplaint),
+			map[uint64]map[types.NodeID][]*typesDKG.Complaint),
 		dkgMasterPublicKeys: make(
-			map[uint64]map[types.NodeID]*types.DKGMasterPublicKey),
+			map[uint64]map[types.NodeID]*typesDKG.MasterPublicKey),
 	}
 }
 
@@ -185,13 +186,13 @@ func (s *State) unpackPayload(
 		v = &crsAdditionRequest{}
 		err = rlp.DecodeBytes(raw.Payload, v)
 	case StateAddDKGComplaint:
-		v = &types.DKGComplaint{}
+		v = &typesDKG.Complaint{}
 		err = rlp.DecodeBytes(raw.Payload, v)
 	case StateAddDKGMasterPublicKey:
-		v = &types.DKGMasterPublicKey{}
+		v = &typesDKG.MasterPublicKey{}
 		err = rlp.DecodeBytes(raw.Payload, v)
 	case StateAddDKGFinal:
-		v = &types.DKGFinalize{}
+		v = &typesDKG.Finalize{}
 		err = rlp.DecodeBytes(raw.Payload, v)
 	case StateChangeNumChains:
 		var tmp uint32
@@ -335,7 +336,7 @@ func (s *State) isValidRequest(req *StateChangeRequest) (err error) {
 	//       responsible for acquiring appropriate lock.
 	switch req.Type {
 	case StateAddDKGComplaint:
-		comp := req.Payload.(*types.DKGComplaint)
+		comp := req.Payload.(*typesDKG.Complaint)
 		// If we've received DKG final from that proposer, we would ignore
 		// its complaint.
 		if _, exists := s.dkgFinals[comp.Round][comp.ProposerID]; exists {
@@ -389,24 +390,24 @@ func (s *State) applyRequest(req *StateChangeRequest) error {
 		}
 		s.crs = append(s.crs, crsRequest.CRS)
 	case StateAddDKGComplaint:
-		comp := req.Payload.(*types.DKGComplaint)
+		comp := req.Payload.(*typesDKG.Complaint)
 		if _, exists := s.dkgComplaints[comp.Round]; !exists {
 			s.dkgComplaints[comp.Round] = make(
-				map[types.NodeID][]*types.DKGComplaint)
+				map[types.NodeID][]*typesDKG.Complaint)
 		}
 		s.dkgComplaints[comp.Round][comp.ProposerID] = append(
 			s.dkgComplaints[comp.Round][comp.ProposerID], comp)
 	case StateAddDKGMasterPublicKey:
-		mKey := req.Payload.(*types.DKGMasterPublicKey)
+		mKey := req.Payload.(*typesDKG.MasterPublicKey)
 		if _, exists := s.dkgMasterPublicKeys[mKey.Round]; !exists {
 			s.dkgMasterPublicKeys[mKey.Round] = make(
-				map[types.NodeID]*types.DKGMasterPublicKey)
+				map[types.NodeID]*typesDKG.MasterPublicKey)
 		}
 		s.dkgMasterPublicKeys[mKey.Round][mKey.ProposerID] = mKey
 	case StateAddDKGFinal:
-		final := req.Payload.(*types.DKGFinalize)
+		final := req.Payload.(*typesDKG.Finalize)
 		if _, exists := s.dkgFinals[final.Round]; !exists {
-			s.dkgFinals[final.Round] = make(map[types.NodeID]*types.DKGFinalize)
+			s.dkgFinals[final.Round] = make(map[types.NodeID]*typesDKG.Finalize)
 		}
 		s.dkgFinals[final.Round][final.ProposerID] = final
 	case StateChangeNumChains:
@@ -491,13 +492,13 @@ func (s *State) RequestChange(
 		s.pendingCRS = append(s.pendingCRS, payload.(*crsAdditionRequest))
 	case StateAddDKGComplaint:
 		s.pendingDKGComplaints = append(
-			s.pendingDKGComplaints, payload.(*types.DKGComplaint))
+			s.pendingDKGComplaints, payload.(*typesDKG.Complaint))
 	case StateAddDKGMasterPublicKey:
 		s.pendingDKGMasterPublicKeys = append(
-			s.pendingDKGMasterPublicKeys, payload.(*types.DKGMasterPublicKey))
+			s.pendingDKGMasterPublicKeys, payload.(*typesDKG.MasterPublicKey))
 	case StateAddDKGFinal:
 		s.pendingDKGFinals = append(
-			s.pendingDKGFinals, payload.(*types.DKGFinalize))
+			s.pendingDKGFinals, payload.(*typesDKG.Finalize))
 	default:
 		s.pendingChangedConfigs[t] = payload
 	}
@@ -516,21 +517,21 @@ func (s *State) CRS(round uint64) common.Hash {
 
 // DKGComplaints access current received dkg complaints for that round.
 // This information won't be snapshot, thus can't be cached in test.Governance.
-func (s *State) DKGComplaints(round uint64) []*types.DKGComplaint {
+func (s *State) DKGComplaints(round uint64) []*typesDKG.Complaint {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	comps, exists := s.dkgComplaints[round]
 	if !exists {
 		return nil
 	}
-	tmpComps := make([]*types.DKGComplaint, 0, len(comps))
+	tmpComps := make([]*typesDKG.Complaint, 0, len(comps))
 	for _, compProp := range comps {
 		for _, comp := range compProp {
 			bytes, err := rlp.EncodeToBytes(comp)
 			if err != nil {
 				panic(err)
 			}
-			compCopy := &types.DKGComplaint{}
+			compCopy := &typesDKG.Complaint{}
 			if err = rlp.DecodeBytes(bytes, compCopy); err != nil {
 				panic(err)
 			}
@@ -543,21 +544,21 @@ func (s *State) DKGComplaints(round uint64) []*types.DKGComplaint {
 // DKGMasterPublicKeys access current received dkg master public keys for that
 // round. This information won't be snapshot, thus can't be cached in
 // test.Governance.
-func (s *State) DKGMasterPublicKeys(round uint64) []*types.DKGMasterPublicKey {
+func (s *State) DKGMasterPublicKeys(round uint64) []*typesDKG.MasterPublicKey {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	masterPublicKeys, exists := s.dkgMasterPublicKeys[round]
 	if !exists {
 		return nil
 	}
-	mpks := make([]*types.DKGMasterPublicKey, 0, len(masterPublicKeys))
+	mpks := make([]*typesDKG.MasterPublicKey, 0, len(masterPublicKeys))
 	for _, mpk := range masterPublicKeys {
 		// Return a deep copied master public keys.
 		b, err := rlp.EncodeToBytes(mpk)
 		if err != nil {
 			panic(err)
 		}
-		mpkCopy := types.NewDKGMasterPublicKey()
+		mpkCopy := typesDKG.NewMasterPublicKey()
 		if err = rlp.DecodeBytes(b, mpkCopy); err != nil {
 			panic(err)
 		}

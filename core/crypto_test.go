@@ -26,6 +26,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/dkg"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -171,7 +172,7 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	prv, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
 	nID := types.NewNodeID(prv.PublicKey())
-	prvShare := &types.DKGPrivateShare{
+	prvShare := &typesDKG.PrivateShare{
 		ProposerID:   nID,
 		Round:        5,
 		PrivateShare: *dkg.NewPrivateKey(),
@@ -188,7 +189,7 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 
 	id := dkg.NewID([]byte{13})
 	_, pkShare := dkg.NewPrivateKeyShares(1)
-	mpk := &types.DKGMasterPublicKey{
+	mpk := &typesDKG.MasterPublicKey{
 		ProposerID:      nID,
 		Round:           5,
 		DKGID:           id,
@@ -207,7 +208,7 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	prvShare.Round = 5
 	prvShare.Signature, err = prv.Sign(hashDKGPrivateShare(prvShare))
 	s.Require().NoError(err)
-	complaint := &types.DKGComplaint{
+	complaint := &typesDKG.Complaint{
 		ProposerID:   nID,
 		Round:        5,
 		PrivateShare: *prvShare,
@@ -239,7 +240,7 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	s.Require().NoError(err)
 	s.False(ok)
 
-	sig := &types.DKGPartialSignature{
+	sig := &typesDKG.PartialSignature{
 		ProposerID:       nID,
 		Round:            5,
 		PartialSignature: dkg.PartialSignature{},
@@ -254,7 +255,7 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	s.Require().NoError(err)
 	s.False(ok)
 
-	final := &types.DKGFinalize{
+	final := &typesDKG.Finalize{
 		ProposerID: nID,
 		Round:      5,
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -60,20 +61,20 @@ func (n *network) BroadcastRandomnessResult(
 
 // SendDKGPrivateShare sends PrivateShare to a DKG participant.
 func (n *network) SendDKGPrivateShare(
-	recv crypto.PublicKey, prvShare *types.DKGPrivateShare) {
+	recv crypto.PublicKey, prvShare *typesDKG.PrivateShare) {
 	n.conn.send(types.NewNodeID(recv), prvShare)
 }
 
 // BroadcastDKGPrivateShare broadcasts PrivateShare to all DKG participants.
 func (n *network) BroadcastDKGPrivateShare(
-	prvShare *types.DKGPrivateShare) {
+	prvShare *typesDKG.PrivateShare) {
 	n.conn.broadcast(n.nID, prvShare)
 }
 
 // BroadcastDKGPartialSignature broadcasts partialSignature to all
 // DKG participants.
 func (n *network) BroadcastDKGPartialSignature(
-	psig *types.DKGPartialSignature) {
+	psig *typesDKG.PartialSignature) {
 	n.conn.broadcast(n.nID, psig)
 }
 
@@ -109,9 +110,9 @@ func (nc *networkConnection) send(to types.NodeID, msg interface{}) {
 			err = con.ProcessAgreementResult(val)
 		case *types.BlockRandomnessResult:
 			err = con.ProcessBlockRandomnessResult(val)
-		case *types.DKGPrivateShare:
+		case *typesDKG.PrivateShare:
 			err = con.cfgModule.processPrivateShare(val)
-		case *types.DKGPartialSignature:
+		case *typesDKG.PartialSignature:
 			err = con.cfgModule.processPartialSignature(val)
 		}
 		if err != nil {

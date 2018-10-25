@@ -15,7 +15,7 @@
 // along with the dexon-consensus-core library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package types
+package dkg
 
 import (
 	"math/rand"
@@ -26,7 +26,8 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/dkg"
+	cryptoDKG "github.com/dexon-foundation/dexon-consensus-core/core/crypto/dkg"
+	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/dexon-foundation/dexon/rlp"
 )
 
@@ -41,8 +42,8 @@ func (s *DKGTestSuite) genRandomBytes() []byte {
 	return randomness
 }
 
-func (s *DKGTestSuite) genID() dkg.ID {
-	dID, err := dkg.BytesID(s.genRandomBytes())
+func (s *DKGTestSuite) genID() cryptoDKG.ID {
+	dID, err := cryptoDKG.BytesID(s.genRandomBytes())
 	s.Require().NoError(err)
 	return dID
 }
@@ -56,8 +57,8 @@ func (s *DKGTestSuite) clone(src, dst interface{}) {
 func (s *DKGTestSuite) TestRLPEncodeDecode() {
 	dID := s.genID()
 	// Prepare master public key for testing.
-	d := DKGMasterPublicKey{
-		ProposerID: NodeID{common.Hash{1, 2, 3}},
+	d := MasterPublicKey{
+		ProposerID: types.NodeID{Hash: common.Hash{1, 2, 3}},
 		Round:      10,
 		DKGID:      dID,
 		Signature: crypto.Signature{
@@ -69,7 +70,7 @@ func (s *DKGTestSuite) TestRLPEncodeDecode() {
 	b, err := rlp.EncodeToBytes(&d)
 	s.Require().NoError(err)
 
-	var dd DKGMasterPublicKey
+	var dd MasterPublicKey
 	err = rlp.DecodeBytes(b, &dd)
 	s.Require().NoError(err)
 
@@ -82,24 +83,24 @@ func (s *DKGTestSuite) TestRLPEncodeDecode() {
 	s.Require().Equal(d.DKGID.GetHexString(), dd.DKGID.GetHexString())
 }
 
-func (s *DKGTestSuite) TestDKGMasterPublicKeyEquality() {
+func (s *DKGTestSuite) TestMasterPublicKeyEquality() {
 	var req = s.Require()
 	// Prepare source master public key.
-	master1 := &DKGMasterPublicKey{
-		ProposerID: NodeID{Hash: common.NewRandomHash()},
+	master1 := &MasterPublicKey{
+		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
 		Round:      1234,
 		DKGID:      s.genID(),
 		Signature: crypto.Signature{
 			Signature: s.genRandomBytes(),
 		},
 	}
-	prvKey := dkg.NewPrivateKey()
-	pubKey := prvKey.PublicKey().(dkg.PublicKey)
-	_, pubShares := dkg.NewPrivateKeyShares(2)
+	prvKey := cryptoDKG.NewPrivateKey()
+	pubKey := prvKey.PublicKey().(cryptoDKG.PublicKey)
+	_, pubShares := cryptoDKG.NewPrivateKeyShares(2)
 	req.NoError(pubShares.AddShare(s.genID(), &pubKey))
 	master1.PublicKeyShares = *pubShares
 	// Prepare another master public key by copying every field.
-	master2 := &DKGMasterPublicKey{}
+	master2 := &MasterPublicKey{}
 	s.clone(master1, master2)
 	// They should be equal.
 	req.True(master1.Equal(master2))
@@ -108,11 +109,11 @@ func (s *DKGTestSuite) TestDKGMasterPublicKeyEquality() {
 	req.False(master1.Equal(master2))
 	master2.Round = 1234
 	// Change proposerID.
-	master2.ProposerID = NodeID{Hash: common.NewRandomHash()}
+	master2.ProposerID = types.NodeID{Hash: common.NewRandomHash()}
 	req.False(master1.Equal(master2))
 	master2.ProposerID = master1.ProposerID
 	// Change DKGID.
-	master2.DKGID = dkg.NewID(s.genRandomBytes())
+	master2.DKGID = cryptoDKG.NewID(s.genRandomBytes())
 	req.False(master1.Equal(master2))
 	master2.DKGID = master1.DKGID
 	// Change signature.
@@ -122,31 +123,31 @@ func (s *DKGTestSuite) TestDKGMasterPublicKeyEquality() {
 	req.False(master1.Equal(master2))
 	master2.Signature = master1.Signature
 	// Change public key share.
-	master2.PublicKeyShares = *dkg.NewEmptyPublicKeyShares()
+	master2.PublicKeyShares = *cryptoDKG.NewEmptyPublicKeyShares()
 	req.False(master1.Equal(master2))
 }
 
-func (s *DKGTestSuite) TestDKGPrivateShareEquality() {
+func (s *DKGTestSuite) TestPrivateShareEquality() {
 	var req = s.Require()
-	share1 := &DKGPrivateShare{
-		ProposerID:   NodeID{Hash: common.NewRandomHash()},
-		ReceiverID:   NodeID{Hash: common.NewRandomHash()},
+	share1 := &PrivateShare{
+		ProposerID:   types.NodeID{Hash: common.NewRandomHash()},
+		ReceiverID:   types.NodeID{Hash: common.NewRandomHash()},
 		Round:        1,
-		PrivateShare: *dkg.NewPrivateKey(),
+		PrivateShare: *cryptoDKG.NewPrivateKey(),
 		Signature: crypto.Signature{
 			Signature: s.genRandomBytes(),
 		},
 	}
 	// Make a copy.
-	share2 := &DKGPrivateShare{}
+	share2 := &PrivateShare{}
 	s.clone(share1, share2)
 	req.True(share1.Equal(share2))
 	// Change proposer ID.
-	share2.ProposerID = NodeID{Hash: common.NewRandomHash()}
+	share2.ProposerID = types.NodeID{Hash: common.NewRandomHash()}
 	req.False(share1.Equal(share2))
 	share2.ProposerID = share1.ProposerID
 	// Change receiver ID.
-	share2.ReceiverID = NodeID{Hash: common.NewRandomHash()}
+	share2.ReceiverID = types.NodeID{Hash: common.NewRandomHash()}
 	req.False(share1.Equal(share2))
 	share2.ReceiverID = share1.ReceiverID
 	// Change round.
@@ -160,23 +161,23 @@ func (s *DKGTestSuite) TestDKGPrivateShareEquality() {
 	req.False(share1.Equal(share2))
 	share2.Signature = share1.Signature
 	// Change private share.
-	share2.PrivateShare = *dkg.NewPrivateKey()
+	share2.PrivateShare = *cryptoDKG.NewPrivateKey()
 	req.False(share1.Equal(share2))
 	share2.PrivateShare = share1.PrivateShare
 	// They should be equal after chaning fields back.
 	req.True(share1.Equal(share2))
 }
 
-func (s *DKGTestSuite) TestDKGComplaintEquality() {
+func (s *DKGTestSuite) TestComplaintEquality() {
 	var req = s.Require()
-	comp1 := &DKGComplaint{
-		ProposerID: NodeID{Hash: common.NewRandomHash()},
+	comp1 := &Complaint{
+		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
 		Round:      1,
-		PrivateShare: DKGPrivateShare{
-			ProposerID:   NodeID{Hash: common.NewRandomHash()},
-			ReceiverID:   NodeID{Hash: common.NewRandomHash()},
+		PrivateShare: PrivateShare{
+			ProposerID:   types.NodeID{Hash: common.NewRandomHash()},
+			ReceiverID:   types.NodeID{Hash: common.NewRandomHash()},
 			Round:        2,
-			PrivateShare: *dkg.NewPrivateKey(),
+			PrivateShare: *cryptoDKG.NewPrivateKey(),
 			Signature: crypto.Signature{
 				Signature: s.genRandomBytes(),
 			},
@@ -186,11 +187,11 @@ func (s *DKGTestSuite) TestDKGComplaintEquality() {
 		},
 	}
 	// Make a copy.
-	comp2 := &DKGComplaint{}
+	comp2 := &Complaint{}
 	s.clone(comp1, comp2)
 	req.True(comp1.Equal(comp2))
 	// Change proposer ID.
-	comp2.ProposerID = NodeID{Hash: common.NewRandomHash()}
+	comp2.ProposerID = types.NodeID{Hash: common.NewRandomHash()}
 	req.False(comp1.Equal(comp2))
 	comp2.ProposerID = comp1.ProposerID
 	// Change round.
@@ -211,21 +212,21 @@ func (s *DKGTestSuite) TestDKGComplaintEquality() {
 	req.True(comp1.Equal(comp2))
 }
 
-func (s *DKGTestSuite) TestDKGFinalizeEquality() {
+func (s *DKGTestSuite) TestFinalizeEquality() {
 	var req = s.Require()
-	final1 := &DKGFinalize{
-		ProposerID: NodeID{Hash: common.NewRandomHash()},
+	final1 := &Finalize{
+		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
 		Round:      1,
 		Signature: crypto.Signature{
 			Signature: s.genRandomBytes(),
 		},
 	}
 	// Make a copy
-	final2 := &DKGFinalize{}
+	final2 := &Finalize{}
 	s.clone(final1, final2)
 	req.True(final1.Equal(final2))
 	// Change proposer ID.
-	final2.ProposerID = NodeID{Hash: common.NewRandomHash()}
+	final2.ProposerID = types.NodeID{Hash: common.NewRandomHash()}
 	req.False(final1.Equal(final2))
 	final2.ProposerID = final1.ProposerID
 	// Change round.

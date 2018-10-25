@@ -25,6 +25,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 )
 
 // Errors for configuration chain..
@@ -51,7 +52,7 @@ type configurationChain struct {
 	tsigTouched map[common.Hash]struct{}
 	tsigReady   *sync.Cond
 	// TODO(jimmy-dexon): add timeout to pending psig.
-	pendingPsig map[common.Hash][]*types.DKGPartialSignature
+	pendingPsig map[common.Hash][]*typesDKG.PartialSignature
 	prevHash    common.Hash
 }
 
@@ -70,7 +71,7 @@ func newConfigurationChain(
 		tsig:        make(map[common.Hash]*tsigProtocol),
 		tsigTouched: make(map[common.Hash]struct{}),
 		tsigReady:   sync.NewCond(&sync.Mutex{}),
-		pendingPsig: make(map[common.Hash][]*types.DKGPartialSignature),
+		pendingPsig: make(map[common.Hash][]*typesDKG.PartialSignature),
 	}
 }
 
@@ -178,7 +179,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 }
 
 func (cc *configurationChain) preparePartialSignature(
-	round uint64, hash common.Hash) (*types.DKGPartialSignature, error) {
+	round uint64, hash common.Hash) (*typesDKG.PartialSignature, error) {
 	signer, exist := func() (*dkgShareSecret, bool) {
 		cc.dkgResult.RLock()
 		defer cc.dkgResult.RUnlock()
@@ -188,7 +189,7 @@ func (cc *configurationChain) preparePartialSignature(
 	if !exist {
 		return nil, ErrDKGNotReady
 	}
-	return &types.DKGPartialSignature{
+	return &typesDKG.PartialSignature{
 		ProposerID:       cc.ID,
 		Round:            round,
 		Hash:             hash,
@@ -273,7 +274,7 @@ func (cc *configurationChain) runCRSTSig(
 }
 
 func (cc *configurationChain) processPrivateShare(
-	prvShare *types.DKGPrivateShare) error {
+	prvShare *typesDKG.PrivateShare) error {
 	cc.dkgLock.Lock()
 	defer cc.dkgLock.Unlock()
 	if cc.dkg == nil {
@@ -283,7 +284,7 @@ func (cc *configurationChain) processPrivateShare(
 }
 
 func (cc *configurationChain) processPartialSignature(
-	psig *types.DKGPartialSignature) error {
+	psig *typesDKG.PartialSignature) error {
 	cc.tsigReady.L.Lock()
 	defer cc.tsigReady.L.Unlock()
 	if _, exist := cc.tsig[psig.Hash]; !exist {

@@ -27,6 +27,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/dkg"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -35,7 +36,7 @@ type StateTestSuite struct {
 }
 
 func (s *StateTestSuite) newDKGMasterPublicKey(
-	round uint64) *types.DKGMasterPublicKey {
+	round uint64) *typesDKG.MasterPublicKey {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
 	pubKey := prvKey.PublicKey()
@@ -43,7 +44,7 @@ func (s *StateTestSuite) newDKGMasterPublicKey(
 	_, pubShare := dkg.NewPrivateKeyShares(3)
 	dID, err := dkg.BytesID(nodeID.Hash[:])
 	s.Require().NoError(err)
-	return &types.DKGMasterPublicKey{
+	return &typesDKG.MasterPublicKey{
 		ProposerID:      nodeID,
 		Round:           round,
 		DKGID:           dID,
@@ -51,16 +52,16 @@ func (s *StateTestSuite) newDKGMasterPublicKey(
 	}
 }
 
-func (s *StateTestSuite) newDKGComplaint(round uint64) *types.DKGComplaint {
+func (s *StateTestSuite) newDKGComplaint(round uint64) *typesDKG.Complaint {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
 	pubKey := prvKey.PublicKey()
 	nodeID := types.NewNodeID(pubKey)
 	// TODO(mission): sign it, and it doesn't make sense to complaint self.
-	return &types.DKGComplaint{
+	return &typesDKG.Complaint{
 		ProposerID: nodeID,
 		Round:      round,
-		PrivateShare: types.DKGPrivateShare{
+		PrivateShare: typesDKG.PrivateShare{
 			ProposerID:   nodeID,
 			ReceiverID:   nodeID,
 			Round:        round,
@@ -69,13 +70,13 @@ func (s *StateTestSuite) newDKGComplaint(round uint64) *types.DKGComplaint {
 	}
 }
 
-func (s *StateTestSuite) newDKGFinal(round uint64) *types.DKGFinalize {
+func (s *StateTestSuite) newDKGFinal(round uint64) *typesDKG.Finalize {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
 	pubKey := prvKey.PublicKey()
 	nodeID := types.NewNodeID(pubKey)
 	// TODO(mission): sign it.
-	return &types.DKGFinalize{
+	return &typesDKG.Finalize{
 		ProposerID: nodeID,
 		Round:      round,
 	}
@@ -126,9 +127,9 @@ func (s *StateTestSuite) findNode(
 
 func (s *StateTestSuite) makeDKGChanges(
 	st *State,
-	masterPubKey *types.DKGMasterPublicKey,
-	complaint *types.DKGComplaint,
-	final *types.DKGFinalize) {
+	masterPubKey *typesDKG.MasterPublicKey,
+	complaint *typesDKG.Complaint,
+	final *typesDKG.Finalize) {
 	st.RequestChange(StateAddDKGMasterPublicKey, masterPubKey)
 	st.RequestChange(StateAddDKGComplaint, complaint)
 	st.RequestChange(StateAddDKGFinal, final)

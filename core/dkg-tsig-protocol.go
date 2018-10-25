@@ -25,6 +25,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/dkg"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 )
 
 // Errors for dkg module.
@@ -55,19 +56,19 @@ var (
 
 type dkgReceiver interface {
 	// ProposeDKGComplaint proposes a DKGComplaint.
-	ProposeDKGComplaint(complaint *types.DKGComplaint)
+	ProposeDKGComplaint(complaint *typesDKG.Complaint)
 
 	// ProposeDKGMasterPublicKey propose a DKGMasterPublicKey.
-	ProposeDKGMasterPublicKey(mpk *types.DKGMasterPublicKey)
+	ProposeDKGMasterPublicKey(mpk *typesDKG.MasterPublicKey)
 
 	// ProposeDKGPrivateShare propose a DKGPrivateShare.
-	ProposeDKGPrivateShare(prv *types.DKGPrivateShare)
+	ProposeDKGPrivateShare(prv *typesDKG.PrivateShare)
 
 	// ProposeDKGAntiNackComplaint propose a DKGPrivateShare as an anti complaint.
-	ProposeDKGAntiNackComplaint(prv *types.DKGPrivateShare)
+	ProposeDKGAntiNackComplaint(prv *typesDKG.PrivateShare)
 
 	// ProposeDKGFinalize propose a DKGFinalize message.
-	ProposeDKGFinalize(final *types.DKGFinalize)
+	ProposeDKGFinalize(final *typesDKG.Finalize)
 }
 
 type dkgProtocol struct {
@@ -133,7 +134,7 @@ func newDKGProtocol(
 
 	prvShare, pubShare := dkg.NewPrivateKeyShares(threshold)
 
-	recv.ProposeDKGMasterPublicKey(&types.DKGMasterPublicKey{
+	recv.ProposeDKGMasterPublicKey(&typesDKG.MasterPublicKey{
 		ProposerID:      ID,
 		Round:           round,
 		DKGID:           newDKGID(ID),
@@ -156,7 +157,7 @@ func newDKGProtocol(
 }
 
 func (d *dkgProtocol) processMasterPublicKeys(
-	mpks []*types.DKGMasterPublicKey) error {
+	mpks []*typesDKG.MasterPublicKey) error {
 	d.idMap = make(map[types.NodeID]dkg.ID, len(mpks))
 	d.mpkMap = make(map[types.NodeID]*dkg.PublicKeyShares, len(mpks))
 	d.prvSharesReceived = make(map[types.NodeID]struct{}, len(mpks))
@@ -173,7 +174,7 @@ func (d *dkgProtocol) processMasterPublicKeys(
 		if !ok {
 			return ErrIDShareNotFound
 		}
-		d.recv.ProposeDKGPrivateShare(&types.DKGPrivateShare{
+		d.recv.ProposeDKGPrivateShare(&typesDKG.PrivateShare{
 			ProposerID:   d.ID,
 			ReceiverID:   mpk.ProposerID,
 			Round:        d.round,
@@ -188,10 +189,10 @@ func (d *dkgProtocol) proposeNackComplaints() {
 		if _, exist := d.prvSharesReceived[nID]; exist {
 			continue
 		}
-		d.recv.ProposeDKGComplaint(&types.DKGComplaint{
+		d.recv.ProposeDKGComplaint(&typesDKG.Complaint{
 			ProposerID: d.ID,
 			Round:      d.round,
-			PrivateShare: types.DKGPrivateShare{
+			PrivateShare: typesDKG.PrivateShare{
 				ProposerID: nID,
 				Round:      d.round,
 			},
@@ -199,7 +200,7 @@ func (d *dkgProtocol) proposeNackComplaints() {
 	}
 }
 
-func (d *dkgProtocol) processNackComplaints(complaints []*types.DKGComplaint) (
+func (d *dkgProtocol) processNackComplaints(complaints []*typesDKG.Complaint) (
 	err error) {
 	for _, complaint := range complaints {
 		if !complaint.IsNack() {
@@ -218,7 +219,7 @@ func (d *dkgProtocol) processNackComplaints(complaints []*types.DKGComplaint) (
 			err = ErrIDShareNotFound
 			continue
 		}
-		d.recv.ProposeDKGAntiNackComplaint(&types.DKGPrivateShare{
+		d.recv.ProposeDKGAntiNackComplaint(&typesDKG.PrivateShare{
 			ProposerID:   d.ID,
 			ReceiverID:   complaint.ProposerID,
 			Round:        d.round,
@@ -228,7 +229,7 @@ func (d *dkgProtocol) processNackComplaints(complaints []*types.DKGComplaint) (
 	return
 }
 
-func (d *dkgProtocol) enforceNackComplaints(complaints []*types.DKGComplaint) {
+func (d *dkgProtocol) enforceNackComplaints(complaints []*typesDKG.Complaint) {
 	for _, complaint := range complaints {
 		if !complaint.IsNack() {
 			continue
@@ -245,10 +246,10 @@ func (d *dkgProtocol) enforceNackComplaints(complaints []*types.DKGComplaint) {
 		}
 		if _, exist :=
 			d.antiComplaintReceived[from][to]; !exist {
-			d.recv.ProposeDKGComplaint(&types.DKGComplaint{
+			d.recv.ProposeDKGComplaint(&typesDKG.Complaint{
 				ProposerID: d.ID,
 				Round:      d.round,
-				PrivateShare: types.DKGPrivateShare{
+				PrivateShare: typesDKG.PrivateShare{
 					ProposerID: to,
 					Round:      d.round,
 				},
@@ -257,7 +258,7 @@ func (d *dkgProtocol) enforceNackComplaints(complaints []*types.DKGComplaint) {
 	}
 }
 
-func (d *dkgProtocol) sanityCheck(prvShare *types.DKGPrivateShare) error {
+func (d *dkgProtocol) sanityCheck(prvShare *typesDKG.PrivateShare) error {
 	if _, exist := d.idMap[prvShare.ProposerID]; !exist {
 		return ErrNotDKGParticipant
 	}
@@ -272,7 +273,7 @@ func (d *dkgProtocol) sanityCheck(prvShare *types.DKGPrivateShare) error {
 }
 
 func (d *dkgProtocol) processPrivateShare(
-	prvShare *types.DKGPrivateShare) error {
+	prvShare *typesDKG.PrivateShare) error {
 	if d.round != prvShare.Round {
 		return nil
 	}
@@ -296,7 +297,7 @@ func (d *dkgProtocol) processPrivateShare(
 		if _, exist := d.nodeComplained[prvShare.ProposerID]; exist {
 			return nil
 		}
-		complaint := &types.DKGComplaint{
+		complaint := &typesDKG.Complaint{
 			ProposerID:   d.ID,
 			Round:        d.round,
 			PrivateShare: *prvShare,
@@ -322,7 +323,7 @@ func (d *dkgProtocol) processPrivateShare(
 }
 
 func (d *dkgProtocol) proposeFinalize() {
-	d.recv.ProposeDKGFinalize(&types.DKGFinalize{
+	d.recv.ProposeDKGFinalize(&typesDKG.Finalize{
 		ProposerID: d.ID,
 		Round:      d.round,
 	})
@@ -351,7 +352,7 @@ func (ss *dkgShareSecret) sign(hash common.Hash) dkg.PartialSignature {
 // NewDKGGroupPublicKey creats a DKGGroupPublicKey instance.
 func NewDKGGroupPublicKey(
 	round uint64,
-	mpks []*types.DKGMasterPublicKey, complaints []*types.DKGComplaint,
+	mpks []*typesDKG.MasterPublicKey, complaints []*typesDKG.Complaint,
 	threshold int) (
 	*DKGGroupPublicKey, error) {
 
@@ -376,7 +377,7 @@ func NewDKGGroupPublicKey(
 	}
 	qualifyIDs := make(dkg.IDs, 0, len(mpks)-len(disqualifyIDs))
 	qualifyNodeIDs := make(map[types.NodeID]struct{})
-	mpkMap := make(map[dkg.ID]*types.DKGMasterPublicKey, cap(qualifyIDs))
+	mpkMap := make(map[dkg.ID]*typesDKG.MasterPublicKey, cap(qualifyIDs))
 	idMap := make(map[types.NodeID]dkg.ID)
 	for _, mpk := range mpks {
 		if _, exist := disqualifyIDs[mpk.ProposerID]; exist {
@@ -507,7 +508,7 @@ func newTSigProtocol(
 	}
 }
 
-func (tsig *tsigProtocol) sanityCheck(psig *types.DKGPartialSignature) error {
+func (tsig *tsigProtocol) sanityCheck(psig *typesDKG.PartialSignature) error {
 	_, exist := tsig.groupPublicKey.publicKeys[psig.ProposerID]
 	if !exist {
 		return ErrNotQualifyDKGParticipant
@@ -526,7 +527,7 @@ func (tsig *tsigProtocol) sanityCheck(psig *types.DKGPartialSignature) error {
 }
 
 func (tsig *tsigProtocol) processPartialSignature(
-	psig *types.DKGPartialSignature) error {
+	psig *typesDKG.PartialSignature) error {
 	if psig.Round != tsig.groupPublicKey.round {
 		return nil
 	}

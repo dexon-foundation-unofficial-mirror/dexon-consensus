@@ -28,6 +28,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 )
 
 // Errors for consensus core.
@@ -157,7 +158,7 @@ type consensusDKGReceiver struct {
 
 // ProposeDKGComplaint proposes a DKGComplaint.
 func (recv *consensusDKGReceiver) ProposeDKGComplaint(
-	complaint *types.DKGComplaint) {
+	complaint *typesDKG.Complaint) {
 	if err := recv.authModule.SignDKGComplaint(complaint); err != nil {
 		recv.logger.Error("Failed to sign DKG complaint", "error", err)
 		return
@@ -169,7 +170,7 @@ func (recv *consensusDKGReceiver) ProposeDKGComplaint(
 
 // ProposeDKGMasterPublicKey propose a DKGMasterPublicKey.
 func (recv *consensusDKGReceiver) ProposeDKGMasterPublicKey(
-	mpk *types.DKGMasterPublicKey) {
+	mpk *typesDKG.MasterPublicKey) {
 	if err := recv.authModule.SignDKGMasterPublicKey(mpk); err != nil {
 		recv.logger.Error("Failed to sign DKG master public key", "error", err)
 		return
@@ -180,7 +181,7 @@ func (recv *consensusDKGReceiver) ProposeDKGMasterPublicKey(
 
 // ProposeDKGPrivateShare propose a DKGPrivateShare.
 func (recv *consensusDKGReceiver) ProposeDKGPrivateShare(
-	prv *types.DKGPrivateShare) {
+	prv *typesDKG.PrivateShare) {
 	if err := recv.authModule.SignDKGPrivateShare(prv); err != nil {
 		recv.logger.Error("Failed to sign DKG private share", "error", err)
 		return
@@ -206,7 +207,7 @@ func (recv *consensusDKGReceiver) ProposeDKGPrivateShare(
 
 // ProposeDKGAntiNackComplaint propose a DKGPrivateShare as an anti complaint.
 func (recv *consensusDKGReceiver) ProposeDKGAntiNackComplaint(
-	prv *types.DKGPrivateShare) {
+	prv *typesDKG.PrivateShare) {
 	if prv.ProposerID == recv.ID {
 		if err := recv.authModule.SignDKGPrivateShare(prv); err != nil {
 			recv.logger.Error("Failed sign DKG private share", "error", err)
@@ -218,7 +219,7 @@ func (recv *consensusDKGReceiver) ProposeDKGAntiNackComplaint(
 }
 
 // ProposeDKGFinalize propose a DKGFinalize message.
-func (recv *consensusDKGReceiver) ProposeDKGFinalize(final *types.DKGFinalize) {
+func (recv *consensusDKGReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
 	if err := recv.authModule.SignDKGFinalize(final); err != nil {
 		recv.logger.Error("Faield to sign DKG finalize", "error", err)
 		return
@@ -644,13 +645,13 @@ func (con *Consensus) processMsg(msgChan <-chan interface{}) {
 				con.logger.Error("Failed to process block randomness result",
 					"error", err)
 			}
-		case *types.DKGPrivateShare:
+		case *typesDKG.PrivateShare:
 			if err := con.cfgModule.processPrivateShare(val); err != nil {
 				con.logger.Error("Failed to process private share",
 					"error", err)
 			}
 
-		case *types.DKGPartialSignature:
+		case *typesDKG.PartialSignature:
 			if err := con.cfgModule.processPartialSignature(val); err != nil {
 				con.logger.Error("Failed to process partial signature",
 					"error", err)

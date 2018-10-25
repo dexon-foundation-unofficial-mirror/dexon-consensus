@@ -25,6 +25,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
 
@@ -40,8 +41,8 @@ type simGovernance struct {
 	chainNum           uint32
 	crs                []common.Hash
 	tsig               map[uint64]crypto.Signature
-	dkgComplaint       map[uint64][]*types.DKGComplaint
-	dkgMasterPublicKey map[uint64][]*types.DKGMasterPublicKey
+	dkgComplaint       map[uint64][]*typesDKG.Complaint
+	dkgMasterPublicKey map[uint64][]*typesDKG.MasterPublicKey
 	dkgFinal           map[uint64]map[types.NodeID]struct{}
 	lambdaBA           time.Duration
 	lambdaDKG          time.Duration
@@ -63,8 +64,8 @@ func newSimGovernance(
 		chainNum:           consensusConfig.ChainNum,
 		crs:                []common.Hash{hashCRS},
 		tsig:               make(map[uint64]crypto.Signature),
-		dkgComplaint:       make(map[uint64][]*types.DKGComplaint),
-		dkgMasterPublicKey: make(map[uint64][]*types.DKGMasterPublicKey),
+		dkgComplaint:       make(map[uint64][]*typesDKG.Complaint),
+		dkgMasterPublicKey: make(map[uint64][]*typesDKG.MasterPublicKey),
 		dkgFinal:           make(map[uint64]map[types.NodeID]struct{}),
 		lambdaBA: time.Duration(consensusConfig.LambdaBA) *
 			time.Millisecond,
@@ -146,7 +147,7 @@ func (g *simGovernance) addNode(pubKey crypto.PublicKey) {
 
 // AddDKGComplaint adds a DKGComplaint.
 func (g *simGovernance) AddDKGComplaint(
-	round uint64, complaint *types.DKGComplaint) {
+	round uint64, complaint *typesDKG.Complaint) {
 	if round != complaint.Round {
 		return
 	}
@@ -165,17 +166,17 @@ func (g *simGovernance) AddDKGComplaint(
 }
 
 // DKGComplaints returns the DKGComplaints of round.
-func (g *simGovernance) DKGComplaints(round uint64) []*types.DKGComplaint {
+func (g *simGovernance) DKGComplaints(round uint64) []*typesDKG.Complaint {
 	complaints, exist := g.dkgComplaint[round]
 	if !exist {
-		return []*types.DKGComplaint{}
+		return []*typesDKG.Complaint{}
 	}
 	return complaints
 }
 
 // AddDKGMasterPublicKey adds a DKGMasterPublicKey.
 func (g *simGovernance) AddDKGMasterPublicKey(
-	round uint64, masterPublicKey *types.DKGMasterPublicKey) {
+	round uint64, masterPublicKey *typesDKG.MasterPublicKey) {
 	if round != masterPublicKey.Round {
 		return
 	}
@@ -189,17 +190,17 @@ func (g *simGovernance) AddDKGMasterPublicKey(
 
 // DKGMasterPublicKeys returns the DKGMasterPublicKeys of round.
 func (g *simGovernance) DKGMasterPublicKeys(
-	round uint64) []*types.DKGMasterPublicKey {
+	round uint64) []*typesDKG.MasterPublicKey {
 	masterPublicKeys, exist := g.dkgMasterPublicKey[round]
 	if !exist {
-		return []*types.DKGMasterPublicKey{}
+		return []*typesDKG.MasterPublicKey{}
 	}
 	return masterPublicKeys
 }
 
 // AddDKGFinalize adds a DKG finalize message.
 func (g *simGovernance) AddDKGFinalize(
-	round uint64, final *types.DKGFinalize) {
+	round uint64, final *typesDKG.Finalize) {
 	if round != final.Round {
 		return
 	}

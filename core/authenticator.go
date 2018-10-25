@@ -21,6 +21,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 )
 
 // Authenticator verify data owner.
@@ -71,7 +72,7 @@ func (au *Authenticator) SignCRS(b *types.Block, crs common.Hash) (err error) {
 
 // SignDKGComplaint signs a DKG complaint.
 func (au *Authenticator) SignDKGComplaint(
-	complaint *types.DKGComplaint) (err error) {
+	complaint *typesDKG.Complaint) (err error) {
 	complaint.ProposerID = au.proposerID
 	complaint.Signature, err = au.prvKey.Sign(hashDKGComplaint(complaint))
 	return
@@ -79,7 +80,7 @@ func (au *Authenticator) SignDKGComplaint(
 
 // SignDKGMasterPublicKey signs a DKG master public key.
 func (au *Authenticator) SignDKGMasterPublicKey(
-	mpk *types.DKGMasterPublicKey) (err error) {
+	mpk *typesDKG.MasterPublicKey) (err error) {
 	mpk.ProposerID = au.proposerID
 	mpk.Signature, err = au.prvKey.Sign(hashDKGMasterPublicKey(mpk))
 	return
@@ -87,7 +88,7 @@ func (au *Authenticator) SignDKGMasterPublicKey(
 
 // SignDKGPrivateShare signs a DKG private share.
 func (au *Authenticator) SignDKGPrivateShare(
-	prvShare *types.DKGPrivateShare) (err error) {
+	prvShare *typesDKG.PrivateShare) (err error) {
 	prvShare.ProposerID = au.proposerID
 	prvShare.Signature, err = au.prvKey.Sign(hashDKGPrivateShare(prvShare))
 	return
@@ -95,7 +96,7 @@ func (au *Authenticator) SignDKGPrivateShare(
 
 // SignDKGPartialSignature signs a DKG partial signature.
 func (au *Authenticator) SignDKGPartialSignature(
-	pSig *types.DKGPartialSignature) (err error) {
+	pSig *typesDKG.PartialSignature) (err error) {
 	pSig.ProposerID = au.proposerID
 	pSig.Signature, err = au.prvKey.Sign(hashDKGPartialSignature(pSig))
 	return
@@ -103,7 +104,7 @@ func (au *Authenticator) SignDKGPartialSignature(
 
 // SignDKGFinalize signs a DKG finalize message.
 func (au *Authenticator) SignDKGFinalize(
-	final *types.DKGFinalize) (err error) {
+	final *typesDKG.Finalize) (err error) {
 	final.ProposerID = au.proposerID
 	final.Signature, err = au.prvKey.Sign(hashDKGFinalize(final))
 	return

@@ -23,6 +23,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 )
 
 func hashWitness(witness *types.Witness) (common.Hash, error) {
@@ -130,7 +131,7 @@ func hashPosition(position types.Position) common.Hash {
 	)
 }
 
-func hashDKGPrivateShare(prvShare *types.DKGPrivateShare) common.Hash {
+func hashDKGPrivateShare(prvShare *typesDKG.PrivateShare) common.Hash {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, prvShare.Round)
 
@@ -143,7 +144,7 @@ func hashDKGPrivateShare(prvShare *types.DKGPrivateShare) common.Hash {
 }
 
 func verifyDKGPrivateShareSignature(
-	prvShare *types.DKGPrivateShare) (bool, error) {
+	prvShare *typesDKG.PrivateShare) (bool, error) {
 	hash := hashDKGPrivateShare(prvShare)
 	pubKey, err := crypto.SigToPub(hash, prvShare.Signature)
 	if err != nil {
@@ -155,7 +156,7 @@ func verifyDKGPrivateShareSignature(
 	return true, nil
 }
 
-func hashDKGMasterPublicKey(mpk *types.DKGMasterPublicKey) common.Hash {
+func hashDKGMasterPublicKey(mpk *typesDKG.MasterPublicKey) common.Hash {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, mpk.Round)
 
@@ -169,7 +170,7 @@ func hashDKGMasterPublicKey(mpk *types.DKGMasterPublicKey) common.Hash {
 
 // VerifyDKGMasterPublicKeySignature verifies DKGMasterPublicKey signature.
 func VerifyDKGMasterPublicKeySignature(
-	mpk *types.DKGMasterPublicKey) (bool, error) {
+	mpk *typesDKG.MasterPublicKey) (bool, error) {
 	hash := hashDKGMasterPublicKey(mpk)
 	pubKey, err := crypto.SigToPub(hash, mpk.Signature)
 	if err != nil {
@@ -181,7 +182,7 @@ func VerifyDKGMasterPublicKeySignature(
 	return true, nil
 }
 
-func hashDKGComplaint(complaint *types.DKGComplaint) common.Hash {
+func hashDKGComplaint(complaint *typesDKG.Complaint) common.Hash {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, complaint.Round)
 
@@ -196,7 +197,7 @@ func hashDKGComplaint(complaint *types.DKGComplaint) common.Hash {
 
 // VerifyDKGComplaintSignature verifies DKGCompliant signature.
 func VerifyDKGComplaintSignature(
-	complaint *types.DKGComplaint) (bool, error) {
+	complaint *typesDKG.Complaint) (bool, error) {
 	if complaint.Round != complaint.PrivateShare.Round {
 		return false, nil
 	}
@@ -214,7 +215,7 @@ func VerifyDKGComplaintSignature(
 	return true, nil
 }
 
-func hashDKGPartialSignature(psig *types.DKGPartialSignature) common.Hash {
+func hashDKGPartialSignature(psig *typesDKG.PartialSignature) common.Hash {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, psig.Round)
 
@@ -227,7 +228,7 @@ func hashDKGPartialSignature(psig *types.DKGPartialSignature) common.Hash {
 }
 
 func verifyDKGPartialSignatureSignature(
-	psig *types.DKGPartialSignature) (bool, error) {
+	psig *typesDKG.PartialSignature) (bool, error) {
 	hash := hashDKGPartialSignature(psig)
 	pubKey, err := crypto.SigToPub(hash, psig.Signature)
 	if err != nil {
@@ -239,7 +240,7 @@ func verifyDKGPartialSignatureSignature(
 	return true, nil
 }
 
-func hashDKGFinalize(final *types.DKGFinalize) common.Hash {
+func hashDKGFinalize(final *typesDKG.Finalize) common.Hash {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, final.Round)
 
@@ -251,7 +252,7 @@ func hashDKGFinalize(final *types.DKGFinalize) common.Hash {
 
 // VerifyDKGFinalizeSignature verifies DKGFinalize signature.
 func VerifyDKGFinalizeSignature(
-	final *types.DKGFinalize) (bool, error) {
+	final *typesDKG.Finalize) (bool, error) {
 	hash := hashDKGFinalize(final)
 	pubKey, err := crypto.SigToPub(hash, final.Signature)
 	if err != nil {

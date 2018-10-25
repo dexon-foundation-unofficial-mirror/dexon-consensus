@@ -27,6 +27,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
 )
 
@@ -118,11 +119,11 @@ MainLoop:
 			if val == statusShutdown {
 				break MainLoop
 			}
-		case *types.DKGComplaint:
+		case *typesDKG.Complaint:
 			n.gov.AddDKGComplaint(val.Round, val)
-		case *types.DKGMasterPublicKey:
+		case *typesDKG.MasterPublicKey:
 			n.gov.AddDKGMasterPublicKey(val.Round, val)
-		case *types.DKGFinalize:
+		case *typesDKG.Finalize:
 			n.gov.AddDKGFinalize(val.Round, val)
 		default:
 			panic(fmt.Errorf("unexpected message from server: %v", val))

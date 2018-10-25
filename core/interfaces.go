@@ -23,6 +23,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 )
 
 // Application describes the application interface that interacts with DEXON
@@ -71,14 +72,14 @@ type Network interface {
 	BroadcastRandomnessResult(randResult *types.BlockRandomnessResult)
 
 	// SendDKGPrivateShare sends PrivateShare to a DKG participant.
-	SendDKGPrivateShare(pub crypto.PublicKey, prvShare *types.DKGPrivateShare)
+	SendDKGPrivateShare(pub crypto.PublicKey, prvShare *typesDKG.PrivateShare)
 
 	// BroadcastDKGPrivateShare broadcasts PrivateShare to all DKG participants.
-	BroadcastDKGPrivateShare(prvShare *types.DKGPrivateShare)
+	BroadcastDKGPrivateShare(prvShare *typesDKG.PrivateShare)
 
 	// BroadcastDKGPartialSignature broadcasts partialSignature to all
 	// DKG participants.
-	BroadcastDKGPartialSignature(psig *types.DKGPartialSignature)
+	BroadcastDKGPartialSignature(psig *typesDKG.PartialSignature)
 
 	// ReceiveChan returns a channel to receive messages from DEXON network.
 	ReceiveChan() <-chan interface{}
@@ -110,19 +111,19 @@ type Governance interface {
 	//// DKG-related methods.
 
 	// AddDKGComplaint adds a DKGComplaint.
-	AddDKGComplaint(round uint64, complaint *types.DKGComplaint)
+	AddDKGComplaint(round uint64, complaint *typesDKG.Complaint)
 
 	// DKGComplaints gets all the DKGComplaints of round.
-	DKGComplaints(round uint64) []*types.DKGComplaint
+	DKGComplaints(round uint64) []*typesDKG.Complaint
 
 	// AddDKGMasterPublicKey adds a DKGMasterPublicKey.
-	AddDKGMasterPublicKey(round uint64, masterPublicKey *types.DKGMasterPublicKey)
+	AddDKGMasterPublicKey(round uint64, masterPublicKey *typesDKG.MasterPublicKey)
 
 	// DKGMasterPublicKeys gets all the DKGMasterPublicKey of round.
-	DKGMasterPublicKeys(round uint64) []*types.DKGMasterPublicKey
+	DKGMasterPublicKeys(round uint64) []*typesDKG.MasterPublicKey
 
 	// AddDKGFinalize adds a DKG finalize message.
-	AddDKGFinalize(round uint64, final *types.DKGFinalize)
+	AddDKGFinalize(round uint64, final *typesDKG.Finalize)
 
 	// IsDKGFinal checks if DKG is final.
 	IsDKGFinal(round uint64) bool

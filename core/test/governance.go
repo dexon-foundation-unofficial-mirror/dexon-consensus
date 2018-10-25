@@ -25,6 +25,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 )
 
 var (
@@ -112,7 +113,7 @@ func (g *Governance) ProposeCRS(round uint64, signedCRS []byte) {
 
 // AddDKGComplaint add a DKGComplaint.
 func (g *Governance) AddDKGComplaint(
-	round uint64, complaint *types.DKGComplaint) {
+	round uint64, complaint *typesDKG.Complaint) {
 	if round != complaint.Round {
 		return
 	}
@@ -123,13 +124,13 @@ func (g *Governance) AddDKGComplaint(
 }
 
 // DKGComplaints returns the DKGComplaints of round.
-func (g *Governance) DKGComplaints(round uint64) []*types.DKGComplaint {
+func (g *Governance) DKGComplaints(round uint64) []*typesDKG.Complaint {
 	return g.state.DKGComplaints(round)
 }
 
 // AddDKGMasterPublicKey adds a DKGMasterPublicKey.
 func (g *Governance) AddDKGMasterPublicKey(
-	round uint64, masterPublicKey *types.DKGMasterPublicKey) {
+	round uint64, masterPublicKey *typesDKG.MasterPublicKey) {
 	if round != masterPublicKey.Round {
 		return
 	}
@@ -138,12 +139,12 @@ func (g *Governance) AddDKGMasterPublicKey(
 
 // DKGMasterPublicKeys returns the DKGMasterPublicKeys of round.
 func (g *Governance) DKGMasterPublicKeys(
-	round uint64) []*types.DKGMasterPublicKey {
+	round uint64) []*typesDKG.MasterPublicKey {
 	return g.state.DKGMasterPublicKeys(round)
 }
 
 // AddDKGFinalize adds a DKG finalize message.
-func (g *Governance) AddDKGFinalize(round uint64, final *types.DKGFinalize) {
+func (g *Governance) AddDKGFinalize(round uint64, final *typesDKG.Finalize) {
 	if round != final.Round {
 		return
 	}
