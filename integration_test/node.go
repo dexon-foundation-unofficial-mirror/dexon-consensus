@@ -73,6 +73,7 @@ type Node struct {
 	broadcastTargets map[types.NodeID]struct{}
 	networkLatency   test.LatencyModel
 	proposingLatency test.LatencyModel
+	prevFinalHeight  uint64
 }
 
 // NewNode constructs an instance of Node.
@@ -185,35 +186,28 @@ func (n *Node) processBlock(b *types.Block) (err error) {
 	//                core/lattice_test.go, except the compaction-chain part.
 	var (
 		delivered []*types.Block
-		verified  []*types.Block
-		pendings  = []*types.Block{b}
 	)
 	if err = n.lattice.SanityCheck(b); err != nil {
-		if err == core.ErrAckingBlockNotExists {
+		if _, ok := err.(*core.ErrAckingBlockNotExists); ok {
 			err = nil
+		} else {
+			return
 		}
+	}
+	if delivered, err = n.lattice.ProcessBlock(b); err != nil {
 		return
 	}
-	for {
-		if len(pendings) == 0 {
-			break
-		}
-		b, pendings = pendings[0], pendings[1:]
-		if verified, delivered, err = n.lattice.ProcessBlock(b); err != nil {
+	// Deliver blocks.
+	for _, b = range delivered {
+		if err = n.db.Put(*b); err != nil {
 			return
 		}
-		// Deliver blocks.
-		for _, b = range delivered {
-			if err = n.db.Put(*b); err != nil {
-				return
-			}
-			n.app.BlockDelivered(b.Hash, b.Finalization)
-		}
-		if err = n.lattice.PurgeBlocks(delivered); err != nil {
-			return
-		}
-		// Update pending blocks for verified block (pass sanity check).
-		pendings = append(pendings, verified...)
+		b.Finalization.Height = n.prevFinalHeight + 1
+		n.app.BlockDelivered(b.Hash, b.Finalization)
+		n.prevFinalHeight++
+	}
+	if err = n.lattice.PurgeBlocks(delivered); err != nil {
+		return
 	}
 	return
 }

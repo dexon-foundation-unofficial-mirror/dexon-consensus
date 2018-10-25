@@ -196,7 +196,7 @@ func (s *LatticeDataTestSuite) TestSanityCheck() {
 		s.hashBlock(b)
 		err := data.sanityCheck(b)
 		req.NotNil(err)
-		req.Equal(expectedErr.Error(), err.Error())
+		req.IsType(expectedErr, err)
 	}
 	// Non-genesis block with no ack, should get error.
 	check(ErrNotAckParent, &types.Block{
@@ -245,7 +245,7 @@ func (s *LatticeDataTestSuite) TestSanityCheck() {
 		},
 	})
 	// Acking block doesn't exists.
-	check(ErrAckingBlockNotExists, &types.Block{
+	check(&ErrAckingBlockNotExists{}, &types.Block{
 		ParentHash: blocks[1][0].Hash,
 		Position: types.Position{
 			ChainID: 1,
@@ -258,7 +258,7 @@ func (s *LatticeDataTestSuite) TestSanityCheck() {
 		Timestamp: time.Now().UTC(),
 	})
 	// Parent block on different chain.
-	check(ErrAckingBlockNotExists, &types.Block{
+	check(&ErrAckingBlockNotExists{}, &types.Block{
 		ParentHash: blocks[1][0].Hash,
 		Position: types.Position{
 			ChainID: 2,

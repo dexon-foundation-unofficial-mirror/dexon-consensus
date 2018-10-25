@@ -53,38 +53,37 @@ func (mgr *testLatticeMgr) prepareBlock(
 func (mgr *testLatticeMgr) processBlock(b *types.Block) (err error) {
 	var (
 		delivered []*types.Block
-		verified  []*types.Block
-		pendings  = []*types.Block{b}
 	)
 	if err = mgr.lattice.SanityCheck(b); err != nil {
-		if err == ErrAckingBlockNotExists {
+		if _, ok := err.(*ErrAckingBlockNotExists); ok {
 			err = nil
+		} else {
+			return
 		}
+	}
+	if err = mgr.db.Put(*b); err != nil {
+		if err != blockdb.ErrBlockExists {
+			return
+		}
+		err = nil
+	}
+	if delivered, err = mgr.lattice.ProcessBlock(b); err != nil {
 		return
 	}
-	for {
-		if len(pendings) == 0 {
-			break
-		}
-		b, pendings = pendings[0], pendings[1:]
-		if verified, delivered, err = mgr.lattice.ProcessBlock(b); err != nil {
+	// Deliver blocks.
+	for _, b = range delivered {
+		if err = mgr.ccModule.processBlock(b); err != nil {
 			return
 		}
-		// Deliver blocks.
-		for _, b = range delivered {
-			if err = mgr.ccModule.processBlock(b); err != nil {
-				return
-			}
-			if err = mgr.db.Put(*b); err != nil {
-				return
-			}
-			mgr.app.BlockDelivered(b.Hash, b.Finalization)
-		}
-		if err = mgr.lattice.PurgeBlocks(delivered); err != nil {
+	}
+	for _, b = range mgr.ccModule.extractBlocks() {
+		if err = mgr.db.Update(*b); err != nil {
 			return
 		}
-		// Update pending blocks for verified block (pass sanity check).
-		pendings = append(pendings, verified...)
+		mgr.app.BlockDelivered(b.Hash, b.Finalization)
+	}
+	if err = mgr.lattice.PurgeBlocks(delivered); err != nil {
+		return
 	}
 	return
 }
@@ -112,6 +111,10 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 	// Setup compaction chain.
 	cc := newCompactionChain(gov)
 	cc.init(&types.Block{})
+	mock := newMockTSigVerifier(true)
+	for i := 0; i < cc.tsigVerifier.cacheSize; i++ {
+		cc.tsigVerifier.verifier[uint64(i)] = mock
+	}
 	// Setup lattice.
 	return &testLatticeMgr{
 		ccModule: cc,
@@ -139,6 +142,7 @@ func (s *LatticeTestSuite) TestBasicUsage() {
 		err             error
 		cfg             = types.Config{
 			NumChains:        chainNum,
+			NotarySetSize:    chainNum,
 			PhiRatio:         float32(2) / float32(3),
 			K:                0,
 			MinBlockInterval: 0,
@@ -158,14 +162,14 @@ func (s *LatticeTestSuite) TestBasicUsage() {
 		req.NotNil(b)
 		req.NoError(err)
 		// We've ignored the error for "acking blocks don't exist".
-		req.Nil(master.processBlock(b))
+		req.NoError(master.processBlock(b))
 	}
 	for i := 0; i < (blockNum - int(chainNum)); i++ {
 		b, err := master.prepareBlock(uint32(rand.Intn(int(chainNum))))
 		req.NotNil(b)
 		req.NoError(err)
 		// We've ignored the error for "acking blocks don't exist".
-		req.Nil(master.processBlock(b))
+		req.NoError(master.processBlock(b))
 	}
 	// Now we have some blocks, replay them on different lattices.
 	iter, err := master.db.GetAll()
@@ -185,7 +189,7 @@ func (s *LatticeTestSuite) TestBasicUsage() {
 				}
 			}
 			req.NoError(err)
-			req.Nil(other.processBlock(&b))
+			req.NoError(other.processBlock(&b))
 			revealed += b.Hash.String() + ","
 			revealSeq[revealed] = struct{}{}
 		}
@@ -195,12 +199,142 @@ func (s *LatticeTestSuite) TestBasicUsage() {
 	req.True(len(revealSeq) > 1)
 	// Make sure nothing goes wrong.
 	for i, app := range apps {
-		req.Nil(app.Verify())
+		err := app.Verify()
+		req.NoError(err)
 		for j, otherApp := range apps {
 			if i >= j {
 				continue
 			}
-			req.Nil(app.Compare(otherApp))
+			err := app.Compare(otherApp)
+			s.NoError(err)
+		}
+	}
+}
+
+func (s *LatticeTestSuite) TestSync() {
+	// One Lattice prepare blocks on chains randomly selected each time
+	// and process it. Those generated blocks and kept into a buffer, and
+	// process by other Lattice instances with random order.
+	var (
+		blockNum = 500
+		// The first `desyncNum` blocks revealed are considered "desynced" and will
+		// not be delivered to lattice. After `syncNum` blocks have revealed, the
+		// system is considered "synced" and start feeding blocks that are desynced
+		// to processFinalizedBlock.
+		desyncNum       = 50
+		syncNum         = 150
+		chainNum        = uint32(19)
+		otherLatticeNum = 50
+		req             = s.Require()
+		err             error
+		cfg             = types.Config{
+			NumChains:        chainNum,
+			NotarySetSize:    chainNum,
+			PhiRatio:         float32(2) / float32(3),
+			K:                0,
+			MinBlockInterval: 0,
+			MaxBlockInterval: 3000 * time.Second,
+			RoundInterval:    time.Hour,
+		}
+		dMoment = time.Now().UTC()
+		master  = s.newTestLatticeMgr(&cfg, dMoment)
+		//apps      = []*test.App{master.app}
+		revealSeq = map[string]struct{}{}
+	)
+	// Make sure the test setup is correct.
+	s.Require().True(syncNum > desyncNum)
+	// Master-lattice generates blocks.
+	for i := uint32(0); i < chainNum; i++ {
+		// Produce genesis blocks should be delivered before all other blocks,
+		// or the consensus time would be wrong.
+		b, err := master.prepareBlock(i)
+		req.NotNil(b)
+		req.NoError(err)
+		// We've ignored the error for "acking blocks don't exist".
+		req.NoError(master.processBlock(b))
+	}
+	for i := 0; i < (blockNum - int(chainNum)); i++ {
+		b, err := master.prepareBlock(uint32(rand.Intn(int(chainNum))))
+		req.NotNil(b)
+		req.NoError(err)
+		// We've ignored the error for "acking blocks don't exist".
+		req.NoError(master.processBlock(b))
+	}
+	req.NoError(master.app.Verify())
+	// Now we have some blocks, replay them on different lattices.
+	iter, err := master.db.GetAll()
+	req.NoError(err)
+	revealer, err := test.NewRandomTipRevealer(iter)
+	req.NoError(err)
+	for i := 0; i < otherLatticeNum; i++ {
+		synced := false
+		syncFromHeight := uint64(0)
+		revealer.Reset()
+		revealed := ""
+		other := s.newTestLatticeMgr(&cfg, dMoment)
+		chainTip := make([]*types.Block, chainNum)
+		for height := 0; ; height++ {
+			b, err := revealer.Next()
+			if err != nil {
+				if err == blockdb.ErrIterationFinished {
+					err = nil
+					break
+				}
+			}
+			req.NoError(err)
+			if height >= syncNum && !synced {
+				synced = true
+				syncToHeight := uint64(0)
+				for _, block := range chainTip {
+					if block == nil {
+						synced = false
+						continue
+					}
+					result, exist := master.app.Delivered[block.Hash]
+					req.True(exist)
+					if syncToHeight < result.ConsensusHeight {
+						syncToHeight = result.ConsensusHeight
+					}
+				}
+
+				for idx := syncFromHeight; idx < syncToHeight; idx++ {
+					block, err := master.db.Get(master.app.DeliverSequence[idx])
+					req.Equal(idx+1, block.Finalization.Height)
+					req.NoError(err)
+					if err = other.db.Put(block); err != nil {
+						req.Equal(blockdb.ErrBlockExists, err)
+					}
+					other.ccModule.processFinalizedBlock(&block)
+				}
+				extracted := other.ccModule.extractFinalizedBlocks()
+				req.Len(extracted, int(syncToHeight-syncFromHeight))
+				for _, block := range extracted {
+					other.app.StronglyAcked(block.Hash)
+					other.lattice.ProcessFinalizedBlock(block)
+				}
+				syncFromHeight = syncToHeight
+			}
+			if height > desyncNum {
+				if chainTip[b.Position.ChainID] == nil {
+					chainTip[b.Position.ChainID] = &b
+				}
+				if err = other.db.Put(b); err != nil {
+					req.Equal(blockdb.ErrBlockExists, err)
+				}
+				delivered, err := other.lattice.addBlockToLattice(&b)
+				req.NoError(err)
+				revealed += b.Hash.String() + ","
+				revealSeq[revealed] = struct{}{}
+				req.NoError(other.lattice.PurgeBlocks(delivered))
+				// TODO(jimmy-dexon): check if delivered set is a DAG.
+			} else {
+				other.app.StronglyAcked(b.Hash)
+			}
+		}
+		for b := range master.app.Acked {
+			if _, exist := other.app.Acked[b]; !exist {
+				s.FailNowf("Block not delivered", "%s not exists", b)
+			}
 		}
 	}
 }

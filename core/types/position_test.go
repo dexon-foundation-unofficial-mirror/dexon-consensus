@@ -59,6 +59,37 @@ func (s *PositionTestSuite) TestNewer() {
 	}))
 }
 
+func (s *PositionTestSuite) TestOlder() {
+	pos := Position{
+		Round:   1,
+		ChainID: 1,
+		Height:  1,
+	}
+	s.Panics(func() {
+		pos.Older(&Position{ChainID: 2})
+	})
+	s.False(pos.Older(&Position{
+		Round:   0,
+		ChainID: 1,
+		Height:  0,
+	}))
+	s.False(pos.Older(&Position{
+		Round:   1,
+		ChainID: 1,
+		Height:  0,
+	}))
+	s.True(pos.Older(&Position{
+		Round:   2,
+		ChainID: 1,
+		Height:  0,
+	}))
+	s.True(pos.Older(&Position{
+		Round:   1,
+		ChainID: 1,
+		Height:  100,
+	}))
+}
+
 func (s *PositionTestSuite) TestSearchInAsendingOrder() {
 	positions := []*Position{
 		&Position{Round: 0, Height: 1},

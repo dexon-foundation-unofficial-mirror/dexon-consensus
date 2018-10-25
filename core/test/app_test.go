@@ -75,14 +75,16 @@ func (s *AppTestSuite) deliverBlockWithTimeFromSequenceLength(
 	app *App, hash common.Hash) {
 
 	s.deliverBlock(app, hash, time.Time{}.Add(
-		time.Duration(len(app.DeliverSequence))*time.Second))
+		time.Duration(len(app.DeliverSequence))*time.Second),
+		uint64(len(app.DeliverSequence)+1))
 }
 
 func (s *AppTestSuite) deliverBlock(
-	app *App, hash common.Hash, timestamp time.Time) {
+	app *App, hash common.Hash, timestamp time.Time, height uint64) {
 
 	app.BlockDelivered(hash, types.FinalizationResult{
 		Timestamp: timestamp,
+		Height:    height,
 	})
 }
 
@@ -113,7 +115,8 @@ func (s *AppTestSuite) TestCompare() {
 	wrongTime := time.Time{}.Add(
 		time.Duration(len(app3.DeliverSequence)) * time.Second)
 	wrongTime = wrongTime.Add(1 * time.Second)
-	s.deliverBlock(app3, s.to3.BlockHashes[0], wrongTime)
+	s.deliverBlock(app3, s.to3.BlockHashes[0], wrongTime,
+		uint64(len(app3.DeliverSequence)+1))
 	req.Equal(ErrMismatchConsensusTime, app1.Compare(app3))
 	req.Equal(ErrMismatchConsensusTime, app3.Compare(app1))
 	// An App without any delivered blocks.
@@ -130,9 +133,10 @@ func (s *AppTestSuite) TestVerify() {
 	s.setupAppByTotalOrderDeliver(app1, s.to1)
 	s.setupAppByTotalOrderDeliver(app1, s.to2)
 	s.setupAppByTotalOrderDeliver(app1, s.to3)
-	req.Nil(app1.Verify())
+	req.NoError(app1.Verify())
 	// A delivered block without strongly ack
-	s.deliverBlock(app1, common.NewRandomHash(), time.Time{})
+	s.deliverBlock(app1, common.NewRandomHash(), time.Time{},
+		uint64(len(app1.DeliverSequence)))
 	req.Equal(ErrDeliveredBlockNotAcked, app1.Verify())
 	// The consensus time is out of order.
 	app2 := NewApp()
@@ -141,7 +145,8 @@ func (s *AppTestSuite) TestVerify() {
 		app2.StronglyAcked(h)
 	}
 	app2.TotalOrderingDelivered(s.to2.BlockHashes, s.to2.Mode)
-	s.deliverBlock(app2, s.to2.BlockHashes[0], time.Time{})
+	s.deliverBlock(app2, s.to2.BlockHashes[0], time.Time{},
+		uint64(len(app2.DeliverSequence)+1))
 	req.Equal(ErrConsensusTimestampOutOfOrder, app2.Verify())
 	// A delivered block is not found in total ordering delivers.
 	app3 := NewApp()
@@ -164,6 +169,17 @@ func (s *AppTestSuite) TestVerify() {
 	// Witness ack on unknown block.
 	app5 := NewApp()
 	s.setupAppByTotalOrderDeliver(app5, s.to1)
+	// The conensus height is out of order.
+	app6 := NewApp()
+	s.setupAppByTotalOrderDeliver(app6, s.to1)
+	for _, h := range s.to2.BlockHashes {
+		app6.StronglyAcked(h)
+	}
+	app6.TotalOrderingDelivered(s.to2.BlockHashes, s.to2.Mode)
+	s.deliverBlock(app6, s.to2.BlockHashes[0], time.Time{}.Add(
+		time.Duration(len(app6.DeliverSequence))*time.Second),
+		uint64(len(app6.DeliverSequence)+2))
+	req.Equal(ErrConsensusHeightOutOfOrder, app6.Verify())
 }
 
 func TestApp(t *testing.T) {

@@ -29,7 +29,7 @@ import (
 var (
 	// ErrEmptyDeliverSequence means there is no delivery event in this App
 	// instance.
-	ErrEmptyDeliverSequence = fmt.Errorf("emptry deliver sequence")
+	ErrEmptyDeliverSequence = fmt.Errorf("empty deliver sequence")
 	// ErrMismatchBlockHashSequence means the delivering sequence between two App
 	// instances are different.
 	ErrMismatchBlockHashSequence = fmt.Errorf("mismatch block hash sequence")
@@ -43,6 +43,10 @@ var (
 	// consensus timestamp older than previous block.
 	ErrConsensusTimestampOutOfOrder = fmt.Errorf(
 		"consensus timestamp out of order")
+	// ErrConsensusHeightOutOfOrder means the later delivered block has
+	// consensus height not equal to height of previous block plus one.
+	ErrConsensusHeightOutOfOrder = fmt.Errorf(
+		"consensus height out of order")
 	// ErrDeliveredBlockNotAcked means some block delivered (confirmed) but
 	// not strongly acked.
 	ErrDeliveredBlockNotAcked = fmt.Errorf("delivered block not acked")
@@ -69,8 +73,9 @@ type AppTotalOrderRecord struct {
 // AppDeliveredRecord caches information when this application received
 // a block delivered notification.
 type AppDeliveredRecord struct {
-	ConsensusTime time.Time
-	When          time.Time
+	ConsensusTime   time.Time
+	ConsensusHeight uint64
+	When            time.Time
 }
 
 // App implements Application interface for testing purpose.
@@ -151,8 +156,9 @@ func (app *App) BlockDelivered(
 	defer app.deliveredLock.Unlock()
 
 	app.Delivered[blockHash] = &AppDeliveredRecord{
-		ConsensusTime: result.Timestamp,
-		When:          time.Now().UTC(),
+		ConsensusTime:   result.Timestamp,
+		ConsensusHeight: result.Height,
+		When:            time.Now().UTC(),
 	}
 	app.DeliverSequence = append(app.DeliverSequence, blockHash)
 }
@@ -201,6 +207,7 @@ func (app *App) Verify() error {
 	app.ackedLock.RLock()
 	defer app.ackedLock.RUnlock()
 
+	expectHeight := uint64(1)
 	prevTime := time.Time{}
 	for _, h := range app.DeliverSequence {
 		// Make sure delivered block is strongly acked.
@@ -218,6 +225,12 @@ func (app *App) Verify() error {
 			return ErrConsensusTimestampOutOfOrder
 		}
 		prevTime = rec.ConsensusTime
+
+		// Make sure the consensus height is incremental.
+		if expectHeight != rec.ConsensusHeight {
+			return ErrConsensusHeightOutOfOrder
+		}
+		expectHeight++
 	}
 	// Make sure the order of delivered and total ordering are the same by
 	// comparing the concated string.

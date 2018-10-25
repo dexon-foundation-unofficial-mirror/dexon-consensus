@@ -30,7 +30,6 @@ import (
 
 // Errors for sanity check error.
 var (
-	ErrAckingBlockNotExists    = fmt.Errorf("acking block not exists")
 	ErrDuplicatedAckOnOneChain = fmt.Errorf("duplicated ack on one chain")
 	ErrInvalidChainID          = fmt.Errorf("invalid chain id")
 	ErrInvalidProposerID       = fmt.Errorf("invalid proposer id")
@@ -49,6 +48,15 @@ var (
 	ErrNotGenesisBlock         = fmt.Errorf("not a genesis block")
 	ErrUnexpectedGenesisBlock  = fmt.Errorf("unexpected genesis block")
 )
+
+// ErrAckingBlockNotExists is for sanity check error.
+type ErrAckingBlockNotExists struct {
+	hash common.Hash
+}
+
+func (e ErrAckingBlockNotExists) Error() string {
+	return fmt.Sprintf("acking block %s not exists", e.hash)
+}
 
 // Errors for method usage
 var (
@@ -144,7 +152,7 @@ func (data *latticeData) checkAckingRelations(b *types.Block) error {
 		bAck, err := data.findBlock(hash)
 		if err != nil {
 			if err == blockdb.ErrBlockDoesNotExist {
-				return ErrAckingBlockNotExists
+				return &ErrAckingBlockNotExists{hash}
 			}
 			return err
 		}
@@ -185,7 +193,7 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 	chainTip := chain.tip
 	if chainTip == nil {
 		if !b.ParentHash.Equal(common.Hash{}) {
-			return ErrAckingBlockNotExists
+			return &ErrAckingBlockNotExists{b.ParentHash}
 		}
 		if !b.IsGenesis() {
 			return ErrNotGenesisBlock
@@ -198,7 +206,7 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 	// Check parent block if parent hash is specified.
 	if !b.ParentHash.Equal(common.Hash{}) {
 		if !b.ParentHash.Equal(chainTip.Hash) {
-			return ErrAckingBlockNotExists
+			return &ErrAckingBlockNotExists{b.ParentHash}
 		}
 		if !b.IsAcking(b.ParentHash) {
 			return ErrNotAckParent
@@ -268,18 +276,21 @@ func (data *latticeData) addBlock(
 		bAck    *types.Block
 		updated bool
 	)
-	if err = data.chains[block.Position.ChainID].addBlock(block); err != nil {
-		return
-	}
+	data.chains[block.Position.ChainID].addBlock(block)
 	data.blockByHash[block.Hash] = block
 	// Update lastAckPos.
 	for _, ack := range block.Acks {
 		if bAck, err = data.findBlock(ack); err != nil {
+			if err == blockdb.ErrBlockDoesNotExist {
+				err = nil
+				continue
+			}
 			return
 		}
 		data.chains[bAck.Position.ChainID].lastAckPos[block.Position.ChainID] =
 			bAck.Position.Clone()
 	}
+
 	// Extract blocks that deliverable to total ordering.
 	// A block is deliverable to total ordering iff:
 	//  - All its acking blocks are delivered to total ordering.
@@ -293,19 +304,37 @@ func (data *latticeData) addBlock(
 			allAckingBlockDelivered := true
 			for _, ack := range tip.Acks {
 				if bAck, err = data.findBlock(ack); err != nil {
+					if err == blockdb.ErrBlockDoesNotExist {
+						err = nil
+						allAckingBlockDelivered = false
+						break
+					}
 					return
 				}
 				// Check if this block is outputed or not.
 				idx := data.chains[bAck.Position.ChainID].findBlock(
 					&bAck.Position)
-				if idx == -1 ||
-					idx < data.chains[bAck.Position.ChainID].nextOutputIndex {
+				var ok bool
+				if idx == -1 {
+					// Either the block is delivered or not added to chain yet.
+					if out :=
+						data.chains[bAck.Position.ChainID].lastOutputPosition; out != nil {
+						ok = !out.Older(&bAck.Position)
+					} else if ackTip :=
+						data.chains[bAck.Position.ChainID].tip; ackTip != nil {
+						ok = !ackTip.Position.Older(&bAck.Position)
+					}
+				} else {
+					ok = idx < data.chains[bAck.Position.ChainID].nextOutputIndex
+				}
+				if ok {
 					continue
 				}
 				// This acked block exists and not delivered yet.
 				allAckingBlockDelivered = false
 			}
 			if allAckingBlockDelivered {
+				status.lastOutputPosition = &tip.Position
 				status.nextOutputIndex++
 				deliverable = append(deliverable, tip)
 				updated = true
@@ -314,6 +343,30 @@ func (data *latticeData) addBlock(
 		if !updated {
 			break
 		}
+	}
+	return
+}
+
+// addFinalizedBlock processes block for syncing internal data.
+func (data *latticeData) addFinalizedBlock(
+	block *types.Block) (err error) {
+	var bAck *types.Block
+	chain := data.chains[block.Position.ChainID]
+	if chain.tip != nil && chain.tip.Position.Height >=
+		block.Position.Height {
+		return
+	}
+	chain.nextOutputIndex = 0
+	chain.blocks = []*types.Block{}
+	chain.tip = block
+	chain.lastOutputPosition = nil
+	// Update lastAckPost.
+	for _, ack := range block.Acks {
+		if bAck, err = data.findBlock(ack); err != nil {
+			return
+		}
+		data.chains[bAck.Position.ChainID].lastAckPos[block.Position.ChainID] =
+			bAck.Position.Clone()
 	}
 	return
 }
@@ -524,6 +577,8 @@ type chainStatus struct {
 	lastAckPos []*types.Position
 	// the index to be output next time.
 	nextOutputIndex int
+	// the position of output last time.
+	lastOutputPosition *types.Position
 }
 
 // findBlock finds index of block in current pending blocks on this chain.
@@ -551,10 +606,9 @@ func (s *chainStatus) getBlock(idx int) (b *types.Block) {
 }
 
 // addBlock adds a block to pending blocks on this chain.
-func (s *chainStatus) addBlock(b *types.Block) error {
+func (s *chainStatus) addBlock(b *types.Block) {
 	s.blocks = append(s.blocks, b)
 	s.tip = b
-	return nil
 }
 
 // TODO(mission): change back to nextHeight.

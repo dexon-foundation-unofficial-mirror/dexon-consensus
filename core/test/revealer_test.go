@@ -135,6 +135,29 @@ func (s *RevealerTestSuite) TestRandomDAGReveal() {
 	s.baseTest(revealer, 10, checkFunc)
 }
 
+func (s *RevealerTestSuite) TestRandomTipReveal() {
+	// This test case would make sure we could at least generate
+	// two different revealing sequence when revealing more than
+	// 10 times.
+	iter, err := s.db.GetAll()
+	s.Require().Nil(err)
+	revealer, err := NewRandomTipRevealer(iter)
+	s.Require().Nil(err)
+
+	checkFunc := func(b *types.Block, revealed map[common.Hash]struct{}) {
+		// Make sure the revealer won't reveal the same block twice.
+		_, alreadyRevealed := revealed[b.Hash]
+		s.False(alreadyRevealed)
+		// Make sure the parent is already revealed.
+		if b.Position.Height == 0 {
+			return
+		}
+		_, alreadyRevealed = revealed[b.ParentHash]
+		s.True(alreadyRevealed)
+	}
+	s.baseTest(revealer, 10, checkFunc)
+}
+
 func TestRevealer(t *testing.T) {
 	suite.Run(t, new(RevealerTestSuite))
 }

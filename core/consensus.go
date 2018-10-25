@@ -815,6 +815,7 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 
 // preProcessBlock performs Byzantine Agreement on the block.
 func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
+	// TODO(jimmy-dexon): add failed block to pool.
 	if err = con.lattice.SanityCheck(b); err != nil {
 		return
 	}
@@ -826,16 +827,12 @@ func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
 
 // processBlock is the entry point to submit one block to a Consensus instance.
 func (con *Consensus) processBlock(block *types.Block) (err error) {
-	verifiedBlocks, deliveredBlocks, err := con.lattice.ProcessBlock(block)
-	if err != nil {
+	if err = con.db.Put(*block); err != nil && err != blockdb.ErrBlockExists {
 		return
 	}
-	// Pass verified blocks (pass sanity check) back to BA module.
-	for _, b := range verifiedBlocks {
-		if err :=
-			con.baModules[b.Position.ChainID].processBlock(b); err != nil {
-			return err
-		}
+	deliveredBlocks, err := con.lattice.ProcessBlock(block)
+	if err != nil {
+		return
 	}
 	// Pass delivered blocks to compaction chain.
 	for _, b := range deliveredBlocks {
@@ -846,7 +843,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 	}
 	deliveredBlocks = con.ccModule.extractBlocks()
 	for _, b := range deliveredBlocks {
-		if err = con.db.Put(*b); err != nil {
+		if err = con.db.Update(*b); err != nil {
 			panic(err)
 		}
 		// TODO(mission): clone types.FinalizationResult

@@ -1,6 +1,23 @@
 // Copyright 2018 The dexon-consensus-core Authors
 // This file is part of the dexon-consensus-core library.
 //
+// The dexon-consensus-core library is free software: you can redistribute it
+// and/or modify it under the terms of the GNU Lesser General Public License as
+// published by the Free Software Foundation, either version 3 of the License,
+// or (at your option) any later version.
+//
+// The dexon-consensus-core library is distributed in the hope that it will be
+// useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser
+// General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the dexon-consensus-core library. If not, see
+// <http://www.gnu.org/licenses/>.
+
+// Copyright 2018 The dexon-consensus-core Authors
+// This file is part of the dexon-consensus-core library.
+//
 // The dexon-consensus-core library is free software: you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public License as
 // published by the Free Software Foundation, either version 3 of the License,
@@ -204,4 +221,62 @@ func (r *RandomRevealer) Reset() {
 		hashes = append(hashes, hash)
 	}
 	r.remains = hashes
+}
+
+// RandomTipRevealer implements Revealer interface, which would load
+// all blocks from blockdb, and randomly pick one chain's tip to reveal.
+type RandomTipRevealer struct {
+	chainsBlock    []map[uint64]*types.Block
+	chainTip       []uint64
+	chainRevealSeq []uint32
+	revealed       int
+	randGen        *rand.Rand
+}
+
+// NewRandomTipRevealer constructs RandomTipRevealer.
+func NewRandomTipRevealer(
+	iter blockdb.BlockIterator) (r *RandomTipRevealer, err error) {
+
+	blocks, err := loadAllBlocks(iter)
+	if err != nil {
+		return
+	}
+	r = &RandomTipRevealer{
+		randGen: rand.New(rand.NewSource(time.Now().UnixNano())),
+	}
+	for _, b := range blocks {
+		for b.Position.ChainID >= uint32(len(r.chainsBlock)) {
+			r.chainsBlock = append(r.chainsBlock, make(map[uint64]*types.Block))
+			r.chainTip = append(r.chainTip, 0)
+		}
+		r.chainsBlock[b.Position.ChainID][b.Position.Height] = b
+		r.chainRevealSeq = append(r.chainRevealSeq, b.Position.ChainID)
+	}
+	r.Reset()
+	return
+}
+
+// Next implements Revealer.Next method, which would reveal blocks randomly.
+func (r *RandomTipRevealer) Next() (types.Block, error) {
+	if len(r.chainRevealSeq) == r.revealed {
+		return types.Block{}, blockdb.ErrIterationFinished
+	}
+
+	picked := r.chainRevealSeq[r.revealed]
+	r.revealed++
+	block := r.chainsBlock[picked][r.chainTip[picked]]
+	r.chainTip[picked]++
+	return *block, nil
+}
+
+// Reset implement Revealer.Reset method, which would reset revealing.
+func (r *RandomTipRevealer) Reset() {
+	r.revealed = 0
+	r.randGen.Shuffle(len(r.chainRevealSeq), func(i, j int) {
+		r.chainRevealSeq[i], r.chainRevealSeq[j] =
+			r.chainRevealSeq[j], r.chainRevealSeq[i]
+	})
+	for i := range r.chainTip {
+		r.chainTip[i] = 0
+	}
 }
