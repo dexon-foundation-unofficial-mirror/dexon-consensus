@@ -183,6 +183,21 @@ func (s *ConsensusTestSuite) prepareConsensus(
 		dMoment, app, gov, db, network, prvKey, &common.NullLogger{})
 	con.ccModule.init(&types.Block{})
 	conn.setCon(nID, con)
+	round := uint64(0)
+	nodes, err := con.nodeSetCache.GetNodeSet(round)
+	s.Require().NoError(err)
+	for i, agreement := range con.baModules {
+		chainID := uint32(i)
+		nIDs := nodes.GetSubSet(
+			int(gov.Configuration(round).NotarySetSize),
+			types.NewNotarySetTarget(
+				gov.CRS(round), chainID))
+		agreement.restart(nIDs, types.Position{
+			Round:   round,
+			ChainID: chainID,
+			Height:  uint64(0),
+		})
+	}
 	return app, con
 }
 

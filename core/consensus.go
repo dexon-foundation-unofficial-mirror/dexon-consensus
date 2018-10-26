@@ -47,6 +47,8 @@ var (
 		"incorrect agreement result position")
 	ErrNotEnoughVotes = fmt.Errorf(
 		"not enought votes")
+	ErrIncorrectVoteBlockHash = fmt.Errorf(
+		"incorrect vote block hash")
 	ErrIncorrectVoteProposer = fmt.Errorf(
 		"incorrect vote proposer")
 	ErrIncorrectBlockRandomnessResult = fmt.Errorf(
@@ -743,27 +745,19 @@ func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
 // ProcessAgreementResult processes the randomness request.
 func (con *Consensus) ProcessAgreementResult(
 	rand *types.AgreementResult) error {
-	if rand.Position.Round == 0 {
-		return nil
-	}
-	if !con.ccModule.blockRegistered(rand.BlockHash) {
-		return nil
-	}
-	if DiffUint64(con.round, rand.Position.Round) > 1 {
-		return nil
-	}
-	if len(rand.Votes) <= int(con.currentConfig.NotarySetSize/3*2) {
-		return ErrNotEnoughVotes
-	}
-	if rand.Position.ChainID >= con.currentConfig.NumChains {
-		return ErrIncorrectAgreementResultPosition
-	}
+	// Sanity Check.
 	notarySet, err := con.nodeSetCache.GetNotarySet(
 		rand.Position.Round, rand.Position.ChainID)
 	if err != nil {
 		return err
 	}
+	if len(rand.Votes) < len(notarySet)/3*2+1 {
+		return ErrNotEnoughVotes
+	}
 	for _, vote := range rand.Votes {
+		if vote.BlockHash != rand.BlockHash {
+			return ErrIncorrectVoteBlockHash
+		}
 		if _, exist := notarySet[vote.ProposerID]; !exist {
 			return ErrIncorrectVoteProposer
 		}
@@ -774,6 +768,37 @@ func (con *Consensus) ProcessAgreementResult(
 		if !ok {
 			return ErrIncorrectVoteSignature
 		}
+	}
+	// Syncing BA Module.
+	agreement := con.baModules[rand.Position.ChainID]
+	aID := agreement.agreementID()
+	if rand.Position.Newer(&aID) {
+		con.logger.Info("Syncing BA", "position", rand.Position)
+		nodes, err := con.nodeSetCache.GetNodeSet(rand.Position.Round)
+		if err != nil {
+			return err
+		}
+		con.logger.Debug("Calling Network.PullBlocks for syncing BA",
+			"hash", rand.BlockHash)
+		con.network.PullBlocks(common.Hashes{rand.BlockHash})
+		nIDs := nodes.GetSubSet(
+			int(con.gov.Configuration(rand.Position.Round).NotarySetSize),
+			types.NewNotarySetTarget(
+				con.gov.CRS(rand.Position.Round), rand.Position.ChainID))
+		for _, vote := range rand.Votes {
+			agreement.processVote(&vote)
+		}
+		agreement.restart(nIDs, rand.Position)
+	}
+	// Calculating randomness.
+	if rand.Position.Round == 0 {
+		return nil
+	}
+	if !con.ccModule.blockRegistered(rand.BlockHash) {
+		return nil
+	}
+	if DiffUint64(con.round, rand.Position.Round) > 1 {
+		return nil
 	}
 	// Sanity check done.
 	if !con.cfgModule.touchTSigHash(rand.BlockHash) {

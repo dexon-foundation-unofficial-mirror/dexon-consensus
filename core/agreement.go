@@ -169,7 +169,9 @@ func (a *agreement) restart(
 		defer a.lock.Unlock()
 		newPendingBlock := make([]pendingBlock, 0)
 		for _, pending := range a.pendingBlock {
-			if pending.block.Position == aID {
+			if aID.Newer(&pending.block.Position) {
+				continue
+			} else if pending.block.Position == aID {
 				replayBlock = append(replayBlock, pending.block)
 			} else if pending.receivedTime.After(expireTime) {
 				newPendingBlock = append(newPendingBlock, pending)
@@ -184,7 +186,9 @@ func (a *agreement) restart(
 		defer a.lock.Unlock()
 		newPendingVote := make([]pendingVote, 0)
 		for _, pending := range a.pendingVote {
-			if pending.vote.Position == aID {
+			if aID.Newer(&pending.vote.Position) {
+				continue
+			} else if pending.vote.Position == aID {
 				replayVote = append(replayVote, pending.vote)
 			} else if pending.receivedTime.After(expireTime) {
 				newPendingVote = append(newPendingVote, pending)
@@ -273,7 +277,11 @@ func (a *agreement) processVote(vote *types.Vote) error {
 	if err := a.sanityCheck(vote); err != nil {
 		return err
 	}
-	if vote.Position != a.agreementID() {
+	aID := a.agreementID()
+	if vote.Position != aID {
+		if aID.Newer(&vote.Position) {
+			return nil
+		}
 		a.lock.Lock()
 		defer a.lock.Unlock()
 		a.pendingVote = append(a.pendingVote, pendingVote{
@@ -372,7 +380,12 @@ func (a *agreement) done() <-chan struct{} {
 func (a *agreement) processBlock(block *types.Block) error {
 	a.data.blocksLock.Lock()
 	defer a.data.blocksLock.Unlock()
-	if block.Position != a.agreementID() {
+
+	aID := a.agreementID()
+	if block.Position != aID {
+		if aID.Newer(&block.Position) {
+			return nil
+		}
 		a.pendingBlock = append(a.pendingBlock, pendingBlock{
 			block:        block,
 			receivedTime: time.Now().UTC(),
