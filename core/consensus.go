@@ -830,6 +830,10 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 	if err = con.db.Put(*block); err != nil && err != blockdb.ErrBlockExists {
 		return
 	}
+	con.lock.Lock()
+	defer con.lock.Unlock()
+	// Block processed by lattice can be out-of-order. But the output of lattice
+	// (deliveredBlocks) cannot.
 	deliveredBlocks, err := con.lattice.ProcessBlock(block)
 	if err != nil {
 		return

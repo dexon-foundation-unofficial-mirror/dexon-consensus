@@ -161,8 +161,6 @@ func (s *Lattice) SanityCheck(b *types.Block) (err error) {
 // NOTE: assume the block passed sanity check.
 func (s *Lattice) addBlockToLattice(
 	input *types.Block) (outputBlocks []*types.Block, err error) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
 	if tip := s.data.chains[input.Position.ChainID].tip; tip != nil {
 		if !input.Position.Newer(&tip.Position) {
 			return
@@ -225,6 +223,9 @@ func (s *Lattice) ProcessBlock(
 		toDelivered   []*types.Block
 		deliveredMode uint32
 	)
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	if inLattice, err = s.addBlockToLattice(input); err != nil {
 		return
