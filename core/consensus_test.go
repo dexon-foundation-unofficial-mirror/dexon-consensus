@@ -37,6 +37,10 @@ type network struct {
 	conn *networkConnection
 }
 
+// PullBlocks tries to pull blocks from the DEXON network.
+func (n *network) PullBlocks(common.Hashes) {
+}
+
 // BroadcastVote broadcasts vote to all nodes in DEXON network.
 func (n *network) BroadcastVote(vote *types.Vote) {
 	n.conn.broadcast(n.nID, vote)

@@ -59,6 +59,9 @@ type Debug interface {
 // Network describs the network interface that interacts with DEXON consensus
 // core.
 type Network interface {
+	// PullBlocks tries to pull blocks from the DEXON network.
+	PullBlocks(hashes common.Hashes)
+
 	// BroadcastVote broadcasts vote to all nodes in DEXON network.
 	BroadcastVote(vote *types.Vote)
 

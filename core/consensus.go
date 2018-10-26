@@ -113,8 +113,20 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 		block, exist = recv.consensus.baModules[recv.chainID].
 			findCandidateBlock(hash)
 		if !exist {
-			recv.consensus.logger.Error("Unknown block confirmed", "hash", hash)
-			return
+			recv.consensus.logger.Error("Unknown block confirmed",
+				"hash", hash,
+				"chainID", recv.chainID)
+			ch := make(chan *types.Block)
+			func() {
+				recv.consensus.lock.Lock()
+				defer recv.consensus.lock.Unlock()
+				recv.consensus.baConfirmedBlock[hash] = ch
+			}()
+			recv.consensus.network.PullBlocks(common.Hashes{hash})
+			block = <-ch
+			recv.consensus.logger.Info("Receive unknown block",
+				"hash", hash,
+				"chainID", recv.chainID)
 		}
 	}
 	recv.consensus.ccModule.registerBlock(block)
@@ -143,6 +155,11 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 	} else {
 		recv.restartNotary <- false
 	}
+}
+
+func (recv *consensusBAReceiver) PullBlocks(hashes common.Hashes) {
+	recv.consensus.logger.Debug("Calling Network.PullBlocks", "hashes", hashes)
+	recv.consensus.network.PullBlocks(hashes)
 }
 
 // consensusDKGReceiver implements dkgReceiver.
@@ -236,8 +253,9 @@ type Consensus struct {
 	currentConfig *types.Config
 
 	// BA.
-	baModules []*agreement
-	receivers []*consensusBAReceiver
+	baModules        []*agreement
+	receivers        []*consensusBAReceiver
+	baConfirmedBlock map[common.Hash]chan<- *types.Block
 
 	// DKG.
 	dkgRunning int32
@@ -318,23 +336,24 @@ func NewConsensus(
 	recv.cfgModule = cfgModule
 	// Construct Consensus instance.
 	con := &Consensus{
-		ID:            ID,
-		currentConfig: config,
-		ccModule:      newCompactionChain(gov),
-		lattice:       lattice,
-		app:           app,
-		gov:           gov,
-		db:            db,
-		network:       network,
-		tickerObj:     newTicker(gov, round, TickerBA),
-		dkgReady:      sync.NewCond(&sync.Mutex{}),
-		cfgModule:     cfgModule,
-		dMoment:       dMoment,
-		nodeSetCache:  nodeSetCache,
-		authModule:    authModule,
-		event:         common.NewEvent(),
-		logger:        logger,
-		roundToNotify: roundToNotify,
+		ID:               ID,
+		currentConfig:    config,
+		ccModule:         newCompactionChain(gov),
+		lattice:          lattice,
+		app:              app,
+		gov:              gov,
+		db:               db,
+		network:          network,
+		tickerObj:        newTicker(gov, round, TickerBA),
+		baConfirmedBlock: make(map[common.Hash]chan<- *types.Block),
+		dkgReady:         sync.NewCond(&sync.Mutex{}),
+		cfgModule:        cfgModule,
+		dMoment:          dMoment,
+		nodeSetCache:     nodeSetCache,
+		authModule:       authModule,
+		event:            common.NewEvent(),
+		logger:           logger,
+		roundToNotify:    roundToNotify,
 	}
 
 	validLeader := func(block *types.Block) bool {
@@ -612,6 +631,7 @@ func (con *Consensus) Stop() {
 }
 
 func (con *Consensus) processMsg(msgChan <-chan interface{}) {
+MessageLoop:
 	for {
 		var msg interface{}
 		select {
@@ -622,8 +642,30 @@ func (con *Consensus) processMsg(msgChan <-chan interface{}) {
 
 		switch val := msg.(type) {
 		case *types.Block:
-			// For sync mode.
-			if val.IsFinalized() {
+			if ch, exist := func() (chan<- *types.Block, bool) {
+				con.lock.RLock()
+				defer con.lock.RUnlock()
+				ch, e := con.baConfirmedBlock[val.Hash]
+				return ch, e
+			}(); exist {
+				if err := con.lattice.SanityCheck(val); err != nil {
+					if err == ErrRetrySanityCheckLater {
+						err = nil
+					} else {
+						con.logger.Error("SanityCheck failed", "error", err)
+						continue MessageLoop
+					}
+				}
+				con.lock.Lock()
+				defer con.lock.Unlock()
+				// In case of multiple delivered block.
+				if _, exist := con.baConfirmedBlock[val.Hash]; !exist {
+					continue MessageLoop
+				}
+				delete(con.baConfirmedBlock, val.Hash)
+				ch <- val
+			} else if val.IsFinalized() {
+				// For sync mode.
 				if err := con.processFinalizedBlock(val); err != nil {
 					con.logger.Error("Failed to process finalized block",
 						"error", err)

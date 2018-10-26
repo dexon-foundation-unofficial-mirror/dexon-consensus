@@ -57,6 +57,8 @@ func (r *agreementStateTestReceiver) ConfirmBlock(block common.Hash,
 	r.s.confirmChan <- block
 }
 
+func (r *agreementStateTestReceiver) PullBlocks(common.Hashes) {}
+
 func (s *AgreementStateTestSuite) proposeBlock(
 	leader *leaderSelector) *types.Block {
 	block := &types.Block{

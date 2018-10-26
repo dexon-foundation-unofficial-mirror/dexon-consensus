@@ -69,6 +69,7 @@ type agreementReceiver interface {
 	ProposeVote(vote *types.Vote)
 	ProposeBlock() common.Hash
 	ConfirmBlock(common.Hash, map[types.NodeID]*types.Vote)
+	PullBlocks(common.Hashes)
 }
 
 type pendingBlock struct {
@@ -327,6 +328,21 @@ func (a *agreement) processVote(vote *types.Vote) error {
 	// Condition 3.
 	if vote.Type == types.VoteCom && vote.Period >= a.data.period &&
 		len(a.data.votes[vote.Period][types.VoteCom]) >= a.data.requiredVote {
+		hashes := common.Hashes{}
+		addPullBlocks := func(voteType types.VoteType) {
+			for _, vote := range a.data.votes[vote.Period][voteType] {
+				if vote.BlockHash == nullBlockHash || vote.BlockHash == skipBlockHash {
+					continue
+				}
+				if _, found := a.findCandidateBlock(vote.BlockHash); !found {
+					hashes = append(hashes, vote.BlockHash)
+				}
+			}
+		}
+		addPullBlocks(types.VoteInit)
+		addPullBlocks(types.VotePreCom)
+		addPullBlocks(types.VoteCom)
+		a.data.recv.PullBlocks(hashes)
 		a.fastForward <- vote.Period + 1
 		return nil
 	}

@@ -88,6 +88,7 @@ type network struct {
 	toNode         chan interface{}
 	sentRandomness map[common.Hash]struct{}
 	sentAgreement  map[common.Hash]struct{}
+	blockCache     map[common.Hash]*types.Block
 }
 
 // newNetwork setup network stuffs for nodes, which provides an
@@ -105,6 +106,7 @@ func newNetwork(pubKey crypto.PublicKey, cfg config.Networking) (n *network) {
 		toConsensus:    make(chan interface{}, 1000),
 		sentRandomness: make(map[common.Hash]struct{}),
 		sentAgreement:  make(map[common.Hash]struct{}),
+		blockCache:     make(map[common.Hash]*types.Block),
 	}
 	n.ctx, n.ctxCancel = context.WithCancel(context.Background())
 	// Construct transport layer.
@@ -121,6 +123,20 @@ func newNetwork(pubKey crypto.PublicKey, cfg config.Networking) (n *network) {
 		panic(fmt.Errorf("unknown network type: %v", cfg.Type))
 	}
 	return
+}
+
+// PullBlock implements core.Network interface.
+func (n *network) PullBlocks(hashes common.Hashes) {
+	go func() {
+		for _, hash := range hashes {
+			// TODO(jimmy-dexon): request block from network instead of cache.
+			if block, exist := n.blockCache[hash]; exist {
+				n.toConsensus <- block
+				continue
+			}
+			panic(fmt.Errorf("unknown block %s requested", hash))
+		}
+	}()
 }
 
 // BroadcastVote implements core.Network interface.
@@ -240,6 +256,15 @@ func (n *network) run() {
 	// The dispatcher declararion:
 	// to consensus or node, that's the question.
 	disp := func(e *test.TransportEnvelope) {
+		if block, ok := e.Msg.(*types.Block); ok {
+			if len(n.blockCache) > 500 {
+				for k := range n.blockCache {
+					delete(n.blockCache, k)
+					break
+				}
+			}
+			n.blockCache[block.Hash] = block
+		}
 		switch e.Msg.(type) {
 		case *types.Block, *types.Vote,
 			*types.AgreementResult, *types.BlockRandomnessResult,

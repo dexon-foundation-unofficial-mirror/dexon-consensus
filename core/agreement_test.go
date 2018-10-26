@@ -47,6 +47,13 @@ func (r *agreementTestReceiver) ConfirmBlock(block common.Hash,
 	r.s.confirmChan <- block
 }
 
+func (r *agreementTestReceiver) PullBlocks(hashes common.Hashes) {
+	for _, hash := range hashes {
+		r.s.pulledBlocks[hash] = struct{}{}
+	}
+
+}
+
 func (s *AgreementTestSuite) proposeBlock(
 	agreementIdx int) *types.Block {
 	block := &types.Block{
@@ -61,13 +68,14 @@ func (s *AgreementTestSuite) proposeBlock(
 
 type AgreementTestSuite struct {
 	suite.Suite
-	ID          types.NodeID
-	auths       map[types.NodeID]*Authenticator
-	voteChan    chan *types.Vote
-	blockChan   chan common.Hash
-	confirmChan chan common.Hash
-	block       map[common.Hash]*types.Block
-	agreement   []*agreement
+	ID           types.NodeID
+	auths        map[types.NodeID]*Authenticator
+	voteChan     chan *types.Vote
+	blockChan    chan common.Hash
+	confirmChan  chan common.Hash
+	block        map[common.Hash]*types.Block
+	pulledBlocks map[common.Hash]struct{}
+	agreement    []*agreement
 }
 
 func (s *AgreementTestSuite) SetupTest() {
@@ -81,6 +89,7 @@ func (s *AgreementTestSuite) SetupTest() {
 	s.blockChan = make(chan common.Hash, 100)
 	s.confirmChan = make(chan common.Hash, 100)
 	s.block = make(map[common.Hash]*types.Block)
+	s.pulledBlocks = make(map[common.Hash]struct{})
 }
 
 func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
@@ -265,13 +274,15 @@ func (s *AgreementTestSuite) TestFastForwardCond2() {
 }
 
 func (s *AgreementTestSuite) TestFastForwardCond3() {
-	votes := 0
+	numVotes := 0
+	votes := []*types.Vote{}
 	a := s.newAgreement(4)
 	a.data.period = 1
 	for nID := range a.notarySet {
 		vote := s.prepareVote(nID, types.VoteCom, common.NewRandomHash(), uint64(2))
+		votes = append(votes, vote)
 		s.Require().NoError(a.processVote(vote))
-		if votes++; votes == 3 {
+		if numVotes++; numVotes == 3 {
 			break
 		}
 	}
@@ -282,6 +293,12 @@ func (s *AgreementTestSuite) TestFastForwardCond3() {
 		s.FailNow("Expecting fast forward.")
 	}
 	s.Equal(uint64(3), a.data.period)
+
+	s.Len(s.pulledBlocks, 3)
+	for _, vote := range votes {
+		_, exist := s.pulledBlocks[vote.BlockHash]
+		s.True(exist)
+	}
 }
 
 func (s *AgreementTestSuite) TestDecide() {
