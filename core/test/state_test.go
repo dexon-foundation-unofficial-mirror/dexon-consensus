@@ -82,15 +82,6 @@ func (s *StateTestSuite) newDKGFinal(round uint64) *typesDKG.Finalize {
 	}
 }
 
-func (s *StateTestSuite) genNodes(count int) (nodes []crypto.PublicKey) {
-	for i := 0; i < count; i++ {
-		prv, err := ecdsa.NewPrivateKey()
-		s.Require().NoError(err)
-		nodes = append(nodes, prv.PublicKey())
-	}
-	return
-}
-
 func (s *StateTestSuite) compareNodes(node1, node2 []crypto.PublicKey) bool {
 	id1 := common.Hashes{}
 	for _, n := range node1 {
@@ -162,13 +153,103 @@ func (s *StateTestSuite) checkConfigChanges(config *types.Config) {
 	req.Equal(config.DKGSetSize, uint32(6))
 }
 
+func (s *StateTestSuite) TestEqual() {
+	var (
+		req    = s.Require()
+		lambda = 250 * time.Millisecond
+	)
+	_, genesisNodes, err := NewKeys(20)
+	req.NoError(err)
+	st := NewState(genesisNodes, lambda, true)
+	req.NoError(st.Equal(st))
+	// One node is missing.
+	st1 := NewState(genesisNodes, lambda, true)
+	for nID := range st1.nodes {
+		delete(st1.nodes, nID)
+		break
+	}
+	req.Equal(st.Equal(st1), ErrStateNodeSetNotEqual)
+	// Make some changes.
+	st2 := st.Clone()
+	req.NoError(st.Equal(st2))
+	s.makeConfigChanges(st)
+	req.Equal(st.Equal(st2), ErrStateConfigNotEqual)
+	crs := common.NewRandomHash()
+	req.NoError(st.ProposeCRS(1, crs))
+	masterPubKey := s.newDKGMasterPublicKey(2)
+	comp := s.newDKGComplaint(2)
+	final := s.newDKGFinal(2)
+	s.makeDKGChanges(st, masterPubKey, comp, final)
+	// Remove dkg complaints from cloned one to check if equal.
+	st3 := st.Clone()
+	req.NoError(st.Equal(st3))
+	delete(st3.dkgComplaints, uint64(2))
+	req.Equal(st.Equal(st3), ErrStateDKGComplaintsNotEqual)
+	// Remove dkg master public key from cloned one to check if equal.
+	st4 := st.Clone()
+	req.NoError(st.Equal(st4))
+	delete(st4.dkgMasterPublicKeys, uint64(2))
+	req.Equal(st.Equal(st4), ErrStateDKGMasterPublicKeysNotEqual)
+	// Remove dkg finalize from cloned one to check if equal.
+	st5 := st.Clone()
+	req.NoError(st.Equal(st5))
+	delete(st5.dkgFinals, uint64(2))
+	req.Equal(st.Equal(st5), ErrStateDKGFinalsNotEqual)
+}
+
+func (s *StateTestSuite) TestPendingChangesEqual() {
+	var (
+		req    = s.Require()
+		lambda = 250 * time.Millisecond
+	)
+	// Setup a non-local mode State instance.
+	_, genesisNodes, err := NewKeys(20)
+	req.NoError(err)
+	st := NewState(genesisNodes, lambda, false)
+	req.NoError(st.Equal(st))
+	// Apply some changes.
+	s.makeConfigChanges(st)
+	crs := common.NewRandomHash()
+	req.NoError(st.ProposeCRS(1, crs))
+	masterPubKey := s.newDKGMasterPublicKey(2)
+	comp := s.newDKGComplaint(2)
+	final := s.newDKGFinal(2)
+	s.makeDKGChanges(st, masterPubKey, comp, final)
+	// Remove pending config changes.
+	st1 := st.Clone()
+	req.NoError(st.Equal(st1))
+	st1.pendingChangedConfigs = make(map[StateChangeType]interface{})
+	req.Equal(st.Equal(st1), ErrStatePendingChangesNotEqual)
+	// Remove pending crs changes.
+	st2 := st.Clone()
+	req.NoError(st.Equal(st2))
+	st2.pendingCRS = []*crsAdditionRequest{}
+	req.Equal(st.Equal(st2), ErrStatePendingChangesNotEqual)
+	// Remove pending dkg complaints changes.
+	st3 := st.Clone()
+	req.NoError(st.Equal(st3))
+	st3.pendingDKGComplaints = []*typesDKG.Complaint{}
+	req.Equal(st.Equal(st3), ErrStatePendingChangesNotEqual)
+	// Remove pending dkg master public key changes.
+	st4 := st.Clone()
+	req.NoError(st.Equal(st4))
+	st4.pendingDKGMasterPublicKeys = []*typesDKG.MasterPublicKey{}
+	req.Equal(st.Equal(st4), ErrStatePendingChangesNotEqual)
+	// Remove pending dkg finalize changes.
+	st5 := st.Clone()
+	req.NoError(st.Equal(st5))
+	st5.pendingDKGFinals = []*typesDKG.Finalize{}
+	req.Equal(st.Equal(st5), ErrStatePendingChangesNotEqual)
+}
+
 func (s *StateTestSuite) TestLocalMode() {
 	// Test State with local mode.
 	var (
 		req    = s.Require()
 		lambda = 250 * time.Millisecond
 	)
-	genesisNodes := s.genNodes(20)
+	_, genesisNodes, err := NewKeys(20)
+	req.NoError(err)
 	st := NewState(genesisNodes, lambda, true)
 	config1, nodes1 := st.Snapshot()
 	req.True(s.compareNodes(genesisNodes, nodes1))
@@ -228,7 +309,8 @@ func (s *StateTestSuite) TestPacking() {
 		lambda = 250 * time.Millisecond
 	)
 	// Make config changes.
-	genesisNodes := s.genNodes(20)
+	_, genesisNodes, err := NewKeys(20)
+	req.NoError(err)
 	st := NewState(genesisNodes, lambda, false)
 	s.makeConfigChanges(st)
 	// Add new CRS.

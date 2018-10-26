@@ -18,29 +18,25 @@
 package test
 
 import (
-	"fmt"
+	"encoding/hex"
+	"reflect"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus-core/core/types/dkg"
 )
 
-var (
-	// ErrPrivateKeyNotExists means caller request private key for an
-	// unknown node ID.
-	ErrPrivateKeyNotExists = fmt.Errorf("private key not exists")
-)
-
 // Governance is an implementation of Goverance for testing purpose.
 type Governance struct {
-	privateKeys map[types.NodeID]crypto.PrivateKey
-	configs     []*types.Config
-	nodeSets    [][]crypto.PublicKey
-	state       *State
-	lock        sync.RWMutex
+	configs  []*types.Config
+	nodeSets [][]crypto.PublicKey
+	state    *State
+	lock     sync.RWMutex
 }
 
 // NewGovernance constructs a Governance instance.
@@ -192,4 +188,75 @@ func (g *Governance) CatchUpWithRound(round uint64) {
 		g.configs = append(g.configs, config)
 		g.nodeSets = append(g.nodeSets, nodeSet)
 	}
+}
+
+// Clone a governance instance with replicate internal state.
+func (g *Governance) Clone() *Governance {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+	// Clone state.
+	copiedState := g.state.Clone()
+	// Clone configs.
+	copiedConfigs := []*types.Config{}
+	for _, c := range g.configs {
+		copiedConfigs = append(copiedConfigs, c.Clone())
+	}
+	// Clone node sets.
+	// NOTE: here I assume the key is from ecdsa.
+	copiedNodeSets := [][]crypto.PublicKey{}
+	for _, nodeSetForRound := range g.nodeSets {
+		copiedNodeSet := []crypto.PublicKey{}
+		for _, node := range nodeSetForRound {
+			pubKey, err := ecdsa.NewPublicKeyFromByteSlice(node.Bytes())
+			if err != nil {
+				panic(err)
+			}
+			copiedNodeSet = append(copiedNodeSet, pubKey)
+		}
+		copiedNodeSets = append(copiedNodeSets, copiedNodeSet)
+	}
+	return &Governance{
+		configs:  copiedConfigs,
+		state:    copiedState,
+		nodeSets: copiedNodeSets,
+	}
+}
+
+// Equal checks equality between two Governance instances.
+func (g *Governance) Equal(other *Governance, checkState bool) bool {
+	// Check configs.
+	if !reflect.DeepEqual(g.configs, other.configs) {
+		return false
+	}
+	// Check node sets.
+	if len(g.nodeSets) != len(other.nodeSets) {
+		return false
+	}
+	getSortedKeys := func(keys []crypto.PublicKey) (encoded []string) {
+		for _, key := range keys {
+			encoded = append(encoded, hex.EncodeToString(key.Bytes()))
+		}
+		sort.Strings(encoded)
+		return
+	}
+	for round, nodeSetsForRound := range g.nodeSets {
+		otherNodeSetsForRound := other.nodeSets[round]
+		if len(nodeSetsForRound) != len(otherNodeSetsForRound) {
+			return false
+		}
+		if !reflect.DeepEqual(
+			getSortedKeys(nodeSetsForRound),
+			getSortedKeys(otherNodeSetsForRound)) {
+			return false
+		}
+	}
+	// Check state if needed.
+	//
+	// While testing, it's expected that two governance instances contain
+	// different state, only the snapshots (configs and node sets) are
+	// essentially equal.
+	if checkState {
+		return g.state.Equal(other.state) == nil
+	}
+	return true
 }

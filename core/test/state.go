@@ -18,8 +18,10 @@
 package test
 
 import (
+	"bytes"
 	"errors"
 	"math"
+	"reflect"
 	"sync"
 	"time"
 
@@ -46,6 +48,28 @@ var (
 	ErrUnknownStateChangeType = errors.New("unknown state change type")
 	// ErrProposerIsFinal means a proposer of one complaint is finalized.
 	ErrProposerIsFinal = errors.New("proposer is final")
+	// ErrStateConfigNotEqual means configuration part of two states is not
+	// equal.
+	ErrStateConfigNotEqual = errors.New("config not equal")
+	// ErrStateLocalFlagNotEqual means local flag of two states is not equal.
+	ErrStateLocalFlagNotEqual = errors.New("local flag not equal")
+	// ErrStateNodeSetNotEqual means node sets of two states are not equal.
+	ErrStateNodeSetNotEqual = errors.New("node set not equal")
+	// ErrStateDKGComplaintsNotEqual means DKG complaints for two states are not
+	// equal.
+	ErrStateDKGComplaintsNotEqual = errors.New("dkg complaints not equal")
+	// ErrStateDKGMasterPublicKeysNotEqual means DKG master public keys of two
+	// states are not equal.
+	ErrStateDKGMasterPublicKeysNotEqual = errors.New(
+		"dkg master public keys not equal")
+	// ErrStateDKGFinalsNotEqual means DKG finalizations of two states are not
+	// equal.
+	ErrStateDKGFinalsNotEqual = errors.New("dkg finalizations not equal")
+	// ErrStateCRSsNotEqual means CRSs of two states are not equal.
+	ErrStateCRSsNotEqual = errors.New("crs not equal")
+	// ErrStatePendingChangesNotEqual means pending change requests of two
+	// states are not equal.
+	ErrStatePendingChangesNotEqual = errors.New("pending changes not equal")
 )
 
 // Types of state change.
@@ -243,6 +267,288 @@ func (s *State) unpackPayload(
 	}
 	if err != nil {
 		return
+	}
+	return
+}
+
+func (s *State) cloneDKGComplaint(
+	comp *typesDKG.Complaint) (copied *typesDKG.Complaint) {
+	b, err := rlp.EncodeToBytes(comp)
+	if err != nil {
+		panic(err)
+	}
+	copied = &typesDKG.Complaint{}
+	if err = rlp.DecodeBytes(b, copied); err != nil {
+		panic(err)
+	}
+	return
+}
+
+func (s *State) cloneDKGMasterPublicKey(mpk *typesDKG.MasterPublicKey) (
+	copied *typesDKG.MasterPublicKey) {
+	b, err := rlp.EncodeToBytes(mpk)
+	if err != nil {
+		panic(err)
+	}
+	copied = typesDKG.NewMasterPublicKey()
+	if err = rlp.DecodeBytes(b, copied); err != nil {
+		panic(err)
+	}
+	return
+}
+
+func (s *State) cloneDKGFinalize(final *typesDKG.Finalize) (
+	copied *typesDKG.Finalize) {
+	b, err := rlp.EncodeToBytes(final)
+	if err != nil {
+		panic(err)
+	}
+	copied = &typesDKG.Finalize{}
+	if err = rlp.DecodeBytes(b, copied); err != nil {
+		panic(err)
+	}
+	return
+}
+
+// Equal checks equality between State instance.
+func (s *State) Equal(other *State) error {
+	// Check configuration part.
+	configEqual := s.numChains == other.numChains &&
+		s.lambdaBA == other.lambdaBA &&
+		s.lambdaDKG == other.lambdaDKG &&
+		s.k == other.k &&
+		s.phiRatio == other.phiRatio &&
+		s.notarySetSize == other.notarySetSize &&
+		s.dkgSetSize == other.dkgSetSize &&
+		s.roundInterval == other.roundInterval &&
+		s.minBlockInterval == other.minBlockInterval &&
+		s.maxBlockInterval == other.maxBlockInterval
+	if !configEqual {
+		return ErrStateConfigNotEqual
+	}
+	// Check local flag.
+	if s.local != other.local {
+		return ErrStateLocalFlagNotEqual
+	}
+	// Check node set.
+	if len(s.nodes) != len(other.nodes) {
+		return ErrStateNodeSetNotEqual
+	}
+	for nID, key := range s.nodes {
+		otherKey, exists := other.nodes[nID]
+		if !exists {
+			return ErrStateNodeSetNotEqual
+		}
+		if bytes.Compare(key.Bytes(), otherKey.Bytes()) != 0 {
+			return ErrStateNodeSetNotEqual
+		}
+	}
+	// Check DKG Complaints, here I assume the addition sequence of complaints
+	// proposed by one node would be identical on each node (this should be true
+	// when state change requests are carried by blocks and executed in order).
+	if len(s.dkgComplaints) != len(other.dkgComplaints) {
+		return ErrStateDKGComplaintsNotEqual
+	}
+	for round, compsForRound := range s.dkgComplaints {
+		otherCompsForRound, exists := other.dkgComplaints[round]
+		if !exists {
+			return ErrStateDKGComplaintsNotEqual
+		}
+		if len(compsForRound) != len(otherCompsForRound) {
+			return ErrStateDKGComplaintsNotEqual
+		}
+		for nID, comps := range compsForRound {
+			otherComps, exists := otherCompsForRound[nID]
+			if !exists {
+				return ErrStateDKGComplaintsNotEqual
+			}
+			if len(comps) != len(otherComps) {
+				return ErrStateDKGComplaintsNotEqual
+			}
+			for idx, comp := range comps {
+				if !comp.Equal(otherComps[idx]) {
+					return ErrStateDKGComplaintsNotEqual
+				}
+			}
+		}
+	}
+	// Check DKG master public keys.
+	if len(s.dkgMasterPublicKeys) != len(other.dkgMasterPublicKeys) {
+		return ErrStateDKGMasterPublicKeysNotEqual
+	}
+	for round, mKeysForRound := range s.dkgMasterPublicKeys {
+		otherMKeysForRound, exists := other.dkgMasterPublicKeys[round]
+		if !exists {
+			return ErrStateDKGMasterPublicKeysNotEqual
+		}
+		if len(mKeysForRound) != len(otherMKeysForRound) {
+			return ErrStateDKGMasterPublicKeysNotEqual
+		}
+		for nID, mKey := range mKeysForRound {
+			otherMKey, exists := otherMKeysForRound[nID]
+			if !exists {
+				return ErrStateDKGMasterPublicKeysNotEqual
+			}
+			if !mKey.Equal(otherMKey) {
+				return ErrStateDKGMasterPublicKeysNotEqual
+			}
+		}
+	}
+	// Check DKG finals.
+	if len(s.dkgFinals) != len(other.dkgFinals) {
+		return ErrStateDKGFinalsNotEqual
+	}
+	for round, finalsForRound := range s.dkgFinals {
+		otherFinalsForRound, exists := other.dkgFinals[round]
+		if !exists {
+			return ErrStateDKGFinalsNotEqual
+		}
+		if len(finalsForRound) != len(otherFinalsForRound) {
+			return ErrStateDKGFinalsNotEqual
+		}
+		for nID, final := range finalsForRound {
+			otherFinal, exists := otherFinalsForRound[nID]
+			if !exists {
+				return ErrStateDKGFinalsNotEqual
+			}
+			if !final.Equal(otherFinal) {
+				return ErrStateDKGFinalsNotEqual
+			}
+		}
+	}
+	// Check CRS part.
+	if len(s.crs) != len(other.crs) {
+		return ErrStateCRSsNotEqual
+	}
+	for idx, crs := range s.crs {
+		if crs != other.crs[idx] {
+			return ErrStateCRSsNotEqual
+		}
+	}
+	// Check pending changes.
+	if !reflect.DeepEqual(
+		s.pendingChangedConfigs, other.pendingChangedConfigs) {
+		return ErrStatePendingChangesNotEqual
+	}
+	if !reflect.DeepEqual(s.pendingCRS, other.pendingCRS) {
+		return ErrStatePendingChangesNotEqual
+	}
+	if !reflect.DeepEqual(s.pendingNodes, other.pendingNodes) {
+		return ErrStatePendingChangesNotEqual
+	}
+	// Check pending DKG complaints.
+	if len(s.pendingDKGComplaints) != len(other.pendingDKGComplaints) {
+		return ErrStatePendingChangesNotEqual
+	}
+	for idx, comp := range s.pendingDKGComplaints {
+		if !comp.Equal(other.pendingDKGComplaints[idx]) {
+			return ErrStatePendingChangesNotEqual
+		}
+	}
+	// Check pending DKG finals.
+	if len(s.pendingDKGFinals) != len(other.pendingDKGFinals) {
+		return ErrStatePendingChangesNotEqual
+	}
+	for idx, final := range s.pendingDKGFinals {
+		if !final.Equal(other.pendingDKGFinals[idx]) {
+			return ErrStatePendingChangesNotEqual
+		}
+	}
+	// Check pending DKG Master public keys.
+	if len(s.pendingDKGMasterPublicKeys) !=
+		len(other.pendingDKGMasterPublicKeys) {
+		return ErrStatePendingChangesNotEqual
+	}
+	for idx, mKey := range s.pendingDKGMasterPublicKeys {
+		if !mKey.Equal(other.pendingDKGMasterPublicKeys[idx]) {
+			return ErrStatePendingChangesNotEqual
+		}
+	}
+	return nil
+}
+
+// Clone returns a copied State instance.
+func (s *State) Clone() (copied *State) {
+	// Clone configuration parts.
+	copied = &State{
+		numChains:        s.numChains,
+		lambdaBA:         s.lambdaBA,
+		lambdaDKG:        s.lambdaDKG,
+		k:                s.k,
+		phiRatio:         s.phiRatio,
+		notarySetSize:    s.notarySetSize,
+		dkgSetSize:       s.dkgSetSize,
+		roundInterval:    s.roundInterval,
+		minBlockInterval: s.minBlockInterval,
+		maxBlockInterval: s.maxBlockInterval,
+		local:            s.local,
+		nodes:            make(map[types.NodeID]crypto.PublicKey),
+		dkgComplaints: make(
+			map[uint64]map[types.NodeID][]*typesDKG.Complaint),
+		dkgMasterPublicKeys: make(
+			map[uint64]map[types.NodeID]*typesDKG.MasterPublicKey),
+		dkgFinals:             make(map[uint64]map[types.NodeID]*typesDKG.Finalize),
+		pendingChangedConfigs: make(map[StateChangeType]interface{}),
+	}
+	// Nodes
+	for nID, key := range s.nodes {
+		copied.nodes[nID] = key
+	}
+	// DKG & CRS
+	for round, complaintsForRound := range s.dkgComplaints {
+		copied.dkgComplaints[round] =
+			make(map[types.NodeID][]*typesDKG.Complaint)
+		for nID, comps := range complaintsForRound {
+			tmpComps := []*typesDKG.Complaint{}
+			for _, comp := range comps {
+				tmpComps = append(tmpComps, s.cloneDKGComplaint(comp))
+			}
+			copied.dkgComplaints[round][nID] = tmpComps
+		}
+	}
+	for round, mKeysForRound := range s.dkgMasterPublicKeys {
+		copied.dkgMasterPublicKeys[round] =
+			make(map[types.NodeID]*typesDKG.MasterPublicKey)
+		for nID, mKey := range mKeysForRound {
+			copied.dkgMasterPublicKeys[round][nID] =
+				s.cloneDKGMasterPublicKey(mKey)
+		}
+	}
+	for round, finalsForRound := range s.dkgFinals {
+		copied.dkgFinals[round] = make(map[types.NodeID]*typesDKG.Finalize)
+		for nID, final := range finalsForRound {
+			copied.dkgFinals[round][nID] = s.cloneDKGFinalize(final)
+		}
+	}
+	for _, crs := range s.crs {
+		copied.crs = append(copied.crs, crs)
+	}
+	// Pending Changes
+	for t, v := range s.pendingChangedConfigs {
+		copied.pendingChangedConfigs[t] = v
+	}
+	for _, bs := range s.pendingNodes {
+		tmpBytes := make([]byte, len(bs))
+		copy(tmpBytes, bs)
+		copied.pendingNodes = append(copied.pendingNodes, tmpBytes)
+	}
+	for _, comp := range s.pendingDKGComplaints {
+		copied.pendingDKGComplaints = append(
+			copied.pendingDKGComplaints, s.cloneDKGComplaint(comp))
+	}
+	for _, final := range s.pendingDKGFinals {
+		copied.pendingDKGFinals = append(
+			copied.pendingDKGFinals, s.cloneDKGFinalize(final))
+	}
+	for _, mKey := range s.pendingDKGMasterPublicKeys {
+		copied.pendingDKGMasterPublicKeys = append(
+			copied.pendingDKGMasterPublicKeys, s.cloneDKGMasterPublicKey(mKey))
+	}
+	for _, req := range s.pendingCRS {
+		copied.pendingCRS = append(copied.pendingCRS, &crsAdditionRequest{
+			Round: req.Round,
+			CRS:   req.CRS,
+		})
 	}
 	return
 }
@@ -527,15 +833,7 @@ func (s *State) DKGComplaints(round uint64) []*typesDKG.Complaint {
 	tmpComps := make([]*typesDKG.Complaint, 0, len(comps))
 	for _, compProp := range comps {
 		for _, comp := range compProp {
-			bytes, err := rlp.EncodeToBytes(comp)
-			if err != nil {
-				panic(err)
-			}
-			compCopy := &typesDKG.Complaint{}
-			if err = rlp.DecodeBytes(bytes, compCopy); err != nil {
-				panic(err)
-			}
-			tmpComps = append(tmpComps, compCopy)
+			tmpComps = append(tmpComps, s.cloneDKGComplaint(comp))
 		}
 	}
 	return tmpComps
@@ -553,16 +851,7 @@ func (s *State) DKGMasterPublicKeys(round uint64) []*typesDKG.MasterPublicKey {
 	}
 	mpks := make([]*typesDKG.MasterPublicKey, 0, len(masterPublicKeys))
 	for _, mpk := range masterPublicKeys {
-		// Return a deep copied master public keys.
-		b, err := rlp.EncodeToBytes(mpk)
-		if err != nil {
-			panic(err)
-		}
-		mpkCopy := typesDKG.NewMasterPublicKey()
-		if err = rlp.DecodeBytes(b, mpkCopy); err != nil {
-			panic(err)
-		}
-		mpks = append(mpks, mpkCopy)
+		mpks = append(mpks, s.cloneDKGMasterPublicKey(mpk))
 	}
 	return mpks
 }

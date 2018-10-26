@@ -46,6 +46,22 @@ type Config struct {
 	MaxBlockInterval time.Duration
 }
 
+// Clone return a copied configuration.
+func (c *Config) Clone() *Config {
+	return &Config{
+		NumChains:        c.NumChains,
+		LambdaBA:         c.LambdaBA,
+		LambdaDKG:        c.LambdaDKG,
+		K:                c.K,
+		PhiRatio:         c.PhiRatio,
+		NotarySetSize:    c.NotarySetSize,
+		DKGSetSize:       c.DKGSetSize,
+		RoundInterval:    c.RoundInterval,
+		MinBlockInterval: c.MinBlockInterval,
+		MaxBlockInterval: c.MaxBlockInterval,
+	}
+}
+
 // Bytes returns []byte representation of Config.
 func (c *Config) Bytes() []byte {
 	binaryNumChains := make([]byte, 4)
