@@ -49,6 +49,10 @@ var (
 		"not enought votes")
 	ErrIncorrectVoteBlockHash = fmt.Errorf(
 		"incorrect vote block hash")
+	ErrIncorrectVoteType = fmt.Errorf(
+		"incorrect vote type")
+	ErrIncorrectVotePosition = fmt.Errorf(
+		"incorrect vote position")
 	ErrIncorrectVoteProposer = fmt.Errorf(
 		"incorrect vote proposer")
 	ErrIncorrectBlockRandomnessResult = fmt.Errorf(
@@ -754,9 +758,18 @@ func (con *Consensus) ProcessAgreementResult(
 	if len(rand.Votes) < len(notarySet)/3*2+1 {
 		return ErrNotEnoughVotes
 	}
+	if len(rand.Votes) > len(notarySet) {
+		return ErrIncorrectVoteProposer
+	}
 	for _, vote := range rand.Votes {
 		if vote.BlockHash != rand.BlockHash {
 			return ErrIncorrectVoteBlockHash
+		}
+		if vote.Type != types.VoteCom {
+			return ErrIncorrectVoteType
+		}
+		if vote.Position != rand.Position {
+			return ErrIncorrectVotePosition
 		}
 		if _, exist := notarySet[vote.ProposerID]; !exist {
 			return ErrIncorrectVoteProposer

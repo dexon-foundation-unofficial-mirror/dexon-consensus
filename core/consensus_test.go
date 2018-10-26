@@ -541,6 +541,79 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 	}
 	s.NotNil(gov.CRS(1))
 }
+
+func (s *ConsensusTestSuite) TestSyncBA() {
+	conn := s.newNetworkConnection()
+	prvKeys, pubKeys, err := test.NewKeys(4)
+	s.Require().NoError(err)
+	gov, err := test.NewGovernance(pubKeys, time.Second)
+	s.Require().NoError(err)
+	prvKey := prvKeys[0]
+	_, con := s.prepareConsensus(time.Now().UTC(), gov, prvKey, conn)
+	hash := common.NewRandomHash()
+	auths := make([]*Authenticator, 0, len(prvKeys))
+	for _, prvKey := range prvKeys {
+		auths = append(auths, NewAuthenticator(prvKey))
+	}
+	pos := types.Position{
+		Round:   0,
+		ChainID: 0,
+		Height:  20,
+	}
+	baResult := &types.AgreementResult{
+		BlockHash: hash,
+		Position:  pos,
+	}
+	for _, auth := range auths {
+		vote := &types.Vote{
+			Type:      types.VoteCom,
+			BlockHash: hash,
+			Position:  pos,
+		}
+		s.Require().NoError(auth.SignVote(vote))
+		baResult.Votes = append(baResult.Votes, *vote)
+	}
+	s.Require().NoError(con.ProcessAgreementResult(baResult))
+	aID := con.baModules[0].agreementID()
+	s.Equal(pos, aID)
+
+	// Test negative case.
+	baResult.BlockHash = common.NewRandomHash()
+	s.Equal(ErrIncorrectVoteBlockHash, con.ProcessAgreementResult(baResult))
+	baResult.BlockHash = hash
+
+	baResult.Position.Height++
+	s.Equal(ErrIncorrectVotePosition, con.ProcessAgreementResult(baResult))
+	baResult.Position = pos
+
+	baResult.Votes[0].Type = types.VotePreCom
+	s.Equal(ErrIncorrectVoteType, con.ProcessAgreementResult(baResult))
+	baResult.Votes[0].Type = types.VoteCom
+
+	baResult.Votes[0].ProposerID = types.NodeID{Hash: common.NewRandomHash()}
+	s.Equal(ErrIncorrectVoteProposer, con.ProcessAgreementResult(baResult))
+	baResult.Votes[0].ProposerID = types.NewNodeID(pubKeys[0])
+
+	baResult.Votes[0].Signature, err = prvKeys[0].Sign(common.NewRandomHash())
+	s.Require().NoError(err)
+	s.Equal(ErrIncorrectVoteSignature, con.ProcessAgreementResult(baResult))
+	s.Require().NoError(auths[0].SignVote(&baResult.Votes[0]))
+
+	for _, auth := range auths {
+		vote := &types.Vote{
+			Type:      types.VoteCom,
+			BlockHash: hash,
+			Position:  pos,
+		}
+		s.Require().NoError(auth.SignVote(vote))
+		baResult.Votes = append(baResult.Votes, *vote)
+	}
+	s.Equal(ErrIncorrectVoteProposer, con.ProcessAgreementResult(baResult))
+
+	baResult.Votes = baResult.Votes[:1]
+	s.Equal(ErrNotEnoughVotes, con.ProcessAgreementResult(baResult))
+}
+
 func TestConsensus(t *testing.T) {
 	suite.Run(t, new(ConsensusTestSuite))
 }
