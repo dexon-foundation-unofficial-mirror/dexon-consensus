@@ -37,6 +37,7 @@ jobs:
       - run: make vet
       - run:
           name: Unit Test
+          no_output_timeout: 900
           command: |
             if [ "${CIRCLE_BRANCH}" == "master" ]; then
               make test
