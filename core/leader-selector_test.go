@@ -29,35 +29,49 @@ import (
 
 type LeaderSelectorTestSuite struct {
 	suite.Suite
+	mockValidLeaderDefault bool
+	mockValidLeaderDB      map[common.Hash]bool
+	mockValidLeader        validLeaderFn
+}
+
+func (s *LeaderSelectorTestSuite) SetupTest() {
+	s.mockValidLeaderDefault = true
+	s.mockValidLeaderDB = make(map[common.Hash]bool)
+	s.mockValidLeader = func(b *types.Block) bool {
+		if ret, exist := s.mockValidLeaderDB[b.Hash]; exist {
+			return ret
+		}
+		return s.mockValidLeaderDefault
+	}
 }
 
 func (s *LeaderSelectorTestSuite) newLeader() *leaderSelector {
-	return newLeaderSelector(common.NewRandomHash())
+	return newLeaderSelector(common.NewRandomHash(), s.mockValidLeader)
 }
 
 func (s *LeaderSelectorTestSuite) TestDistance() {
 	leader := s.newLeader()
 	hash := common.NewRandomHash()
 	prv, err := ecdsa.NewPrivateKey()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	sig, err := prv.Sign(hash)
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	dis := leader.distance(sig)
-	s.True(dis.Cmp(maxHash) == -1)
+	s.Equal(-1, dis.Cmp(maxHash))
 }
 
 func (s *LeaderSelectorTestSuite) TestProbability() {
 	leader := s.newLeader()
 	prv1, err := ecdsa.NewPrivateKey()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	prv2, err := ecdsa.NewPrivateKey()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	for {
 		hash := common.NewRandomHash()
 		sig1, err := prv1.Sign(hash)
-		s.Require().Nil(err)
+		s.Require().NoError(err)
 		sig2, err := prv2.Sign(hash)
-		s.Require().Nil(err)
+		s.Require().NoError(err)
 		dis1 := leader.distance(sig1)
 		dis2 := leader.distance(sig2)
 		prob1 := leader.probability(sig1)
@@ -83,14 +97,14 @@ func (s *LeaderSelectorTestSuite) TestLeaderBlockHash() {
 	blocks := make(map[common.Hash]*types.Block)
 	for i := 0; i < 10; i++ {
 		prv, err := ecdsa.NewPrivateKey()
-		s.Require().Nil(err)
+		s.Require().NoError(err)
 		block := &types.Block{
 			ProposerID: types.NewNodeID(prv.PublicKey()),
 			Hash:       common.NewRandomHash(),
 		}
 		s.Require().NoError(
 			NewAuthenticator(prv).SignCRS(block, leader.hashCRS))
-		s.Require().Nil(leader.processBlock(block))
+		s.Require().NoError(leader.processBlock(block))
 		blocks[block.Hash] = block
 	}
 	blockHash := leader.leaderBlockHash()
@@ -102,8 +116,36 @@ func (s *LeaderSelectorTestSuite) TestLeaderBlockHash() {
 			continue
 		}
 		dist := leader.distance(block.CRSSignature)
-		s.True(leaderDist.Cmp(dist) == -1)
+		s.Equal(-1, leaderDist.Cmp(dist))
 	}
+}
+
+func (s *LeaderSelectorTestSuite) TestValidLeaderFn() {
+	leader := s.newLeader()
+	blocks := make(map[common.Hash]*types.Block)
+	for i := 0; i < 10; i++ {
+		prv, err := ecdsa.NewPrivateKey()
+		s.Require().NoError(err)
+		block := &types.Block{
+			ProposerID: types.NewNodeID(prv.PublicKey()),
+			Hash:       common.NewRandomHash(),
+		}
+		s.Require().NoError(
+			NewAuthenticator(prv).SignCRS(block, leader.hashCRS))
+		s.Require().NoError(leader.processBlock(block))
+		blocks[block.Hash] = block
+	}
+	blockHash := leader.leaderBlockHash()
+
+	s.mockValidLeaderDB[blockHash] = false
+	leader.restart()
+	for _, b := range blocks {
+		s.Require().NoError(leader.processBlock(b))
+	}
+	s.NotEqual(blockHash, leader.leaderBlockHash())
+	s.mockValidLeaderDB[blockHash] = true
+	s.Equal(blockHash, leader.leaderBlockHash())
+	s.Len(leader.pendingBlocks, 0)
 }
 
 func TestLeaderSelector(t *testing.T) {

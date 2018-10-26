@@ -188,7 +188,7 @@ func (n *Node) processBlock(b *types.Block) (err error) {
 		delivered []*types.Block
 	)
 	if err = n.lattice.SanityCheck(b); err != nil {
-		if _, ok := err.(*core.ErrAckingBlockNotExists); ok {
+		if err == core.ErrRetrySanityCheckLater {
 			err = nil
 		} else {
 			return

@@ -337,6 +337,10 @@ func NewConsensus(
 		roundToNotify: roundToNotify,
 	}
 
+	validLeader := func(block *types.Block) bool {
+		return lattice.SanityCheck(block) == nil
+	}
+
 	con.baModules = make([]*agreement, config.NumChains)
 	con.receivers = make([]*consensusBAReceiver, config.NumChains)
 	for i := uint32(0); i < config.NumChains; i++ {
@@ -350,7 +354,7 @@ func NewConsensus(
 			con.ID,
 			recv,
 			nodes.IDs,
-			newLeaderSelector(crs),
+			newLeaderSelector(crs, validLeader),
 			con.authModule,
 		)
 		// Hacky way to make agreement module self contained.
@@ -815,9 +819,10 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 
 // preProcessBlock performs Byzantine Agreement on the block.
 func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
-	// TODO(jimmy-dexon): add failed block to pool.
 	if err = con.lattice.SanityCheck(b); err != nil {
-		return
+		if err != ErrRetrySanityCheckLater {
+			return
+		}
 	}
 	if err = con.baModules[b.Position.ChainID].processBlock(b); err != nil {
 		return err

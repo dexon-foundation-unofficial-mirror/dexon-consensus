@@ -95,7 +95,9 @@ func (s *AgreementStateTestSuite) SetupTest() {
 }
 
 func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
-	leader := newLeaderSelector(common.NewRandomHash())
+	leader := newLeaderSelector(common.NewRandomHash(), func(*types.Block) bool {
+		return true
+	})
 	notarySet := make(map[types.NodeID]struct{})
 	for i := 0; i < numNode-1; i++ {
 		prvKey, err := ecdsa.NewPrivateKey()

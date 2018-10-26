@@ -55,7 +55,7 @@ func (mgr *testLatticeMgr) processBlock(b *types.Block) (err error) {
 		delivered []*types.Block
 	)
 	if err = mgr.lattice.SanityCheck(b); err != nil {
-		if _, ok := err.(*ErrAckingBlockNotExists); ok {
+		if err == ErrRetrySanityCheckLater {
 			err = nil
 		} else {
 			return

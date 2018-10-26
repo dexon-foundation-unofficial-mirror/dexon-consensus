@@ -84,7 +84,9 @@ func (s *AgreementTestSuite) SetupTest() {
 }
 
 func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
-	leader := newLeaderSelector(common.NewRandomHash())
+	leader := newLeaderSelector(common.NewRandomHash(), func(*types.Block) bool {
+		return true
+	})
 	agreementIdx := len(s.agreement)
 	notarySet := make(map[types.NodeID]struct{})
 	for i := 0; i < numNotarySet-1; i++ {

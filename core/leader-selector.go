@@ -20,6 +20,7 @@ package core
 import (
 	"fmt"
 	"math/big"
+	"sync"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
@@ -30,6 +31,8 @@ import (
 var (
 	ErrIncorrectCRSSignature = fmt.Errorf("incorrect CRS signature")
 )
+
+type validLeaderFn func(*types.Block) bool
 
 // Some constant value.
 var (
@@ -47,20 +50,24 @@ func init() {
 }
 
 type leaderSelector struct {
-	hashCRS      common.Hash
-	numCRS       *big.Int
-	minCRSBlock  *big.Int
-	minBlockHash common.Hash
+	hashCRS       common.Hash
+	numCRS        *big.Int
+	minCRSBlock   *big.Int
+	minBlockHash  common.Hash
+	pendingBlocks []*types.Block
+	validLeader   validLeaderFn
+	lock          sync.Mutex
 }
 
 func newLeaderSelector(
-	crs common.Hash) *leaderSelector {
+	crs common.Hash, validLeader validLeaderFn) *leaderSelector {
 	numCRS := big.NewInt(0)
 	numCRS.SetBytes(crs[:])
 	return &leaderSelector{
 		numCRS:      numCRS,
 		hashCRS:     crs,
 		minCRSBlock: maxHash,
+		validLeader: validLeader,
 	}
 }
 
@@ -80,11 +87,25 @@ func (l *leaderSelector) probability(sig crypto.Signature) float64 {
 }
 
 func (l *leaderSelector) restart() {
+	l.lock.Lock()
+	defer l.lock.Unlock()
 	l.minCRSBlock = maxHash
 	l.minBlockHash = common.Hash{}
+	l.pendingBlocks = []*types.Block{}
 }
 
 func (l *leaderSelector) leaderBlockHash() common.Hash {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	newPendingBlocks := []*types.Block{}
+	for _, b := range l.pendingBlocks {
+		if l.validLeader(b) {
+			l.updateLeader(b)
+		} else {
+			newPendingBlocks = append(newPendingBlocks, b)
+		}
+	}
+	l.pendingBlocks = newPendingBlocks
 	return l.minBlockHash
 }
 
@@ -96,11 +117,20 @@ func (l *leaderSelector) processBlock(block *types.Block) error {
 	if !ok {
 		return ErrIncorrectCRSSignature
 	}
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	if !l.validLeader(block) {
+		l.pendingBlocks = append(l.pendingBlocks, block)
+		return nil
+	}
+	l.updateLeader(block)
+	return nil
+}
+func (l *leaderSelector) updateLeader(block *types.Block) {
 	dist := l.distance(block.CRSSignature)
 	cmp := l.minCRSBlock.Cmp(dist)
 	if cmp > 0 || (cmp == 0 && block.Hash.Less(l.minBlockHash)) {
 		l.minCRSBlock = dist
 		l.minBlockHash = block.Hash
 	}
-	return nil
 }

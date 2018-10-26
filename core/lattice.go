@@ -18,12 +18,18 @@
 package core
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+)
+
+// Errors for sanity check error.
+var (
+	ErrRetrySanityCheckLater = fmt.Errorf("retry sanity check later")
 )
 
 // Lattice represents a unit to produce a global ordering from multiple chains.
@@ -138,6 +144,9 @@ func (s *Lattice) SanityCheck(b *types.Block) (err error) {
 		s.lock.RLock()
 		defer s.lock.RUnlock()
 		if err = s.data.sanityCheck(b); err != nil {
+			if _, ok := err.(*ErrAckingBlockNotExists); ok {
+				err = ErrRetrySanityCheckLater
+			}
 			s.logger.Error("Sanity Check failed", "error", err)
 			return
 		}
@@ -147,10 +156,11 @@ func (s *Lattice) SanityCheck(b *types.Block) (err error) {
 	}
 	// Verify data in application layer.
 	s.logger.Debug("Calling Application.VerifyBlock", "block", b)
-	// TODO(jimmy-dexon): handle types.VerifyRetryLater.
-	if s.app.VerifyBlock(b) == types.VerifyInvalidBlock {
+	switch s.app.VerifyBlock(b) {
+	case types.VerifyInvalidBlock:
 		err = ErrInvalidBlock
-		return err
+	case types.VerifyRetryLater:
+		err = ErrRetrySanityCheckLater
 	}
 	return
 }
