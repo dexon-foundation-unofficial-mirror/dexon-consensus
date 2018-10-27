@@ -59,11 +59,9 @@ func (s *NonByzantineTestSuite) TestNonByzantine() {
 		sch.RegisterEventHandler(vID, v)
 		req.Nil(sch.Seed(NewProposeBlockEvent(vID, now)))
 	}
-	sch.Run(10)
+	sch.Run(4)
 	// Check results by comparing test.App instances.
-	if err = VerifyApps(apps); err != nil {
-		panic(err)
-	}
+	req.NoError(VerifyApps(apps))
 }
 
 func TestNonByzantine(t *testing.T) {

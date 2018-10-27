@@ -74,6 +74,7 @@ type Node struct {
 	networkLatency   test.LatencyModel
 	proposingLatency test.LatencyModel
 	prevFinalHeight  uint64
+	pendings         []*types.Block
 }
 
 // NewNode constructs an instance of Node.
@@ -187,27 +188,50 @@ func (n *Node) processBlock(b *types.Block) (err error) {
 	var (
 		delivered []*types.Block
 	)
-	if err = n.lattice.SanityCheck(b); err != nil {
-		if err == core.ErrRetrySanityCheckLater {
-			err = nil
-		} else {
-			return
+	n.pendings = append([]*types.Block{b}, n.pendings...)
+	for {
+		var (
+			newPendings  []*types.Block
+			tmpDelivered []*types.Block
+			tmpErr       error
+		)
+		updated := false
+		for _, p := range n.pendings {
+			if tmpErr = n.lattice.SanityCheck(p); tmpErr != nil {
+				if tmpErr == core.ErrRetrySanityCheckLater {
+					newPendings = append(newPendings, p)
+				} else {
+					// Those blocks are prepared by lattice module, they should
+					// not be wrong.
+					panic(tmpErr)
+				}
+				continue
+			}
+			if tmpDelivered, tmpErr =
+				n.lattice.ProcessBlock(p); tmpErr != nil {
+				// It's not allowed that sanity checked block failed to
+				// be added to lattice.
+				panic(tmpErr)
+			}
+			delivered = append(delivered, tmpDelivered...)
+			updated = true
 		}
-	}
-	if delivered, err = n.lattice.ProcessBlock(b); err != nil {
-		return
+		n.pendings = newPendings
+		if !updated {
+			break
+		}
 	}
 	// Deliver blocks.
 	for _, b = range delivered {
 		if err = n.db.Put(*b); err != nil {
-			return
+			panic(err)
 		}
 		b.Finalization.Height = n.prevFinalHeight + 1
 		n.app.BlockDelivered(b.Hash, b.Finalization)
 		n.prevFinalHeight++
 	}
 	if err = n.lattice.PurgeBlocks(delivered); err != nil {
-		return
+		panic(err)
 	}
 	return
 }
