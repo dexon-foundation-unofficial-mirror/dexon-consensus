@@ -40,12 +40,33 @@ func (s *BlockTestSuite) randomBytes() []byte {
 	return h[:]
 }
 
+func (s *BlockTestSuite) noZeroInStruct(v reflect.Value) {
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		tf := t.Field(i)
+		vf := v.FieldByName(tf.Name)
+		if vf.Type().Kind() == reflect.Struct {
+			s.noZeroInStruct(vf)
+			continue
+		}
+		if !vf.CanInterface() {
+			s.T().Log("unable to check private field", tf.Name)
+			continue
+		}
+		if reflect.DeepEqual(
+			vf.Interface(), reflect.Zero(vf.Type()).Interface()) {
+			s.Failf("", "should not be zero value %s", tf.Name)
+		}
+	}
+}
+
 func (s *BlockTestSuite) createRandomBlock() *Block {
 	b := &Block{
 		ProposerID: NodeID{common.NewRandomHash()},
 		ParentHash: common.NewRandomHash(),
 		Hash:       common.NewRandomHash(),
 		Position: Position{
+			Round:   rand.Uint64(),
 			ChainID: rand.Uint32(),
 			Height:  rand.Uint64(),
 		},
@@ -59,15 +80,22 @@ func (s *BlockTestSuite) createRandomBlock() *Block {
 			Data:   s.randomBytes(),
 		},
 		Finalization: FinalizationResult{
+			ParentHash: common.NewRandomHash(),
 			Timestamp:  time.Now().UTC(),
 			Height:     rand.Uint64(),
 			Randomness: s.randomBytes(),
 		},
-		Payload:      s.randomBytes(),
-		Signature:    crypto.Signature{Signature: s.randomBytes()},
-		CRSSignature: crypto.Signature{Signature: s.randomBytes()},
+		Payload: s.randomBytes(),
+		Signature: crypto.Signature{
+			Type:      "some type",
+			Signature: s.randomBytes()},
+		CRSSignature: crypto.Signature{
+			Type:      "some type",
+			Signature: s.randomBytes(),
+		},
 	}
-
+	// Check if all fields are initialized with non zero values.
+	s.noZeroInStruct(reflect.ValueOf(*b))
 	return b
 }
 

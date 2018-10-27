@@ -215,6 +215,7 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.ProposerID = b.ProposerID
 	bcopy.ParentHash = b.ParentHash
 	bcopy.Hash = b.Hash
+	bcopy.Position.Round = b.Position.Round
 	bcopy.Position.ChainID = b.Position.ChainID
 	bcopy.Position.Height = b.Position.Height
 	bcopy.Signature = b.Signature.Clone()
