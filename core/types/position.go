@@ -18,14 +18,8 @@
 package types
 
 import (
-	"errors"
 	"fmt"
 )
-
-// ErrComparePositionOnDifferentChains raised when attempting to
-// compare two positions with different chain ID.
-var ErrComparePositionOnDifferentChains = errors.New(
-	"position on different chain")
 
 // Position describes the position in the block lattice of an entity.
 type Position struct {
@@ -42,7 +36,8 @@ func (pos *Position) String() string {
 // are different.
 func (pos *Position) Equal(other *Position) bool {
 	if pos.ChainID != other.ChainID {
-		panic(ErrComparePositionOnDifferentChains)
+		panic(fmt.Errorf("unexpected chainID %d, should be %d",
+			other.ChainID, pos.ChainID))
 	}
 	return pos.Round == other.Round && pos.Height == other.Height
 }
@@ -51,7 +46,8 @@ func (pos *Position) Equal(other *Position) bool {
 // If two blocks on different chain compared by this function, it would panic.
 func (pos *Position) Newer(other *Position) bool {
 	if pos.ChainID != other.ChainID {
-		panic(ErrComparePositionOnDifferentChains)
+		panic(fmt.Errorf("unexpected chainID %d, should be %d",
+			other.ChainID, pos.ChainID))
 	}
 	return pos.Round > other.Round ||
 		(pos.Round == other.Round && pos.Height > other.Height)
@@ -61,7 +57,8 @@ func (pos *Position) Newer(other *Position) bool {
 // If two blocks on different chain compared by this function, it would panic.
 func (pos *Position) Older(other *Position) bool {
 	if pos.ChainID != other.ChainID {
-		panic(ErrComparePositionOnDifferentChains)
+		panic(fmt.Errorf("unexpected chainID %d, should be %d",
+			other.ChainID, pos.ChainID))
 	}
 	return pos.Round < other.Round ||
 		(pos.Round == other.Round && pos.Height < other.Height)

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"math"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
@@ -102,7 +101,7 @@ type agreementData struct {
 type agreement struct {
 	state          agreementState
 	data           *agreementData
-	aID            *atomic.Value
+	aID            types.Position
 	notarySet      map[types.NodeID]struct{}
 	hasOutput      bool
 	lock           sync.RWMutex
@@ -126,7 +125,6 @@ func newAgreement(
 			ID:     ID,
 			leader: leader,
 		},
-		aID:            &atomic.Value{},
 		candidateBlock: make(map[common.Hash]*types.Block),
 		fastForward:    make(chan uint64, 1),
 		authModule:     authModule,
@@ -159,7 +157,7 @@ func (a *agreement) restart(
 		a.state = newInitialState(a.data)
 		a.notarySet = notarySet
 		a.candidateBlock = make(map[common.Hash]*types.Block)
-		a.aID.Store(aID)
+		a.aID = *aID.Clone()
 	}()
 
 	expireTime := time.Now().Add(-10 * time.Second)
@@ -219,7 +217,9 @@ func (a *agreement) clocks() int {
 
 // agreementID returns the current agreementID.
 func (a *agreement) agreementID() types.Position {
-	return a.aID.Load().(types.Position)
+	a.lock.RLock()
+	defer a.lock.RUnlock()
+	return a.aID
 }
 
 // nextState is called at the specific clock time.
