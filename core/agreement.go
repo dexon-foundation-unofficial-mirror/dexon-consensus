@@ -160,6 +160,10 @@ func (a *agreement) restart(
 		a.aID = *aID.Clone()
 	}()
 
+	if isStop(aID) {
+		return
+	}
+
 	expireTime := time.Now().Add(-10 * time.Second)
 	replayBlock := make([]*types.Block, 0)
 	func() {
@@ -208,6 +212,10 @@ func (a *agreement) stop() {
 	a.restart(make(map[types.NodeID]struct{}), types.Position{
 		ChainID: math.MaxUint32,
 	})
+}
+
+func isStop(aID types.Position) bool {
+	return aID.ChainID == math.MaxUint32
 }
 
 // clocks returns how many time this state is required.
@@ -279,8 +287,11 @@ func (a *agreement) processVote(vote *types.Vote) error {
 	}
 	aID := a.agreementID()
 	if vote.Position != aID {
-		if aID.Newer(&vote.Position) {
-			return nil
+		// Agreement module has stopped.
+		if !isStop(aID) {
+			if aID.Newer(&vote.Position) {
+				return nil
+			}
 		}
 		a.lock.Lock()
 		defer a.lock.Unlock()
@@ -383,8 +394,11 @@ func (a *agreement) processBlock(block *types.Block) error {
 
 	aID := a.agreementID()
 	if block.Position != aID {
-		if aID.Newer(&block.Position) {
-			return nil
+		// Agreement module has stopped.
+		if !isStop(aID) {
+			if aID.Newer(&block.Position) {
+				return nil
+			}
 		}
 		a.pendingBlock = append(a.pendingBlock, pendingBlock{
 			block:        block,
