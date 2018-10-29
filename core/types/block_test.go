@@ -61,6 +61,7 @@ func (s *BlockTestSuite) noZeroInStruct(v reflect.Value) {
 }
 
 func (s *BlockTestSuite) createRandomBlock() *Block {
+	payload := s.randomBytes()
 	b := &Block{
 		ProposerID: NodeID{common.NewRandomHash()},
 		ParentHash: common.NewRandomHash(),
@@ -85,7 +86,8 @@ func (s *BlockTestSuite) createRandomBlock() *Block {
 			Height:     rand.Uint64(),
 			Randomness: s.randomBytes(),
 		},
-		Payload: s.randomBytes(),
+		Payload:     payload,
+		PayloadHash: crypto.Keccak256Hash(payload),
 		Signature: crypto.Signature{
 			Type:      "some type",
 			Signature: s.randomBytes()},

@@ -50,7 +50,6 @@ func hashBlock(block *types.Block) (common.Hash, error) {
 	if err != nil {
 		return common.Hash{}, err
 	}
-	payloadHash := crypto.Keccak256Hash(block.Payload)
 
 	hash := crypto.Keccak256Hash(
 		block.ProposerID.Hash[:],
@@ -58,7 +57,7 @@ func hashBlock(block *types.Block) (common.Hash, error) {
 		hashPosition[:],
 		hashAcks[:],
 		binaryTimestamp[:],
-		payloadHash[:],
+		block.PayloadHash[:],
 		binaryWitness[:])
 	return hash, nil
 }

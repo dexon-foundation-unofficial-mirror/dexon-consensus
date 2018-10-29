@@ -44,6 +44,7 @@ func NewAuthenticator(prvKey crypto.PrivateKey) (auth *Authenticator) {
 // SignBlock signs a types.Block.
 func (au *Authenticator) SignBlock(b *types.Block) (err error) {
 	b.ProposerID = au.proposerID
+	b.PayloadHash = crypto.Keccak256Hash(b.Payload)
 	if b.Hash, err = hashBlock(b); err != nil {
 		return
 	}
@@ -112,6 +113,11 @@ func (au *Authenticator) SignDKGFinalize(
 
 // VerifyBlock verifies the signature of types.Block.
 func (au *Authenticator) VerifyBlock(b *types.Block) (err error) {
+	payloadHash := crypto.Keccak256Hash(b.Payload)
+	if payloadHash != b.PayloadHash {
+		err = ErrIncorrectHash
+		return
+	}
 	hash, err := hashBlock(b)
 	if err != nil {
 		return

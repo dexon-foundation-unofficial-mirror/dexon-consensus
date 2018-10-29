@@ -131,6 +131,27 @@ func HashConfigurationBlock(
 	)
 }
 
+// VerifyBlock verifies the signature of types.Block.
+func VerifyBlock(b *types.Block) (err error) {
+	hash, err := hashBlock(b)
+	if err != nil {
+		return
+	}
+	if hash != b.Hash {
+		err = ErrIncorrectHash
+		return
+	}
+	pubKey, err := crypto.SigToPub(b.Hash, b.Signature)
+	if err != nil {
+		return
+	}
+	if !b.ProposerID.Equal(types.NewNodeID(pubKey)) {
+		err = ErrIncorrectSignature
+		return
+	}
+	return
+}
+
 // DiffUint64 calculates difference between two uint64.
 func DiffUint64(a, b uint64) uint64 {
 	if a > b {

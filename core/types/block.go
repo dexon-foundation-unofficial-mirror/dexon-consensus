@@ -143,6 +143,7 @@ type Block struct {
 	Timestamp    time.Time           `json:"timestamp"`
 	Acks         common.SortedHashes `json:"acks"`
 	Payload      []byte              `json:"payload"`
+	PayloadHash  common.Hash         `json:"payload_hash"`
 	Witness      Witness             `json:"witness"`
 	Finalization FinalizationResult  `json:"finalization"`
 	Signature    crypto.Signature    `json:"signature"`
@@ -158,6 +159,7 @@ type rlpBlock struct {
 	Timestamp    *rlpTimestamp
 	Acks         common.SortedHashes
 	Payload      []byte
+	PayloadHash  common.Hash
 	Witness      *Witness
 	Finalization *FinalizationResult
 	Signature    crypto.Signature
@@ -175,6 +177,7 @@ func (b *Block) EncodeRLP(w io.Writer) error {
 		Timestamp:    &rlpTimestamp{b.Timestamp},
 		Acks:         b.Acks,
 		Payload:      b.Payload,
+		PayloadHash:  b.PayloadHash,
 		Witness:      &b.Witness,
 		Finalization: &b.Finalization,
 		Signature:    b.Signature,
@@ -195,6 +198,7 @@ func (b *Block) DecodeRLP(s *rlp.Stream) error {
 			Timestamp:    dec.Timestamp.Time,
 			Acks:         dec.Acks,
 			Payload:      dec.Payload,
+			PayloadHash:  dec.PayloadHash,
 			Witness:      *dec.Witness,
 			Finalization: *dec.Finalization,
 			Signature:    dec.Signature,
@@ -231,6 +235,7 @@ func (b *Block) Clone() (bcopy *Block) {
 	copy(bcopy.Acks, b.Acks)
 	bcopy.Payload = make([]byte, len(b.Payload))
 	copy(bcopy.Payload, b.Payload)
+	bcopy.PayloadHash = b.PayloadHash
 	bcopy.Finalization.Randomness = make([]byte, len(b.Finalization.Randomness))
 	copy(bcopy.Finalization.Randomness, b.Finalization.Randomness)
 	return
