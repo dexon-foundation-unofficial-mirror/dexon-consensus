@@ -205,6 +205,12 @@ func (cc *configurationChain) touchTSigHash(hash common.Hash) (first bool) {
 	return !exist
 }
 
+func (cc *configurationChain) untouchTSigHash(hash common.Hash) {
+	cc.tsigReady.L.Lock()
+	defer cc.tsigReady.L.Unlock()
+	delete(cc.tsigTouched, hash)
+}
+
 func (cc *configurationChain) runTSig(
 	round uint64, hash common.Hash) (
 	crypto.Signature, error) {
@@ -240,10 +246,10 @@ func (cc *configurationChain) runTSig(
 		signature, err = cc.tsig[hash].signature()
 		return err == ErrNotEnoughtPartialSignatures
 	}() {
+		// TODO(jimmy-dexon): add a timeout here.
 		cc.tsigReady.Wait()
 	}
 	delete(cc.tsig, hash)
-	delete(cc.tsigTouched, hash)
 	if err != nil {
 		return crypto.Signature{}, err
 	}

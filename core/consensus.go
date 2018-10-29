@@ -935,6 +935,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		if err = con.db.Update(*b); err != nil {
 			panic(err)
 		}
+		con.cfgModule.untouchTSigHash(b.Hash)
 		// TODO(mission): clone types.FinalizationResult
 		con.app.BlockDelivered(b.Hash, b.Finalization)
 	}
