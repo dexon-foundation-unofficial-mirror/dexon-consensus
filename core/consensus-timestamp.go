@@ -34,6 +34,8 @@ type consensusTimestamp struct {
 
 	// dMoment represents the genesis time.
 	dMoment time.Time
+	// lastTimestamp represents previous assigned consensus timestamp.
+	lastTimestamp time.Time
 }
 
 var (
@@ -42,6 +44,9 @@ var (
 	ErrTimestampNotIncrease = errors.New("timestamp is not increasing")
 	// ErrNoRoundConfig for no round config found.
 	ErrNoRoundConfig = errors.New("no round config found")
+	// ErrConsensusTimestampRewind would be reported if the generated timestamp
+	// is rewinded.
+	ErrConsensusTimestampRewind = errors.New("consensus timestamp rewind")
 )
 
 // newConsensusTimestamp creates timestamper object.
@@ -95,13 +100,13 @@ func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (err error) {
 			if len(ct.numChainsOfRounds) < 2 {
 				return ErrNoRoundConfig
 			}
+			ct.numChainsBase++
+			ct.numChainsOfRounds = ct.numChainsOfRounds[1:]
 			if ct.numChainsOfRounds[0] > ct.numChainsOfRounds[1] {
 				ct.resizeChainTimetamps(ct.numChainsOfRounds[0])
 			} else {
 				ct.resizeChainTimetamps(ct.numChainsOfRounds[1])
 			}
-			ct.numChainsBase++
-			ct.numChainsOfRounds = ct.numChainsOfRounds[1:]
 		} else {
 			// Error if round < base or round > base + 2.
 			return ErrInvalidRoundID
@@ -114,6 +119,11 @@ func (ct *consensusTimestamp) processBlocks(blocks []*types.Block) (err error) {
 			return ErrTimestampNotIncrease
 		}
 		ct.chainTimestamps[block.Position.ChainID] = block.Timestamp
+		if block.Finalization.Timestamp.Before(ct.lastTimestamp) {
+			block.Finalization.Timestamp = ct.lastTimestamp
+		} else {
+			ct.lastTimestamp = block.Finalization.Timestamp
+		}
 	}
 	return
 }
