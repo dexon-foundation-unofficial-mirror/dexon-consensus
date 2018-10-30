@@ -389,6 +389,10 @@ func (data *latticeData) prepareBlock(b *types.Block) error {
 	if config = data.getConfig(b.Position.Round); config == nil {
 		return ErrUnknownRoundID
 	}
+	// When this chain is illegal in this round, reject it.
+	if b.Position.ChainID >= config.numChains {
+		return ErrInvalidChainID
+	}
 	// Reset fields to make sure we got these information from parent block.
 	b.Position.Height = 0
 	b.ParentHash = common.Hash{}
@@ -449,9 +453,12 @@ func (data *latticeData) prepareBlock(b *types.Block) error {
 			// The reference block is already acked.
 			continue
 		}
-		// Can't ack block too old or too new to us.
-		if DiffUint64(
-			status.tip.Position.Round, b.Position.Round) > 1 {
+		if status.tip.Position.Round > b.Position.Round {
+			// Avoid forward acking: acking some block from later rounds.
+			continue
+		}
+		if b.Position.Round > status.tip.Position.Round+1 {
+			// Can't ack block too old or too new to us.
 			continue
 		}
 		acks = append(acks, status.tip.Hash)

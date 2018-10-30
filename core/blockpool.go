@@ -38,7 +38,7 @@ func newBlockPool(chainNum uint32) (pool blockPool) {
 
 // resize the pool if new chain is added.
 func (p *blockPool) resize(num uint32) {
-	if uint32(len(*p)) < num {
+	if uint32(len(*p)) >= num {
 		return
 	}
 	newPool := make([]types.ByPosition, num)

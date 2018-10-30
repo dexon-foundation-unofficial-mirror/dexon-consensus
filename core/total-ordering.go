@@ -214,6 +214,11 @@ func (cache *totalOrderingObjectCache) requestAckedStatus() (
 // recycleAckedStatys recycles the structure to record acking status.
 func (cache *totalOrderingObjectCache) recycleAckedStatus(
 	acked []*totalOrderingHeightRecord) {
+	// If the recycled objects supports lower numChains than we required,
+	// don't recycle it.
+	if uint32(len(acked)) != cache.numChains {
+		return
+	}
 	cache.ackedStatus = append(cache.ackedStatus, acked)
 }
 
@@ -229,6 +234,11 @@ func (cache *totalOrderingObjectCache) requestWinRecord() (
 func (cache *totalOrderingObjectCache) recycleWinRecord(
 	win *totalOrderingWinRecord) {
 	if win == nil {
+		return
+	}
+	// If the recycled objects supports lower numChains than we required,
+	// don't recycle it.
+	if uint32(len(win.wins)) != cache.numChains {
 		return
 	}
 	cache.winRecordPool.Put(win)
@@ -253,6 +263,11 @@ func (cache *totalOrderingObjectCache) requestHeightVector() (hv []uint64) {
 // recycleHeightVector recycles an instance to record acking heights
 // of one candidate.
 func (cache *totalOrderingObjectCache) recycleHeightVector(hv []uint64) {
+	// If the recycled objects supports lower numChains than we required,
+	// don't recycle it.
+	if uint32(len(hv)) != cache.numChains {
+		return
+	}
 	cache.heightVectors = append(cache.heightVectors, hv)
 }
 
@@ -275,6 +290,11 @@ func (cache *totalOrderingObjectCache) requestWinRecordContainer() (
 // recycleWinRecordContainer recycles a map of totalOrderingWinRecord.
 func (cache *totalOrderingObjectCache) recycleWinRecordContainer(
 	con []*totalOrderingWinRecord) {
+	// If the recycled objects supports lower numChains than we required,
+	// don't recycle it.
+	if uint32(len(con)) != cache.numChains {
+		return
+	}
 	cache.winRecordContainers = append(cache.winRecordContainers, con)
 }
 
@@ -1292,8 +1312,14 @@ func (to *totalOrdering) deliverBlocks() (
 			if !cfg.isValidLastBlock(b) {
 				continue
 			}
-			to.flushReadyChains[b.Position.ChainID] = struct{}{}
 			to.flushed[b.Position.ChainID] = struct{}{}
+		}
+		// Some last blocks for the round to be flushed might not be delivered
+		// yet.
+		for _, tip := range to.globalVector.tips[:cfg.numChains] {
+			if tip.Position.Round > to.curRound || cfg.isValidLastBlock(tip) {
+				to.flushReadyChains[tip.Position.ChainID] = struct{}{}
+			}
 		}
 	}
 	return
