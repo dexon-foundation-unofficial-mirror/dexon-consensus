@@ -19,6 +19,8 @@ package test
 
 import (
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"reflect"
 	"sort"
 	"sync"
@@ -33,10 +35,11 @@ import (
 
 // Governance is an implementation of Goverance for testing purpose.
 type Governance struct {
-	configs  []*types.Config
-	nodeSets [][]crypto.PublicKey
-	state    *State
-	lock     sync.RWMutex
+	configs              []*types.Config
+	nodeSets             [][]crypto.PublicKey
+	state                *State
+	pendingConfigChanges map[uint64]map[StateChangeType]interface{}
+	lock                 sync.RWMutex
 }
 
 // NewGovernance constructs a Governance instance.
@@ -47,7 +50,8 @@ func NewGovernance(genesisNodes []crypto.PublicKey,
 	//                public class in another, I did this to make the range of
 	//                modification smaller.
 	g = &Governance{
-		state: NewState(genesisNodes, lambda, true),
+		pendingConfigChanges: make(map[uint64]map[StateChangeType]interface{}),
+		state:                NewState(genesisNodes, lambda, true),
 	}
 	return
 }
@@ -77,7 +81,7 @@ func (g *Governance) Configuration(round uint64) *types.Config {
 	}
 	g.lock.RLock()
 	defer g.lock.RUnlock()
-	if round >= uint64(len(g.nodeSets)) {
+	if round >= uint64(len(g.configs)) {
 		return nil
 	}
 	return g.configs[round]
@@ -91,6 +95,17 @@ func (g *Governance) CRS(round uint64) common.Hash {
 // NotifyRoundHeight notifies governace contract to snapshot config.
 func (g *Governance) NotifyRoundHeight(round, height uint64) {
 	g.CatchUpWithRound(round)
+	// Apply change request for next round.
+	func() {
+		g.lock.Lock()
+		defer g.lock.Unlock()
+		for t, v := range g.pendingConfigChanges[round+1] {
+			if err := g.state.RequestChange(t, v); err != nil {
+				panic(err)
+			}
+		}
+		delete(g.pendingConfigChanges, round+1)
+	}()
 }
 
 // ProposeCRS propose a CRS.
@@ -202,6 +217,14 @@ func (g *Governance) Clone() *Governance {
 		copiedConfigs = append(copiedConfigs, c.Clone())
 	}
 	// Clone node sets.
+	copiedPendingChanges := make(map[uint64]map[StateChangeType]interface{})
+	for round, forRound := range g.pendingConfigChanges {
+		copiedForRound := make(map[StateChangeType]interface{})
+		for k, v := range forRound {
+			copiedForRound[k] = v
+		}
+		copiedPendingChanges[round] = copiedForRound
+	}
 	// NOTE: here I assume the key is from ecdsa.
 	copiedNodeSets := [][]crypto.PublicKey{}
 	for _, nodeSetForRound := range g.nodeSets {
@@ -215,10 +238,13 @@ func (g *Governance) Clone() *Governance {
 		}
 		copiedNodeSets = append(copiedNodeSets, copiedNodeSet)
 	}
+	// Clone pending changes.
+
 	return &Governance{
-		configs:  copiedConfigs,
-		state:    copiedState,
-		nodeSets: copiedNodeSets,
+		configs:              copiedConfigs,
+		state:                copiedState,
+		nodeSets:             copiedNodeSets,
+		pendingConfigChanges: copiedPendingChanges,
 	}
 }
 
@@ -230,6 +256,10 @@ func (g *Governance) Equal(other *Governance, checkState bool) bool {
 	}
 	// Check node sets.
 	if len(g.nodeSets) != len(other.nodeSets) {
+		return false
+	}
+	// Check pending changes.
+	if !reflect.DeepEqual(g.pendingConfigChanges, other.pendingConfigChanges) {
 		return false
 	}
 	getSortedKeys := func(keys []crypto.PublicKey) (encoded []string) {
@@ -259,4 +289,33 @@ func (g *Governance) Equal(other *Governance, checkState bool) bool {
 		return g.state.Equal(other.state) == nil
 	}
 	return true
+}
+
+// RegisterConfigChange tells this governance instance to request some
+// configuration change at some round.
+// NOTE: you can't request config change for round 0, 1, they are genesis
+//       rounds.
+// NOTE: this function should be called before running.
+func (g *Governance) RegisterConfigChange(
+	round uint64, t StateChangeType, v interface{}) (err error) {
+	if t < StateChangeNumChains || t > StateChangeDKGSetSize {
+		return fmt.Errorf("state changes to register is not supported: %v", t)
+	}
+	if round < 2 {
+		return errors.New(
+			"attempt to register state change for genesis rounds")
+	}
+	g.lock.Lock()
+	defer g.lock.Unlock()
+	if round <= uint64(len(g.configs)) {
+		return errors.New(
+			"attempt to register state change for prepared rounds")
+	}
+	pendingChangesForRound, exists := g.pendingConfigChanges[round]
+	if !exists {
+		pendingChangesForRound = make(map[StateChangeType]interface{})
+		g.pendingConfigChanges[round] = pendingChangesForRound
+	}
+	pendingChangesForRound[t] = v
+	return nil
 }

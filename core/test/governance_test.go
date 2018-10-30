@@ -59,6 +59,36 @@ func (s *GovernanceTestSuite) TestEqual() {
 	req.False(g1.Equal(g4, true))
 }
 
+func (s *GovernanceTestSuite) TestRegisterChange() {
+	req := s.Require()
+	_, genesisNodes, err := NewKeys(20)
+	req.NoError(err)
+	g, err := NewGovernance(genesisNodes, 100*time.Millisecond)
+	req.NoError(err)
+	// Unable to register change for genesis round.
+	req.Error(g.RegisterConfigChange(0, StateChangeNumChains, uint32(32)))
+	// Make some round prepared.
+	g.CatchUpWithRound(4)
+	req.Equal(g.Configuration(4).NumChains, uint32(20))
+	// Unable to register change for prepared round.
+	req.Error(g.RegisterConfigChange(4, StateChangeNumChains, uint32(32)))
+	// Unable to register change for next notified round.
+	req.Error(g.RegisterConfigChange(5, StateChangeNumChains, uint32(32)))
+	// It's ok to make some change when condition is met.
+	req.NoError(g.RegisterConfigChange(6, StateChangeNumChains, uint32(32)))
+	req.NoError(g.RegisterConfigChange(7, StateChangeNumChains, uint32(40)))
+	// In local mode, state for round 6 would be ready after notified with
+	// round 5.
+	g.NotifyRoundHeight(5, 0)
+	// In local mode, state for round 7 would be ready after notified with
+	// round 6.
+	g.NotifyRoundHeight(6, 0)
+	// Notify governance to take a snapshot for round 7's configuration.
+	g.NotifyRoundHeight(7, 0)
+	req.Equal(g.Configuration(6).NumChains, uint32(32))
+	req.Equal(g.Configuration(7).NumChains, uint32(40))
+}
+
 func TestGovernance(t *testing.T) {
 	suite.Run(t, new(GovernanceTestSuite))
 }

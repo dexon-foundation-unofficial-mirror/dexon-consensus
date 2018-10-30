@@ -180,6 +180,14 @@ func NewState(
 	}
 }
 
+// SwitchToRemoteMode turn this State instance into remote mode: all changes
+// are pending, and need to be packed/unpacked to apply.
+func (s *State) SwitchToRemoteMode() {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.local = false
+}
+
 // Snapshot returns configration that could be snapshotted.
 func (s *State) Snapshot() (*types.Config, []crypto.PublicKey) {
 	s.lock.RLock()
@@ -575,6 +583,13 @@ func (s *State) Apply(reqsAsBytes []byte) (err error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	for _, req := range reqs {
+		if err = s.isValidRequest(req); err != nil {
+			if err == ErrDuplicatedChange {
+				err = nil
+				continue
+			}
+			return
+		}
 		if err = s.applyRequest(req); err != nil {
 			return
 		}
