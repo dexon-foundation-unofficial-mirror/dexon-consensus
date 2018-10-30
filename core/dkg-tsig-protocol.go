@@ -106,9 +106,25 @@ type TSigVerifier interface {
 	VerifySignature(hash common.Hash, sig crypto.Signature) bool
 }
 
+// TSigVerifierCacheInterface specifies interface used by TSigVerifierCache.
+type TSigVerifierCacheInterface interface {
+	// Configuration returns the configuration at a given round.
+	// Return the genesis configuration if round == 0.
+	Configuration(round uint64) *types.Config
+
+	// DKGComplaints gets all the DKGComplaints of round.
+	DKGComplaints(round uint64) []*typesDKG.Complaint
+
+	// DKGMasterPublicKeys gets all the DKGMasterPublicKey of round.
+	DKGMasterPublicKeys(round uint64) []*typesDKG.MasterPublicKey
+
+	// IsDKGFinal checks if DKG is final.
+	IsDKGFinal(round uint64) bool
+}
+
 // TSigVerifierCache is the cache for TSigVerifier.
 type TSigVerifierCache struct {
-	gov       Governance
+	intf      TSigVerifierCacheInterface
 	verifier  map[uint64]TSigVerifier
 	minRound  uint64
 	cacheSize int
@@ -431,9 +447,10 @@ func (gpk *DKGGroupPublicKey) VerifySignature(
 }
 
 // NewTSigVerifierCache creats a DKGGroupPublicKey instance.
-func NewTSigVerifierCache(gov Governance, cacheSize int) *TSigVerifierCache {
+func NewTSigVerifierCache(
+	intf TSigVerifierCacheInterface, cacheSize int) *TSigVerifierCache {
 	return &TSigVerifierCache{
-		gov:       gov,
+		intf:      intf,
 		verifier:  make(map[uint64]TSigVerifier),
 		cacheSize: cacheSize,
 	}
@@ -463,13 +480,13 @@ func (tc *TSigVerifierCache) Update(round uint64) (bool, error) {
 	if _, exist := tc.verifier[round]; exist {
 		return true, nil
 	}
-	if !tc.gov.IsDKGFinal(round) {
+	if !tc.intf.IsDKGFinal(round) {
 		return false, nil
 	}
 	gpk, err := NewDKGGroupPublicKey(round,
-		tc.gov.DKGMasterPublicKeys(round),
-		tc.gov.DKGComplaints(round),
-		int(tc.gov.Configuration(round).DKGSetSize/3)+1)
+		tc.intf.DKGMasterPublicKeys(round),
+		tc.intf.DKGComplaints(round),
+		int(tc.intf.Configuration(round).DKGSetSize/3)+1)
 	if err != nil {
 		return false, err
 	}
