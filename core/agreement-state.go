@@ -19,7 +19,6 @@ package core
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
@@ -40,6 +39,7 @@ const (
 	statePreCommit
 	stateCommit
 	stateForward
+	stateRepeatVote
 )
 
 var nullBlockHash = common.Hash{}
@@ -127,26 +127,54 @@ func (s *commitState) nextState() (agreementState, error) {
 	} else {
 		hash = skipBlockHash
 	}
-	s.a.recv.ProposeVote(&types.Vote{
+	vote := &types.Vote{
 		Type:      types.VoteCom,
 		BlockHash: hash,
 		Period:    s.a.period,
-	})
-	return newForwardState(s.a), nil
+	}
+	s.a.recv.ProposeVote(vote)
+	return newForwardState(s.a, vote), nil
 }
 
 // ----- ForwardState -----
 type forwardState struct {
-	a *agreementData
+	a    *agreementData
+	vote *types.Vote
 }
 
-func newForwardState(a *agreementData) *forwardState {
-	return &forwardState{a: a}
+func newForwardState(a *agreementData, vote *types.Vote) *forwardState {
+	return &forwardState{
+		a:    a,
+		vote: vote,
+	}
 }
 
 func (s *forwardState) state() agreementStateType { return stateForward }
-func (s *forwardState) clocks() int               { return math.MaxInt32 }
+func (s *forwardState) clocks() int               { return 4 }
 
 func (s *forwardState) nextState() (agreementState, error) {
+	return newRepeatVoteState(s.a, s.vote), nil
+}
+
+// ----- RepeatVoteState -----
+// repeateVoteState is a special state to ensure the assumption in the consensus
+// algorithm that every vote will eventually arrive for all nodes.
+type repeatVoteState struct {
+	a    *agreementData
+	vote *types.Vote
+}
+
+func newRepeatVoteState(a *agreementData, vote *types.Vote) *repeatVoteState {
+	return &repeatVoteState{
+		a:    a,
+		vote: vote,
+	}
+}
+
+func (s *repeatVoteState) state() agreementStateType { return stateRepeatVote }
+func (s *repeatVoteState) clocks() int               { return 4 }
+
+func (s *repeatVoteState) nextState() (agreementState, error) {
+	s.a.recv.ProposeVote(s.vote)
 	return s, nil
 }

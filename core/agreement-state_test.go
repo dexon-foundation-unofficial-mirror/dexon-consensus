@@ -233,14 +233,36 @@ func (s *AgreementStateTestSuite) TestCommitState() {
 
 func (s *AgreementStateTestSuite) TestForwardState() {
 	a := s.newAgreement(4)
-	state := newForwardState(a.data)
+	vote := &types.Vote{
+		BlockHash: common.NewRandomHash(),
+	}
+	state := newForwardState(a.data, vote)
 	s.Equal(stateForward, state.state())
-	s.True(state.clocks() > 100000)
+	s.Equal(4, state.clocks())
 
-	// nextState() should return instantly without doing anything.
-	_, err := state.nextState()
+	newState, err := state.nextState()
 	s.Require().Nil(err)
 	s.Require().Len(s.voteChan, 0)
+	s.Equal(stateRepeatVote, newState.state())
+}
+
+func (s *AgreementStateTestSuite) TestRepeatVoteState() {
+	a := s.newAgreement(4)
+	vote := &types.Vote{
+		BlockHash: common.NewRandomHash(),
+	}
+	state := newRepeatVoteState(a.data, vote)
+	s.Equal(stateRepeatVote, state.state())
+	s.Equal(4, state.clocks())
+
+	for i := 0; i < 5; i++ {
+		newState, err := state.nextState()
+		s.Require().Nil(err)
+		s.Require().Len(s.voteChan, 1)
+		proposedVote := <-s.voteChan
+		s.Equal(vote, proposedVote)
+		s.Equal(stateRepeatVote, newState.state())
+	}
 }
 
 func TestAgreementState(t *testing.T) {

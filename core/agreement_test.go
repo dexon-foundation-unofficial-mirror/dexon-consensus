@@ -183,6 +183,49 @@ func (s *AgreementTestSuite) TestSimpleConfirm() {
 	s.Equal(blockHash, confirmBlock)
 }
 
+func (s *AgreementTestSuite) TestPartitionOnCommitVote() {
+	a := s.newAgreement(4)
+	// InitialState
+	a.nextState()
+	// PreCommitState
+	s.Require().Len(s.blockChan, 1)
+	blockHash := <-s.blockChan
+	block, exist := s.block[blockHash]
+	s.Require().True(exist)
+	s.Require().NoError(a.processBlock(block))
+	s.Require().Len(s.voteChan, 1)
+	vote := <-s.voteChan
+	s.Equal(types.VoteInit, vote.Type)
+	s.Equal(blockHash, vote.BlockHash)
+	a.nextState()
+	// CommitState
+	s.Require().Len(s.voteChan, 1)
+	vote = <-s.voteChan
+	s.Equal(types.VotePreCom, vote.Type)
+	s.Equal(blockHash, vote.BlockHash)
+	for nID := range s.auths {
+		v := s.copyVote(vote, nID)
+		s.Require().NoError(a.processVote(v))
+	}
+	a.nextState()
+	// ForwardState
+	s.Require().Len(s.voteChan, 1)
+	vote = <-s.voteChan
+	s.Equal(types.VoteCom, vote.Type)
+	s.Equal(blockHash, vote.BlockHash)
+	s.Equal(blockHash, a.data.lockValue)
+	s.Equal(uint64(1), a.data.lockRound)
+	// RepeateVoteState
+	a.nextState()
+	// The agreement does not receive others commit vote, it will keep re-sending.
+	for i := 0; i < 5; i++ {
+		a.nextState()
+		s.Require().Len(s.voteChan, 1)
+		proposedVote := <-s.voteChan
+		s.Equal(vote, proposedVote)
+	}
+}
+
 func (s *AgreementTestSuite) TestFastForwardCond1() {
 	votes := 0
 	a := s.newAgreement(4)
