@@ -7,8 +7,8 @@ else
 BINDIR := $(abspath $(BINDIR))
 endif
 PROJECT_ROOT=github.com/dexon-foundation/dexon-consensus-core
-BLS_REPO = spiderpowa/bls-go-alpine
-BLS_LIB = vendor/github.com/Spiderpowa/bls/lib/libbls384.a
+BLS_REPO = dexonfoundation/bls-go-alpine
+BLS_LIB = vendor/github.com/dexon-foundation/bls/lib/libbls384.a
 BUILDER_REPO = dexonfoundation/dexon-alpine
 
 ifeq ($(DOCKER),true)
