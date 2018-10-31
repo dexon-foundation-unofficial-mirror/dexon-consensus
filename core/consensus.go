@@ -910,6 +910,20 @@ func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
 	return
 }
 
+// deliverBlock deliver a block to application layer.
+func (con *Consensus) deliverBlock(b *types.Block) {
+	// TODO(mission): clone types.FinalizationResult
+	con.logger.Debug("Calling Application.BlockDelivered", "block", b)
+	con.app.BlockDelivered(b.Hash, b.Finalization)
+	if b.Position.Round+2 == con.roundToNotify {
+		// Only the first block delivered of that round would
+		// trigger this noitification.
+		con.gov.NotifyRoundHeight(
+			con.roundToNotify, b.Finalization.Height)
+		con.roundToNotify++
+	}
+}
+
 // processBlock is the entry point to submit one block to a Consensus instance.
 func (con *Consensus) processBlock(block *types.Block) (err error) {
 	if err = con.db.Put(*block); err != nil && err != blockdb.ErrBlockExists {
@@ -936,8 +950,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 			panic(err)
 		}
 		con.cfgModule.untouchTSigHash(b.Hash)
-		// TODO(mission): clone types.FinalizationResult
-		con.app.BlockDelivered(b.Hash, b.Finalization)
+		con.deliverBlock(b)
 	}
 	if err = con.lattice.PurgeBlocks(deliveredBlocks); err != nil {
 		return
@@ -966,14 +979,7 @@ func (con *Consensus) processFinalizedBlock(block *types.Block) (err error) {
 				}
 				err = nil
 			}
-			con.app.BlockDelivered(b.Hash, b.Finalization)
-			if b.Position.Round+2 == con.roundToNotify {
-				// Only the first block delivered of that round would
-				// trigger this noitification.
-				con.gov.NotifyRoundHeight(
-					con.roundToNotify, b.Finalization.Height)
-				con.roundToNotify++
-			}
+			con.deliverBlock(b)
 		}
 	}
 	return
