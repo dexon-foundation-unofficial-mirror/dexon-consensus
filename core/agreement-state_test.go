@@ -85,7 +85,7 @@ func (s *AgreementStateTestSuite) prepareVote(
 
 func (s *AgreementStateTestSuite) SetupTest() {
 	prvKey, err := ecdsa.NewPrivateKey()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	s.ID = types.NewNodeID(prvKey.PublicKey())
 	s.auths = map[types.NodeID]*Authenticator{
 		s.ID: NewAuthenticator(prvKey),
@@ -103,7 +103,7 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 	notarySet := make(map[types.NodeID]struct{})
 	for i := 0; i < numNode-1; i++ {
 		prvKey, err := ecdsa.NewPrivateKey()
-		s.Require().Nil(err)
+		s.Require().NoError(err)
 		nID := types.NewNodeID(prvKey.PublicKey())
 		notarySet[nID] = struct{}{}
 		s.auths[nID] = NewAuthenticator(prvKey)
@@ -132,11 +132,11 @@ func (s *AgreementStateTestSuite) TestInitialState() {
 	// Proposing a new block.
 	a.data.period = 1
 	newState, err := state.nextState()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	s.Require().Len(s.blockChan, 1)
 	proposedBlock := <-s.blockChan
 	s.NotEqual(common.Hash{}, proposedBlock)
-	s.Require().Nil(a.processBlock(s.block[proposedBlock]))
+	s.Require().NoError(a.processBlock(s.block[proposedBlock]))
 	s.Equal(statePreCommit, newState.state())
 }
 
@@ -150,18 +150,18 @@ func (s *AgreementStateTestSuite) TestPreCommitState() {
 	for i := range blocks {
 		blocks[i] = s.proposeBlock(a.data.leader)
 		prv, err := ecdsa.NewPrivateKey()
-		s.Require().Nil(err)
+		s.Require().NoError(err)
 		blocks[i].ProposerID = types.NewNodeID(prv.PublicKey())
-		s.Require().Nil(NewAuthenticator(prv).SignCRS(
+		s.Require().NoError(NewAuthenticator(prv).SignCRS(
 			blocks[i], a.data.leader.hashCRS))
-		s.Require().Nil(a.processBlock(blocks[i]))
+		s.Require().NoError(a.processBlock(blocks[i]))
 	}
 
 	// If lockvalue == null, propose preCom-vote for the leader block.
 	a.data.lockValue = nullBlockHash
 	a.data.period = 1
 	newState, err := state.nextState()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	s.Require().Len(s.voteChan, 1)
 	vote := <-s.voteChan
 	s.Equal(types.VotePreCom, vote.Type)
@@ -173,7 +173,7 @@ func (s *AgreementStateTestSuite) TestPreCommitState() {
 	hash := common.NewRandomHash()
 	a.data.lockValue = hash
 	newState, err = state.nextState()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	s.Require().Len(s.voteChan, 1)
 	vote = <-s.voteChan
 	s.Equal(types.VotePreCom, vote.Type)
@@ -191,13 +191,13 @@ func (s *AgreementStateTestSuite) TestCommitState() {
 	// propose a com-vote for block v.
 	a.data.period = 1
 	block := s.proposeBlock(a.data.leader)
-	s.Require().Nil(a.processBlock(block))
+	s.Require().NoError(a.processBlock(block))
 	for nID := range a.notarySet {
 		vote := s.prepareVote(nID, types.VotePreCom, block.Hash, 1)
-		s.Require().Nil(a.processVote(vote))
+		s.Require().NoError(a.processVote(vote))
 	}
 	newState, err := state.nextState()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	s.Require().Len(s.voteChan, 1)
 	s.Equal(block.Hash, a.data.lockValue)
 	s.Equal(uint64(1), a.data.lockRound)
@@ -209,7 +209,7 @@ func (s *AgreementStateTestSuite) TestCommitState() {
 	// Else, com-vote on SKIP.
 	a.data.period = 2
 	newState, err = state.nextState()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	s.Require().Len(s.voteChan, 1)
 	vote = <-s.voteChan
 	s.Equal(types.VoteCom, vote.Type)
@@ -220,10 +220,10 @@ func (s *AgreementStateTestSuite) TestCommitState() {
 	a.data.period = 3
 	for nID := range a.notarySet {
 		vote := s.prepareVote(nID, types.VotePreCom, skipBlockHash, 3)
-		s.Require().Nil(a.processVote(vote))
+		s.Require().NoError(a.processVote(vote))
 	}
 	newState, err = state.nextState()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	s.Require().Len(s.voteChan, 1)
 	vote = <-s.voteChan
 	s.Equal(types.VoteCom, vote.Type)
@@ -233,36 +233,26 @@ func (s *AgreementStateTestSuite) TestCommitState() {
 
 func (s *AgreementStateTestSuite) TestForwardState() {
 	a := s.newAgreement(4)
-	vote := &types.Vote{
-		BlockHash: common.NewRandomHash(),
-	}
-	state := newForwardState(a.data, vote)
+	state := newForwardState(a.data)
 	s.Equal(stateForward, state.state())
 	s.Equal(4, state.clocks())
 
 	newState, err := state.nextState()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	s.Require().Len(s.voteChan, 0)
-	s.Equal(stateRepeatVote, newState.state())
+	s.Equal(statePullVote, newState.state())
 }
 
-func (s *AgreementStateTestSuite) TestRepeatVoteState() {
+func (s *AgreementStateTestSuite) TestPullVoteState() {
 	a := s.newAgreement(4)
-	vote := &types.Vote{
-		BlockHash: common.NewRandomHash(),
-	}
-	state := newRepeatVoteState(a.data, vote)
-	s.Equal(stateRepeatVote, state.state())
+	state := newPullVoteState(a.data)
+	s.Equal(statePullVote, state.state())
 	s.Equal(4, state.clocks())
 
-	for i := 0; i < 5; i++ {
-		newState, err := state.nextState()
-		s.Require().Nil(err)
-		s.Require().Len(s.voteChan, 1)
-		proposedVote := <-s.voteChan
-		s.Equal(vote, proposedVote)
-		s.Equal(stateRepeatVote, newState.state())
-	}
+	newState, err := state.nextState()
+	s.Require().NoError(err)
+	s.Require().Len(s.voteChan, 0)
+	s.Equal(statePullVote, newState.state())
 }
 
 func TestAgreementState(t *testing.T) {

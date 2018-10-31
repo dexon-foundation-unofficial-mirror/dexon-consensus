@@ -471,6 +471,12 @@ BALoop:
 			agreement.restart(nIDs, nextPos)
 		default:
 		}
+		if agreement.pullVotes() {
+			pos := agreement.agreementID()
+			con.logger.Debug("Calling Network.PullVotes for syncing votes",
+				"position", pos)
+			con.network.PullVotes(pos)
+		}
 		err := agreement.nextState()
 		if err != nil {
 			con.logger.Error("Failed to proceed to next state",

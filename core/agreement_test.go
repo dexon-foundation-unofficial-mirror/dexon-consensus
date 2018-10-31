@@ -80,7 +80,7 @@ type AgreementTestSuite struct {
 
 func (s *AgreementTestSuite) SetupTest() {
 	prvKey, err := ecdsa.NewPrivateKey()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	s.ID = types.NewNodeID(prvKey.PublicKey())
 	s.auths = map[types.NodeID]*Authenticator{
 		s.ID: NewAuthenticator(prvKey),
@@ -100,7 +100,7 @@ func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 	notarySet := make(map[types.NodeID]struct{})
 	for i := 0; i < numNotarySet-1; i++ {
 		prvKey, err := ecdsa.NewPrivateKey()
-		s.Require().Nil(err)
+		s.Require().NoError(err)
 		nID := types.NewNodeID(prvKey.PublicKey())
 		notarySet[nID] = struct{}{}
 		s.auths[nID] = NewAuthenticator(prvKey)
@@ -217,13 +217,8 @@ func (s *AgreementTestSuite) TestPartitionOnCommitVote() {
 	s.Equal(uint64(1), a.data.lockRound)
 	// RepeateVoteState
 	a.nextState()
-	// The agreement does not receive others commit vote, it will keep re-sending.
-	for i := 0; i < 5; i++ {
-		a.nextState()
-		s.Require().Len(s.voteChan, 1)
-		proposedVote := <-s.voteChan
-		s.Equal(vote, proposedVote)
-	}
+	s.True(a.pullVotes())
+	s.Require().Len(s.voteChan, 0)
 }
 
 func (s *AgreementTestSuite) TestFastForwardCond1() {

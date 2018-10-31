@@ -223,6 +223,11 @@ func (a *agreement) clocks() int {
 	return a.state.clocks()
 }
 
+// pullVotes returns if current agreement requires more votes to continue.
+func (a *agreement) pullVotes() bool {
+	return a.state.state() == statePullVote
+}
+
 // agreementID returns the current agreementID.
 func (a *agreement) agreementID() types.Position {
 	a.lock.RLock()

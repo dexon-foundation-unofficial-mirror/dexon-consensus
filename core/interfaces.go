@@ -62,6 +62,9 @@ type Network interface {
 	// PullBlocks tries to pull blocks from the DEXON network.
 	PullBlocks(hashes common.Hashes)
 
+	// PullVotes tries to pull votes from the DEXON network.
+	PullVotes(position types.Position)
+
 	// BroadcastVote broadcasts vote to all nodes in DEXON network.
 	BroadcastVote(vote *types.Vote)
 

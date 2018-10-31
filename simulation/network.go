@@ -139,6 +139,11 @@ func (n *network) PullBlocks(hashes common.Hashes) {
 	}()
 }
 
+// PullVote implements core.Network interface.
+func (n *network) PullVotes(pos types.Position) {
+	// TODO(jimmy-dexon): implement this.
+}
+
 // BroadcastVote implements core.Network interface.
 func (n *network) BroadcastVote(vote *types.Vote) {
 	if err := n.trans.Broadcast(vote); err != nil {

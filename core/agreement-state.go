@@ -39,7 +39,7 @@ const (
 	statePreCommit
 	stateCommit
 	stateForward
-	stateRepeatVote
+	statePullVote
 )
 
 var nullBlockHash = common.Hash{}
@@ -127,54 +127,44 @@ func (s *commitState) nextState() (agreementState, error) {
 	} else {
 		hash = skipBlockHash
 	}
-	vote := &types.Vote{
+	s.a.recv.ProposeVote(&types.Vote{
 		Type:      types.VoteCom,
 		BlockHash: hash,
 		Period:    s.a.period,
-	}
-	s.a.recv.ProposeVote(vote)
-	return newForwardState(s.a, vote), nil
+	})
+	return newForwardState(s.a), nil
 }
 
 // ----- ForwardState -----
 type forwardState struct {
-	a    *agreementData
-	vote *types.Vote
+	a *agreementData
 }
 
-func newForwardState(a *agreementData, vote *types.Vote) *forwardState {
-	return &forwardState{
-		a:    a,
-		vote: vote,
-	}
+func newForwardState(a *agreementData) *forwardState {
+	return &forwardState{a: a}
 }
 
 func (s *forwardState) state() agreementStateType { return stateForward }
 func (s *forwardState) clocks() int               { return 4 }
 
 func (s *forwardState) nextState() (agreementState, error) {
-	return newRepeatVoteState(s.a, s.vote), nil
+	return newPullVoteState(s.a), nil
 }
 
-// ----- RepeatVoteState -----
-// repeateVoteState is a special state to ensure the assumption in the consensus
+// ----- PullVoteState -----
+// pullVoteState is a special state to ensure the assumption in the consensus
 // algorithm that every vote will eventually arrive for all nodes.
-type repeatVoteState struct {
-	a    *agreementData
-	vote *types.Vote
+type pullVoteState struct {
+	a *agreementData
 }
 
-func newRepeatVoteState(a *agreementData, vote *types.Vote) *repeatVoteState {
-	return &repeatVoteState{
-		a:    a,
-		vote: vote,
-	}
+func newPullVoteState(a *agreementData) *pullVoteState {
+	return &pullVoteState{a: a}
 }
 
-func (s *repeatVoteState) state() agreementStateType { return stateRepeatVote }
-func (s *repeatVoteState) clocks() int               { return 4 }
+func (s *pullVoteState) state() agreementStateType { return statePullVote }
+func (s *pullVoteState) clocks() int               { return 4 }
 
-func (s *repeatVoteState) nextState() (agreementState, error) {
-	s.a.recv.ProposeVote(s.vote)
+func (s *pullVoteState) nextState() (agreementState, error) {
 	return s, nil
 }
