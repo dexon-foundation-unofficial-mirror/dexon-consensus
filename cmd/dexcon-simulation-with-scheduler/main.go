@@ -5,6 +5,8 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"runtime"
 	"runtime/pprof"
@@ -24,7 +26,10 @@ var (
 func main() {
 	flag.Parse()
 	rand.Seed(time.Now().UnixNano())
-
+	// Supports runtime pprof monitoring.
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 	if *configFile == "" {
 		log.Fatal("error: no configuration file specified")
 	}
