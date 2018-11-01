@@ -88,22 +88,30 @@ type App struct {
 	Delivered          map[common.Hash]*AppDeliveredRecord
 	DeliverSequence    common.Hashes
 	deliveredLock      sync.RWMutex
+	blocks             map[common.Hash]*types.Block
+	blocksLock         sync.Mutex
+	state              *State
 }
 
 // NewApp constructs a TestApp instance.
-func NewApp() *App {
+func NewApp(state *State) *App {
 	return &App{
 		Acked:              make(map[common.Hash]*AppAckedRecord),
 		TotalOrdered:       []*AppTotalOrderRecord{},
 		TotalOrderedByHash: make(map[common.Hash]*AppTotalOrderRecord),
 		Delivered:          make(map[common.Hash]*AppDeliveredRecord),
 		DeliverSequence:    common.Hashes{},
+		blocks:             make(map[common.Hash]*types.Block),
+		state:              state,
 	}
 }
 
 // PreparePayload implements Application interface.
 func (app *App) PreparePayload(position types.Position) ([]byte, error) {
-	return []byte{}, nil
+	if app.state == nil {
+		return []byte{}, nil
+	}
+	return app.state.PackRequests()
 }
 
 // PrepareWitness implements Application interface.
@@ -119,7 +127,10 @@ func (app *App) VerifyBlock(block *types.Block) types.BlockVerifyStatus {
 }
 
 // BlockConfirmed implements Application interface.
-func (app *App) BlockConfirmed(_ types.Block) {
+func (app *App) BlockConfirmed(b types.Block) {
+	app.blocksLock.Lock()
+	defer app.blocksLock.Unlock()
+	app.blocks[b.Hash] = &b
 }
 
 // StronglyAcked implements Application interface.
@@ -152,15 +163,30 @@ func (app *App) TotalOrderingDelivered(blockHashes common.Hashes, mode uint32) {
 // BlockDelivered implements Application interface.
 func (app *App) BlockDelivered(
 	blockHash common.Hash, result types.FinalizationResult) {
-	app.deliveredLock.Lock()
-	defer app.deliveredLock.Unlock()
-
-	app.Delivered[blockHash] = &AppDeliveredRecord{
-		ConsensusTime:   result.Timestamp,
-		ConsensusHeight: result.Height,
-		When:            time.Now().UTC(),
-	}
-	app.DeliverSequence = append(app.DeliverSequence, blockHash)
+	func() {
+		app.deliveredLock.Lock()
+		defer app.deliveredLock.Unlock()
+		app.Delivered[blockHash] = &AppDeliveredRecord{
+			ConsensusTime:   result.Timestamp,
+			ConsensusHeight: result.Height,
+			When:            time.Now().UTC(),
+		}
+		app.DeliverSequence = append(app.DeliverSequence, blockHash)
+	}()
+	// Apply packed state change requests in payload.
+	func() {
+		if app.state == nil {
+			return
+		}
+		app.blocksLock.Lock()
+		defer app.blocksLock.Unlock()
+		b := app.blocks[blockHash]
+		if err := app.state.Apply(b.Payload); err != nil {
+			if err != ErrDuplicatedChange {
+				panic(err)
+			}
+		}
+	}()
 }
 
 // Compare performs these checks against another App instance

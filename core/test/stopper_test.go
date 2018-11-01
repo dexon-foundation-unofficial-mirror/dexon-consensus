@@ -70,7 +70,7 @@ func (s *StopperTestSuite) TestStopByConfirmedBlocks() {
 		nodes = GenerateRandomNodeIDs(2)
 	)
 	for _, nID := range nodes {
-		apps[nID] = NewApp()
+		apps[nID] = NewApp(nil)
 		db, err := blockdb.NewMemBackedBlockDB()
 		req.NoError(err)
 		dbs[nID] = db
@@ -118,7 +118,7 @@ func (s *StopperTestSuite) TestStopByRound() {
 		nodes = GenerateRandomNodeIDs(2)
 	)
 	for _, nID := range nodes {
-		apps[nID] = NewApp()
+		apps[nID] = NewApp(nil)
 		db, err := blockdb.NewMemBackedBlockDB()
 		req.NoError(err)
 		dbs[nID] = db

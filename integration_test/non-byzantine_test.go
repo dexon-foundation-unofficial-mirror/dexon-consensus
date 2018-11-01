@@ -21,9 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus-core/core/test"
-	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -32,10 +30,6 @@ type NonByzantineTestSuite struct {
 }
 
 func (s *NonByzantineTestSuite) TestNonByzantine() {
-	numNodes := 25
-	if testing.Short() {
-		numNodes = 7
-	}
 	var (
 		networkLatency = &test.NormalLatencyModel{
 			Sigma: 20,
@@ -45,20 +39,99 @@ func (s *NonByzantineTestSuite) TestNonByzantine() {
 			Sigma: 30,
 			Mean:  500,
 		}
-		apps = make(map[types.NodeID]*test.App)
-		dbs  = make(map[types.NodeID]blockdb.BlockDatabase)
-		req  = s.Require()
+		numNodes = 25
+		req      = s.Require()
 	)
-
-	apps, dbs, nodes, err := PrepareNodes(
-		numNodes, networkLatency, proposingLatency)
-	req.Nil(err)
+	if testing.Short() {
+		numNodes = 7
+	}
+	// Setup key pairs.
+	prvKeys, pubKeys, err := test.NewKeys(numNodes)
+	req.NoError(err)
+	// Setup governance.
+	gov, err := test.NewGovernance(pubKeys, 250*time.Millisecond)
+	req.NoError(err)
+	// Setup nodes.
+	nodes, err := PrepareNodes(
+		gov, prvKeys, 25, networkLatency, proposingLatency)
+	req.NoError(err)
+	// Setup scheduler.
+	apps, dbs := CollectAppAndDBFromNodes(nodes)
 	now := time.Now().UTC()
 	sch := test.NewScheduler(test.NewStopByConfirmedBlocks(50, apps, dbs))
-	for vID, v := range nodes {
-		sch.RegisterEventHandler(vID, v)
-		req.Nil(sch.Seed(NewProposeBlockEvent(vID, now)))
+	for _, n := range nodes {
+		req.NoError(n.Bootstrap(sch, now))
 	}
+	sch.Run(4)
+	// Check results by comparing test.App instances.
+	req.NoError(VerifyApps(apps))
+}
+
+func (s *NonByzantineTestSuite) TestConfigurationChange() {
+	// This test case verify the correctness of core.Lattice when configuration
+	// changes.
+	// - Configuration changes are registered at 'pickedNode', and would carried
+	//   in blocks' payload and broadcast to other nodes.
+	var (
+		networkLatency = &test.NormalLatencyModel{
+			Sigma: 20,
+			Mean:  250,
+		}
+		proposingLatency = &test.NormalLatencyModel{
+			Sigma: 30,
+			Mean:  500,
+		}
+		numNodes     = 4
+		req          = s.Require()
+		maxNumChains = uint32(9)
+	)
+	// Setup key pairs.
+	prvKeys, pubKeys, err := test.NewKeys(numNodes)
+	req.NoError(err)
+	// Setup governance.
+	gov, err := test.NewGovernance(pubKeys, 250*time.Millisecond)
+	req.NoError(err)
+	// Change default round interval, expect 1 round produce 30 blocks.
+	gov.State().RequestChange(test.StateChangeRoundInterval, 15*time.Second)
+	// Setup nodes.
+	nodes, err := PrepareNodes(
+		gov, prvKeys, maxNumChains, networkLatency, proposingLatency)
+	req.NoError(err)
+	// Set scheduler.
+	apps, dbs := CollectAppAndDBFromNodes(nodes)
+	now := time.Now().UTC()
+	sch := test.NewScheduler(test.NewStopByRound(9, apps, dbs))
+	for _, n := range nodes {
+		req.NoError(n.Bootstrap(sch, now))
+	}
+	// Register some configuration changes at some node.
+	var pickedNode *Node
+	for _, pickedNode = range nodes {
+		break
+	}
+	// Config changes for round 4, numChains from 4 to 7.
+	req.NoError(pickedNode.gov().RegisterConfigChange(
+		4, test.StateChangeNumChains, uint32(7)))
+	req.NoError(pickedNode.gov().RegisterConfigChange(
+		4, test.StateChangeK, 3))
+	req.NoError(pickedNode.gov().RegisterConfigChange(
+		4, test.StateChangePhiRatio, float32(0.5)))
+	// Config changes for round 5, numChains from 7 to 9.
+	req.NoError(pickedNode.gov().RegisterConfigChange(
+		5, test.StateChangeNumChains, maxNumChains))
+	req.NoError(pickedNode.gov().RegisterConfigChange(
+		5, test.StateChangeK, 0))
+	// Config changes for round 6, numChains from 9 to 7.
+	req.NoError(pickedNode.gov().RegisterConfigChange(
+		6, test.StateChangeNumChains, uint32(7)))
+	req.NoError(pickedNode.gov().RegisterConfigChange(
+		6, test.StateChangeK, 1))
+	// Config changes for round 6, numChains from 7 to 5.
+	req.NoError(pickedNode.gov().RegisterConfigChange(
+		7, test.StateChangeNumChains, uint32(5)))
+	req.NoError(pickedNode.gov().RegisterConfigChange(
+		7, test.StateChangeK, 1))
+	// Perform test.
 	sch.Run(4)
 	// Check results by comparing test.App instances.
 	req.NoError(VerifyApps(apps))

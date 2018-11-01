@@ -20,16 +20,18 @@ func (s *EventStatsTestSuite) TestCalculate() {
 		proposingLatency = &test.FixedLatencyModel{Latency: 300}
 		req              = s.Require()
 	)
-
-	apps, dbs, nodes, err := PrepareNodes(
-		7, networkLatency, proposingLatency)
-	req.Nil(err)
-
+	prvKeys, pubKeys, err := test.NewKeys(7)
+	req.NoError(err)
+	gov, err := test.NewGovernance(pubKeys, 100*time.Millisecond)
+	req.NoError(err)
+	nodes, err := PrepareNodes(
+		gov, prvKeys, 7, networkLatency, proposingLatency)
+	req.NoError(err)
+	apps, dbs := CollectAppAndDBFromNodes(nodes)
 	sch := test.NewScheduler(test.NewStopByConfirmedBlocks(50, apps, dbs))
 	now := time.Now().UTC()
-	for vID, v := range nodes {
-		sch.RegisterEventHandler(vID, v)
-		req.Nil(sch.Seed(NewProposeBlockEvent(vID, now)))
+	for _, n := range nodes {
+		req.NoError(n.Bootstrap(sch, now))
 	}
 	sch.Run(10)
 	req.Nil(VerifyApps(apps))

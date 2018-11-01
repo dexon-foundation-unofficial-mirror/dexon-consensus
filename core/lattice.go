@@ -36,7 +36,6 @@ var (
 type Lattice struct {
 	lock       sync.RWMutex
 	authModule *Authenticator
-	chainNum   uint32
 	app        Application
 	debug      Debug
 	pool       blockPool
@@ -61,7 +60,6 @@ func NewLattice(
 	toConfig := newGenesisTotalOrderingConfig(dMoment, cfg)
 	s = &Lattice{
 		authModule: authModule,
-		chainNum:   cfg.NumChains,
 		app:        app,
 		debug:      debug,
 		pool:       newBlockPool(cfg.NumChains),
@@ -180,7 +178,7 @@ func (s *Lattice) addBlockToLattice(
 	// Replay tips in pool to check their validity.
 	for {
 		hasOutput := false
-		for i := uint32(0); i < s.chainNum; i++ {
+		for i := uint32(0); i < uint32(len(s.pool)); i++ {
 			var tip *types.Block
 			if tip = s.pool.tip(i); tip == nil {
 				continue

@@ -101,13 +101,13 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 	// Setup blockdb.
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)
-	// Setup application.
-	app := test.NewApp()
 	// Setup governance.
 	_, pubKeys, err := test.NewKeys(int(cfg.NotarySetSize))
 	req.NoError(err)
 	gov, err := test.NewGovernance(pubKeys, cfg.LambdaBA)
 	req.NoError(err)
+	// Setup application.
+	app := test.NewApp(gov.State())
 	// Setup compaction chain.
 	cc := newCompactionChain(gov)
 	cc.init(&types.Block{})

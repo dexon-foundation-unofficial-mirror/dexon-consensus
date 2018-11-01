@@ -57,23 +57,31 @@ func main() {
 		Sigma: cfg.Node.Legacy.ProposeIntervalSigma,
 		Mean:  cfg.Node.Legacy.ProposeIntervalMean,
 	}
+	// Setup key pairs.
+	prvKeys, pubKeys, err := test.NewKeys(cfg.Node.Num)
+	if err != nil {
+		log.Fatal("could not setup key pairs: ", err)
+	}
+	// Setup governance instance.
+	gov, err := test.NewGovernance(
+		pubKeys, time.Duration(cfg.Networking.Mean)*time.Millisecond)
+	if err != nil {
+		log.Fatal("could not setup governance: ", err)
+	}
 	// Setup nodes and other consensus related stuffs.
-	apps, dbs, nodes, err := integration.PrepareNodes(
-		cfg.Node.Num, networkLatency, proposingLatency)
+	nodes, err := integration.PrepareNodes(
+		gov, prvKeys, uint32(cfg.Node.Num), networkLatency, proposingLatency)
 	if err != nil {
 		log.Fatal("could not setup nodes: ", err)
 	}
+	apps, dbs := integration.CollectAppAndDBFromNodes(nodes)
 	blockPerNode := int(math.Ceil(
 		float64(cfg.Node.MaxBlock) / float64(cfg.Node.Num)))
 	sch := test.NewScheduler(
 		test.NewStopByConfirmedBlocks(blockPerNode, apps, dbs))
-	for nID, v := range nodes {
-		sch.RegisterEventHandler(nID, v)
-		if err = sch.Seed(integration.NewProposeBlockEvent(
-			nID, time.Now().UTC())); err != nil {
-
-			log.Fatal("unable to set seed simulation events: ", err)
-		}
+	now := time.Now().UTC()
+	for _, v := range nodes {
+		v.Bootstrap(sch, now)
 	}
 	// Run the simulation.
 	sch.Run(cfg.Scheduler.WorkerNum)
