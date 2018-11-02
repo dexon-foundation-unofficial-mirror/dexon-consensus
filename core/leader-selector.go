@@ -59,13 +59,8 @@ type leaderSelector struct {
 	lock          sync.Mutex
 }
 
-func newLeaderSelector(
-	crs common.Hash, validLeader validLeaderFn) *leaderSelector {
-	numCRS := big.NewInt(0)
-	numCRS.SetBytes(crs[:])
+func newLeaderSelector(validLeader validLeaderFn) *leaderSelector {
 	return &leaderSelector{
-		numCRS:      numCRS,
-		hashCRS:     crs,
 		minCRSBlock: maxHash,
 		validLeader: validLeader,
 	}
@@ -86,9 +81,13 @@ func (l *leaderSelector) probability(sig crypto.Signature) float64 {
 	return p
 }
 
-func (l *leaderSelector) restart() {
+func (l *leaderSelector) restart(crs common.Hash) {
+	numCRS := big.NewInt(0)
+	numCRS.SetBytes(crs[:])
 	l.lock.Lock()
 	defer l.lock.Unlock()
+	l.numCRS = numCRS
+	l.hashCRS = crs
 	l.minCRSBlock = maxHash
 	l.minBlockHash = common.Hash{}
 	l.pendingBlocks = []*types.Block{}

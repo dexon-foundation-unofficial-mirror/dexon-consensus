@@ -118,7 +118,6 @@ type agreement struct {
 func newAgreement(
 	ID types.NodeID,
 	recv agreementReceiver,
-	notarySet map[types.NodeID]struct{},
 	leader *leaderSelector,
 	authModule *Authenticator) *agreement {
 	agreement := &agreement{
@@ -137,7 +136,7 @@ func newAgreement(
 
 // restart the agreement
 func (a *agreement) restart(
-	notarySet map[types.NodeID]struct{}, aID types.Position) {
+	notarySet map[types.NodeID]struct{}, aID types.Position, crs common.Hash) {
 
 	func() {
 		a.lock.Lock()
@@ -151,7 +150,7 @@ func (a *agreement) restart(
 		a.data.period = 1
 		a.data.blocks = make(map[types.NodeID]*types.Block)
 		a.data.requiredVote = len(notarySet)/3*2 + 1
-		a.data.leader.restart()
+		a.data.leader.restart(crs)
 		a.data.lockValue = nullBlockHash
 		a.data.lockRound = 1
 		a.fastForward = make(chan uint64, 1)
@@ -213,7 +212,7 @@ func (a *agreement) restart(
 func (a *agreement) stop() {
 	a.restart(make(map[types.NodeID]struct{}), types.Position{
 		ChainID: math.MaxUint32,
-	})
+	}, common.Hash{})
 }
 
 func isStop(aID types.Position) bool {

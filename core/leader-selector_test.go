@@ -46,7 +46,9 @@ func (s *LeaderSelectorTestSuite) SetupTest() {
 }
 
 func (s *LeaderSelectorTestSuite) newLeader() *leaderSelector {
-	return newLeaderSelector(common.NewRandomHash(), s.mockValidLeader)
+	l := newLeaderSelector(s.mockValidLeader)
+	l.restart(common.NewRandomHash())
+	return l
 }
 
 func (s *LeaderSelectorTestSuite) TestDistance() {
@@ -138,7 +140,7 @@ func (s *LeaderSelectorTestSuite) TestValidLeaderFn() {
 	blockHash := leader.leaderBlockHash()
 
 	s.mockValidLeaderDB[blockHash] = false
-	leader.restart()
+	leader.restart(leader.hashCRS)
 	for _, b := range blocks {
 		s.Require().NoError(leader.processBlock(b))
 	}

@@ -93,7 +93,7 @@ func (s *AgreementTestSuite) SetupTest() {
 }
 
 func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
-	leader := newLeaderSelector(common.NewRandomHash(), func(*types.Block) bool {
+	leader := newLeaderSelector(func(*types.Block) bool {
 		return true
 	})
 	agreementIdx := len(s.agreement)
@@ -112,11 +112,10 @@ func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 			s:              s,
 			agreementIndex: agreementIdx,
 		},
-		notarySet,
 		leader,
 		s.auths[s.ID],
 	)
-	agreement.restart(notarySet, types.Position{})
+	agreement.restart(notarySet, types.Position{}, common.NewRandomHash())
 	s.agreement = append(s.agreement, agreement)
 	return agreement
 }

@@ -200,7 +200,7 @@ func (s *ConsensusTestSuite) prepareConsensus(
 			Round:   round,
 			ChainID: chainID,
 			Height:  uint64(0),
-		})
+		}, gov.CRS(round))
 	}
 	return app, con
 }

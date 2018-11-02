@@ -97,7 +97,7 @@ func (s *AgreementStateTestSuite) SetupTest() {
 }
 
 func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
-	leader := newLeaderSelector(common.NewRandomHash(), func(*types.Block) bool {
+	leader := newLeaderSelector(func(*types.Block) bool {
 		return true
 	})
 	notarySet := make(map[types.NodeID]struct{})
@@ -115,11 +115,10 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 			s:      s,
 			leader: leader,
 		},
-		notarySet,
 		leader,
 		s.auths[s.ID],
 	)
-	agreement.restart(notarySet, types.Position{})
+	agreement.restart(notarySet, types.Position{}, common.NewRandomHash())
 	return agreement
 }
 

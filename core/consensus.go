@@ -315,12 +315,6 @@ func NewConsensus(
 	config := gov.Configuration(round)
 	nodeSetCache := NewNodeSetCache(gov)
 	logger.Debug("Calling Governance.CRS", "round", round)
-	crs := gov.CRS(round)
-	// Setup acking by information returned from Governace.
-	nodes, err := nodeSetCache.GetNodeSet(round)
-	if err != nil {
-		panic(err)
-	}
 	// Setup auth module.
 	authModule := NewAuthenticator(prv)
 	// Check if the application implement Debug interface.
@@ -385,8 +379,7 @@ func NewConsensus(
 		agreementModule := newAgreement(
 			con.ID,
 			recv,
-			nodes.IDs,
-			newLeaderSelector(crs, validLeader),
+			newLeaderSelector(validLeader),
 			con.authModule,
 		)
 		// Hacky way to make agreement module self contained.
@@ -448,6 +441,7 @@ func (con *Consensus) runBA(chainID uint32, tick <-chan struct{}) {
 	recv := con.receivers[chainID]
 	recv.restartNotary <- true
 	nIDs := make(map[types.NodeID]struct{})
+	crs := common.Hash{}
 	// Reset ticker
 	<-tick
 BALoop:
@@ -466,16 +460,17 @@ BALoop:
 				if err != nil {
 					panic(err)
 				}
+				con.logger.Debug("Calling Governance.CRS", "round", recv.round)
+				crs = con.gov.CRS(recv.round)
 				con.logger.Debug("Calling Governance.Configuration",
 					"round", recv.round)
-				con.logger.Debug("Calling Governance.CRS", "round", recv.round)
 				nIDs = nodes.GetSubSet(
 					int(con.gov.Configuration(recv.round).NotarySetSize),
-					types.NewNotarySetTarget(con.gov.CRS(recv.round), chainID))
+					types.NewNotarySetTarget(crs, chainID))
 			}
 			nextPos := con.lattice.NextPosition(chainID)
 			nextPos.Round = recv.round
-			agreement.restart(nIDs, nextPos)
+			agreement.restart(nIDs, nextPos, crs)
 		default:
 		}
 		if agreement.pullVotes() {
@@ -809,14 +804,15 @@ func (con *Consensus) ProcessAgreementResult(
 		con.logger.Debug("Calling Network.PullBlocks for syncing BA",
 			"hash", rand.BlockHash)
 		con.network.PullBlocks(common.Hashes{rand.BlockHash})
+		con.logger.Debug("Calling Governance.CRS", "round", rand.Position.Round)
+		crs := con.gov.CRS(rand.Position.Round)
 		nIDs := nodes.GetSubSet(
 			int(con.gov.Configuration(rand.Position.Round).NotarySetSize),
-			types.NewNotarySetTarget(
-				con.gov.CRS(rand.Position.Round), rand.Position.ChainID))
+			types.NewNotarySetTarget(crs, rand.Position.ChainID))
 		for _, vote := range rand.Votes {
 			agreement.processVote(&vote)
 		}
-		agreement.restart(nIDs, rand.Position)
+		agreement.restart(nIDs, rand.Position, crs)
 	}
 	// Calculating randomness.
 	if rand.Position.Round == 0 {
