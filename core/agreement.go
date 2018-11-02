@@ -325,6 +325,9 @@ func (a *agreement) processVote(vote *types.Vote) error {
 	}
 
 	// Check if the agreement requires fast-forwarding.
+	if len(a.fastForward) > 0 {
+		return nil
+	}
 	if vote.Type == types.VotePreCom {
 		if hash, ok := a.data.countVoteNoLock(vote.Period, vote.Type); ok &&
 			hash != skipBlockHash {
@@ -362,7 +365,9 @@ func (a *agreement) processVote(vote *types.Vote) error {
 		addPullBlocks(types.VoteInit)
 		addPullBlocks(types.VotePreCom)
 		addPullBlocks(types.VoteCom)
-		a.data.recv.PullBlocks(hashes)
+		if len(hashes) > 0 {
+			a.data.recv.PullBlocks(hashes)
+		}
 		a.fastForward <- vote.Period + 1
 		return nil
 	}
@@ -394,14 +399,15 @@ func (a *agreement) done() <-chan struct{} {
 
 // processBlock is the entry point for processing Block.
 func (a *agreement) processBlock(block *types.Block) error {
+	a.lock.Lock()
+	defer a.lock.Unlock()
 	a.data.blocksLock.Lock()
 	defer a.data.blocksLock.Unlock()
 
-	aID := a.agreementID()
-	if block.Position != aID {
+	if block.Position != a.aID {
 		// Agreement module has stopped.
-		if !isStop(aID) {
-			if aID.Newer(&block.Position) {
+		if !isStop(a.aID) {
+			if a.aID.Newer(&block.Position) {
 				return nil
 			}
 		}
@@ -421,13 +427,17 @@ func (a *agreement) processBlock(block *types.Block) error {
 		return err
 	}
 	a.data.blocks[block.ProposerID] = block
-	a.addCandidateBlock(block)
+	a.addCandidateBlockNoLock(block)
 	return nil
 }
 
 func (a *agreement) addCandidateBlock(block *types.Block) {
 	a.lock.Lock()
 	defer a.lock.Unlock()
+	a.addCandidateBlockNoLock(block)
+}
+
+func (a *agreement) addCandidateBlockNoLock(block *types.Block) {
 	a.candidateBlock[block.Hash] = block
 }
 

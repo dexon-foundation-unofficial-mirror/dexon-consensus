@@ -69,9 +69,9 @@ func newInitialState(a *agreementData) *initialState {
 func (s *initialState) state() agreementStateType { return stateInitial }
 func (s *initialState) clocks() int               { return 0 }
 func (s *initialState) nextState() (agreementState, error) {
+	hash := s.a.recv.ProposeBlock()
 	s.a.lock.Lock()
 	defer s.a.lock.Unlock()
-	hash := s.a.recv.ProposeBlock()
 	s.a.recv.ProposeVote(&types.Vote{
 		Type:      types.VoteInit,
 		BlockHash: hash,

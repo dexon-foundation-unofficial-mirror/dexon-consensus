@@ -71,11 +71,11 @@ type consensusBAReceiver struct {
 }
 
 func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {
-	if err := recv.agreementModule.prepareVote(vote); err != nil {
-		recv.consensus.logger.Error("Failed to prepare vote", "error", err)
-		return
-	}
 	go func() {
+		if err := recv.agreementModule.prepareVote(vote); err != nil {
+			recv.consensus.logger.Error("Failed to prepare vote", "error", err)
+			return
+		}
 		if err := recv.agreementModule.processVote(vote); err != nil {
 			recv.consensus.logger.Error("Failed to process vote", "error", err)
 			return
@@ -92,7 +92,6 @@ func (recv *consensusBAReceiver) ProposeBlock() common.Hash {
 		recv.consensus.logger.Error("unable to propose block")
 		return nullBlockHash
 	}
-	recv.consensus.baModules[recv.chainID].addCandidateBlock(block)
 	if err := recv.consensus.preProcessBlock(block); err != nil {
 		recv.consensus.logger.Error("Failed to pre-process block", "error", err)
 		return common.Hash{}
@@ -129,10 +128,15 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 				recv.consensus.baConfirmedBlock[hash] = ch
 			}()
 			recv.consensus.network.PullBlocks(common.Hashes{hash})
-			block = <-ch
-			recv.consensus.logger.Info("Receive unknown block",
-				"hash", hash,
-				"chainID", recv.chainID)
+			go func() {
+				block = <-ch
+				recv.consensus.logger.Info("Receive unknown block",
+					"hash", hash,
+					"chainID", recv.chainID)
+				recv.agreementModule.addCandidateBlock(block)
+				recv.ConfirmBlock(block.Hash, votes)
+			}()
+			return
 		}
 	}
 	recv.consensus.ccModule.registerBlock(block)
@@ -668,14 +672,16 @@ MessageLoop:
 						continue MessageLoop
 					}
 				}
-				con.lock.Lock()
-				defer con.lock.Unlock()
-				// In case of multiple delivered block.
-				if _, exist := con.baConfirmedBlock[val.Hash]; !exist {
-					continue MessageLoop
-				}
-				delete(con.baConfirmedBlock, val.Hash)
-				ch <- val
+				func() {
+					con.lock.Lock()
+					defer con.lock.Unlock()
+					// In case of multiple delivered block.
+					if _, exist := con.baConfirmedBlock[val.Hash]; !exist {
+						return
+					}
+					delete(con.baConfirmedBlock, val.Hash)
+					ch <- val
+				}()
 			} else if val.IsFinalized() {
 				// For sync mode.
 				if err := con.processFinalizedBlock(val); err != nil {
