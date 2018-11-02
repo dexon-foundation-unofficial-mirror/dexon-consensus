@@ -4,11 +4,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/dexon-foundation/dexon-consensus-core/core"
-	"github.com/dexon-foundation/dexon-consensus-core/core/blockdb"
-	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
-	"github.com/dexon-foundation/dexon-consensus-core/core/test"
-	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core"
+	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus/core/test"
+	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
 func genRoundEndTimes(

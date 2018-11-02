@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dexon-foundation/dexon-consensus-core/core/test"
-	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/test"
+	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
 // Errors when calculating statistics for events.

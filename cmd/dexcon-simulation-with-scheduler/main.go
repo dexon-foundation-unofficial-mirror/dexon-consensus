@@ -12,9 +12,9 @@ import (
 	"runtime/pprof"
 	"time"
 
-	"github.com/dexon-foundation/dexon-consensus-core/core/test"
-	integration "github.com/dexon-foundation/dexon-consensus-core/integration_test"
-	"github.com/dexon-foundation/dexon-consensus-core/simulation/config"
+	"github.com/dexon-foundation/dexon-consensus/core/test"
+	integration "github.com/dexon-foundation/dexon-consensus/integration_test"
+	"github.com/dexon-foundation/dexon-consensus/simulation/config"
 )
 
 var (
