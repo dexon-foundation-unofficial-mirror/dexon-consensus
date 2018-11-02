@@ -1197,7 +1197,9 @@ func (s *TotalOrderingTestSuite) TestRoundChanged() {
 	s.baseTestForRoundChange(repeat, configs)
 }
 
-func (s *TotalOrderingTestSuite) TestRunFromNonGenesis() {
+// TestSync tests sync mode of total ordering, which is started not from genesis
+// but some blocks which is on the cut of delivery set.
+func (s *TotalOrderingTestSuite) TestSync() {
 	var (
 		req         = s.Require()
 		numChains   = uint32(19)
@@ -1232,7 +1234,7 @@ func (s *TotalOrderingTestSuite) TestRunFromNonGenesis() {
 		PhiRatio:  0.5,
 		NumChains: numChains,
 	}))
-	deliveredBlocks1 := [][]*types.Block{}
+	deliveredBlockSets1 := [][]*types.Block{}
 	for {
 		b, err := revealer.Next()
 		if err != nil {
@@ -1245,32 +1247,174 @@ func (s *TotalOrderingTestSuite) TestRunFromNonGenesis() {
 		bs, _, err := to1.processBlock(&b)
 		s.Require().Nil(err)
 		if len(bs) > 0 {
-			deliveredBlocks1 = append(deliveredBlocks1, bs)
+			deliveredBlockSets1 = append(deliveredBlockSets1, bs)
 		}
 	}
 	// Run new total ordering again.
-	offset := len(deliveredBlocks1) / 2
+	offset := len(deliveredBlockSets1) / 2
 	to2 := newTotalOrdering(genesisConfig)
 	s.Require().NoError(to2.appendConfig(1, &types.Config{
 		K:         0,
 		PhiRatio:  0.5,
 		NumChains: numChains,
 	}))
-	deliveredBlocks2 := [][]*types.Block{}
-	for i := offset; i < len(deliveredBlocks1); i++ {
-		for _, b := range deliveredBlocks1[i] {
+	deliveredBlockSets2 := [][]*types.Block{}
+	for i := offset; i < len(deliveredBlockSets1); i++ {
+		for _, b := range deliveredBlockSets1[i] {
 			bs, _, err := to2.processBlock(b)
 			req.NoError(err)
 			if len(bs) > 0 {
-				deliveredBlocks2 = append(deliveredBlocks2, bs)
+				deliveredBlockSets2 = append(deliveredBlockSets2, bs)
 			}
 		}
 	}
 	// Check deliver1 and deliver2.
-	for i := 0; i < len(deliveredBlocks2); i++ {
-		req.Equal(len(deliveredBlocks1[offset+i]), len(deliveredBlocks2[i]))
-		for j := 0; j < len(deliveredBlocks2[i]); j++ {
-			req.Equal(deliveredBlocks1[offset+i][j], deliveredBlocks2[i][j])
+	for i := 0; i < len(deliveredBlockSets2); i++ {
+		req.Equal(len(deliveredBlockSets1[offset+i]), len(deliveredBlockSets2[i]))
+		for j := 0; j < len(deliveredBlockSets2[i]); j++ {
+			req.Equal(deliveredBlockSets1[offset+i][j], deliveredBlockSets2[i][j])
+		}
+	}
+}
+
+func (s *TotalOrderingTestSuite) TestSyncWithConfigChange() {
+	var (
+		req           = s.Require()
+		genesisTime   = time.Now().UTC()
+		roundInterval = 30 * time.Second
+	)
+
+	genesisConfig := &totalOrderingConfig{
+		roundBasedConfig: roundBasedConfig{roundInterval: roundInterval},
+		k:                0,
+		phi:              uint64(19 * 2 / 3),
+		numChains:        uint32(19),
+	}
+	genesisConfig.setRoundBeginTime(genesisTime)
+
+	// Configs for round change, notice configs[0] is the same as genesisConfig.
+	configs := []*types.Config{
+		&types.Config{
+			K:             0,
+			PhiRatio:      0.67,
+			NumChains:     uint32(19),
+			RoundInterval: roundInterval,
+		},
+		&types.Config{
+			K:             2,
+			PhiRatio:      0.5,
+			NumChains:     uint32(17),
+			RoundInterval: roundInterval,
+		},
+		&types.Config{
+			K:             0,
+			PhiRatio:      0.8,
+			NumChains:     uint32(22),
+			RoundInterval: roundInterval,
+		},
+		&types.Config{
+			K:             3,
+			PhiRatio:      0.5,
+			NumChains:     uint32(25),
+			RoundInterval: roundInterval,
+		},
+		&types.Config{
+			K:             1,
+			PhiRatio:      0.7,
+			NumChains:     uint32(20),
+			RoundInterval: roundInterval,
+		},
+	}
+
+	blocks := []*types.Block{}
+	db, err := blockdb.NewMemBackedBlockDB()
+	req.NoError(err)
+
+	for i, cfg := range configs {
+		gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
+			NumChains:            cfg.NumChains,
+			MinBlockTimeInterval: 250 * time.Millisecond,
+		}, nil, hashBlock)
+		err = gen.Generate(
+			uint64(i),
+			genesisTime.Add(time.Duration(i)*cfg.RoundInterval),
+			genesisTime.Add(time.Duration(i+1)*cfg.RoundInterval),
+			db,
+		)
+		req.NoError(err)
+	}
+
+	iter, err := db.GetAll()
+	req.NoError(err)
+
+	revealer, err := test.NewRandomDAGRevealer(iter)
+	req.NoError(err)
+
+	for {
+		b, err := revealer.Next()
+		if err != nil {
+			if err == blockdb.ErrIterationFinished {
+				err = nil
+				break
+			}
+		}
+		req.NoError(err)
+		blocks = append(blocks, &b)
+	}
+
+	to1 := newTotalOrdering(genesisConfig)
+	for i, cfg := range configs[1:] {
+		req.NoError(to1.appendConfig(uint64(i+1), cfg))
+	}
+
+	deliveredBlockSets1 := [][]*types.Block{}
+	deliveredBlockModes := []uint32{}
+	for _, b := range blocks {
+		bs, mode, err := to1.processBlock(b)
+		req.NoError(err)
+		if len(bs) > 0 {
+			deliveredBlockSets1 = append(deliveredBlockSets1, bs)
+			deliveredBlockModes = append(deliveredBlockModes, mode)
+		}
+	}
+
+	// Find the offset that can be used in the second run of total ordering. And
+	// the mode of deliver set should not be "flush".
+	for test := 0; test < 3; test++ {
+		offset := len(deliveredBlockSets1) * (3 + test) / 7
+		for deliveredBlockModes[offset] == TotalOrderingModeFlush {
+			offset++
+		}
+		offsetRound := deliveredBlockSets1[offset][0].Position.Round
+		// The range of offset's round should not be the first nor the last round,
+		// or nothing is tested.
+		req.True(uint64(0) < offsetRound && offsetRound < uint64(len(configs)-1))
+
+		to2 := newTotalOrdering(genesisConfig)
+		for i, cfg := range configs[1:] {
+			req.NoError(to2.appendConfig(uint64(i+1), cfg))
+		}
+		// Skip useless configs.
+		for i := uint64(0); i < deliveredBlockSets1[offset][0].Position.Round; i++ {
+			to2.switchRound()
+		}
+		// Run total ordering again from offset.
+		deliveredBlockSets2 := [][]*types.Block{}
+		for i := offset; i < len(deliveredBlockSets1); i++ {
+			for _, b := range deliveredBlockSets1[i] {
+				bs, _, err := to2.processBlock(b)
+				req.NoError(err)
+				if len(bs) > 0 {
+					deliveredBlockSets2 = append(deliveredBlockSets2, bs)
+				}
+			}
+		}
+		// Check deliver1 and deliver2.
+		for i := 0; i < len(deliveredBlockSets2); i++ {
+			req.Equal(len(deliveredBlockSets1[offset+i]), len(deliveredBlockSets2[i]))
+			for j := 0; j < len(deliveredBlockSets2[i]); j++ {
+				req.Equal(deliveredBlockSets1[offset+i][j], deliveredBlockSets2[i][j])
+			}
 		}
 	}
 }

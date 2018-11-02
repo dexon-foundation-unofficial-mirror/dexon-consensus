@@ -25,9 +25,11 @@ import (
 
 type roundBasedConfig struct {
 	roundID uint64
+
 	// roundBeginTime is the beginning of round, as local time.
 	roundBeginTime time.Time
 	roundInterval  time.Duration
+
 	// roundEndTime is a cache for begin + interval.
 	roundEndTime time.Time
 }
@@ -43,8 +45,8 @@ func (config *roundBasedConfig) setRoundBeginTime(begin time.Time) {
 	config.roundEndTime = begin.Add(config.roundInterval)
 }
 
-// isValidLastBlock checks if a block is a valid last block of this round.
-func (config *roundBasedConfig) isValidLastBlock(b *types.Block) bool {
+// isLastBlock checks if a block is the last block of this round.
+func (config *roundBasedConfig) isLastBlock(b *types.Block) bool {
 	return b.Position.Round == config.roundID &&
 		b.Timestamp.After(config.roundEndTime)
 }
