@@ -257,7 +257,7 @@ func (n *Node) processBlock(b *types.Block) (events []*test.Event, err error) {
 		}
 		b.Finalization.Height = n.prevFinalHeight + 1
 		b.Finalization.ParentHash = n.prevHash
-		n.appModule.BlockDelivered(b.Hash, b.Finalization)
+		n.appModule.BlockDelivered(b.Hash, b.Position, b.Finalization)
 		n.prevFinalHeight++
 		n.prevHash = b.Hash
 		events = append(events, n.checkRoundSwitch(b)...)

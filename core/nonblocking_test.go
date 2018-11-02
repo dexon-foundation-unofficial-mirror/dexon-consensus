@@ -75,8 +75,8 @@ func (app *slowApp) TotalOrderingDelivered(blockHashes common.Hashes, mode uint3
 	}
 }
 
-func (app *slowApp) BlockDelivered(
-	blockHash common.Hash, _ types.FinalizationResult) {
+func (app *slowApp) BlockDelivered(blockHash common.Hash,
+	blockPosition types.Position, _ types.FinalizationResult) {
 	time.Sleep(app.sleep)
 	app.blockDelivered[blockHash] = struct{}{}
 }
@@ -111,8 +111,8 @@ func (app *noDebugApp) BlockConfirmed(block types.Block) {
 	app.blockConfirmed[block.Hash] = struct{}{}
 }
 
-func (app *noDebugApp) BlockDelivered(
-	blockHash common.Hash, _ types.FinalizationResult) {
+func (app *noDebugApp) BlockDelivered(blockHash common.Hash,
+	blockPosition types.Position, _ types.FinalizationResult) {
 	app.blockDelivered[blockHash] = struct{}{}
 }
 
@@ -138,7 +138,8 @@ func (s *NonBlockingTestSuite) TestNonBlocking() {
 			Witness: types.Witness{},
 		})
 		nbModule.StronglyAcked(hash)
-		nbModule.BlockDelivered(hash, types.FinalizationResult{})
+		nbModule.BlockDelivered(
+			hash, types.Position{}, types.FinalizationResult{})
 	}
 	nbModule.TotalOrderingDelivered(hashes, TotalOrderingModeEarly)
 
@@ -161,7 +162,7 @@ func (s *NonBlockingTestSuite) TestNoDebug() {
 	// Test BlockConfirmed.
 	nbModule.BlockConfirmed(types.Block{Hash: hash})
 	// Test BlockDelivered
-	nbModule.BlockDelivered(hash, types.FinalizationResult{})
+	nbModule.BlockDelivered(hash, types.Position{}, types.FinalizationResult{})
 	nbModule.wait()
 	s.Contains(app.blockConfirmed, hash)
 	s.Contains(app.blockDelivered, hash)

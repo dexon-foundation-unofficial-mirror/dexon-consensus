@@ -82,7 +82,7 @@ func (s *AppTestSuite) deliverBlockWithTimeFromSequenceLength(
 func (s *AppTestSuite) deliverBlock(
 	app *App, hash common.Hash, timestamp time.Time, height uint64) {
 
-	app.BlockDelivered(hash, types.FinalizationResult{
+	app.BlockDelivered(hash, types.Position{}, types.FinalizationResult{
 		Timestamp: timestamp,
 		Height:    height,
 	})

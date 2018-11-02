@@ -132,7 +132,7 @@ func (a *simApp) TotalOrderingDelivered(
 
 // BlockDelivered is called when a block in compaction chain is delivered.
 func (a *simApp) BlockDelivered(
-	blockHash common.Hash, result types.FinalizationResult) {
+	blockHash common.Hash, _ types.Position, result types.FinalizationResult) {
 	if len(result.Randomness) == 0 && func() bool {
 		if block, exist := a.blockByHash[blockHash]; exist {
 			if block.Position.Round == 0 {

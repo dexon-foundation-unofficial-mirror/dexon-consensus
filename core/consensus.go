@@ -929,7 +929,7 @@ func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
 func (con *Consensus) deliverBlock(b *types.Block) {
 	// TODO(mission): clone types.FinalizationResult
 	con.logger.Debug("Calling Application.BlockDelivered", "block", b)
-	con.app.BlockDelivered(b.Hash, b.Finalization)
+	con.app.BlockDelivered(b.Hash, b.Position, b.Finalization)
 	if b.Position.Round+2 == con.roundToNotify {
 		// Only the first block delivered of that round would
 		// trigger this noitification.

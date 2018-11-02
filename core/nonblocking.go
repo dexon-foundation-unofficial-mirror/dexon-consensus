@@ -39,8 +39,9 @@ type totalOrderingDeliveredEvent struct {
 }
 
 type blockDeliveredEvent struct {
-	blockHash common.Hash
-	result    *types.FinalizationResult
+	blockHash     common.Hash
+	blockPosition types.Position
+	result        *types.FinalizationResult
 }
 
 // nonBlocking implements these interfaces and is a decorator for
@@ -99,7 +100,7 @@ func (nb *nonBlocking) run() {
 		case totalOrderingDeliveredEvent:
 			nb.debug.TotalOrderingDelivered(e.blockHashes, e.mode)
 		case blockDeliveredEvent:
-			nb.app.BlockDelivered(e.blockHash, *e.result)
+			nb.app.BlockDelivered(e.blockHash, e.blockPosition, *e.result)
 		default:
 			fmt.Printf("Unknown event %v.", e)
 		}
@@ -155,10 +156,11 @@ func (nb *nonBlocking) TotalOrderingDelivered(
 }
 
 // BlockDelivered is called when a block is add to the compaction chain.
-func (nb *nonBlocking) BlockDelivered(
-	blockHash common.Hash, result types.FinalizationResult) {
+func (nb *nonBlocking) BlockDelivered(blockHash common.Hash,
+	blockPosition types.Position, result types.FinalizationResult) {
 	nb.addEvent(blockDeliveredEvent{
-		blockHash: blockHash,
-		result:    &result,
+		blockHash:     blockHash,
+		blockPosition: blockPosition,
+		result:        &result,
 	})
 }

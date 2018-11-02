@@ -162,7 +162,7 @@ func (app *App) TotalOrderingDelivered(blockHashes common.Hashes, mode uint32) {
 
 // BlockDelivered implements Application interface.
 func (app *App) BlockDelivered(
-	blockHash common.Hash, result types.FinalizationResult) {
+	blockHash common.Hash, _ types.Position, result types.FinalizationResult) {
 	func() {
 		app.deliveredLock.Lock()
 		defer app.deliveredLock.Unlock()
@@ -220,6 +220,7 @@ func (app *App) Compare(other *App) error {
 
 // Verify checks the integrity of date received by this App instance.
 func (app *App) Verify() error {
+	// TODO(mission): verify blocks' position when delivered.
 	app.deliveredLock.RLock()
 	defer app.deliveredLock.RUnlock()
 

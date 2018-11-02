@@ -44,7 +44,7 @@ func (s *StopperTestSuite) deliver(
 	}
 	app.TotalOrderingDelivered(hashes, core.TotalOrderingModeNormal)
 	for _, h := range hashes {
-		app.BlockDelivered(h, types.FinalizationResult{
+		app.BlockDelivered(h, types.Position{}, types.FinalizationResult{
 			Timestamp: time.Time{},
 		})
 	}

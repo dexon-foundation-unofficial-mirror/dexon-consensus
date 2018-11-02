@@ -80,7 +80,7 @@ func (mgr *testLatticeMgr) processBlock(b *types.Block) (err error) {
 		if err = mgr.db.Update(*b); err != nil {
 			return
 		}
-		mgr.app.BlockDelivered(b.Hash, b.Finalization)
+		mgr.app.BlockDelivered(b.Hash, b.Position, b.Finalization)
 	}
 	if err = mgr.lattice.PurgeBlocks(delivered); err != nil {
 		return
