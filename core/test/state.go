@@ -207,7 +207,6 @@ func (s *State) Snapshot() (*types.Config, []crypto.PublicKey) {
 		DKGSetSize:       s.dkgSetSize,
 		RoundInterval:    s.roundInterval,
 		MinBlockInterval: s.minBlockInterval,
-		MaxBlockInterval: s.maxBlockInterval,
 	}, nodes
 }
 

@@ -1,6 +1,6 @@
-[![CircleCI](https://circleci.com/gh/dexon-foundation/dexon-consensus-core.svg?style=svg&circle-token=faed911ec07618dfbd6868b09181aa2046b550d8)](https://circleci.com/gh/dexon-foundation/dexon-consensus-core)
+[![CircleCI](https://circleci.com/gh/dexon-foundation/dexon-consensus.svg?style=svg&circle-token=faed911ec07618dfbd6868b09181aa2046b550d8)](https://circleci.com/gh/dexon-foundation/dexon-consensus)
 
-DEXON Consensus Core
+DEXON Consensus
 ====================
 
 ## Getting Started
@@ -13,8 +13,8 @@ DEXON Consensus Core
 
 1. Clone the repo
     ```
-    git clone https://github.com/dexon-foundation/dexon-consensus-core.git
-    cd dexon-consensus-core
+    git clone https://github.com/dexon-foundation/dexon-consensus.git
+    cd dexon-consensus
     ```
 
 2. Install go dependency management tool

@@ -52,8 +52,7 @@ func (s *TotalOrderingSyncerTestSuite) genDeliverySet(numChains uint32) (
 
 	gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
 		NumChains:            numChains,
-		MinBlockTimeInterval: 100 * time.Millisecond,
-		MaxBlockTimeInterval: 500 * time.Millisecond,
+		MinBlockTimeInterval: 250 * time.Millisecond,
 	}, nil, hashBlock)
 
 	db, err := blockdb.NewMemBackedBlockDB()

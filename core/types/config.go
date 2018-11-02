@@ -43,7 +43,6 @@ type Config struct {
 	// Time related.
 	RoundInterval    time.Duration
 	MinBlockInterval time.Duration
-	MaxBlockInterval time.Duration
 }
 
 // Clone return a copied configuration.
@@ -58,7 +57,6 @@ func (c *Config) Clone() *Config {
 		DKGSetSize:       c.DKGSetSize,
 		RoundInterval:    c.RoundInterval,
 		MinBlockInterval: c.MinBlockInterval,
-		MaxBlockInterval: c.MaxBlockInterval,
 	}
 }
 
@@ -90,9 +88,6 @@ func (c *Config) Bytes() []byte {
 	binaryMinBlockInterval := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryMinBlockInterval,
 		uint64(c.MinBlockInterval.Nanoseconds()))
-	binaryMaxBlockInterval := make([]byte, 8)
-	binary.LittleEndian.PutUint64(binaryMaxBlockInterval,
-		uint64(c.MaxBlockInterval.Nanoseconds()))
 
 	enc := make([]byte, 0, 40)
 	enc = append(enc, binaryNumChains...)
@@ -104,6 +99,5 @@ func (c *Config) Bytes() []byte {
 	enc = append(enc, binaryDKGSetSize...)
 	enc = append(enc, binaryRoundInterval...)
 	enc = append(enc, binaryMinBlockInterval...)
-	enc = append(enc, binaryMaxBlockInterval...)
 	return enc
 }

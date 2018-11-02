@@ -73,28 +73,24 @@ type latticeDataConfig struct {
 	// Block interval specifies reasonable time difference between
 	// parent/child blocks.
 	minBlockTimeInterval time.Duration
-	maxBlockTimeInterval time.Duration
 }
 
 // Initiate latticeDataConfig from types.Config.
 func (config *latticeDataConfig) fromConfig(roundID uint64, cfg *types.Config) {
 	config.numChains = cfg.NumChains
 	config.minBlockTimeInterval = cfg.MinBlockInterval
-	config.maxBlockTimeInterval = cfg.MaxBlockInterval
 	config.setupRoundBasedFields(roundID, cfg)
 }
 
 // Check if timestamp of a block is valid according to a reference time.
 func (config *latticeDataConfig) isValidBlockTime(
 	b *types.Block, ref time.Time) bool {
-	return !(b.Timestamp.Before(ref.Add(config.minBlockTimeInterval)) ||
-		b.Timestamp.After(ref.Add(config.maxBlockTimeInterval)))
+	return !b.Timestamp.Before(ref.Add(config.minBlockTimeInterval))
 }
 
 // isValidGenesisBlockTime check if a timestamp is valid for a genesis block.
 func (config *latticeDataConfig) isValidGenesisBlockTime(b *types.Block) bool {
-	return !(b.Timestamp.Before(config.roundBeginTime) || b.Timestamp.After(
-		config.roundBeginTime.Add(config.maxBlockTimeInterval)))
+	return !b.Timestamp.Before(config.roundBeginTime)
 }
 
 // newGenesisLatticeDataConfig constructs a latticeDataConfig instance.
@@ -380,11 +376,11 @@ func (data *latticeData) addFinalizedBlock(
 //    genesis block.
 func (data *latticeData) prepareBlock(b *types.Block) error {
 	var (
-		minTimestamp, maxTimestamp time.Time
-		config                     *latticeDataConfig
-		acks                       common.Hashes
-		bindTip                    bool
-		chainTip                   *types.Block
+		minTimestamp time.Time
+		config       *latticeDataConfig
+		acks         common.Hashes
+		bindTip      bool
+		chainTip     *types.Block
 	)
 	if config = data.getConfig(b.Position.Round); config == nil {
 		return ErrUnknownRoundID
@@ -425,7 +421,6 @@ func (data *latticeData) prepareBlock(b *types.Block) error {
 	// parent block and bound config.
 	if bindTip {
 		minTimestamp = chainTip.Timestamp.Add(config.minBlockTimeInterval)
-		maxTimestamp = chainTip.Timestamp.Add(config.maxBlockTimeInterval)
 		// When a chain is removed and added back, the reference block
 		// of previous round can't be used as parent block.
 		b.ParentHash = chainTip.Hash
@@ -434,13 +429,10 @@ func (data *latticeData) prepareBlock(b *types.Block) error {
 		// Discontinuous round ID detected, another fresh start of
 		// new round.
 		minTimestamp = config.roundBeginTime
-		maxTimestamp = config.roundBeginTime.Add(config.maxBlockTimeInterval)
 	}
 	// Fix timestamp if the given one is invalid.
 	if b.Timestamp.Before(minTimestamp) {
 		b.Timestamp = minTimestamp
-	} else if b.Timestamp.After(maxTimestamp) {
-		b.Timestamp = maxTimestamp
 	}
 	// Setup acks fields.
 	for _, status := range data.chains {

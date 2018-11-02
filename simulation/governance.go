@@ -102,7 +102,6 @@ func (g *simGovernance) Configuration(round uint64) *types.Config {
 		NotarySetSize:    uint32(len(g.nodeSet)),
 		DKGSetSize:       uint32(len(g.nodeSet)),
 		MinBlockInterval: g.lambdaBA * 3,
-		MaxBlockInterval: g.lambdaBA * 8,
 		RoundInterval:    g.roundInterval,
 	}
 }

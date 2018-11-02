@@ -146,7 +146,6 @@ func (s *LatticeTestSuite) TestBasicUsage() {
 			PhiRatio:         float32(2) / float32(3),
 			K:                0,
 			MinBlockInterval: 0,
-			MaxBlockInterval: 3000 * time.Second,
 			RoundInterval:    time.Hour,
 		}
 		dMoment   = time.Now().UTC()
@@ -239,7 +238,6 @@ func (s *LatticeTestSuite) TestSync() {
 			PhiRatio:         float32(2) / float32(3),
 			K:                0,
 			MinBlockInterval: 0,
-			MaxBlockInterval: 3000 * time.Second,
 			RoundInterval:    time.Hour,
 		}
 		dMoment = time.Now().UTC()
@@ -354,7 +352,6 @@ func (s *LatticeTestSuite) TestSanityCheck() {
 			PhiRatio:         float32(2) / float32(3),
 			K:                0,
 			MinBlockInterval: 0,
-			MaxBlockInterval: 3000 * time.Second,
 		}
 		lattice = s.newTestLatticeMgr(&cfg, time.Now().UTC()).lattice
 		auth    = lattice.authModule // Steal auth module from lattice, :(

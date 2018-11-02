@@ -37,8 +37,7 @@ func (s *BlocksGeneratorTestSuite) TestGenerate() {
 	var (
 		config = &BlocksGeneratorConfig{
 			NumChains:            19,
-			MinBlockTimeInterval: 50 * time.Millisecond,
-			MaxBlockTimeInterval: 400 * time.Millisecond,
+			MinBlockTimeInterval: 200 * time.Millisecond,
 		}
 		gen       = NewBlocksGenerator(config, nil, stableRandomHash)
 		req       = s.Require()
@@ -120,8 +119,7 @@ func (s *BlocksGeneratorTestSuite) TestGenerateWithMaxAckCount() {
 	var (
 		config = &BlocksGeneratorConfig{
 			NumChains:            13,
-			MinBlockTimeInterval: 0,
-			MaxBlockTimeInterval: 500 * time.Millisecond,
+			MinBlockTimeInterval: 250 * time.Millisecond,
 		}
 		req              = s.Require()
 		totalAckingCount = 0
@@ -186,8 +184,7 @@ func (s *BlocksGeneratorTestSuite) TestFindTips() {
 	var (
 		config = &BlocksGeneratorConfig{
 			NumChains:            10,
-			MinBlockTimeInterval: 0,
-			MaxBlockTimeInterval: 500 * time.Millisecond,
+			MinBlockTimeInterval: 250 * time.Millisecond,
 		}
 		req         = s.Require()
 		genesisTime = time.Now().UTC()
@@ -222,8 +219,7 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 	// Generate round 0 blocks.
 	gen := NewBlocksGenerator(&BlocksGeneratorConfig{
 		NumChains:            4,
-		MinBlockTimeInterval: 0,
-		MaxBlockTimeInterval: 500 * time.Millisecond,
+		MinBlockTimeInterval: 250 * time.Millisecond,
 	}, nil, stableRandomHash)
 	req.NoError(gen.Generate(
 		0,
@@ -236,8 +232,7 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 	// Generate round 1 blocks.
 	gen = NewBlocksGenerator(&BlocksGeneratorConfig{
 		NumChains:            10,
-		MinBlockTimeInterval: 0,
-		MaxBlockTimeInterval: 500 * time.Millisecond,
+		MinBlockTimeInterval: 250 * time.Millisecond,
 	}, nil, stableRandomHash)
 	req.NoError(gen.Generate(
 		1,
@@ -250,8 +245,7 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 	// Generate round 2 blocks.
 	gen = NewBlocksGenerator(&BlocksGeneratorConfig{
 		NumChains:            7,
-		MinBlockTimeInterval: 0,
-		MaxBlockTimeInterval: 500 * time.Millisecond,
+		MinBlockTimeInterval: 250 * time.Millisecond,
 	}, nil, stableRandomHash)
 	req.NoError(gen.Generate(
 		2,

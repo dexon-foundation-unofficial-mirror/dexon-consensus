@@ -4,7 +4,7 @@ jobs:
     docker:
       - image: circleci/golang:1.10
 
-    working_directory: /go/src/github.com/dexon-foundation/dexon-consensus-core
+    working_directory: /go/src/github.com/dexon-foundation/dexon-consensus
 
     environment:
 

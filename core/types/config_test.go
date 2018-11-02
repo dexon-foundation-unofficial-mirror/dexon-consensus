@@ -38,7 +38,6 @@ func (s *ConfigTestSuite) TestClone() {
 		DKGSetSize:       6,
 		RoundInterval:    3 * time.Second,
 		MinBlockInterval: 7 * time.Nanosecond,
-		MaxBlockInterval: 9 * time.Minute,
 	}
 	s.Require().Equal(c, c.Clone())
 }

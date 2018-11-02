@@ -6,7 +6,7 @@ BINDIR := $(CURDIR)/build
 else
 BINDIR := $(abspath $(BINDIR))
 endif
-PROJECT_ROOT=github.com/dexon-foundation/dexon-consensus-core
+PROJECT_ROOT=github.com/dexon-foundation/dexon-consensus
 BLS_REPO = dexonfoundation/bls-go-alpine
 BLS_LIB = vendor/github.com/dexon-foundation/bls/lib/libbls384.a
 BUILDER_REPO = dexonfoundation/dexon-alpine

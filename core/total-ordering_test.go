@@ -943,8 +943,7 @@ func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 	)
 	gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
 		NumChains:            chainNum,
-		MinBlockTimeInterval: 0,
-		MaxBlockTimeInterval: 500 * time.Millisecond,
+		MinBlockTimeInterval: 250 * time.Millisecond,
 	}, ackingCountGenerator, hashBlock)
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)
@@ -1115,8 +1114,7 @@ func (s *TotalOrderingTestSuite) TestNumChainsChanged() {
 	fix := func(c *types.Config) *types.Config {
 		c.K = 1
 		c.PhiRatio = 0.5
-		c.MinBlockInterval = 0
-		c.MaxBlockInterval = 500 * time.Millisecond
+		c.MinBlockInterval = 250 * time.Millisecond
 		c.RoundInterval = 10 * time.Second
 		return c
 	}
@@ -1138,8 +1136,7 @@ func (s *TotalOrderingTestSuite) TestPhiChanged() {
 	fix := func(c *types.Config) *types.Config {
 		c.K = 1
 		c.NumChains = 10
-		c.MinBlockInterval = 0
-		c.MaxBlockInterval = 500 * time.Millisecond
+		c.MinBlockInterval = 250 * time.Millisecond
 		c.RoundInterval = 10 * time.Second
 		return c
 	}
@@ -1161,8 +1158,7 @@ func (s *TotalOrderingTestSuite) TestKChanged() {
 	fix := func(c *types.Config) *types.Config {
 		c.NumChains = 10
 		c.PhiRatio = 0.7
-		c.MinBlockInterval = 0
-		c.MaxBlockInterval = 500 * time.Millisecond
+		c.MinBlockInterval = 250 * time.Millisecond
 		c.RoundInterval = 10 * time.Second
 		return c
 	}
@@ -1182,8 +1178,7 @@ func (s *TotalOrderingTestSuite) TestKChanged() {
 func (s *TotalOrderingTestSuite) TestRoundChanged() {
 	// This test changes everything when round changed.
 	fix := func(c *types.Config) *types.Config {
-		c.MinBlockInterval = 0
-		c.MaxBlockInterval = 500 * time.Millisecond
+		c.MinBlockInterval = 250 * time.Millisecond
 		c.RoundInterval = 10 * time.Second
 		return c
 	}
@@ -1210,8 +1205,7 @@ func (s *TotalOrderingTestSuite) TestRunFromNonGenesis() {
 	)
 	gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
 		NumChains:            numChains,
-		MinBlockTimeInterval: 0,
-		MaxBlockTimeInterval: 500 * time.Millisecond,
+		MinBlockTimeInterval: 250 * time.Millisecond,
 	}, nil, hashBlock)
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)

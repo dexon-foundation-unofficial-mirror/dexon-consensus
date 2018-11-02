@@ -46,8 +46,7 @@ func (s *RevealerTestSuite) SetupSuite() {
 	// Randomly generate blocks.
 	config := &BlocksGeneratorConfig{
 		NumChains:            19,
-		MinBlockTimeInterval: 0,
-		MaxBlockTimeInterval: 500 * time.Millisecond,
+		MinBlockTimeInterval: 250 * time.Millisecond,
 	}
 	gen := NewBlocksGenerator(config, nil, stableRandomHash)
 	s.Require().NoError(gen.Generate(

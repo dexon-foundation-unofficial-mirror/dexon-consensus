@@ -367,6 +367,9 @@ func NewConsensus(
 	}
 
 	validLeader := func(block *types.Block) bool {
+		if block.Timestamp.After(time.Now()) {
+			return false
+		}
 		return lattice.SanityCheck(block) == nil
 	}
 

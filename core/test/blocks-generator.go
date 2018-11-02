@@ -255,12 +255,12 @@ func generateNodePicker() func([]types.NodeID) types.NodeID {
 	}
 }
 
-// defaultTimePicker would pick a time based on reference time and
-// the given minimum/maximum time range.
-func generateTimePicker(min, max time.Duration) (f func(time.Time) time.Time) {
+// defaultTimePicker would pick a time based on reference time plus min.
+func generateTimePicker(min time.Duration) (f func(time.Time) time.Time) {
 	privateRand := rand.New(rand.NewSource(time.Now().UnixNano()))
 	return func(ref time.Time) time.Time {
-		return ref.Add(min + time.Duration(privateRand.Int63n(int64(max-min))))
+		return ref.Add(min + time.Duration(
+			privateRand.Int63n(int64(500*time.Millisecond))))
 	}
 }
 
@@ -268,7 +268,6 @@ func generateTimePicker(min, max time.Duration) (f func(time.Time) time.Time) {
 type BlocksGeneratorConfig struct {
 	NumChains            uint32
 	MinBlockTimeInterval time.Duration
-	MaxBlockTimeInterval time.Duration
 }
 
 // NewBlocksGeneratorConfig construct a BlocksGeneratorConfig instance.
@@ -276,7 +275,6 @@ func NewBlocksGeneratorConfig(c *types.Config) *BlocksGeneratorConfig {
 	return &BlocksGeneratorConfig{
 		NumChains:            c.NumChains,
 		MinBlockTimeInterval: c.MinBlockInterval,
-		MaxBlockTimeInterval: c.MaxBlockInterval,
 	}
 }
 
@@ -302,14 +300,16 @@ func NewBlocksGenerator(
 	config *BlocksGeneratorConfig,
 	ackingCountGenerator func() int,
 	hashBlock hashBlockFn) *BlocksGenerator {
+	if config.MinBlockTimeInterval == time.Duration(0) {
+		panic(errors.New("min block interval cannot be 0"))
+	}
 	if ackingCountGenerator == nil {
 		ackingCountGenerator = normalAckingCountGenerator(
 			config.NumChains,
 			float64(config.NumChains/5),
 			float64(config.NumChains/7+1))
 	}
-	timePicker := generateTimePicker(
-		config.MinBlockTimeInterval, config.MaxBlockTimeInterval)
+	timePicker := generateTimePicker(config.MinBlockTimeInterval)
 	return &BlocksGenerator{
 		config:               config,
 		nodePicker:           generateNodePicker(),
