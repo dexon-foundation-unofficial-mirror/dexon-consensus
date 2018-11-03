@@ -71,11 +71,11 @@ type consensusBAReceiver struct {
 }
 
 func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {
+	if err := recv.agreementModule.prepareVote(vote); err != nil {
+		recv.consensus.logger.Error("Failed to prepare vote", "error", err)
+		return
+	}
 	go func() {
-		if err := recv.agreementModule.prepareVote(vote); err != nil {
-			recv.consensus.logger.Error("Failed to prepare vote", "error", err)
-			return
-		}
 		if err := recv.agreementModule.processVote(vote); err != nil {
 			recv.consensus.logger.Error("Failed to process vote", "error", err)
 			return

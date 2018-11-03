@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
@@ -103,7 +104,7 @@ type agreementData struct {
 type agreement struct {
 	state          agreementState
 	data           *agreementData
-	aID            types.Position
+	aID            *atomic.Value
 	notarySet      map[types.NodeID]struct{}
 	hasOutput      bool
 	lock           sync.RWMutex
@@ -126,6 +127,7 @@ func newAgreement(
 			ID:     ID,
 			leader: leader,
 		},
+		aID:            &atomic.Value{},
 		candidateBlock: make(map[common.Hash]*types.Block),
 		fastForward:    make(chan uint64, 1),
 		authModule:     authModule,
@@ -158,7 +160,7 @@ func (a *agreement) restart(
 		a.state = newInitialState(a.data)
 		a.notarySet = notarySet
 		a.candidateBlock = make(map[common.Hash]*types.Block)
-		a.aID = *aID.Clone()
+		a.aID.Store(aID)
 	}()
 
 	if isStop(aID) {
@@ -231,9 +233,7 @@ func (a *agreement) pullVotes() bool {
 
 // agreementID returns the current agreementID.
 func (a *agreement) agreementID() types.Position {
-	a.lock.RLock()
-	defer a.lock.RUnlock()
-	return a.aID
+	return a.aID.Load().(types.Position)
 }
 
 // nextState is called at the specific clock time.
@@ -288,10 +288,11 @@ func (a *agreement) processVote(vote *types.Vote) error {
 	if err := a.sanityCheck(vote); err != nil {
 		return err
 	}
-	if vote.Position != a.aID {
+	aID := a.agreementID()
+	if vote.Position != aID {
 		// Agreement module has stopped.
-		if !isStop(a.aID) {
-			if a.aID.Newer(&vote.Position) {
+		if !isStop(aID) {
+			if aID.Newer(&vote.Position) {
 				return nil
 			}
 		}
@@ -403,10 +404,11 @@ func (a *agreement) processBlock(block *types.Block) error {
 	a.data.blocksLock.Lock()
 	defer a.data.blocksLock.Unlock()
 
-	if block.Position != a.aID {
+	aID := a.agreementID()
+	if block.Position != aID {
 		// Agreement module has stopped.
-		if !isStop(a.aID) {
-			if a.aID.Newer(&block.Position) {
+		if !isStop(aID) {
+			if aID.Newer(&block.Position) {
 				return nil
 			}
 		}

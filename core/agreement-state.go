@@ -118,9 +118,9 @@ func newCommitState(a *agreementData) *commitState {
 func (s *commitState) state() agreementStateType { return stateCommit }
 func (s *commitState) clocks() int               { return 2 }
 func (s *commitState) nextState() (agreementState, error) {
-	hash, ok := s.a.countVote(s.a.period, types.VotePreCom)
 	s.a.lock.Lock()
 	defer s.a.lock.Unlock()
+	hash, ok := s.a.countVoteNoLock(s.a.period, types.VotePreCom)
 	if ok && hash != skipBlockHash {
 		s.a.lockValue = hash
 		s.a.lockRound = s.a.period
