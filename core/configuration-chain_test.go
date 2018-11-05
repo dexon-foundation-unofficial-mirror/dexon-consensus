@@ -166,11 +166,17 @@ func (s *ConfigurationChainTestSuite) runDKG(
 	cfgChains := make(map[types.NodeID]*configurationChain)
 	recv := newTestCCReceiver(s)
 
+	pks := make([]crypto.PublicKey, 0, len(s.prvKeys))
+	for _, prv := range s.prvKeys {
+		pks = append(pks, prv.PublicKey())
+	}
+
 	for _, nID := range s.nIDs {
-		gov, err := test.NewGovernance(nil, 50*time.Millisecond)
+		gov, err := test.NewGovernance(pks, 50*time.Millisecond)
 		s.Require().NoError(err)
+		cache := NewNodeSetCache(gov)
 		cfgChains[nID] = newConfigurationChain(
-			nID, recv, gov, &common.NullLogger{})
+			nID, recv, gov, cache, &common.NullLogger{})
 		recv.nodes[nID] = cfgChains[nID]
 		recv.govs[nID] = gov
 	}
@@ -225,7 +231,7 @@ func (s *ConfigurationChainTestSuite) preparePartialSignature(
 // recovering threshold signature.
 // All participants are good people in this test.
 func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
-	k := 3
+	k := 4
 	n := 10
 	round := uint64(1)
 	cfgChains := s.runDKG(k, n, round)
@@ -253,7 +259,7 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 	}
 	for nID, cc := range cfgChains {
 		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
-			continue
+			s.FailNow("Should be qualifyied")
 		}
 		s.Require().NoError(<-errs)
 		tsig := <-tsigChan

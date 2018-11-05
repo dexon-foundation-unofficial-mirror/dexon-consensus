@@ -336,6 +336,7 @@ func NewConsensus(
 		ID,
 		recv,
 		gov,
+		nodeSetCache,
 		logger)
 	recv.cfgModule = cfgModule
 	// Construct Consensus instance.
@@ -1005,10 +1006,9 @@ func (con *Consensus) prepareBlock(b *types.Block,
 	if err = con.lattice.PrepareBlock(b, proposeTime); err != nil {
 		return
 	}
-	// TODO(mission): decide CRS by block's round, which could be determined by
-	//                block's info (ex. position, timestamp).
 	con.logger.Debug("Calling Governance.CRS", "round", 0)
-	if err = con.authModule.SignCRS(b, con.gov.CRS(0)); err != nil {
+	if err =
+		con.authModule.SignCRS(b, con.gov.CRS(b.Position.Round)); err != nil {
 		return
 	}
 	return

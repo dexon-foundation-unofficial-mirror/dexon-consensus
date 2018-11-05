@@ -39,18 +39,22 @@ var (
 )
 
 type configurationChain struct {
-	ID          types.NodeID
-	recv        dkgReceiver
-	gov         Governance
-	dkg         *dkgProtocol
-	logger      common.Logger
-	dkgLock     sync.RWMutex
-	dkgSigner   map[uint64]*dkgShareSecret
-	gpk         map[uint64]*DKGGroupPublicKey
-	dkgResult   sync.RWMutex
-	tsig        map[common.Hash]*tsigProtocol
-	tsigTouched map[common.Hash]struct{}
-	tsigReady   *sync.Cond
+	ID              types.NodeID
+	recv            dkgReceiver
+	gov             Governance
+	dkg             *dkgProtocol
+	logger          common.Logger
+	dkgLock         sync.RWMutex
+	dkgSigner       map[uint64]*dkgShareSecret
+	gpk             map[uint64]*DKGGroupPublicKey
+	dkgResult       sync.RWMutex
+	tsig            map[common.Hash]*tsigProtocol
+	tsigTouched     map[common.Hash]struct{}
+	tsigReady       *sync.Cond
+	cache           *NodeSetCache
+	dkgSet          map[types.NodeID]struct{}
+	mpkReady        bool
+	pendingPrvShare map[types.NodeID]*typesDKG.PrivateShare
 	// TODO(jimmy-dexon): add timeout to pending psig.
 	pendingPsig map[common.Hash][]*typesDKG.PartialSignature
 	prevHash    common.Hash
@@ -60,6 +64,7 @@ func newConfigurationChain(
 	ID types.NodeID,
 	recv dkgReceiver,
 	gov Governance,
+	cache *NodeSetCache,
 	logger common.Logger) *configurationChain {
 	return &configurationChain{
 		ID:          ID,
@@ -71,6 +76,7 @@ func newConfigurationChain(
 		tsig:        make(map[common.Hash]*tsigProtocol),
 		tsigTouched: make(map[common.Hash]struct{}),
 		tsigReady:   sync.NewCond(&sync.Mutex{}),
+		cache:       cache,
 		pendingPsig: make(map[common.Hash][]*typesDKG.PartialSignature),
 	}
 }
@@ -78,6 +84,17 @@ func newConfigurationChain(
 func (cc *configurationChain) registerDKG(round uint64, threshold int) {
 	cc.dkgLock.Lock()
 	defer cc.dkgLock.Unlock()
+	if cc.dkg != nil {
+		cc.logger.Error("Previous DKG is not finished")
+	}
+	dkgSet, err := cc.cache.GetDKGSet(round)
+	if err != nil {
+		cc.logger.Error("Error getting DKG set from cache", "error", err)
+		return
+	}
+	cc.dkgSet = dkgSet
+	cc.pendingPrvShare = make(map[types.NodeID]*typesDKG.PrivateShare)
+	cc.mpkReady = false
 	cc.dkg = newDKGProtocol(
 		cc.ID,
 		cc.recv,
@@ -107,6 +124,13 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	// Phase 2(T = 0): Exchange DKG secret key share.
 	cc.logger.Debug("Calling Governance.DKGMasterPublicKeys", "round", round)
 	cc.dkg.processMasterPublicKeys(cc.gov.DKGMasterPublicKeys(round))
+	cc.mpkReady = true
+	for _, prvShare := range cc.pendingPrvShare {
+		if err := cc.dkg.processPrivateShare(prvShare); err != nil {
+			cc.logger.Error("Failed to process private share",
+				"error", err)
+		}
+	}
 	// Phase 3(T = 0~λ): Propose complaint.
 	// Propose complaint is done in `processMasterPublicKeys`.
 	cc.dkgLock.Unlock()
@@ -284,6 +308,21 @@ func (cc *configurationChain) processPrivateShare(
 	cc.dkgLock.Lock()
 	defer cc.dkgLock.Unlock()
 	if cc.dkg == nil {
+		return nil
+	}
+	if _, exist := cc.dkgSet[prvShare.ProposerID]; !exist {
+		return ErrNotDKGParticipant
+	}
+	if !cc.mpkReady {
+		// TODO(jimmy-dexon): remove duplicated signature check in dkg module.
+		ok, err := verifyDKGPrivateShareSignature(prvShare)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return ErrIncorrectPrivateShareSignature
+		}
+		cc.pendingPrvShare[prvShare.ProposerID] = prvShare
 		return nil
 	}
 	return cc.dkg.processPrivateShare(prvShare)
