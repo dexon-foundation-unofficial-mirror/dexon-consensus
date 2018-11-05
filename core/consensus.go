@@ -159,6 +159,15 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 		recv.consensus.logger.Error("Failed to process block", "error", err)
 		return
 	}
+	// Clean the restartNotary channel so BA will not stuck by deadlock.
+CleanChannelLoop:
+	for {
+		select {
+		case <-recv.restartNotary:
+		default:
+			break CleanChannelLoop
+		}
+	}
 	if block.Timestamp.After(recv.changeNotaryTime) {
 		recv.round++
 		recv.restartNotary <- true
