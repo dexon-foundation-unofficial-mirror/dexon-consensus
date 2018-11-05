@@ -47,9 +47,8 @@ type Vote struct {
 }
 
 func (v *Vote) String() string {
-	return fmt.Sprintf("Vote[%s:%d:%d](%d:%d):%s",
-		v.ProposerID.String()[:6], v.Position.ChainID, v.Position.Height,
-		v.Period, v.Type, v.BlockHash.String()[:6])
+	return fmt.Sprintf("Vote[%s:%s](%d:%d):%s", v.ProposerID.String()[:6],
+		&v.Position, v.Period, v.Type, v.BlockHash.String()[:6])
 }
 
 // Clone returns a deep copy of a vote.

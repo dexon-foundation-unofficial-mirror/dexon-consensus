@@ -394,6 +394,9 @@ func NewConsensus(
 
 // Run starts running DEXON Consensus.
 func (con *Consensus) Run(initBlock *types.Block) {
+	con.logger.Debug("Calling Governance.NotifyRoundHeight for genesis rounds",
+		"block", initBlock)
+	notifyGenesisRounds(initBlock, con.gov)
 	// Setup context.
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
 	con.ccModule.init(initBlock)
@@ -930,9 +933,12 @@ func (con *Consensus) deliverBlock(b *types.Block) {
 	// TODO(mission): clone types.FinalizationResult
 	con.logger.Debug("Calling Application.BlockDelivered", "block", b)
 	con.app.BlockDelivered(b.Hash, b.Position, b.Finalization)
-	if b.Position.Round+2 == con.roundToNotify {
+	if b.Position.Round+roundShift == con.roundToNotify {
 		// Only the first block delivered of that round would
 		// trigger this noitification.
+		con.logger.Debug("Calling Governance.NotifyRoundHeight",
+			"round", con.roundToNotify,
+			"height", b.Finalization.Height)
 		con.gov.NotifyRoundHeight(
 			con.roundToNotify, b.Finalization.Height)
 		con.roundToNotify++
