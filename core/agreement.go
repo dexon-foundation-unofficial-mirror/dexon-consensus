@@ -160,7 +160,7 @@ func (a *agreement) restart(
 		a.data.requiredVote = len(notarySet)/3*2 + 1
 		a.data.leader.restart(crs)
 		a.data.lockValue = nullBlockHash
-		a.data.lockRound = 1
+		a.data.lockRound = 0
 		a.fastForward = make(chan uint64, 1)
 		a.hasOutput = false
 		a.state = newInitialState(a.data)
@@ -237,7 +237,10 @@ func (a *agreement) clocks() int {
 
 // pullVotes returns if current agreement requires more votes to continue.
 func (a *agreement) pullVotes() bool {
-	return a.state.state() == statePullVote
+	a.data.lock.RLock()
+	defer a.data.lock.RUnlock()
+	return a.state.state() == statePullVote ||
+		(a.state.state() == statePreCommit && (a.data.period%3) == 0)
 }
 
 // agreementID returns the current agreementID.
@@ -345,7 +348,6 @@ func (a *agreement) processVote(vote *types.Vote) error {
 				vote.BlockHash != a.data.lockValue {
 				a.data.lockValue = hash
 				a.data.lockRound = vote.Period
-				a.fastForward <- a.data.period + 1
 				return nil
 			}
 			// Condition 2.

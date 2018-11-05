@@ -236,12 +236,12 @@ func (s *AgreementTestSuite) TestFastForwardCond1() {
 
 	select {
 	case <-a.done():
+		s.FailNow("Unexpected fast forward.")
 	default:
-		s.FailNow("Expecting fast forward.")
 	}
 	s.Equal(hash, a.data.lockValue)
 	s.Equal(uint64(2), a.data.lockRound)
-	s.Equal(uint64(4), a.data.period)
+	s.Equal(uint64(3), a.data.period)
 
 	// No fast forward if vote.BlockHash == SKIP
 	a.data.lockRound = 6
