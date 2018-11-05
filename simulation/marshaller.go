@@ -20,9 +20,6 @@ package simulation
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/dexon-foundation/dexon-consensus/core/types"
-	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
 )
 
 // jsonMarshaller implements test.Marshaller to marshal simulation related
@@ -32,8 +29,13 @@ type jsonMarshaller struct{}
 // Unmarshal implements Unmarshal method of test.Marshaller interface.
 func (m *jsonMarshaller) Unmarshal(
 	msgType string, payload []byte) (msg interface{}, err error) {
-
 	switch msgType {
+	case "info-status":
+		var status infoStatus
+		if err = json.Unmarshal(payload, &status); err != nil {
+			break
+		}
+		msg = status
 	case "blocklist":
 		var blocks BlockList
 		if err = json.Unmarshal(payload, &blocks); err != nil {
@@ -46,66 +48,6 @@ func (m *jsonMarshaller) Unmarshal(
 			break
 		}
 		msg = &m
-	case "info-status":
-		var status infoStatus
-		if err = json.Unmarshal(payload, &status); err != nil {
-			break
-		}
-		msg = status
-	case "block":
-		block := &types.Block{}
-		if err = json.Unmarshal(payload, block); err != nil {
-			break
-		}
-		msg = block
-	case "vote":
-		vote := &types.Vote{}
-		if err = json.Unmarshal(payload, vote); err != nil {
-			break
-		}
-		msg = vote
-	case "block-randomness-request":
-		request := &types.AgreementResult{}
-		if err = json.Unmarshal(payload, request); err != nil {
-			break
-		}
-		msg = request
-	case "block-randomness-result":
-		result := &types.BlockRandomnessResult{}
-		if err = json.Unmarshal(payload, result); err != nil {
-			break
-		}
-		msg = result
-	case "dkg-private-share":
-		privateShare := &typesDKG.PrivateShare{}
-		if err = json.Unmarshal(payload, privateShare); err != nil {
-			break
-		}
-		msg = privateShare
-	case "dkg-master-public-key":
-		masterPublicKey := typesDKG.NewMasterPublicKey()
-		if err = json.Unmarshal(payload, masterPublicKey); err != nil {
-			break
-		}
-		msg = masterPublicKey
-	case "dkg-complaint":
-		complaint := &typesDKG.Complaint{}
-		if err = json.Unmarshal(payload, complaint); err != nil {
-			break
-		}
-		msg = complaint
-	case "dkg-partial-signature":
-		psig := &typesDKG.PartialSignature{}
-		if err = json.Unmarshal(payload, psig); err != nil {
-			break
-		}
-		msg = psig
-	case "dkg-finalize":
-		final := &typesDKG.Finalize{}
-		if err = json.Unmarshal(payload, final); err != nil {
-			break
-		}
-		msg = final
 	default:
 		err = fmt.Errorf("unrecognized message type: %v", msgType)
 	}
@@ -118,32 +60,13 @@ func (m *jsonMarshaller) Unmarshal(
 // Marshal implements Marshal method of test.Marshaller interface.
 func (m *jsonMarshaller) Marshal(msg interface{}) (
 	msgType string, payload []byte, err error) {
-
 	switch msg.(type) {
+	case infoStatus:
+		msgType = "info-status"
 	case *BlockList:
 		msgType = "blocklist"
 	case *message:
 		msgType = "message"
-	case infoStatus:
-		msgType = "info-status"
-	case *types.Block:
-		msgType = "block"
-	case *types.Vote:
-		msgType = "vote"
-	case *types.AgreementResult:
-		msgType = "block-randomness-request"
-	case *types.BlockRandomnessResult:
-		msgType = "block-randomness-result"
-	case *typesDKG.PrivateShare:
-		msgType = "dkg-private-share"
-	case *typesDKG.MasterPublicKey:
-		msgType = "dkg-master-public-key"
-	case *typesDKG.Complaint:
-		msgType = "dkg-complaint"
-	case *typesDKG.PartialSignature:
-		msgType = "dkg-partial-signature"
-	case *typesDKG.Finalize:
-		msgType = "dkg-finalize"
 	default:
 		err = fmt.Errorf("unknwon message type: %v", msg)
 	}

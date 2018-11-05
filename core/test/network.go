@@ -15,75 +15,44 @@
 // along with the dexon-consensus library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package simulation
+package test
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"strconv"
-	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
-	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
-	"github.com/dexon-foundation/dexon-consensus/simulation/config"
 )
 
-type messageType string
+// NetworkType is the simulation network type.
+type NetworkType string
 
+// NetworkType enums.
 const (
-	shutdownAck    messageType = "shutdownAck"
-	blockTimestamp messageType = "blockTimestamps"
+	NetworkTypeTCP      NetworkType = "tcp"
+	NetworkTypeTCPLocal NetworkType = "tcp-local"
+	NetworkTypeFake     NetworkType = "fake"
 )
 
-// message is a struct for peer sending message to server.
-type message struct {
-	Type    messageType     `json:"type"`
-	Payload json.RawMessage `json:"payload"`
+// NetworkConfig is the configuration for Network module.
+type NetworkConfig struct {
+	Type       NetworkType
+	PeerServer string
+	PeerPort   int
 }
 
-type timestampEvent string
-
-const (
-	blockSeen        timestampEvent = "blockSeen"
-	timestampConfirm timestampEvent = "timestampConfirm"
-	timestampAck     timestampEvent = "timestampAck"
-)
-
-// TimestampMessage is a struct for peer sending consensus timestamp information
-// to server.
-type timestampMessage struct {
-	BlockHash common.Hash    `json:"hash"`
-	Event     timestampEvent `json:"event"`
-	Timestamp time.Time      `json:"timestamp"`
-}
-
-type infoStatus string
-
-const (
-	statusInit     infoStatus = "init"
-	statusNormal   infoStatus = "normal"
-	statusShutdown infoStatus = "shutdown"
-)
-
-// infoMessage is a struct used by peerServer's /info.
-type infoMessage struct {
-	Status infoStatus              `json:"status"`
-	Peers  map[types.NodeID]string `json:"peers"`
-}
-
-// network implements core.Network interface and other methods for simulation
-// based on test.TransportClient.
-type network struct {
-	cfg            config.Networking
+// Network implements core.Network interface based on TransportClient.
+type Network struct {
+	config         NetworkConfig
 	ctx            context.Context
 	ctxCancel      context.CancelFunc
-	trans          test.TransportClient
-	fromTransport  <-chan *test.TransportEnvelope
+	trans          TransportClient
+	fromTransport  <-chan *TransportEnvelope
 	toConsensus    chan interface{}
 	toNode         chan interface{}
 	sentRandomness map[common.Hash]struct{}
@@ -91,42 +60,36 @@ type network struct {
 	blockCache     map[common.Hash]*types.Block
 }
 
-// newNetwork setup network stuffs for nodes, which provides an
-// implementation of core.Network based on test.TransportClient.
-func newNetwork(pubKey crypto.PublicKey, cfg config.Networking) (n *network) {
-	// Construct latency model.
-	latency := &test.NormalLatencyModel{
-		Mean:  cfg.Mean,
-		Sigma: cfg.Sigma,
-	}
+// NewNetwork setup network stuffs for nodes, which provides an
+// implementation of core.Network based on TransportClient.
+func NewNetwork(pubKey crypto.PublicKey, latency LatencyModel,
+	marshaller Marshaller, config NetworkConfig) (n *Network) {
 	// Construct basic network instance.
-	n = &network{
-		cfg:            cfg,
-		toNode:         make(chan interface{}, 1000),
+	n = &Network{
+		config:         config,
 		toConsensus:    make(chan interface{}, 1000),
+		toNode:         make(chan interface{}, 1000),
 		sentRandomness: make(map[common.Hash]struct{}),
 		sentAgreement:  make(map[common.Hash]struct{}),
 		blockCache:     make(map[common.Hash]*types.Block),
 	}
 	n.ctx, n.ctxCancel = context.WithCancel(context.Background())
 	// Construct transport layer.
-	switch cfg.Type {
-	case config.NetworkTypeTCPLocal:
-		n.trans = test.NewTCPTransportClient(
-			pubKey, latency, &jsonMarshaller{}, true)
-	case config.NetworkTypeTCP:
-		n.trans = test.NewTCPTransportClient(
-			pubKey, latency, &jsonMarshaller{}, false)
-	case config.NetworkTypeFake:
-		n.trans = test.NewFakeTransportClient(pubKey, latency)
+	switch config.Type {
+	case NetworkTypeTCPLocal:
+		n.trans = NewTCPTransportClient(pubKey, latency, marshaller, true)
+	case NetworkTypeTCP:
+		n.trans = NewTCPTransportClient(pubKey, latency, marshaller, false)
+	case NetworkTypeFake:
+		n.trans = NewFakeTransportClient(pubKey, latency)
 	default:
-		panic(fmt.Errorf("unknown network type: %v", cfg.Type))
+		panic(fmt.Errorf("unknown network type: %v", config.Type))
 	}
 	return
 }
 
-// PullBlock implements core.Network interface.
-func (n *network) PullBlocks(hashes common.Hashes) {
+// PullBlocks implements core.Network interface.
+func (n *Network) PullBlocks(hashes common.Hashes) {
 	go func() {
 		for _, hash := range hashes {
 			// TODO(jimmy-dexon): request block from network instead of cache.
@@ -139,27 +102,27 @@ func (n *network) PullBlocks(hashes common.Hashes) {
 	}()
 }
 
-// PullVote implements core.Network interface.
-func (n *network) PullVotes(pos types.Position) {
+// PullVotes implements core.Network interface.
+func (n *Network) PullVotes(pos types.Position) {
 	// TODO(jimmy-dexon): implement this.
 }
 
 // BroadcastVote implements core.Network interface.
-func (n *network) BroadcastVote(vote *types.Vote) {
+func (n *Network) BroadcastVote(vote *types.Vote) {
 	if err := n.trans.Broadcast(vote); err != nil {
 		panic(err)
 	}
 }
 
 // BroadcastBlock implements core.Network interface.
-func (n *network) BroadcastBlock(block *types.Block) {
+func (n *Network) BroadcastBlock(block *types.Block) {
 	if err := n.trans.Broadcast(block); err != nil {
 		panic(err)
 	}
 }
 
 // BroadcastAgreementResult implements core.Network interface.
-func (n *network) BroadcastAgreementResult(
+func (n *Network) BroadcastAgreementResult(
 	randRequest *types.AgreementResult) {
 	if _, exist := n.sentAgreement[randRequest.BlockHash]; exist {
 		return
@@ -178,7 +141,7 @@ func (n *network) BroadcastAgreementResult(
 }
 
 // BroadcastRandomnessResult implements core.Network interface.
-func (n *network) BroadcastRandomnessResult(
+func (n *Network) BroadcastRandomnessResult(
 	randResult *types.BlockRandomnessResult) {
 	if _, exist := n.sentRandomness[randResult.BlockHash]; exist {
 		return
@@ -197,14 +160,14 @@ func (n *network) BroadcastRandomnessResult(
 }
 
 // broadcast message to all other nodes in the network.
-func (n *network) broadcast(message interface{}) {
+func (n *Network) broadcast(message interface{}) {
 	if err := n.trans.Broadcast(message); err != nil {
 		panic(err)
 	}
 }
 
 // SendDKGPrivateShare implements core.Network interface.
-func (n *network) SendDKGPrivateShare(
+func (n *Network) SendDKGPrivateShare(
 	recv crypto.PublicKey, prvShare *typesDKG.PrivateShare) {
 	if err := n.trans.Send(types.NewNodeID(recv), prvShare); err != nil {
 		panic(err)
@@ -212,7 +175,7 @@ func (n *network) SendDKGPrivateShare(
 }
 
 // BroadcastDKGPrivateShare implements core.Network interface.
-func (n *network) BroadcastDKGPrivateShare(
+func (n *Network) BroadcastDKGPrivateShare(
 	prvShare *typesDKG.PrivateShare) {
 	if err := n.trans.Broadcast(prvShare); err != nil {
 		panic(err)
@@ -220,7 +183,7 @@ func (n *network) BroadcastDKGPrivateShare(
 }
 
 // BroadcastDKGPartialSignature implements core.Network interface.
-func (n *network) BroadcastDKGPartialSignature(
+func (n *Network) BroadcastDKGPartialSignature(
 	psig *typesDKG.PartialSignature) {
 	if err := n.trans.Broadcast(psig); err != nil {
 		panic(err)
@@ -228,27 +191,22 @@ func (n *network) BroadcastDKGPartialSignature(
 }
 
 // ReceiveChan implements core.Network interface.
-func (n *network) ReceiveChan() <-chan interface{} {
+func (n *Network) ReceiveChan() <-chan interface{} {
 	return n.toConsensus
 }
 
-// receiveChanForNode returns a channel for nodes' specific
-// messages.
-func (n *network) receiveChanForNode() <-chan interface{} {
-	return n.toNode
-}
-
-// setup transport layer.
-func (n *network) setup(serverEndpoint interface{}) (err error) {
+// Setup transport layer.
+func (n *Network) Setup(serverEndpoint interface{}) (err error) {
 	// Join the p2p network.
-	switch n.cfg.Type {
-	case config.NetworkTypeTCP, config.NetworkTypeTCPLocal:
-		addr := net.JoinHostPort(n.cfg.PeerServer, strconv.Itoa(peerPort))
+	switch n.config.Type {
+	case NetworkTypeTCP, NetworkTypeTCPLocal:
+		addr := net.JoinHostPort(
+			n.config.PeerServer, strconv.Itoa(n.config.PeerPort))
 		n.fromTransport, err = n.trans.Join(addr)
-	case config.NetworkTypeFake:
+	case NetworkTypeFake:
 		n.fromTransport, err = n.trans.Join(serverEndpoint)
 	default:
-		err = fmt.Errorf("unknown network type: %v", n.cfg.Type)
+		err = fmt.Errorf("unknown network type: %v", n.config.Type)
 	}
 	if err != nil {
 		return
@@ -256,50 +214,49 @@ func (n *network) setup(serverEndpoint interface{}) (err error) {
 	return
 }
 
-// run the main loop.
-func (n *network) run() {
-	// The dispatcher declararion:
-	// to consensus or node, that's the question.
-	disp := func(e *test.TransportEnvelope) {
-		if block, ok := e.Msg.(*types.Block); ok {
-			if len(n.blockCache) > 500 {
-				for k := range n.blockCache {
-					delete(n.blockCache, k)
-					break
-				}
+func (n *Network) msgHandler(e *TransportEnvelope) {
+	switch v := e.Msg.(type) {
+	case *types.Block:
+		if len(n.blockCache) > 500 {
+			// Randomly purge one block from cache.
+			for k := range n.blockCache {
+				delete(n.blockCache, k)
+				break
 			}
-			n.blockCache[block.Hash] = block
 		}
-		switch e.Msg.(type) {
-		case *types.Block, *types.Vote,
-			*types.AgreementResult, *types.BlockRandomnessResult,
-			*typesDKG.PrivateShare, *typesDKG.PartialSignature:
-			n.toConsensus <- e.Msg
-		default:
-			n.toNode <- e.Msg
-		}
+		n.blockCache[v.Hash] = v
+		n.toConsensus <- e.Msg
+	case *types.Vote, *types.AgreementResult, *types.BlockRandomnessResult,
+		*typesDKG.PrivateShare, *typesDKG.PartialSignature:
+		n.toConsensus <- e.Msg
+	default:
+		n.toNode <- e.Msg
 	}
-MainLoop:
+}
+
+// Run the main loop.
+func (n *Network) Run() {
+Loop:
 	for {
 		select {
 		case <-n.ctx.Done():
-			break MainLoop
+			break Loop
 		default:
 		}
 		select {
 		case <-n.ctx.Done():
-			break MainLoop
+			break Loop
 		case e, ok := <-n.fromTransport:
 			if !ok {
-				break MainLoop
+				break Loop
 			}
-			disp(e)
+			n.msgHandler(e)
 		}
 	}
 }
 
-// Close stop the network.
-func (n *network) Close() (err error) {
+// Close stops the network.
+func (n *Network) Close() (err error) {
 	n.ctxCancel()
 	close(n.toConsensus)
 	n.toConsensus = nil
@@ -311,12 +268,26 @@ func (n *network) Close() (err error) {
 	return
 }
 
-// report exports 'Report' method of test.TransportClient.
-func (n *network) report(msg interface{}) error {
+// Report exports 'Report' method of TransportClient.
+func (n *Network) Report(msg interface{}) error {
 	return n.trans.Report(msg)
 }
 
-// peers exports 'Peers' method of test.Transport.
-func (n *network) peers() []crypto.PublicKey {
+// Peers exports 'Peers' method of Transport.
+func (n *Network) Peers() []crypto.PublicKey {
 	return n.trans.Peers()
+}
+
+// Broadcast exports 'Broadcast' method of Transport, and would panic when
+// error.
+func (n *Network) Broadcast(msg interface{}) {
+	if err := n.trans.Broadcast(msg); err != nil {
+		panic(err)
+	}
+}
+
+// ReceiveChanForNode returns a channel for messages not handled by
+// core.Consensus.
+func (n *Network) ReceiveChanForNode() <-chan interface{} {
+	return n.toNode
 }

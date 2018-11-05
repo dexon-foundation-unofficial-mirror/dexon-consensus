@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
+	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/simulation/config"
 )
 
@@ -51,11 +52,11 @@ func Run(cfg *config.Config) {
 	}
 
 	switch networkType {
-	case config.NetworkTypeTCP:
+	case test.NetworkTypeTCP:
 		// Intialized a simulation on multiple remotely peers.
 		// The peer-server would be initialized with another command.
 		init(nil)
-	case config.NetworkTypeTCPLocal, config.NetworkTypeFake:
+	case test.NetworkTypeTCPLocal, test.NetworkTypeFake:
 		// Initialize a local simulation with a peer server.
 		var serverEndpoint interface{}
 		server = NewPeerServer()
@@ -76,7 +77,7 @@ func Run(cfg *config.Config) {
 
 	// Do not exit when we are in TCP node, since k8s will restart the pod and
 	// cause confusions.
-	if networkType == config.NetworkTypeTCP {
+	if networkType == test.NetworkTypeTCP {
 		select {}
 	}
 }

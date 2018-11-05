@@ -24,6 +24,7 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
 	"github.com/dexon-foundation/dexon-consensus/simulation/config"
@@ -47,7 +48,7 @@ type simGovernance struct {
 	lambdaBA           time.Duration
 	lambdaDKG          time.Duration
 	roundInterval      time.Duration
-	network            *network
+	network            *test.Network
 }
 
 // newSimGovernance returns a new simGovernance instance.
@@ -76,7 +77,7 @@ func newSimGovernance(
 	}
 }
 
-func (g *simGovernance) setNetwork(network *network) {
+func (g *simGovernance) setNetwork(network *test.Network) {
 	g.network = network
 }
 
@@ -160,7 +161,7 @@ func (g *simGovernance) AddDKGComplaint(
 	g.dkgComplaint[complaint.Round] = append(
 		g.dkgComplaint[complaint.Round], complaint)
 	if complaint.ProposerID == g.id {
-		g.network.broadcast(complaint)
+		g.network.Broadcast(complaint)
 	}
 }
 
@@ -183,7 +184,7 @@ func (g *simGovernance) AddDKGMasterPublicKey(
 	g.dkgMasterPublicKey[masterPublicKey.Round] = append(
 		g.dkgMasterPublicKey[masterPublicKey.Round], masterPublicKey)
 	if masterPublicKey.ProposerID == g.id {
-		g.network.broadcast(masterPublicKey)
+		g.network.Broadcast(masterPublicKey)
 	}
 }
 
@@ -209,7 +210,7 @@ func (g *simGovernance) AddDKGFinalize(
 	}
 	g.dkgFinal[final.Round][final.ProposerID] = struct{}{}
 	if final.ProposerID == g.id {
-		g.network.broadcast(final)
+		g.network.Broadcast(final)
 	}
 }
 

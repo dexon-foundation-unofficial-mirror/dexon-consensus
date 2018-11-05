@@ -18,6 +18,7 @@
 package simulation
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -26,10 +27,32 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core"
 	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
 	"github.com/dexon-foundation/dexon-consensus/simulation/config"
 )
+
+type infoStatus string
+
+const (
+	statusInit     infoStatus = "init"
+	statusNormal   infoStatus = "normal"
+	statusShutdown infoStatus = "shutdown"
+)
+
+type messageType string
+
+const (
+	shutdownAck    messageType = "shutdownAck"
+	blockTimestamp messageType = "blockTimestamps"
+)
+
+// message is a struct for peer sending message to server.
+type message struct {
+	Type    messageType     `json:"type"`
+	Payload json.RawMessage `json:"payload"`
+}
 
 // node represents a node in DexCon.
 type node struct {
@@ -38,7 +61,7 @@ type node struct {
 	db  blockdb.BlockDatabase
 
 	config    config.Node
-	netModule *network
+	netModule *test.Network
 
 	ID        types.NodeID
 	chainID   uint64
@@ -50,12 +73,21 @@ type node struct {
 func newNode(
 	prvKey crypto.PrivateKey,
 	config config.Config) *node {
-
 	pubKey := prvKey.PublicKey()
-	netModule := newNetwork(pubKey, config.Networking)
+	netModule := test.NewNetwork(
+		pubKey,
+		&test.NormalLatencyModel{
+			Mean:  config.Networking.Mean,
+			Sigma: config.Networking.Sigma,
+		},
+		test.NewDefaultMarshaller(&jsonMarshaller{}),
+		test.NetworkConfig{
+			Type:       config.Networking.Type,
+			PeerServer: config.Networking.PeerServer,
+			PeerPort:   peerPort,
+		})
 	id := types.NewNodeID(pubKey)
-	db, err := blockdb.NewMemBackedBlockDB(
-		id.String() + ".blockdb")
+	db, err := blockdb.NewMemBackedBlockDB(id.String() + ".blockdb")
 	if err != nil {
 		panic(err)
 	}
@@ -79,12 +111,12 @@ func (n *node) GetID() types.NodeID {
 // run starts the node.
 func (n *node) run(serverEndpoint interface{}, dMoment time.Time) {
 	// Run network.
-	if err := n.netModule.setup(serverEndpoint); err != nil {
+	if err := n.netModule.Setup(serverEndpoint); err != nil {
 		panic(err)
 	}
-	msgChannel := n.netModule.receiveChanForNode()
-	peers := n.netModule.peers()
-	go n.netModule.run()
+	msgChannel := n.netModule.ReceiveChanForNode()
+	peers := n.netModule.Peers()
+	go n.netModule.Run()
 	n.gov.setNetwork(n.netModule)
 	// Run consensus.
 	hashes := make(common.Hashes, 0, len(peers))
@@ -134,7 +166,7 @@ MainLoop:
 	if err := n.db.Close(); err != nil {
 		fmt.Println(err)
 	}
-	n.netModule.report(&message{
+	n.netModule.Report(&message{
 		Type: shutdownAck,
 	})
 	// TODO(mission): once we have a way to know if consensus is stopped, stop

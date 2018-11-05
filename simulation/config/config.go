@@ -21,17 +21,8 @@ import (
 	"math"
 	"os"
 
+	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/naoina/toml"
-)
-
-// NetworkType is the simulation network type.
-type NetworkType string
-
-// NetworkType enums.
-const (
-	NetworkTypeTCP      NetworkType = "tcp"
-	NetworkTypeTCPLocal NetworkType = "tcp-local"
-	NetworkTypeFake     NetworkType = "fake"
 )
 
 // Consensus settings.
@@ -61,7 +52,7 @@ type Node struct {
 
 // Networking config.
 type Networking struct {
-	Type       NetworkType
+	Type       test.NetworkType
 	PeerServer string
 
 	Mean          float64
@@ -110,7 +101,7 @@ func GenerateDefault(path string) error {
 			MaxBlock: math.MaxUint64,
 		},
 		Networking: Networking{
-			Type:          NetworkTypeTCPLocal,
+			Type:          test.NetworkTypeTCPLocal,
 			PeerServer:    "127.0.0.1",
 			Mean:          100,
 			Sigma:         10,

@@ -24,15 +24,32 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
+	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
+
+type timestampEvent string
+
+const (
+	blockSeen        timestampEvent = "blockSeen"
+	timestampConfirm timestampEvent = "timestampConfirm"
+	timestampAck     timestampEvent = "timestampAck"
+)
+
+// TimestampMessage is a struct for peer sending consensus timestamp information
+// to server.
+type timestampMessage struct {
+	BlockHash common.Hash    `json:"hash"`
+	Event     timestampEvent `json:"event"`
+	Timestamp time.Time      `json:"timestamp"`
+}
 
 // simApp is an DEXON app for simulation.
 type simApp struct {
 	NodeID    types.NodeID
 	Outputs   []*types.Block
 	Early     bool
-	netModule *network
+	netModule *test.Network
 	DeliverID int
 	// blockSeen stores the time when block is delivered by Total Ordering.
 	blockSeen map[common.Hash]time.Time
@@ -45,7 +62,7 @@ type simApp struct {
 }
 
 // newSimApp returns point to a new instance of simApp.
-func newSimApp(id types.NodeID, netModule *network) *simApp {
+func newSimApp(id types.NodeID, netModule *test.Network) *simApp {
 	return &simApp{
 		NodeID:             id,
 		netModule:          netModule,
@@ -126,7 +143,7 @@ func (a *simApp) TotalOrderingDelivered(
 		ID:        a.DeliverID,
 		BlockHash: blockHashes,
 	}
-	a.netModule.report(blockList)
+	a.netModule.Report(blockList)
 	a.DeliverID++
 }
 
@@ -178,5 +195,5 @@ func (a *simApp) BlockDelivered(
 		Type:    blockTimestamp,
 		Payload: jsonPayload,
 	}
-	a.netModule.report(msg)
+	a.netModule.Report(msg)
 }
