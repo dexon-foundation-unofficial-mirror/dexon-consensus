@@ -140,9 +140,15 @@ func newAgreement(
 func (a *agreement) restart(
 	notarySet map[types.NodeID]struct{}, aID types.Position, crs common.Hash) {
 
-	func() {
+	if !func() bool {
 		a.lock.Lock()
 		defer a.lock.Unlock()
+		if !isStop(aID) {
+			oldAID := a.agreementID()
+			if !isStop(oldAID) && !aID.Newer(&oldAID) {
+				return false
+			}
+		}
 		a.data.lock.Lock()
 		defer a.data.lock.Unlock()
 		a.data.blocksLock.Lock()
@@ -161,7 +167,10 @@ func (a *agreement) restart(
 		a.notarySet = notarySet
 		a.candidateBlock = make(map[common.Hash]*types.Block)
 		a.aID.Store(aID)
-	}()
+		return true
+	}() {
+		return
+	}
 
 	if isStop(aID) {
 		return

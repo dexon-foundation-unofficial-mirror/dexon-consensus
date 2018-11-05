@@ -430,7 +430,10 @@ func (con *Consensus) Run(initBlock *types.Block) {
 	for {
 		<-con.tickerObj.Tick()
 		for _, tick := range ticks {
-			go func(tick chan struct{}) { tick <- struct{}{} }(tick)
+			select {
+			case tick <- struct{}{}:
+			default:
+			}
 		}
 	}
 }
