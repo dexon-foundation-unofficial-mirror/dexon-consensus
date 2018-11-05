@@ -488,6 +488,9 @@ func (data *latticeData) prepareEmptyBlock(b *types.Block) {
 		}
 		b.Position.Height = chainTip.Position.Height + 1
 		b.Timestamp = chainTip.Timestamp.Add(chainTipConfig.minBlockTimeInterval)
+		b.Witness.Height = chainTip.Witness.Height
+		b.Witness.Data = make([]byte, len(chainTip.Witness.Data))
+		copy(b.Witness.Data, chainTip.Witness.Data)
 		acks = append(acks, chainTip.Hash)
 	}
 	b.Acks = common.NewSortedHashes(acks)
