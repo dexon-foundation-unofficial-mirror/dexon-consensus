@@ -330,7 +330,7 @@ func NewConsensus(
 	debugApp, _ := app.(Debug)
 	// Init lattice.
 	lattice := NewLattice(
-		dMoment, config, authModule, app, debugApp, db, logger)
+		dMoment, round, config, authModule, app, debugApp, db, logger)
 	// Init configuration chain.
 	ID := types.NewNodeID(prv.PublicKey())
 	recv := &consensusDKGReceiver{

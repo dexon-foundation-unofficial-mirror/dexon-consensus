@@ -82,22 +82,26 @@ func (config *latticeDataConfig) fromConfig(roundID uint64, cfg *types.Config) {
 	config.setupRoundBasedFields(roundID, cfg)
 }
 
-// Check if timestamp of a block is valid according to a reference time.
+// isValidBlockTime checks if timestamp of a block is valid according to a
+// reference time.
 func (config *latticeDataConfig) isValidBlockTime(
 	b *types.Block, ref time.Time) bool {
 	return !b.Timestamp.Before(ref.Add(config.minBlockTimeInterval))
 }
 
-// isValidGenesisBlockTime check if a timestamp is valid for a genesis block.
+// isValidGenesisBlockTime checks if a timestamp is valid for a genesis block.
 func (config *latticeDataConfig) isValidGenesisBlockTime(b *types.Block) bool {
 	return !b.Timestamp.Before(config.roundBeginTime)
 }
 
 // newGenesisLatticeDataConfig constructs a latticeDataConfig instance.
 func newGenesisLatticeDataConfig(
-	dMoment time.Time, config *types.Config) *latticeDataConfig {
+	dMoment time.Time,
+	round uint64,
+	config *types.Config) *latticeDataConfig {
+
 	c := &latticeDataConfig{}
-	c.fromConfig(0, config)
+	c.fromConfig(round, config)
 	c.setRoundBeginTime(dMoment)
 	return c
 }
@@ -113,7 +117,7 @@ func newLatticeDataConfig(
 
 // latticeData is a module for storing lattice.
 type latticeData struct {
-	// we need blockdb to read blocks purged from cache in memory.
+	// BlockDB for getting blocks purged in memory.
 	db blockdb.Reader
 	// chains stores chains' blocks and other info.
 	chains []*chainStatus
@@ -123,9 +127,10 @@ type latticeData struct {
 	configs []*latticeDataConfig
 }
 
-// newLatticeData creates a new latticeData struct.
+// newLatticeData creates a new latticeData instance.
 func newLatticeData(
 	db blockdb.Reader, genesisConfig *latticeDataConfig) (data *latticeData) {
+
 	data = &latticeData{
 		db:          db,
 		chains:      make([]*chainStatus, genesisConfig.numChains),
@@ -163,7 +168,7 @@ func (data *latticeData) checkAckingRelations(b *types.Block) error {
 		if lastAckPos != nil && !bAck.Position.Newer(lastAckPos) {
 			return ErrDoubleAck
 		}
-		// Check if ack two blocks on the same chain. This would need
+		// Check if it acks two blocks on the same chain. This would need
 		// to check after we replace map with slice for acks.
 		if _, acked := acksByChainID[bAck.Position.ChainID]; acked {
 			return ErrDuplicatedAckOnOneChain
@@ -174,8 +179,8 @@ func (data *latticeData) checkAckingRelations(b *types.Block) error {
 }
 
 func (data *latticeData) sanityCheck(b *types.Block) error {
-	// TODO(mission): Check if its proposer is in validator set somewhere,
-	//                lattice doesn't have to know about node set.
+	// TODO(mission): Check if its proposer is in validator set, lattice has no
+	// knowledge about node set.
 	config := data.getConfig(b.Position.Round)
 	if config == nil {
 		return ErrInvalidRoundID
@@ -264,8 +269,8 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 	return nil
 }
 
-// addBlock processes block, it does sanity check, inserts block into
-// lattice and deletes blocks which will not be used.
+// addBlock processes blocks. It does sanity check, inserts block into lattice
+// and deletes blocks which will not be used.
 func (data *latticeData) addBlock(
 	block *types.Block) (deliverable []*types.Block, err error) {
 	var (
@@ -287,9 +292,8 @@ func (data *latticeData) addBlock(
 			bAck.Position.Clone()
 	}
 
-	// Extract blocks that deliverable to total ordering.
-	// A block is deliverable to total ordering iff:
-	//  - All its acking blocks are delivered to total ordering.
+	// Extract deliverable blocks to total ordering. A block is deliverable to
+	// total ordering iff all its ackings blocks were delivered to total ordering.
 	for {
 		updated = false
 		for _, status := range data.chains {
@@ -308,8 +312,7 @@ func (data *latticeData) addBlock(
 					return
 				}
 				// Check if this block is outputed or not.
-				idx := data.chains[bAck.Position.ChainID].findBlock(
-					&bAck.Position)
+				idx := data.chains[bAck.Position.ChainID].findBlock(&bAck.Position)
 				var ok bool
 				if idx == -1 {
 					// Either the block is delivered or not added to chain yet.
@@ -344,12 +347,10 @@ func (data *latticeData) addBlock(
 }
 
 // addFinalizedBlock processes block for syncing internal data.
-func (data *latticeData) addFinalizedBlock(
-	block *types.Block) (err error) {
+func (data *latticeData) addFinalizedBlock(block *types.Block) (err error) {
 	var bAck *types.Block
 	chain := data.chains[block.Position.ChainID]
-	if chain.tip != nil && chain.tip.Position.Height >=
-		block.Position.Height {
+	if chain.tip != nil && chain.tip.Position.Height >= block.Position.Height {
 		return
 	}
 	chain.nextOutputIndex = 0
@@ -367,13 +368,13 @@ func (data *latticeData) addFinalizedBlock(
 	return
 }
 
-// prepareBlock helps to setup fields of block based on its ChainID and Round,
+// prepareBlock setups fields of a block based on its ChainID and Round,
 // including:
-//  - Acks
-//  - Timestamp
-//  - ParentHash and Height from parent block. If there is no valid parent block
-//    (ex. Newly added chain or bootstrap ), these fields would be setup as
-//    genesis block.
+// - Acks
+// - Timestamp
+// - ParentHash and Height from parent block. If there is no valid parent block
+//   (e.g. Newly added chain or bootstrap), these fields should be setup as
+//   genesis block.
 func (data *latticeData) prepareBlock(b *types.Block) error {
 	var (
 		minTimestamp time.Time
@@ -385,7 +386,7 @@ func (data *latticeData) prepareBlock(b *types.Block) error {
 	if config = data.getConfig(b.Position.Round); config == nil {
 		return ErrUnknownRoundID
 	}
-	// When this chain is illegal in this round, reject it.
+	// If chainID is illegal in this round, reject it.
 	if b.Position.ChainID >= config.numChains {
 		return ErrInvalidChainID
 	}
@@ -459,13 +460,13 @@ func (data *latticeData) prepareBlock(b *types.Block) error {
 	return nil
 }
 
-// prepareEmptyBlock helps to setup fields of block based on its ChainID.
+// prepareEmptyBlock setups fields of a block based on its ChainID.
 // including:
-//  - Acks only acking its parent
-//  - Timestamp with parent.Timestamp + minBlockProposeInterval
-//  - ParentHash and Height from parent block. If there is no valid parent block
-//    (ex. Newly added chain or bootstrap ), these fields would be setup as
-//    genesis block.
+// - Acks only acking its parent
+// - Timestamp with parent.Timestamp + minBlockProposeInterval
+// - ParentHash and Height from parent block. If there is no valid parent block
+//   (ex. Newly added chain or bootstrap), these fields would be setup as
+//   genesis block.
 func (data *latticeData) prepareEmptyBlock(b *types.Block) {
 	// emptyBlock has no proposer.
 	b.ProposerID = types.NodeID{}
@@ -497,7 +498,7 @@ func (data *latticeData) prepareEmptyBlock(b *types.Block) {
 }
 
 // TODO(mission): make more abstraction for this method.
-// nextHeight returns the next height for the chain.
+// nextHeight returns the next height of a chain.
 func (data *latticeData) nextPosition(chainID uint32) types.Position {
 	return data.chains[chainID].nextPosition()
 }
@@ -522,7 +523,7 @@ func (data *latticeData) purgeBlocks(blocks []*types.Block) error {
 			return ErrPurgedBlockNotFound
 		}
 		delete(data.blockByHash, b.Hash)
-		// blocks would be purged in ascending order in position.
+		// Blocks are purged in ascending order by position.
 		if err := data.chains[b.Position.ChainID].purgeBlock(b); err != nil {
 			return err
 		}
@@ -532,18 +533,19 @@ func (data *latticeData) purgeBlocks(blocks []*types.Block) error {
 
 // getConfig get configuration for lattice-data by round ID.
 func (data *latticeData) getConfig(round uint64) (config *latticeDataConfig) {
-	if round >= uint64(len(data.configs)) {
+	r := data.configs[0].roundID
+	if round < r || round >= r+uint64(len(data.configs)) {
 		return
 	}
-	return data.configs[round]
+	return data.configs[round-r]
 }
 
-// appendConfig appends a configuration for upcoming round. When you append
-// a config for round R, next time you can only append the config for round R+1.
+// appendConfig appends a configuration for upcoming round. Rounds appended
+// should be consecutive.
 func (data *latticeData) appendConfig(
 	round uint64, config *types.Config) (err error) {
-	// Make sure caller knows which round this config belongs to.
-	if round != uint64(len(data.configs)) {
+	// Check if the round of config is increasing by 1.
+	if round != uint64(len(data.configs))+data.configs[0].roundID {
 		return ErrRoundNotIncreasing
 	}
 	// Set round beginning time.
@@ -584,7 +586,7 @@ type chainStatus struct {
 }
 
 // findBlock finds index of block in current pending blocks on this chain.
-// -1 means not found.
+// Return -1 if not found.
 func (s *chainStatus) findBlock(pos *types.Position) (idx int) {
 	idx = sort.Search(len(s.blocks), func(i int) bool {
 		return s.blocks[i].Position.Newer(pos) ||
@@ -628,8 +630,8 @@ func (s *chainStatus) nextPosition() types.Position {
 	}
 }
 
-// purgeBlock purge a block from cache, make sure this block already
-// persists to blockdb.
+// purgeBlock purges a block from cache, make sure this block is already saved
+// in blockdb.
 func (s *chainStatus) purgeBlock(b *types.Block) error {
 	if b.Hash != s.blocks[0].Hash || s.nextOutputIndex <= 0 {
 		return ErrPurgeNotDeliveredBlock

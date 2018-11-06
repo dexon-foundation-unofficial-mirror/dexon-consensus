@@ -23,11 +23,10 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
-// blockPool is a slice of heap of blocks, indexed by chainID,
-// and the heap is sorted based on heights of blocks.
+// blockPool is a heaped slice of blocks, indexed by chainID, and each in it is
+// sorted by block's height.
 type blockPool []types.ByPosition
 
-// newBlockPool constructs a blockPool.
 func newBlockPool(chainNum uint32) (pool blockPool) {
 	pool = make(blockPool, chainNum)
 	for _, p := range pool {
@@ -36,12 +35,12 @@ func newBlockPool(chainNum uint32) (pool blockPool) {
 	return
 }
 
-// resize the pool if new chain is added.
 func (p *blockPool) resize(num uint32) {
 	if uint32(len(*p)) >= num {
+		// Do nothing If the origin size is larger.
 		return
 	}
-	newPool := make([]types.ByPosition, num)
+	newPool := make(blockPool, num)
 	copy(newPool, *p)
 	for i := uint32(len(*p)); i < num; i++ {
 		newChain := types.ByPosition{}
@@ -51,25 +50,20 @@ func (p *blockPool) resize(num uint32) {
 	*p = newPool
 }
 
-// addBlock adds a block into pending set and make sure these
-// blocks are sorted by height.
+// addBlock adds a block into pool and sorts them by height.
 func (p blockPool) addBlock(b *types.Block) {
 	heap.Push(&p[b.Position.ChainID], b)
 }
 
-// purgeBlocks purge blocks of that chain with less-or-equal height.
-// NOTE: we won't check the validity of 'chainID', the caller should
-//       be sure what he is expecting.
+// purgeBlocks purges blocks of a specified chain with less-or-equal heights.
+// NOTE: "chainID" is not checked here, this should be ensured by the called.
 func (p blockPool) purgeBlocks(chainID uint32, height uint64) {
-	for {
-		if len(p[chainID]) == 0 || p[chainID][0].Position.Height > height {
-			break
-		}
+	for len(p[chainID]) > 0 && p[chainID][0].Position.Height <= height {
 		heap.Pop(&p[chainID])
 	}
 }
 
-// tip get the blocks with lowest height of the chain if any.
+// tip returns block with the smallest height, nil if no existing block.
 func (p blockPool) tip(chainID uint32) *types.Block {
 	if len(p[chainID]) == 0 {
 		return nil
@@ -77,7 +71,7 @@ func (p blockPool) tip(chainID uint32) *types.Block {
 	return p[chainID][0]
 }
 
-// removeTip removes block with lowest height of the specified chain.
+// removeTip removes block with lowest height of a specified chain.
 func (p blockPool) removeTip(chainID uint32) {
 	if len(p[chainID]) > 0 {
 		heap.Pop(&p[chainID])

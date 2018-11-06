@@ -61,7 +61,7 @@ func (s *LatticeDataTestSuite) genTestCase1() (
 	}
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)
-	data = newLatticeData(db, newGenesisLatticeDataConfig(now, genesisConfig))
+	data = newLatticeData(db, newGenesisLatticeDataConfig(now, 0, genesisConfig))
 	config := &types.Config{
 		RoundInterval:    1000 * time.Second,
 		NumChains:        chainNum,
@@ -388,7 +388,7 @@ func (s *LatticeDataTestSuite) TestRandomlyGeneratedBlocks() {
 		db, err := blockdb.NewMemBackedBlockDB()
 		req.NoError(err)
 		data := newLatticeData(
-			db, newGenesisLatticeDataConfig(genesisTime, genesisConfig))
+			db, newGenesisLatticeDataConfig(genesisTime, 0, genesisConfig))
 		deliveredHashes := common.Hashes{}
 		revealedHashes := common.Hashes{}
 		revealer.Reset()
@@ -478,7 +478,7 @@ func (s *LatticeDataTestSuite) TestPrepareBlock() {
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)
 	data := newLatticeData(
-		db, newGenesisLatticeDataConfig(time.Now().UTC(), genesisConfig))
+		db, newGenesisLatticeDataConfig(time.Now().UTC(), 0, genesisConfig))
 	// Setup genesis blocks.
 	b00 := s.prepareGenesisBlock(0)
 	time.Sleep(minInterval)
@@ -564,7 +564,7 @@ func (s *LatticeDataTestSuite) TestNextPosition() {
 		MinBlockInterval: 1 * time.Second,
 	}
 	data = newLatticeData(
-		nil, newGenesisLatticeDataConfig(time.Now().UTC(), genesisConfig))
+		nil, newGenesisLatticeDataConfig(time.Now().UTC(), 0, genesisConfig))
 	s.Equal(data.nextPosition(0), types.Position{ChainID: 0, Height: 0})
 }
 
@@ -618,7 +618,7 @@ func (s *LatticeDataTestSuite) TestNumChainsChange() {
 	req.NoError(err)
 	// Set up latticeData instance.
 	lattice := newLatticeData(db, newGenesisLatticeDataConfig(
-		time.Now().UTC(), configs[0]))
+		time.Now().UTC(), 0, configs[0]))
 	req.NoError(lattice.appendConfig(1, configs[1]))
 	req.NoError(lattice.appendConfig(2, configs[2]))
 	req.NoError(lattice.appendConfig(3, configs[3]))
@@ -679,6 +679,23 @@ func (s *LatticeDataTestSuite) TestNumChainsChange() {
 		}
 		dag[b.Hash] = struct{}{}
 	}
+}
+
+func (s *LatticeDataTestSuite) TestAppendConfig() {
+	var (
+		req   = s.Require()
+		now   = time.Now().UTC()
+		round = uint64(5)
+		cfg   = &types.Config{NumChains: uint32(4)}
+	)
+	db, err := blockdb.NewMemBackedBlockDB()
+	req.NoError(err)
+	dataConfig := newGenesisLatticeDataConfig(now, round, cfg)
+	latticeData := newLatticeData(db, dataConfig)
+	err = latticeData.appendConfig(6, cfg)
+	req.NoError(err)
+	err = latticeData.appendConfig(10, cfg)
+	req.Equal(err, ErrRoundNotIncreasing)
 }
 
 func TestLatticeData(t *testing.T) {

@@ -49,16 +49,18 @@ type Lattice struct {
 // NewLattice constructs an Lattice instance.
 func NewLattice(
 	dMoment time.Time,
+	round uint64,
 	cfg *types.Config,
 	authModule *Authenticator,
 	app Application,
 	debug Debug,
 	db blockdb.BlockDatabase,
-	logger common.Logger) (s *Lattice) {
+	logger common.Logger) *Lattice {
+
 	// Create genesis latticeDataConfig.
-	dataConfig := newGenesisLatticeDataConfig(dMoment, cfg)
+	dataConfig := newGenesisLatticeDataConfig(dMoment, round, cfg)
 	toConfig := newGenesisTotalOrderingConfig(dMoment, cfg)
-	s = &Lattice{
+	return &Lattice{
 		authModule: authModule,
 		app:        app,
 		debug:      debug,
@@ -68,51 +70,50 @@ func NewLattice(
 		ctModule:   newConsensusTimestamp(dMoment, 0, cfg.NumChains),
 		logger:     logger,
 	}
-	return
 }
 
-// PrepareBlock setup block's field based on current lattice status.
-func (s *Lattice) PrepareBlock(
+// PrepareBlock setups block's fields based on current status.
+func (l *Lattice) PrepareBlock(
 	b *types.Block, proposeTime time.Time) (err error) {
 
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	l.lock.RLock()
+	defer l.lock.RUnlock()
 
 	b.Timestamp = proposeTime
-	if err = s.data.prepareBlock(b); err != nil {
+	if err = l.data.prepareBlock(b); err != nil {
 		return
 	}
-	s.logger.Debug("Calling Application.PreparePayload", "position", b.Position)
-	if b.Payload, err = s.app.PreparePayload(b.Position); err != nil {
+	l.logger.Debug("Calling Application.PreparePayload", "position", b.Position)
+	if b.Payload, err = l.app.PreparePayload(b.Position); err != nil {
 		return
 	}
-	s.logger.Debug("Calling Application.PrepareWitness",
+	l.logger.Debug("Calling Application.PrepareWitness",
 		"height", b.Witness.Height)
-	if b.Witness, err = s.app.PrepareWitness(b.Witness.Height); err != nil {
+	if b.Witness, err = l.app.PrepareWitness(b.Witness.Height); err != nil {
 		return
 	}
-	if err = s.authModule.SignBlock(b); err != nil {
+	if err = l.authModule.SignBlock(b); err != nil {
 		return
 	}
 	return
 }
 
-// PrepareEmptyBlock setup block's field based on current lattice status.
-func (s *Lattice) PrepareEmptyBlock(b *types.Block) (err error) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	s.data.prepareEmptyBlock(b)
+// PrepareEmptyBlock setups block's fields based on current lattice status.
+func (l *Lattice) PrepareEmptyBlock(b *types.Block) (err error) {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+	l.data.prepareEmptyBlock(b)
 	if b.Hash, err = hashBlock(b); err != nil {
 		return
 	}
 	return
 }
 
-// SanityCheck check if a block is valid.
+// SanityCheck checks the validity of a block.
 //
-// If some acking blocks don't exists, Lattice would help to cache this block
-// and retry when lattice updated in Lattice.ProcessBlock.
-func (s *Lattice) SanityCheck(b *types.Block) (err error) {
+// If any acking blocks of this block does not exist, Lattice helps caching this
+// block and retries when Lattice.ProcessBlock is called.
+func (l *Lattice) SanityCheck(b *types.Block) (err error) {
 	if b.IsEmpty() {
 		// Only need to verify block's hash.
 		var hash common.Hash
@@ -124,7 +125,7 @@ func (s *Lattice) SanityCheck(b *types.Block) (err error) {
 		}
 	} else {
 		// Verify block's signature.
-		if err = s.authModule.VerifyBlock(b); err != nil {
+		if err = l.authModule.VerifyBlock(b); err != nil {
 			return
 		}
 	}
@@ -139,13 +140,13 @@ func (s *Lattice) SanityCheck(b *types.Block) (err error) {
 		}
 	}
 	if err = func() (err error) {
-		s.lock.RLock()
-		defer s.lock.RUnlock()
-		if err = s.data.sanityCheck(b); err != nil {
+		l.lock.RLock()
+		defer l.lock.RUnlock()
+		if err = l.data.sanityCheck(b); err != nil {
 			if _, ok := err.(*ErrAckingBlockNotExists); ok {
 				err = ErrRetrySanityCheckLater
 			}
-			s.logger.Error("Sanity Check failed", "error", err)
+			l.logger.Error("Sanity Check failed", "error", err)
 			return
 		}
 		return
@@ -153,8 +154,8 @@ func (s *Lattice) SanityCheck(b *types.Block) (err error) {
 		return
 	}
 	// Verify data in application layer.
-	s.logger.Debug("Calling Application.VerifyBlock", "block", b)
-	switch s.app.VerifyBlock(b) {
+	l.logger.Debug("Calling Application.VerifyBlock", "block", b)
+	switch l.app.VerifyBlock(b) {
 	case types.VerifyInvalidBlock:
 		err = ErrInvalidBlock
 	case types.VerifyRetryLater:
@@ -163,31 +164,33 @@ func (s *Lattice) SanityCheck(b *types.Block) (err error) {
 	return
 }
 
-// addBlockToLattice adds a block into lattice, and deliver blocks with the acks
-// already delivered.
+// addBlockToLattice adds a block into lattice, and delivers blocks with the
+// acks already delivered.
 //
-// NOTE: assume the block passed sanity check.
-func (s *Lattice) addBlockToLattice(
+// NOTE: input block should pass sanity check.
+func (l *Lattice) addBlockToLattice(
 	input *types.Block) (outputBlocks []*types.Block, err error) {
-	if tip := s.data.chains[input.Position.ChainID].tip; tip != nil {
+
+	if tip := l.data.chains[input.Position.ChainID].tip; tip != nil {
 		if !input.Position.Newer(&tip.Position) {
 			return
 		}
 	}
-	s.pool.addBlock(input)
-	// Replay tips in pool to check their validity.
+	l.pool.addBlock(input)
+	// Check tips in pool to check their validity for moving blocks from pool
+	// to lattice.
 	for {
 		hasOutput := false
-		for i := uint32(0); i < uint32(len(s.pool)); i++ {
+		for i := uint32(0); i < uint32(len(l.pool)); i++ {
 			var tip *types.Block
-			if tip = s.pool.tip(i); tip == nil {
+			if tip = l.pool.tip(i); tip == nil {
 				continue
 			}
-			err = s.data.sanityCheck(tip)
+			err = l.data.sanityCheck(tip)
 			if err == nil {
 				var output []*types.Block
-				if output, err = s.data.addBlock(tip); err != nil {
-					s.logger.Error("Sanity Check failed", "error", err)
+				if output, err = l.data.addBlock(tip); err != nil {
+					l.logger.Error("Sanity Check failed", "error", err)
 					continue
 				}
 				hasOutput = true
@@ -197,7 +200,7 @@ func (s *Lattice) addBlockToLattice(
 				err = nil
 				continue
 			}
-			s.pool.removeTip(i)
+			l.pool.removeTip(i)
 		}
 		if !hasOutput {
 			break
@@ -206,13 +209,13 @@ func (s *Lattice) addBlockToLattice(
 
 	for _, b := range outputBlocks {
 		// TODO(jimmy-dexon): change this name of classic DEXON algorithm.
-		if s.debug != nil {
-			s.debug.StronglyAcked(b.Hash)
+		if l.debug != nil {
+			l.debug.StronglyAcked(b.Hash)
 		}
-		s.logger.Debug("Calling Application.BlockConfirmed", "block", input)
-		s.app.BlockConfirmed(*b.Clone())
+		l.logger.Debug("Calling Application.BlockConfirmed", "block", input)
+		l.app.BlockConfirmed(*b.Clone())
 		// Purge blocks in pool with the same chainID and lower height.
-		s.pool.purgeBlocks(b.Position.ChainID, b.Position.Height)
+		l.pool.purgeBlocks(b.Position.ChainID, b.Position.Height)
 	}
 
 	return
@@ -223,7 +226,7 @@ func (s *Lattice) addBlockToLattice(
 // would be returned, too.
 //
 // NOTE: assume the block passed sanity check.
-func (s *Lattice) ProcessBlock(
+func (l *Lattice) ProcessBlock(
 	input *types.Block) (delivered []*types.Block, err error) {
 	var (
 		b             *types.Block
@@ -232,10 +235,10 @@ func (s *Lattice) ProcessBlock(
 		deliveredMode uint32
 	)
 
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	l.lock.Lock()
+	defer l.lock.Unlock()
 
-	if inLattice, err = s.addBlockToLattice(input); err != nil {
+	if inLattice, err = l.addBlockToLattice(input); err != nil {
 		return
 	}
 
@@ -245,7 +248,7 @@ func (s *Lattice) ProcessBlock(
 
 	// Perform total ordering for each block added to lattice.
 	for _, b = range inLattice {
-		toDelivered, deliveredMode, err = s.toModule.processBlock(b)
+		toDelivered, deliveredMode, err = l.toModule.processBlock(b)
 		if err != nil {
 			// All errors from total ordering is serious, should panic.
 			panic(err)
@@ -257,11 +260,11 @@ func (s *Lattice) ProcessBlock(
 		for idx := range toDelivered {
 			hashes[idx] = toDelivered[idx].Hash
 		}
-		if s.debug != nil {
-			s.debug.TotalOrderingDelivered(hashes, deliveredMode)
+		if l.debug != nil {
+			l.debug.TotalOrderingDelivered(hashes, deliveredMode)
 		}
-		// Perform timestamp generation.
-		if err = s.ctModule.processBlocks(toDelivered); err != nil {
+		// Perform consensus timestamp module.
+		if err = l.ctModule.processBlocks(toDelivered); err != nil {
 			return
 		}
 		delivered = append(delivered, toDelivered...)
@@ -269,49 +272,47 @@ func (s *Lattice) ProcessBlock(
 	return
 }
 
-// NextPosition returns expected position of incoming block for that chain.
-func (s *Lattice) NextPosition(chainID uint32) types.Position {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	return s.data.nextPosition(chainID)
+// NextPosition returns expected position of incoming block for specified chain.
+func (l *Lattice) NextPosition(chainID uint32) types.Position {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+	return l.data.nextPosition(chainID)
 }
 
-// PurgeBlocks from cache of blocks in memory, this is called when the caller
-// make sure those blocks are saved to db.
-func (s *Lattice) PurgeBlocks(blocks []*types.Block) error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	return s.data.purgeBlocks(blocks)
+// PurgeBlocks purges blocks' cache in memory, this is called when the caller
+// makes sure those blocks are already saved in db.
+func (l *Lattice) PurgeBlocks(blocks []*types.Block) error {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	return l.data.purgeBlocks(blocks)
 }
 
-// AppendConfig add new configs for upcoming rounds. If you add a config for
-// round R, next time you can only add the config for round R+1.
-func (s *Lattice) AppendConfig(round uint64, config *types.Config) (err error) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+// AppendConfig adds a new config for upcoming rounds. If a config of round r is
+// added, only config in round r + 1 is allowed next.
+func (l *Lattice) AppendConfig(round uint64, config *types.Config) (err error) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
 
-	s.pool.resize(config.NumChains)
-	if err = s.data.appendConfig(round, config); err != nil {
+	l.pool.resize(config.NumChains)
+	if err = l.data.appendConfig(round, config); err != nil {
 		return
 	}
-	if err = s.toModule.appendConfig(round, config); err != nil {
+	if err = l.toModule.appendConfig(round, config); err != nil {
 		return
 	}
-	if err = s.ctModule.appendConfig(round, config); err != nil {
+	if err = l.ctModule.appendConfig(round, config); err != nil {
 		return
 	}
 	return
 }
 
 // ProcessFinalizedBlock is used for syncing lattice data.
-func (s *Lattice) ProcessFinalizedBlock(input *types.Block) {
-	defer func() { s.retryAdd = true }()
-	s.lock.Lock()
-	defer s.lock.Unlock()
-	if err := s.data.addFinalizedBlock(input); err != nil {
+func (l *Lattice) ProcessFinalizedBlock(b *types.Block) {
+	defer func() { l.retryAdd = true }()
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	if err := l.data.addFinalizedBlock(b); err != nil {
 		panic(err)
 	}
-	s.pool.purgeBlocks(input.Position.ChainID, input.Position.Height)
+	l.pool.purgeBlocks(b.Position.ChainID, b.Position.Height)
 }

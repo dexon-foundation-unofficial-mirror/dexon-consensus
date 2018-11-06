@@ -108,6 +108,7 @@ func newNode(
 	// Setup lattice instance.
 	lattice := core.NewLattice(
 		dMoment,
+		0,
 		configs[0],
 		core.NewAuthenticator(privateKey),
 		app,

@@ -122,6 +122,7 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 		db:       db,
 		lattice: NewLattice(
 			dMoment,
+			0,
 			cfg,
 			NewAuthenticator(prvKey),
 			app,
@@ -246,7 +247,7 @@ func (s *LatticeTestSuite) TestSync() {
 		revealSeq = map[string]struct{}{}
 	)
 	// Make sure the test setup is correct.
-	s.Require().True(syncNum > desyncNum)
+	req.True(syncNum > desyncNum)
 	// Master-lattice generates blocks.
 	for i := uint32(0); i < chainNum; i++ {
 		// Produce genesis blocks should be delivered before all other blocks,
