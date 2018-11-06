@@ -18,6 +18,7 @@
 package simulation
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -34,6 +35,14 @@ func Run(cfg *config.Config) {
 		wg          sync.WaitGroup
 		err         error
 	)
+
+	if cfg.Node.Consensus.NotarySetSize > cfg.Node.Num {
+		panic(fmt.Errorf("NotarySetSize should not be larger the node num"))
+	}
+
+	if cfg.Node.Consensus.DKGSetSize > cfg.Node.Num {
+		panic(fmt.Errorf("DKGSetSze should not be larger the node num"))
+	}
 
 	dMoment := time.Now().UTC().Add(1 * time.Second)
 
@@ -69,7 +78,7 @@ func Run(cfg *config.Config) {
 			server.Run()
 		}()
 		// Initialize all nodes.
-		for i := 0; i < cfg.Node.Num; i++ {
+		for i := uint32(0); i < cfg.Node.Num; i++ {
 			init(serverEndpoint)
 		}
 	}

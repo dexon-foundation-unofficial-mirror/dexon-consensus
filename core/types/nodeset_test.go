@@ -54,6 +54,17 @@ func (s *NodeSetTestSuite) TestGetSubSet() {
 	}
 }
 
+func (s *NodeSetTestSuite) TestGetSubSetZeroSize() {
+	total := 10
+	nodes := NewNodeSet()
+	for len(nodes.IDs) < total {
+		nodes.IDs[NodeID{common.NewRandomHash()}] = struct{}{}
+	}
+	// Passing nil should not crash.
+	emptySet := nodes.GetSubSet(0, nil)
+	s.Len(emptySet, 0)
+}
+
 func TestNodeSet(t *testing.T) {
 	suite.Run(t, new(NodeSetTestSuite))
 }

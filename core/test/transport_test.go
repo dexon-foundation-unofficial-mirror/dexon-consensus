@@ -223,7 +223,7 @@ func (s *TransportTestSuite) TestFake() {
 		}()
 	}
 	// Block here until we collect enough peers.
-	server.trans.WaitForPeers(peerCount)
+	server.trans.WaitForPeers(uint32(peerCount))
 	// Make sure all clients are ready.
 	wg.Wait()
 	s.baseTest(server, peers, 300*time.Millisecond)
@@ -270,7 +270,7 @@ func (s *TransportTestSuite) TestTCPLocal() {
 		}()
 	}
 	// Block here until we collect enough peers.
-	server.trans.WaitForPeers(peerCount)
+	server.trans.WaitForPeers(uint32(peerCount))
 	// Make sure all clients are ready.
 	wg.Wait()
 

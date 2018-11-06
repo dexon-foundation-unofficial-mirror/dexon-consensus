@@ -91,7 +91,12 @@ func newNode(
 	if err != nil {
 		panic(err)
 	}
-	gov := newSimGovernance(id, config.Node.Num, config.Node.Consensus)
+	gov := newSimGovernance(
+		id,
+		config.Node.Num,
+		config.Node.Consensus.NotarySetSize,
+		config.Node.Consensus.DKGSetSize,
+		config.Node.Consensus)
 	return &node{
 		ID:        id,
 		prvKey:    prvKey,

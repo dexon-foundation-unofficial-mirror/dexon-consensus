@@ -233,7 +233,7 @@ func (s *ConfigurationChainTestSuite) preparePartialSignature(
 func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 	k := 4
 	n := 10
-	round := uint64(1)
+	round := uint64(0)
 	cfgChains := s.runDKG(k, n, round)
 
 	hash := crypto.Keccak256Hash([]byte("🌚🌝"))
@@ -272,7 +272,7 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 func (s *ConfigurationChainTestSuite) TestMultipleTSig() {
 	k := 2
 	n := 7
-	round := uint64(1)
+	round := uint64(0)
 	cfgChains := s.runDKG(k, n, round)
 
 	hash1 := crypto.Keccak256Hash([]byte("Hash1"))

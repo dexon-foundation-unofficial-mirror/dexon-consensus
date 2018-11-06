@@ -417,15 +417,23 @@ func (con *Consensus) Run(initBlock *types.Block) {
 			panic(err)
 		}
 	}
+	round0 := uint64(0)
+	dkgSet, err := con.nodeSetCache.GetDKGSet(round0)
+	if err != nil {
+		panic(err)
+	}
 	con.logger.Debug("Calling Network.ReceiveChan")
 	go con.processMsg(con.network.ReceiveChan())
 	// Sleep until dMoment come.
 	time.Sleep(con.dMoment.Sub(time.Now().UTC()))
-	con.cfgModule.registerDKG(con.round, int(con.currentConfig.DKGSetSize)/3+1)
-	con.event.RegisterTime(con.dMoment.Add(con.currentConfig.RoundInterval/4),
-		func(time.Time) {
-			con.runDKGTSIG(con.round)
-		})
+	if _, exist := dkgSet[con.ID]; exist {
+		con.logger.Info("Selected as DKG set", "round", round0)
+		con.cfgModule.registerDKG(round0, int(con.currentConfig.DKGSetSize)/3+1)
+		con.event.RegisterTime(con.dMoment.Add(con.currentConfig.RoundInterval/4),
+			func(time.Time) {
+				con.runDKGTSIG(round0)
+			})
+	}
 	round1 := uint64(1)
 	con.logger.Debug("Calling Governance.Configuration", "round", round1)
 	con.lattice.AppendConfig(round1, con.gov.Configuration(round1))
@@ -613,11 +621,23 @@ func (con *Consensus) initialRound(startTime time.Time) {
 	}
 	con.logger.Debug("Calling Governance.Configuration", "round", con.round)
 	con.currentConfig = con.gov.Configuration(con.round)
+	curDkgSet, err := con.nodeSetCache.GetDKGSet(con.round)
+	if err != nil {
+		con.logger.Error("Error getting DKG set", "round", con.round, "error", err)
+		curDkgSet = make(map[types.NodeID]struct{})
+	}
+	if _, exist := curDkgSet[con.ID]; exist {
+		con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval/2),
+			func(time.Time) {
+				go func() {
+					con.runCRS()
+				}()
+			})
+	}
 
 	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval/2),
 		func(time.Time) {
 			go func() {
-				con.runCRS()
 				ticker := newTicker(con.gov, con.round, TickerDKG)
 				<-ticker.Tick()
 				// Normally, gov.CRS would return non-nil. Use this for in case of
@@ -627,18 +647,29 @@ func (con *Consensus) initialRound(startTime time.Time) {
 						"nodeID", con.ID)
 					time.Sleep(500 * time.Millisecond)
 				}
+				nextDkgSet, err := con.nodeSetCache.GetDKGSet(con.round + 1)
+				if err != nil {
+					con.logger.Error("Error getting DKG set",
+						"round", con.round+1, "error", err)
+					return
+				}
+				if _, exist := nextDkgSet[con.ID]; !exist {
+					return
+				}
+				con.logger.Info("Selected as DKG set", "round", con.round+1)
 				con.cfgModule.registerDKG(
 					con.round+1, int(con.currentConfig.DKGSetSize/3)+1)
+				con.event.RegisterTime(
+					startTime.Add(con.currentConfig.RoundInterval*2/3),
+					func(time.Time) {
+						func() {
+							con.dkgReady.L.Lock()
+							defer con.dkgReady.L.Unlock()
+							con.dkgRunning = 0
+						}()
+						con.runDKGTSIG(con.round + 1)
+					})
 			}()
-		})
-	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval*2/3),
-		func(time.Time) {
-			func() {
-				con.dkgReady.L.Lock()
-				defer con.dkgReady.L.Unlock()
-				con.dkgRunning = 0
-			}()
-			con.runDKGTSIG(con.round + 1)
 		})
 	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval),
 		func(time.Time) {

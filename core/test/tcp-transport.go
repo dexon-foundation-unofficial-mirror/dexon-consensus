@@ -743,7 +743,7 @@ func (t *TCPTransportServer) Host() (chan *TransportEnvelope, error) {
 }
 
 // WaitForPeers implements TransportServer.WaitForPeers method.
-func (t *TCPTransportServer) WaitForPeers(numPeers int) (err error) {
+func (t *TCPTransportServer) WaitForPeers(numPeers uint32) (err error) {
 	// Collect peers info. Packets other than peer info is
 	// unexpected.
 	peersInfo := make(map[types.NodeID]string)
@@ -764,7 +764,7 @@ func (t *TCPTransportServer) WaitForPeers(numPeers int) (err error) {
 		}
 		peersInfo[msg.NodeID] = msg.Info
 		// Check if we already collect enought peers.
-		if len(peersInfo) == numPeers {
+		if uint32(len(peersInfo)) == numPeers {
 			break
 		}
 	}
@@ -790,7 +790,7 @@ func (t *TCPTransportServer) WaitForPeers(numPeers int) (err error) {
 			panic(fmt.Errorf("already report conn-ready message: %v", e))
 		}
 		readies[msg.NodeID] = struct{}{}
-		if len(readies) == numPeers {
+		if uint32(len(readies)) == numPeers {
 			break
 		}
 	}

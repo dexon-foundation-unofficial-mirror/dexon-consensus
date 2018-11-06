@@ -34,6 +34,8 @@ type Consensus struct {
 	LambdaBA      int    `toml:"lambda_ba"`
 	LambdaDKG     int    `toml:"lambda_dkg"`
 	RoundInterval int
+	NotarySetSize uint32
+	DKGSetSize    uint32 `toml:"dkg_set_size"`
 }
 
 // Legacy config.
@@ -46,7 +48,7 @@ type Legacy struct {
 type Node struct {
 	Consensus Consensus
 	Legacy    Legacy
-	Num       int
+	Num       uint32
 	MaxBlock  uint64
 }
 
@@ -92,6 +94,8 @@ func GenerateDefault(path string) error {
 				LambdaBA:      250,
 				LambdaDKG:     1000,
 				RoundInterval: 30 * 1000,
+				NotarySetSize: 7,
+				DKGSetSize:    7,
 			},
 			Legacy: Legacy{
 				ProposeIntervalMean:  500,

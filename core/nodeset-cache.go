@@ -177,6 +177,11 @@ func (cache *NodeSetCache) update(
 		err = ErrRoundNotReady
 		return
 	}
+	crs := cache.nsIntf.CRS(round)
+	if (crs == common.Hash{}) {
+		err = ErrRoundNotReady
+		return
+	}
 	// Cache new round.
 	nodeSet := types.NewNodeSet()
 	for _, key := range keySet {
@@ -192,7 +197,6 @@ func (cache *NodeSetCache) update(
 		}
 	}
 	cfg := cache.nsIntf.Configuration(round)
-	crs := cache.nsIntf.CRS(round)
 	nIDs = &sets{
 		nodeSet:   nodeSet,
 		notarySet: make([]map[types.NodeID]struct{}, cfg.NumChains),

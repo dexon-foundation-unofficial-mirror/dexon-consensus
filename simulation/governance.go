@@ -36,7 +36,9 @@ type simGovernance struct {
 	id                 types.NodeID
 	lock               sync.RWMutex
 	nodeSet            map[types.NodeID]crypto.PublicKey
-	expectedNumNodes   int
+	expectedNumNodes   uint32
+	notarySetSize      uint32
+	dkgSetSize         uint32
 	k                  int
 	phiRatio           float32
 	chainNum           uint32
@@ -54,12 +56,17 @@ type simGovernance struct {
 // newSimGovernance returns a new simGovernance instance.
 func newSimGovernance(
 	id types.NodeID,
-	numNodes int, consensusConfig config.Consensus) *simGovernance {
+	numNodes uint32,
+	notarySetSize uint32,
+	dkgSetSize uint32,
+	consensusConfig config.Consensus) *simGovernance {
 	hashCRS := crypto.Keccak256Hash([]byte(consensusConfig.GenesisCRS))
 	return &simGovernance{
 		id:                 id,
 		nodeSet:            make(map[types.NodeID]crypto.PublicKey),
 		expectedNumNodes:   numNodes,
+		notarySetSize:      notarySetSize,
+		dkgSetSize:         dkgSetSize,
 		k:                  consensusConfig.K,
 		phiRatio:           consensusConfig.PhiRatio,
 		chainNum:           consensusConfig.ChainNum,
@@ -100,8 +107,8 @@ func (g *simGovernance) Configuration(round uint64) *types.Config {
 		LambdaDKG:        g.lambdaDKG,
 		K:                g.k,
 		PhiRatio:         g.phiRatio,
-		NotarySetSize:    uint32(len(g.nodeSet)),
-		DKGSetSize:       uint32(len(g.nodeSet)),
+		NotarySetSize:    g.notarySetSize,
+		DKGSetSize:       g.dkgSetSize,
 		MinBlockInterval: g.lambdaBA * 3,
 		RoundInterval:    g.roundInterval,
 	}
@@ -139,7 +146,7 @@ func (g *simGovernance) addNode(pubKey crypto.PublicKey) {
 	if _, exists := g.nodeSet[nID]; exists {
 		return
 	}
-	if len(g.nodeSet) == g.expectedNumNodes {
+	if uint32(len(g.nodeSet)) == g.expectedNumNodes {
 		panic(fmt.Errorf("attempt to add node when ready"))
 	}
 	g.nodeSet[nID] = pubKey
