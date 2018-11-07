@@ -27,6 +27,8 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
+	"github.com/dexon-foundation/dexon/rlp"
 )
 
 func stableRandomHash(block *types.Block) (common.Hash, error) {
@@ -113,6 +115,45 @@ func NewKeys(count int) (
 		}
 		prvKeys = append(prvKeys, prvKey)
 		pubKeys = append(pubKeys, prvKey.PublicKey())
+	}
+	return
+}
+
+func cloneDKGComplaint(
+	comp *typesDKG.Complaint) (copied *typesDKG.Complaint) {
+	b, err := rlp.EncodeToBytes(comp)
+	if err != nil {
+		panic(err)
+	}
+	copied = &typesDKG.Complaint{}
+	if err = rlp.DecodeBytes(b, copied); err != nil {
+		panic(err)
+	}
+	return
+}
+
+func cloneDKGMasterPublicKey(mpk *typesDKG.MasterPublicKey) (
+	copied *typesDKG.MasterPublicKey) {
+	b, err := rlp.EncodeToBytes(mpk)
+	if err != nil {
+		panic(err)
+	}
+	copied = typesDKG.NewMasterPublicKey()
+	if err = rlp.DecodeBytes(b, copied); err != nil {
+		panic(err)
+	}
+	return
+}
+
+func cloneDKGFinalize(final *typesDKG.Finalize) (
+	copied *typesDKG.Finalize) {
+	b, err := rlp.EncodeToBytes(final)
+	if err != nil {
+		panic(err)
+	}
+	copied = &typesDKG.Finalize{}
+	if err = rlp.DecodeBytes(b, copied); err != nil {
+		panic(err)
 	}
 	return
 }

@@ -194,6 +194,18 @@ func (s *StateTestSuite) TestEqual() {
 	req.NoError(st.Equal(st5))
 	delete(st5.dkgFinals, uint64(2))
 	req.Equal(st.Equal(st5), ErrStateDKGFinalsNotEqual)
+	// Switch to remote mode.
+	st.SwitchToRemoteMode()
+	// Make some change.
+	req.NoError(st.RequestChange(StateChangeK, int(5)))
+	st6 := st.Clone()
+	req.NoError(st.Equal(st6))
+	// Remove the pending change, should not be equal.
+	req.Len(st6.ownRequests, 1)
+	for k := range st6.ownRequests {
+		delete(st6.ownRequests, k)
+	}
+	req.Error(ErrStatePendingChangesNotEqual, st.Equal(st6))
 }
 
 func (s *StateTestSuite) TestPendingChangesEqual() {
@@ -214,31 +226,6 @@ func (s *StateTestSuite) TestPendingChangesEqual() {
 	comp := s.newDKGComplaint(2)
 	final := s.newDKGFinal(2)
 	s.makeDKGChanges(st, masterPubKey, comp, final)
-	// Remove pending config changes.
-	st1 := st.Clone()
-	req.NoError(st.Equal(st1))
-	st1.pendingChangedConfigs = make(map[StateChangeType]interface{})
-	req.Equal(st.Equal(st1), ErrStatePendingChangesNotEqual)
-	// Remove pending crs changes.
-	st2 := st.Clone()
-	req.NoError(st.Equal(st2))
-	st2.pendingCRS = []*crsAdditionRequest{}
-	req.Equal(st.Equal(st2), ErrStatePendingChangesNotEqual)
-	// Remove pending dkg complaints changes.
-	st3 := st.Clone()
-	req.NoError(st.Equal(st3))
-	st3.pendingDKGComplaints = []*typesDKG.Complaint{}
-	req.Equal(st.Equal(st3), ErrStatePendingChangesNotEqual)
-	// Remove pending dkg master public key changes.
-	st4 := st.Clone()
-	req.NoError(st.Equal(st4))
-	st4.pendingDKGMasterPublicKeys = []*typesDKG.MasterPublicKey{}
-	req.Equal(st.Equal(st4), ErrStatePendingChangesNotEqual)
-	// Remove pending dkg finalize changes.
-	st5 := st.Clone()
-	req.NoError(st.Equal(st5))
-	st5.pendingDKGFinals = []*typesDKG.Finalize{}
-	req.Equal(st.Equal(st5), ErrStatePendingChangesNotEqual)
 }
 
 func (s *StateTestSuite) TestLocalMode() {
@@ -351,6 +338,67 @@ func (s *StateTestSuite) TestPacking() {
 	req.True(compForRound[0].Equal(comp))
 	// Check IsDKGFinal.
 	req.True(st.IsDKGFinal(2, 0))
+}
+
+func (s *StateTestSuite) TestRequestBroadcastAndPack() {
+	// This test case aims to demonstrate this scenario:
+	// - a change request is pending at one node.
+	// - that request can be packed by PackOwnRequests and sent to other nodes.
+	// - when some other node allow to propose a block, it will pack all those
+	//   'own' requests from others into the block's payload.
+	// - when all nodes receive that block, all pending requests (including
+	//   those 'own' requests) would be cleaned.
+	var (
+		req    = s.Require()
+		lambda = 250 * time.Millisecond
+	)
+	_, genesisNodes, err := NewKeys(20)
+	req.NoError(err)
+	st := NewState(genesisNodes, lambda, false)
+	st1 := NewState(genesisNodes, lambda, false)
+	req.NoError(st.Equal(st1))
+	// Make configuration changes.
+	s.makeConfigChanges(st)
+	// Add new CRS.
+	crs := common.NewRandomHash()
+	req.NoError(st.ProposeCRS(1, crs))
+	// Add new node.
+	prvKey, err := ecdsa.NewPrivateKey()
+	req.NoError(err)
+	pubKey := prvKey.PublicKey()
+	st.RequestChange(StateAddNode, pubKey)
+	// Add DKG stuffs.
+	masterPubKey := s.newDKGMasterPublicKey(2)
+	comp := s.newDKGComplaint(2)
+	final := s.newDKGFinal(2)
+	s.makeDKGChanges(st, masterPubKey, comp, final)
+	// Pack those changes into a byte stream, and pass it to other State
+	// instance.
+	packed, err := st.PackOwnRequests()
+	req.NoError(err)
+	req.NotEmpty(packed)
+	// The second attempt to pack would get empty result.
+	emptyPackedAsByte, err := st.PackOwnRequests()
+	req.NoError(err)
+	emptyPacked, err := st.unpackRequests(emptyPackedAsByte)
+	req.NoError(err)
+	req.Empty(emptyPacked)
+	// Pass it to others.
+	req.NoError(st1.AddRequestsFromOthers(packed))
+	// These two instance are equal now, because their pending change requests
+	// are synced.
+	req.NoError(st.Equal(st1))
+	// Make them apply those pending changes.
+	applyChangesForRemoteState := func(s *State) {
+		p, err := s.PackRequests()
+		req.NoError(err)
+		req.NotEmpty(p)
+		req.NoError(s.Apply(p))
+	}
+	applyChangesForRemoteState(st)
+	applyChangesForRemoteState(st1)
+	// They should be equal after applying those changes.
+	req.NoError(st.Equal(st1))
 }
 
 func TestState(t *testing.T) {
