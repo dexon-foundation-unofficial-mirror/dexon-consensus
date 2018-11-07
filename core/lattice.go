@@ -67,7 +67,7 @@ func NewLattice(
 		pool:       newBlockPool(cfg.NumChains),
 		data:       newLatticeData(db, dataConfig),
 		toModule:   newTotalOrdering(toConfig),
-		ctModule:   newConsensusTimestamp(dMoment, 0, cfg.NumChains),
+		ctModule:   newConsensusTimestamp(dMoment, round, cfg.NumChains),
 		logger:     logger,
 	}
 }
@@ -111,8 +111,8 @@ func (l *Lattice) PrepareEmptyBlock(b *types.Block) (err error) {
 
 // SanityCheck checks the validity of a block.
 //
-// If any acking blocks of this block does not exist, Lattice helps caching this
-// block and retries when Lattice.ProcessBlock is called.
+// If any acking block of this block does not exist, Lattice caches this block
+// and retries when Lattice.ProcessBlock is called.
 func (l *Lattice) SanityCheck(b *types.Block) (err error) {
 	if b.IsEmpty() {
 		// Only need to verify block's hash.

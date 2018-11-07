@@ -52,9 +52,10 @@ var (
 // newConsensusTimestamp creates timestamper object.
 func newConsensusTimestamp(
 	dMoment time.Time, round uint64, numChains uint32) *consensusTimestamp {
-	ts := make([]time.Time, 0, numChains)
-	for i := uint32(0); i < numChains; i++ {
-		ts = append(ts, dMoment)
+
+	ts := make([]time.Time, numChains)
+	for i := range ts {
+		ts[i] = dMoment
 	}
 	return &consensusTimestamp{
 		numChainsOfRounds: []uint32{numChains},

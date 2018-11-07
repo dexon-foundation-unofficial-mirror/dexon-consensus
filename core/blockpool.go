@@ -23,8 +23,8 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
-// blockPool is a heaped slice of blocks, indexed by chainID, and each in it is
-// sorted by block's height.
+// blockPool is a heaped slice of blocks ([][]*types.Block), indexed by chainID,
+// and blocks in each is sorted by block's height.
 type blockPool []types.ByPosition
 
 func newBlockPool(chainNum uint32) (pool blockPool) {
@@ -56,7 +56,7 @@ func (p blockPool) addBlock(b *types.Block) {
 }
 
 // purgeBlocks purges blocks of a specified chain with less-or-equal heights.
-// NOTE: "chainID" is not checked here, this should be ensured by the called.
+// NOTE: "chainID" is not checked here, this should be ensured by the caller.
 func (p blockPool) purgeBlocks(chainID uint32, height uint64) {
 	for len(p[chainID]) > 0 && p[chainID][0].Position.Height <= height {
 		heap.Pop(&p[chainID])
