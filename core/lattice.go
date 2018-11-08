@@ -58,15 +58,13 @@ func NewLattice(
 	logger common.Logger) *Lattice {
 
 	// Create genesis latticeDataConfig.
-	dataConfig := newGenesisLatticeDataConfig(dMoment, round, cfg)
-	toConfig := newGenesisTotalOrderingConfig(dMoment, cfg)
 	return &Lattice{
 		authModule: authModule,
 		app:        app,
 		debug:      debug,
 		pool:       newBlockPool(cfg.NumChains),
-		data:       newLatticeData(db, dataConfig),
-		toModule:   newTotalOrdering(toConfig),
+		data:       newLatticeData(db, dMoment, round, cfg),
+		toModule:   newTotalOrdering(dMoment, cfg),
 		ctModule:   newConsensusTimestamp(dMoment, round, cfg.NumChains),
 		logger:     logger,
 	}

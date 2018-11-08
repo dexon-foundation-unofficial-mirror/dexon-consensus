@@ -156,19 +156,19 @@ func (s *LatticeTestSuite) TestBasicUsage() {
 	)
 	// Master-lattice generates blocks.
 	for i := uint32(0); i < chainNum; i++ {
-		// Produce genesis blocks should be delivered before all other blocks,
+		// Produced genesis blocks should be delivered before all other blocks,
 		// or the consensus time would be wrong.
 		b, err := master.prepareBlock(i)
 		req.NotNil(b)
 		req.NoError(err)
-		// We've ignored the error for "acking blocks don't exist".
+		// Ignore error "acking blocks don't exist".
 		req.NoError(master.processBlock(b))
 	}
 	for i := 0; i < (blockNum - int(chainNum)); i++ {
 		b, err := master.prepareBlock(uint32(rand.Intn(int(chainNum))))
 		req.NotNil(b)
 		req.NoError(err)
-		// We've ignored the error for "acking blocks don't exist".
+		// Ignore error "acking blocks don't exist".
 		req.NoError(master.processBlock(b))
 	}
 	// Now we have some blocks, replay them on different lattices.
@@ -212,9 +212,9 @@ func (s *LatticeTestSuite) TestBasicUsage() {
 }
 
 func (s *LatticeTestSuite) TestSync() {
-	// One Lattice prepare blocks on chains randomly selected each time
-	// and process it. Those generated blocks and kept into a buffer, and
-	// process by other Lattice instances with random order.
+	// A Lattice prepares blocks on chains randomly selected each time and
+	// processes them. Those generated blocks are kept into a buffer, and
+	// processed by other Lattice instances with random order.
 	var (
 		chainNum        = uint32(19)
 		otherLatticeNum = 50
@@ -241,28 +241,27 @@ func (s *LatticeTestSuite) TestSync() {
 			MinBlockInterval: 0,
 			RoundInterval:    time.Hour,
 		}
-		dMoment = time.Now().UTC()
-		master  = s.newTestLatticeMgr(&cfg, dMoment)
-		//apps      = []*test.App{master.app}
+		dMoment   = time.Now().UTC()
+		master    = s.newTestLatticeMgr(&cfg, dMoment)
 		revealSeq = map[string]struct{}{}
 	)
 	// Make sure the test setup is correct.
 	req.True(syncNum > desyncNum)
 	// Master-lattice generates blocks.
 	for i := uint32(0); i < chainNum; i++ {
-		// Produce genesis blocks should be delivered before all other blocks,
+		// Produced genesis blocks should be delivered before all other blocks,
 		// or the consensus time would be wrong.
 		b, err := master.prepareBlock(i)
 		req.NotNil(b)
 		req.NoError(err)
-		// We've ignored the error for "acking blocks don't exist".
+		// Ignore error "acking blocks don't exist".
 		req.NoError(master.processBlock(b))
 	}
 	for i := 0; i < (blockNum - int(chainNum)); i++ {
 		b, err := master.prepareBlock(uint32(rand.Intn(int(chainNum))))
 		req.NotNil(b)
 		req.NoError(err)
-		// We've ignored the error for "acking blocks don't exist".
+		// Ignore error "acking blocks don't exist".
 		req.NoError(master.processBlock(b))
 	}
 	req.NoError(master.app.Verify())

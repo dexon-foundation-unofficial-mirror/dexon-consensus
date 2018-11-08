@@ -61,7 +61,7 @@ func (s *LatticeDataTestSuite) genTestCase1() (
 	}
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)
-	data = newLatticeData(db, newGenesisLatticeDataConfig(now, 0, genesisConfig))
+	data = newLatticeData(db, now, 0, genesisConfig)
 	config := &types.Config{
 		RoundInterval:    1000 * time.Second,
 		NumChains:        chainNum,
@@ -387,8 +387,7 @@ func (s *LatticeDataTestSuite) TestRandomlyGeneratedBlocks() {
 	for i := 0; i < repeat; i++ {
 		db, err := blockdb.NewMemBackedBlockDB()
 		req.NoError(err)
-		data := newLatticeData(
-			db, newGenesisLatticeDataConfig(genesisTime, 0, genesisConfig))
+		data := newLatticeData(db, genesisTime, 0, genesisConfig)
 		deliveredHashes := common.Hashes{}
 		revealedHashes := common.Hashes{}
 		revealer.Reset()
@@ -477,8 +476,7 @@ func (s *LatticeDataTestSuite) TestPrepareBlock() {
 	}
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)
-	data := newLatticeData(
-		db, newGenesisLatticeDataConfig(time.Now().UTC(), 0, genesisConfig))
+	data := newLatticeData(db, time.Now().UTC(), 0, genesisConfig)
 	// Setup genesis blocks.
 	b00 := s.prepareGenesisBlock(0)
 	time.Sleep(minInterval)
@@ -563,8 +561,7 @@ func (s *LatticeDataTestSuite) TestNextPosition() {
 		NumChains:        4,
 		MinBlockInterval: 1 * time.Second,
 	}
-	data = newLatticeData(
-		nil, newGenesisLatticeDataConfig(time.Now().UTC(), 0, genesisConfig))
+	data = newLatticeData(nil, time.Now().UTC(), 0, genesisConfig)
 	s.Equal(data.nextPosition(0), types.Position{ChainID: 0, Height: 0})
 }
 
@@ -617,8 +614,7 @@ func (s *LatticeDataTestSuite) TestNumChainsChange() {
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)
 	// Set up latticeData instance.
-	lattice := newLatticeData(db, newGenesisLatticeDataConfig(
-		time.Now().UTC(), 0, configs[0]))
+	lattice := newLatticeData(db, time.Now().UTC(), 0, configs[0])
 	req.NoError(lattice.appendConfig(1, configs[1]))
 	req.NoError(lattice.appendConfig(2, configs[2]))
 	req.NoError(lattice.appendConfig(3, configs[3]))
@@ -690,8 +686,7 @@ func (s *LatticeDataTestSuite) TestAppendConfig() {
 	)
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)
-	dataConfig := newGenesisLatticeDataConfig(now, round, cfg)
-	latticeData := newLatticeData(db, dataConfig)
+	latticeData := newLatticeData(db, now, round, cfg)
 	err = latticeData.appendConfig(6, cfg)
 	req.NoError(err)
 	err = latticeData.appendConfig(10, cfg)

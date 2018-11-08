@@ -35,20 +35,16 @@ type TotalOrderingSyncerTestSuite struct {
 
 func (s *TotalOrderingSyncerTestSuite) genDeliverySet(numChains uint32) (
 	deliverySet [][]*types.Block, revealer *test.RandomDAGRevealer) {
-	phi := uint64(numChains) / 2
 
 	genesisTime := time.Now().UTC()
-
-	genesisConfig := &totalOrderingConfig{
-		roundBasedConfig: roundBasedConfig{
-			roundInterval: 1000 * time.Second,
-		},
-		k:         0,
-		phi:       phi,
-		numChains: numChains,
+	genesisConfig := &types.Config{
+		K:             0,
+		PhiRatio:      0.5,
+		NumChains:     numChains,
+		RoundInterval: 1000 * time.Second,
 	}
-	genesisConfig.setRoundBeginTime(genesisTime)
-	to := newTotalOrdering(genesisConfig)
+
+	to := newTotalOrdering(genesisTime, genesisConfig)
 
 	gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
 		NumChains:            numChains,

@@ -94,18 +94,6 @@ func (config *latticeDataConfig) isValidGenesisBlockTime(b *types.Block) bool {
 	return !b.Timestamp.Before(config.roundBeginTime)
 }
 
-// newGenesisLatticeDataConfig constructs a latticeDataConfig instance.
-func newGenesisLatticeDataConfig(
-	dMoment time.Time,
-	round uint64,
-	config *types.Config) *latticeDataConfig {
-
-	c := &latticeDataConfig{}
-	c.fromConfig(round, config)
-	c.setRoundBeginTime(dMoment)
-	return c
-}
-
 // newLatticeDataConfig constructs a latticeDataConfig instance.
 func newLatticeDataConfig(
 	prev *latticeDataConfig, cur *types.Config) *latticeDataConfig {
@@ -129,8 +117,14 @@ type latticeData struct {
 
 // newLatticeData creates a new latticeData instance.
 func newLatticeData(
-	db blockdb.Reader, genesisConfig *latticeDataConfig) (data *latticeData) {
+	db blockdb.Reader,
+	dMoment time.Time,
+	round uint64,
+	config *types.Config) (data *latticeData) {
 
+	genesisConfig := &latticeDataConfig{}
+	genesisConfig.fromConfig(round, config)
+	genesisConfig.setRoundBeginTime(dMoment)
 	data = &latticeData{
 		db:          db,
 		chains:      make([]*chainStatus, genesisConfig.numChains),

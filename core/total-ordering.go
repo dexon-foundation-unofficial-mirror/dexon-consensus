@@ -58,6 +58,8 @@ var (
 	ErrForwardAck = errors.New("forward ack")
 	// ErrUnexpected means general (I'm lazy) errors.
 	ErrUnexpected = errors.New("unexpected")
+	// ErrTotalOrderingPhiRatio means invalid phi ratio
+	ErrTotalOrderingPhiRatio = errors.New("invalid total ordering phi ratio")
 )
 
 // totalOrderingConfig is the configuration for total ordering.
@@ -81,14 +83,6 @@ func (config *totalOrderingConfig) fromConfig(round uint64, cfg *types.Config) {
 	config.numChains = cfg.NumChains
 	config.phi = uint64(float32(cfg.NumChains-1)*cfg.PhiRatio + 1)
 	config.setupRoundBasedFields(round, cfg)
-}
-
-func newGenesisTotalOrderingConfig(
-	dMoment time.Time, config *types.Config) *totalOrderingConfig {
-	c := &totalOrderingConfig{}
-	c.fromConfig(0, config)
-	c.setRoundBeginTime(dMoment)
-	return c
 }
 
 func newTotalOrderingConfig(
@@ -798,7 +792,10 @@ type totalOrdering struct {
 }
 
 // newTotalOrdering constructs an totalOrdering instance.
-func newTotalOrdering(config *totalOrderingConfig) *totalOrdering {
+func newTotalOrdering(dMoment time.Time, cfg *types.Config) *totalOrdering {
+	config := &totalOrderingConfig{}
+	config.fromConfig(0, cfg)
+	config.setRoundBeginTime(dMoment)
 	candidates := make([]*totalOrderingCandidateInfo, config.numChains)
 	to := &totalOrdering{
 		pendings:              make(map[common.Hash]*types.Block),
@@ -821,6 +818,9 @@ func (to *totalOrdering) appendConfig(
 	round uint64, config *types.Config) error {
 	if round != uint64(len(to.configs))+to.configs[0].roundID {
 		return ErrRoundNotIncreasing
+	}
+	if config.PhiRatio < 0.5 || config.PhiRatio > 1.0 {
+		return ErrTotalOrderingPhiRatio
 	}
 	to.configs = append(
 		to.configs,
