@@ -79,9 +79,14 @@ func (cc *compactionChain) registerBlock(block *types.Block) {
 	cc.blocks[block.Hash] = block
 }
 
-func (cc *compactionChain) blockRegistered(hash common.Hash) (exist bool) {
+func (cc *compactionChain) blockRegistered(hash common.Hash) bool {
 	cc.lock.RLock()
 	defer cc.lock.RUnlock()
+	return cc.blockRegisteredNoLock(hash)
+}
+
+func (cc *compactionChain) blockRegisteredNoLock(
+	hash common.Hash) (exist bool) {
 	_, exist = cc.blocks[hash]
 	return
 }
@@ -248,11 +253,13 @@ func (cc *compactionChain) extractFinalizedBlocks() []*types.Block {
 
 func (cc *compactionChain) processBlockRandomnessResult(
 	rand *types.BlockRandomnessResult) error {
-	if !cc.blockRegistered(rand.BlockHash) {
-		return ErrBlockNotRegistered
-	}
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
+	// TODO(jimmy-dexon): the result should not be discarded here. Blocks may
+	// be registered later.
+	if !cc.blockRegisteredNoLock(rand.BlockHash) {
+		return ErrBlockNotRegistered
+	}
 	cc.blocks[rand.BlockHash].Finalization.Randomness = rand.Randomness
 	return nil
 }
