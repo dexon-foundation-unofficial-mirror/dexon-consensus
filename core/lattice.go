@@ -153,14 +153,6 @@ func (l *Lattice) SanityCheck(b *types.Block) (err error) {
 	}(); err != nil {
 		return
 	}
-	// Verify data in application layer.
-	l.logger.Debug("Calling Application.VerifyBlock", "block", b)
-	switch l.app.VerifyBlock(b) {
-	case types.VerifyInvalidBlock:
-		err = ErrInvalidBlock
-	case types.VerifyRetryLater:
-		err = ErrRetrySanityCheckLater
-	}
 	return
 }
 

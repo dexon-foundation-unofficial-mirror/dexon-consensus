@@ -32,7 +32,7 @@ var (
 	ErrIncorrectCRSSignature = fmt.Errorf("incorrect CRS signature")
 )
 
-type validLeaderFn func(*types.Block) bool
+type validLeaderFn func(*types.Block) (bool, error)
 
 // Some constant value.
 var (
@@ -57,12 +57,15 @@ type leaderSelector struct {
 	pendingBlocks []*types.Block
 	validLeader   validLeaderFn
 	lock          sync.Mutex
+	logger        common.Logger
 }
 
-func newLeaderSelector(validLeader validLeaderFn) *leaderSelector {
+func newLeaderSelector(
+	validLeader validLeaderFn, logger common.Logger) *leaderSelector {
 	return &leaderSelector{
 		minCRSBlock: maxHash,
 		validLeader: validLeader,
+		logger:      logger,
 	}
 }
 
@@ -98,7 +101,12 @@ func (l *leaderSelector) leaderBlockHash() common.Hash {
 	defer l.lock.Unlock()
 	newPendingBlocks := []*types.Block{}
 	for _, b := range l.pendingBlocks {
-		if l.validLeader(b) {
+		ok, err := l.validLeader(b)
+		if err != nil {
+			l.logger.Error("Error checking validLeader", "error", err, "block", b)
+			continue
+		}
+		if ok {
 			l.updateLeader(b)
 		} else {
 			newPendingBlocks = append(newPendingBlocks, b)
@@ -118,7 +126,11 @@ func (l *leaderSelector) processBlock(block *types.Block) error {
 	}
 	l.lock.Lock()
 	defer l.lock.Unlock()
-	if !l.validLeader(block) {
+	ok, err = l.validLeader(block)
+	if err != nil {
+		return err
+	}
+	if !ok {
 		l.pendingBlocks = append(l.pendingBlocks, block)
 		return nil
 	}

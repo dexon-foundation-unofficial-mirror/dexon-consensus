@@ -93,9 +93,9 @@ func (s *AgreementTestSuite) SetupTest() {
 }
 
 func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
-	leader := newLeaderSelector(func(*types.Block) bool {
-		return true
-	})
+	leader := newLeaderSelector(func(*types.Block) (bool, error) {
+		return true, nil
+	}, &common.NullLogger{})
 	agreementIdx := len(s.agreement)
 	notarySet := make(map[types.NodeID]struct{})
 	for i := 0; i < numNotarySet-1; i++ {

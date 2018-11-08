@@ -370,11 +370,25 @@ func NewConsensus(
 		roundToNotify:    roundToNotify,
 	}
 
-	validLeader := func(block *types.Block) bool {
+	validLeader := func(block *types.Block) (bool, error) {
 		if block.Timestamp.After(time.Now()) {
-			return false
+			return false, nil
 		}
-		return lattice.SanityCheck(block) == nil
+		if err := lattice.SanityCheck(block); err != nil {
+			if err == ErrRetrySanityCheckLater {
+				return false, nil
+			}
+			return false, err
+		}
+		logger.Debug("Calling Application.VerifyBlock", "block", block)
+		switch app.VerifyBlock(block) {
+		case types.VerifyInvalidBlock:
+			return false, ErrInvalidBlock
+		case types.VerifyRetryLater:
+			return false, nil
+		default:
+		}
+		return true, nil
 	}
 
 	con.baModules = make([]*agreement, config.NumChains)
@@ -389,7 +403,7 @@ func NewConsensus(
 		agreementModule := newAgreement(
 			con.ID,
 			recv,
-			newLeaderSelector(validLeader),
+			newLeaderSelector(validLeader, logger),
 			con.authModule,
 		)
 		// Hacky way to make agreement module self contained.
@@ -442,7 +456,14 @@ func (con *Consensus) Run(initBlock *types.Block) {
 	for i := uint32(0); i < con.currentConfig.NumChains; i++ {
 		tick := make(chan struct{})
 		ticks = append(ticks, tick)
-		go con.runBA(i, tick)
+		// TODO(jimmy-dexon): this is a temporary solution to offset BA time.
+		// The complelete solution should be delivered along with config change.
+		offset := time.Duration(i*uint32(4)/con.currentConfig.NumChains) *
+			con.currentConfig.LambdaBA
+		go func(chainID uint32, offset time.Duration) {
+			time.Sleep(offset)
+			con.runBA(chainID, tick)
+		}(i, offset)
 	}
 
 	// Reset ticker.
@@ -717,6 +738,14 @@ MessageLoop:
 						continue MessageLoop
 					}
 				}
+				// TODO(mission): check with full node if this verification is required.
+				con.logger.Debug("Calling Application.VerifyBlock", "block", val)
+				switch con.app.VerifyBlock(val) {
+				case types.VerifyInvalidBlock:
+					con.logger.Error("VerifyBlock fail")
+					continue MessageLoop
+				default:
+				}
 				func() {
 					con.lock.Lock()
 					defer con.lock.Unlock()
@@ -957,11 +986,6 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 
 // preProcessBlock performs Byzantine Agreement on the block.
 func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
-	if err = con.lattice.SanityCheck(b); err != nil {
-		if err != ErrRetrySanityCheckLater {
-			return
-		}
-	}
 	if err = con.baModules[b.Position.ChainID].processBlock(b); err != nil {
 		return err
 	}

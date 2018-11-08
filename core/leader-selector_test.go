@@ -37,16 +37,16 @@ type LeaderSelectorTestSuite struct {
 func (s *LeaderSelectorTestSuite) SetupTest() {
 	s.mockValidLeaderDefault = true
 	s.mockValidLeaderDB = make(map[common.Hash]bool)
-	s.mockValidLeader = func(b *types.Block) bool {
+	s.mockValidLeader = func(b *types.Block) (bool, error) {
 		if ret, exist := s.mockValidLeaderDB[b.Hash]; exist {
-			return ret
+			return ret, nil
 		}
-		return s.mockValidLeaderDefault
+		return s.mockValidLeaderDefault, nil
 	}
 }
 
 func (s *LeaderSelectorTestSuite) newLeader() *leaderSelector {
-	l := newLeaderSelector(s.mockValidLeader)
+	l := newLeaderSelector(s.mockValidLeader, &common.NullLogger{})
 	l.restart(common.NewRandomHash())
 	return l
 }
