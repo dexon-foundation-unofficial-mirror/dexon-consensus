@@ -32,7 +32,7 @@ type SimAppSuite struct {
 
 func (s *SimAppSuite) TestAppInterface() {
 	var app core.Application
-	app = newSimApp(types.NodeID{}, nil)
+	app = newSimApp(types.NodeID{}, nil, nil)
 	s.NotPanics(func() {
 		_ = app.(core.Debug)
 	})

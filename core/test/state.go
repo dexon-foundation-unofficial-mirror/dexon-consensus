@@ -518,9 +518,11 @@ func (s *State) AddRequestsFromOthers(reqsAsBytes []byte) (err error) {
 
 // PackRequests pack all current pending requests, include those from others.
 func (s *State) PackRequests() (b []byte, err error) {
-	// Convert own requests to global one for packing.
-	if _, err = s.PackOwnRequests(); err != nil {
-		return
+	if s.local {
+		// Convert own requests to global one for packing.
+		if _, err = s.PackOwnRequests(); err != nil {
+			return
+		}
 	}
 	// Pack requests in global pool.
 	packed := []*StateChangeRequest{}

@@ -81,7 +81,7 @@ func (l *Lattice) PrepareBlock(
 	if err = l.data.prepareBlock(b); err != nil {
 		return
 	}
-	l.logger.Debug("Calling Application.PreparePayload", "position", b.Position)
+	l.logger.Debug("Calling Application.PreparePayload", "position", &b.Position)
 	if b.Payload, err = l.app.PreparePayload(b.Position); err != nil {
 		return
 	}

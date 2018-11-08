@@ -20,7 +20,6 @@ package simulation
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
@@ -29,7 +28,6 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
-	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
 	"github.com/dexon-foundation/dexon-consensus/simulation/config"
 )
 
@@ -56,15 +54,11 @@ type message struct {
 
 // node represents a node in DexCon.
 type node struct {
-	app core.Application
-	gov *simGovernance
-	db  blockdb.BlockDatabase
-
-	config    config.Node
+	app       core.Application
+	db        blockdb.BlockDatabase
+	gov       *test.Governance
 	netModule *test.Network
-
 	ID        types.NodeID
-	chainID   uint64
 	prvKey    crypto.PrivateKey
 	consensus *core.Consensus
 }
@@ -91,17 +85,32 @@ func newNode(
 	if err != nil {
 		panic(err)
 	}
-	gov := newSimGovernance(
-		id,
-		config.Node.Num,
-		config.Node.Consensus.NotarySetSize,
-		config.Node.Consensus.DKGSetSize,
-		config.Node.Consensus)
+	// Sync config to state in governance.
+	cConfig := config.Node.Consensus
+	gov, err := test.NewGovernance([]crypto.PublicKey{pubKey}, time.Millisecond)
+	if err != nil {
+		panic(err)
+	}
+	gov.State().RequestChange(test.StateChangeK, cConfig.K)
+	gov.State().RequestChange(test.StateChangePhiRatio, cConfig.PhiRatio)
+	gov.State().RequestChange(test.StateChangeNumChains, cConfig.ChainNum)
+	gov.State().RequestChange(
+		test.StateChangeNotarySetSize, cConfig.NotarySetSize)
+	gov.State().RequestChange(test.StateChangeDKGSetSize, cConfig.DKGSetSize)
+	gov.State().RequestChange(test.StateChangeLambdaBA, time.Duration(
+		cConfig.LambdaBA)*time.Millisecond)
+	gov.State().RequestChange(test.StateChangeLambdaDKG, time.Duration(
+		cConfig.LambdaDKG)*time.Millisecond)
+	gov.State().RequestChange(test.StateChangeRoundInterval, time.Duration(
+		cConfig.RoundInterval)*time.Millisecond)
+	gov.State().RequestChange(
+		test.StateChangeMinBlockInterval,
+		3*time.Duration(cConfig.LambdaBA)*time.Millisecond)
+	gov.State().ProposeCRS(0, crypto.Keccak256Hash([]byte(cConfig.GenesisCRS)))
 	return &node{
 		ID:        id,
 		prvKey:    prvKey,
-		config:    config.Node,
-		app:       newSimApp(id, netModule),
+		app:       newSimApp(id, netModule, gov.State()),
 		gov:       gov,
 		db:        db,
 		netModule: netModule,
@@ -122,21 +131,16 @@ func (n *node) run(serverEndpoint interface{}, dMoment time.Time) {
 	msgChannel := n.netModule.ReceiveChanForNode()
 	peers := n.netModule.Peers()
 	go n.netModule.Run()
-	n.gov.setNetwork(n.netModule)
 	// Run consensus.
 	hashes := make(common.Hashes, 0, len(peers))
 	for _, pubKey := range peers {
 		nID := types.NewNodeID(pubKey)
-		n.gov.addNode(pubKey)
+		n.gov.State().RequestChange(test.StateAddNode, pubKey)
 		hashes = append(hashes, nID.Hash)
 	}
-	sort.Sort(hashes)
-	for i, hash := range hashes {
-		if hash == n.ID.Hash {
-			n.chainID = uint64(i)
-			break
-		}
-	}
+	// Setup of governance is ready, can be switched to remote mode.
+	n.gov.SwitchToRemoteMode(n.netModule)
+	// Setup Consensus.
 	n.consensus = core.NewConsensus(
 		dMoment,
 		n.app,
@@ -156,12 +160,6 @@ MainLoop:
 			if val == statusShutdown {
 				break MainLoop
 			}
-		case *typesDKG.Complaint:
-			n.gov.AddDKGComplaint(val.Round, val)
-		case *typesDKG.MasterPublicKey:
-			n.gov.AddDKGMasterPublicKey(val.Round, val)
-		case *typesDKG.Finalize:
-			n.gov.AddDKGFinalize(val.Round, val)
 		default:
 			panic(fmt.Errorf("unexpected message from server: %v", val))
 		}

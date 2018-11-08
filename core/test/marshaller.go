@@ -95,6 +95,12 @@ func (m *DefaultMarshaller) Unmarshal(
 			break
 		}
 		msg = final
+	case "packed-state-changes":
+		packed := &packedStateChanges{}
+		if err = json.Unmarshal(payload, packed); err != nil {
+			break
+		}
+		msg = *packed
 	default:
 		if m.fallback == nil {
 			err = fmt.Errorf("unknown msg type: %v", msgType)
@@ -135,6 +141,9 @@ func (m *DefaultMarshaller) Marshal(
 		payload, err = json.Marshal(msg)
 	case *typesDKG.Finalize:
 		msgType = "dkg-finalize"
+		payload, err = json.Marshal(msg)
+	case packedStateChanges:
+		msgType = "packed-state-changes"
 		payload, err = json.Marshal(msg)
 	default:
 		if m.fallback == nil {

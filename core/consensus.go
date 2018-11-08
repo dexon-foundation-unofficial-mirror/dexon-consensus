@@ -660,7 +660,8 @@ func (con *Consensus) initialRound(
 				// unexpected network fluctuation and ensure the robustness.
 				for (con.gov.CRS(nextRound) == common.Hash{}) {
 					con.logger.Info("CRS is not ready yet. Try again later...",
-						"nodeID", con.ID)
+						"nodeID", con.ID,
+						"round", nextRound)
 					time.Sleep(500 * time.Millisecond)
 				}
 				nextDkgSet, err := con.nodeSetCache.GetDKGSet(nextRound)

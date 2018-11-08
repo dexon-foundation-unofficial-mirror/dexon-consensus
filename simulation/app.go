@@ -46,11 +46,12 @@ type timestampMessage struct {
 
 // simApp is an DEXON app for simulation.
 type simApp struct {
-	NodeID    types.NodeID
-	Outputs   []*types.Block
-	Early     bool
-	netModule *test.Network
-	DeliverID int
+	NodeID      types.NodeID
+	Outputs     []*types.Block
+	Early       bool
+	netModule   *test.Network
+	stateModule *test.State
+	DeliverID   int
 	// blockSeen stores the time when block is delivered by Total Ordering.
 	blockSeen map[common.Hash]time.Time
 	// uncofirmBlocks stores the blocks whose timestamps are not ready.
@@ -62,10 +63,12 @@ type simApp struct {
 }
 
 // newSimApp returns point to a new instance of simApp.
-func newSimApp(id types.NodeID, netModule *test.Network) *simApp {
+func newSimApp(
+	id types.NodeID, netModule *test.Network, stateModule *test.State) *simApp {
 	return &simApp{
 		NodeID:             id,
 		netModule:          netModule,
+		stateModule:        stateModule,
 		DeliverID:          0,
 		blockSeen:          make(map[common.Hash]time.Time),
 		unconfirmedBlocks:  make(map[types.NodeID]common.Hashes),
@@ -116,7 +119,7 @@ func (a *simApp) getAckedBlocks(ackHash common.Hash) (output common.Hashes) {
 
 // PreparePayload implements core.Application.
 func (a *simApp) PreparePayload(position types.Position) ([]byte, error) {
-	return []byte{}, nil
+	return a.stateModule.PackRequests()
 }
 
 // PrepareWitness implements core.Application.
@@ -149,17 +152,23 @@ func (a *simApp) TotalOrderingDelivered(
 
 // BlockDelivered is called when a block in compaction chain is delivered.
 func (a *simApp) BlockDelivered(
-	blockHash common.Hash, _ types.Position, result types.FinalizationResult) {
-	if len(result.Randomness) == 0 && func() bool {
-		if block, exist := a.blockByHash[blockHash]; exist {
-			if block.Position.Round == 0 {
-				return false
-			}
-		}
-		return true
-	}() {
+	blockHash common.Hash, pos types.Position, result types.FinalizationResult) {
+	if len(result.Randomness) == 0 && pos.Round > 0 {
 		panic(fmt.Errorf("Block %s randomness is empty", blockHash))
 	}
+	func() {
+		a.blockByHashMutex.Lock()
+		defer a.blockByHashMutex.Unlock()
+		if block, exist := a.blockByHash[blockHash]; exist {
+			if err := a.stateModule.Apply(block.Payload); err != nil {
+				if err != test.ErrDuplicatedChange {
+					panic(err)
+				}
+			}
+		} else {
+			panic(fmt.Errorf("Block is not confirmed yet: %s", blockHash))
+		}
+	}()
 	func() {
 		a.latestWitnessReady.L.Lock()
 		defer a.latestWitnessReady.L.Unlock()

@@ -37,7 +37,8 @@ import (
 type Governance struct {
 	configs              []*types.Config
 	nodeSets             [][]crypto.PublicKey
-	state                *State
+	stateModule          *State
+	networkModule        *Network
 	pendingConfigChanges map[uint64]map[StateChangeType]interface{}
 	lock                 sync.RWMutex
 }
@@ -51,7 +52,7 @@ func NewGovernance(genesisNodes []crypto.PublicKey,
 	//                modification smaller.
 	g = &Governance{
 		pendingConfigChanges: make(map[uint64]map[StateChangeType]interface{}),
-		state:                NewState(genesisNodes, lambda, true),
+		stateModule:          NewState(genesisNodes, lambda, true),
 	}
 	return
 }
@@ -89,7 +90,7 @@ func (g *Governance) Configuration(round uint64) *types.Config {
 
 // CRS returns the CRS for a given round.
 func (g *Governance) CRS(round uint64) common.Hash {
-	return g.state.CRS(round)
+	return g.stateModule.CRS(round)
 }
 
 // NotifyRoundHeight notifies governace contract to snapshot config.
@@ -100,11 +101,12 @@ func (g *Governance) NotifyRoundHeight(round, height uint64) {
 		g.lock.Lock()
 		defer g.lock.Unlock()
 		for t, v := range g.pendingConfigChanges[round+1] {
-			if err := g.state.RequestChange(t, v); err != nil {
+			if err := g.stateModule.RequestChange(t, v); err != nil {
 				panic(err)
 			}
 		}
 		delete(g.pendingConfigChanges, round+1)
+		g.broadcastPendingStateChanges()
 	}()
 }
 
@@ -113,13 +115,15 @@ func (g *Governance) ProposeCRS(round uint64, signedCRS []byte) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 	crs := crypto.Keccak256Hash(signedCRS)
-	if err := g.state.ProposeCRS(round, crs); err != nil {
+	if err := g.stateModule.ProposeCRS(round, crs); err != nil {
 		// CRS can be proposed multiple times, other errors are not
 		// accepted.
 		if err != ErrDuplicatedChange {
 			panic(err)
 		}
+		return
 	}
+	g.broadcastPendingStateChanges()
 }
 
 // AddDKGComplaint add a DKGComplaint.
@@ -131,12 +135,16 @@ func (g *Governance) AddDKGComplaint(
 	if g.IsDKGFinal(complaint.Round) {
 		return
 	}
-	g.state.RequestChange(StateAddDKGComplaint, complaint)
+	if err := g.stateModule.RequestChange(
+		StateAddDKGComplaint, complaint); err != nil {
+		panic(err)
+	}
+	g.broadcastPendingStateChanges()
 }
 
 // DKGComplaints returns the DKGComplaints of round.
 func (g *Governance) DKGComplaints(round uint64) []*typesDKG.Complaint {
-	return g.state.DKGComplaints(round)
+	return g.stateModule.DKGComplaints(round)
 }
 
 // AddDKGMasterPublicKey adds a DKGMasterPublicKey.
@@ -145,13 +153,17 @@ func (g *Governance) AddDKGMasterPublicKey(
 	if round != masterPublicKey.Round {
 		return
 	}
-	g.state.RequestChange(StateAddDKGMasterPublicKey, masterPublicKey)
+	if err := g.stateModule.RequestChange(
+		StateAddDKGMasterPublicKey, masterPublicKey); err != nil {
+		panic(err)
+	}
+	g.broadcastPendingStateChanges()
 }
 
 // DKGMasterPublicKeys returns the DKGMasterPublicKeys of round.
 func (g *Governance) DKGMasterPublicKeys(
 	round uint64) []*typesDKG.MasterPublicKey {
-	return g.state.DKGMasterPublicKeys(round)
+	return g.stateModule.DKGMasterPublicKeys(round)
 }
 
 // AddDKGFinalize adds a DKG finalize message.
@@ -159,7 +171,10 @@ func (g *Governance) AddDKGFinalize(round uint64, final *typesDKG.Finalize) {
 	if round != final.Round {
 		return
 	}
-	g.state.RequestChange(StateAddDKGFinal, final)
+	if err := g.stateModule.RequestChange(StateAddDKGFinal, final); err != nil {
+		panic(err)
+	}
+	g.broadcastPendingStateChanges()
 }
 
 // IsDKGFinal checks if DKG is final.
@@ -174,16 +189,31 @@ func (g *Governance) IsDKGFinal(round uint64) bool {
 	if round >= uint64(len(g.configs)) {
 		return false
 	}
-	return g.state.IsDKGFinal(round, int(g.configs[round].DKGSetSize)/3*2)
+	return g.stateModule.IsDKGFinal(round, int(g.configs[round].DKGSetSize)/3*2)
 }
 
 //
 // Test Utilities
 //
 
+type packedStateChanges []byte
+
+// This method broadcasts pending state change requests in the underlying
+// State instance, this behavior is to simulate tx-gossiping in full nodes.
+func (g *Governance) broadcastPendingStateChanges() {
+	if g.networkModule == nil {
+		return
+	}
+	packed, err := g.stateModule.PackOwnRequests()
+	if err != nil {
+		panic(err)
+	}
+	g.networkModule.Broadcast(packedStateChanges(packed))
+}
+
 // State allows to access embed State instance.
 func (g *Governance) State() *State {
-	return g.state
+	return g.stateModule
 }
 
 // CatchUpWithRound attempts to perform state snapshot to
@@ -199,7 +229,7 @@ func (g *Governance) CatchUpWithRound(round uint64) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 	for uint64(len(g.configs)) <= round {
-		config, nodeSet := g.state.Snapshot()
+		config, nodeSet := g.stateModule.Snapshot()
 		g.configs = append(g.configs, config)
 		g.nodeSets = append(g.nodeSets, nodeSet)
 	}
@@ -210,7 +240,7 @@ func (g *Governance) Clone() *Governance {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 	// Clone state.
-	copiedState := g.state.Clone()
+	copiedState := g.stateModule.Clone()
 	// Clone configs.
 	copiedConfigs := []*types.Config{}
 	for _, c := range g.configs {
@@ -239,10 +269,9 @@ func (g *Governance) Clone() *Governance {
 		copiedNodeSets = append(copiedNodeSets, copiedNodeSet)
 	}
 	// Clone pending changes.
-
 	return &Governance{
 		configs:              copiedConfigs,
-		state:                copiedState,
+		stateModule:          copiedState,
 		nodeSets:             copiedNodeSets,
 		pendingConfigChanges: copiedPendingChanges,
 	}
@@ -286,7 +315,7 @@ func (g *Governance) Equal(other *Governance, checkState bool) bool {
 	// different state, only the snapshots (configs and node sets) are
 	// essentially equal.
 	if checkState {
-		return g.state.Equal(other.state) == nil
+		return g.stateModule.Equal(other.stateModule) == nil
 	}
 	return true
 }
@@ -318,4 +347,16 @@ func (g *Governance) RegisterConfigChange(
 	}
 	pendingChangesForRound[t] = v
 	return nil
+}
+
+// SwitchToRemoteMode would switch this governance instance to remote mode,
+// which means: it will broadcast all changes from its underlying state
+// instance.
+func (g *Governance) SwitchToRemoteMode(n *Network) {
+	if g.networkModule != nil {
+		panic(errors.New("not in local mode before switching"))
+	}
+	g.stateModule.SwitchToRemoteMode()
+	g.networkModule = n
+	n.addStateModule(g.stateModule)
 }

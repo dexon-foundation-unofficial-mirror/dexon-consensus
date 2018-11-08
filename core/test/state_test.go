@@ -315,6 +315,9 @@ func (s *StateTestSuite) TestPacking() {
 	req.Empty(st.DKGMasterPublicKeys(2))
 	req.Empty(st.DKGComplaints(2))
 	req.False(st.IsDKGFinal(2, 0))
+	// In remote mode, we need to manually convert own requests to global ones.
+	_, err = st.PackOwnRequests()
+	req.NoError(err)
 	// Pack changes into bytes.
 	b, err := st.PackRequests()
 	req.NoError(err)
