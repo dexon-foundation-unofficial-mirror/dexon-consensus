@@ -105,8 +105,9 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 	hash common.Hash, votes map[types.NodeID]*types.Vote) {
 	var block *types.Block
 	if (hash == common.Hash{}) {
+		aID := recv.agreementModule.agreementID()
 		recv.consensus.logger.Info("Empty block is confirmed",
-			"position", recv.agreementModule.agreementID())
+			"position", &aID)
 		var err error
 		block, err = recv.consensus.proposeEmptyBlock(recv.chainID)
 		if err != nil {
@@ -267,9 +268,8 @@ func (recv *consensusDKGReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
 // Consensus implements DEXON Consensus algorithm.
 type Consensus struct {
 	// Node Info.
-	ID            types.NodeID
-	authModule    *Authenticator
-	currentConfig *types.Config
+	ID         types.NodeID
+	authModule *Authenticator
 
 	// BA.
 	baModules        []*agreement
@@ -351,7 +351,6 @@ func NewConsensus(
 	// Construct Consensus instance.
 	con := &Consensus{
 		ID:               ID,
-		currentConfig:    config,
 		ccModule:         newCompactionChain(gov),
 		lattice:          lattice,
 		app:              app,
@@ -420,19 +419,21 @@ func (con *Consensus) Run(initBlock *types.Block) {
 	con.logger.Debug("Calling Governance.NotifyRoundHeight for genesis rounds",
 		"block", initBlock)
 	notifyGenesisRounds(initBlock, con.gov)
+	initRound := initBlock.Position.Round
+	con.logger.Debug("Calling Governance.Configuration", "round", initRound)
+	initConfig := con.gov.Configuration(initRound)
 	// Setup context.
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
 	con.ccModule.init(initBlock)
 	// TODO(jimmy-dexon): change AppendConfig to add config for specific round.
-	for i := uint64(0); i < initBlock.Position.Round; i++ {
+	for i := uint64(0); i <= initRound; i++ {
 		con.logger.Debug("Calling Governance.Configuration", "round", i+1)
 		cfg := con.gov.Configuration(i + 1)
 		if err := con.lattice.AppendConfig(i+1, cfg); err != nil {
 			panic(err)
 		}
 	}
-	round0 := uint64(0)
-	dkgSet, err := con.nodeSetCache.GetDKGSet(round0)
+	dkgSet, err := con.nodeSetCache.GetDKGSet(initRound)
 	if err != nil {
 		panic(err)
 	}
@@ -441,25 +442,22 @@ func (con *Consensus) Run(initBlock *types.Block) {
 	// Sleep until dMoment come.
 	time.Sleep(con.dMoment.Sub(time.Now().UTC()))
 	if _, exist := dkgSet[con.ID]; exist {
-		con.logger.Info("Selected as DKG set", "round", round0)
-		con.cfgModule.registerDKG(round0, int(con.currentConfig.DKGSetSize)/3+1)
-		con.event.RegisterTime(con.dMoment.Add(con.currentConfig.RoundInterval/4),
+		con.logger.Info("Selected as DKG set", "round", initRound)
+		con.cfgModule.registerDKG(initRound, int(initConfig.DKGSetSize)/3+1)
+		con.event.RegisterTime(con.dMoment.Add(initConfig.RoundInterval/4),
 			func(time.Time) {
-				con.runDKGTSIG(round0)
+				con.runDKGTSIG(initRound, initConfig)
 			})
 	}
-	round1 := uint64(1)
-	con.logger.Debug("Calling Governance.Configuration", "round", round1)
-	con.lattice.AppendConfig(round1, con.gov.Configuration(round1))
-	con.initialRound(con.dMoment)
-	ticks := make([]chan struct{}, 0, con.currentConfig.NumChains)
-	for i := uint32(0); i < con.currentConfig.NumChains; i++ {
+	con.initialRound(con.dMoment, initRound, initConfig)
+	ticks := make([]chan struct{}, 0, initConfig.NumChains)
+	for i := uint32(0); i < initConfig.NumChains; i++ {
 		tick := make(chan struct{})
 		ticks = append(ticks, tick)
 		// TODO(jimmy-dexon): this is a temporary solution to offset BA time.
 		// The complelete solution should be delivered along with config change.
-		offset := time.Duration(i*uint32(4)/con.currentConfig.NumChains) *
-			con.currentConfig.LambdaBA
+		offset := time.Duration(i*uint32(4)/initConfig.NumChains) *
+			initConfig.LambdaBA
 		go func(chainID uint32, offset time.Duration) {
 			time.Sleep(offset)
 			con.runBA(chainID, tick)
@@ -499,8 +497,9 @@ BALoop:
 		select {
 		case newNotary := <-recv.restartNotary:
 			if newNotary {
+				configForNewRound := con.gov.Configuration(recv.round)
 				recv.changeNotaryTime =
-					recv.changeNotaryTime.Add(con.currentConfig.RoundInterval)
+					recv.changeNotaryTime.Add(configForNewRound.RoundInterval)
 				nodes, err := con.nodeSetCache.GetNodeSet(recv.round)
 				if err != nil {
 					panic(err)
@@ -510,7 +509,7 @@ BALoop:
 				con.logger.Debug("Calling Governance.Configuration",
 					"round", recv.round)
 				nIDs = nodes.GetSubSet(
-					int(con.gov.Configuration(recv.round).NotarySetSize),
+					int(configForNewRound.NotarySetSize),
 					types.NewNotarySetTarget(crs, chainID))
 			}
 			nextPos := con.lattice.NextPosition(chainID)
@@ -521,7 +520,7 @@ BALoop:
 		if agreement.pullVotes() {
 			pos := agreement.agreementID()
 			con.logger.Debug("Calling Network.PullVotes for syncing votes",
-				"position", pos)
+				"position", &pos)
 			con.network.PullVotes(pos)
 		}
 		err := agreement.nextState()
@@ -548,7 +547,7 @@ BALoop:
 }
 
 // runDKGTSIG starts running DKG+TSIG protocol.
-func (con *Consensus) runDKGTSIG(round uint64) {
+func (con *Consensus) runDKGTSIG(round uint64, config *types.Config) {
 	con.dkgReady.L.Lock()
 	defer con.dkgReady.L.Unlock()
 	if con.dkgRunning != 0 {
@@ -564,7 +563,7 @@ func (con *Consensus) runDKGTSIG(round uint64) {
 			con.dkgRunning = 2
 			DKGTime := time.Now().Sub(startTime)
 			if DKGTime.Nanoseconds() >=
-				con.currentConfig.RoundInterval.Nanoseconds()/2 {
+				config.RoundInterval.Nanoseconds()/2 {
 				con.logger.Warn("Your computer cannot finish DKG on time!",
 					"nodeID", con.ID.String())
 			}
@@ -604,11 +603,10 @@ func (con *Consensus) runDKGTSIG(round uint64) {
 	}()
 }
 
-func (con *Consensus) runCRS() {
+func (con *Consensus) runCRS(round uint64) {
 	// Start running next round CRS.
-	con.logger.Debug("Calling Governance.CRS", "round", con.round)
-	psig, err := con.cfgModule.preparePartialSignature(
-		con.round, con.gov.CRS(con.round))
+	con.logger.Debug("Calling Governance.CRS", "round", round)
+	psig, err := con.cfgModule.preparePartialSignature(round, con.gov.CRS(round))
 	if err != nil {
 		con.logger.Error("Failed to prepare partial signature", "error", err)
 	} else if err = con.authModule.SignDKGPartialSignature(psig); err != nil {
@@ -621,85 +619,106 @@ func (con *Consensus) runCRS() {
 			"round", psig.Round,
 			"hash", psig.Hash)
 		con.network.BroadcastDKGPartialSignature(psig)
-		con.logger.Debug("Calling Governance.CRS", "round", con.round)
-		crs, err := con.cfgModule.runCRSTSig(con.round, con.gov.CRS(con.round))
+		con.logger.Debug("Calling Governance.CRS", "round", round)
+		crs, err := con.cfgModule.runCRSTSig(round, con.gov.CRS(round))
 		if err != nil {
 			con.logger.Error("Failed to run CRS Tsig", "error", err)
 		} else {
 			con.logger.Debug("Calling Governance.ProposeCRS",
-				"round", con.round+1,
+				"round", round+1,
 				"crs", hex.EncodeToString(crs))
-			con.gov.ProposeCRS(con.round+1, crs)
+			con.gov.ProposeCRS(round+1, crs)
 		}
 	}
 }
 
-func (con *Consensus) initialRound(startTime time.Time) {
+func (con *Consensus) initialRound(
+	startTime time.Time, round uint64, config *types.Config) {
 	select {
 	case <-con.ctx.Done():
 		return
 	default:
 	}
-	con.logger.Debug("Calling Governance.Configuration", "round", con.round)
-	con.currentConfig = con.gov.Configuration(con.round)
-	curDkgSet, err := con.nodeSetCache.GetDKGSet(con.round)
+	curDkgSet, err := con.nodeSetCache.GetDKGSet(round)
 	if err != nil {
-		con.logger.Error("Error getting DKG set", "round", con.round, "error", err)
+		con.logger.Error("Error getting DKG set", "round", round, "error", err)
 		curDkgSet = make(map[types.NodeID]struct{})
 	}
 	if _, exist := curDkgSet[con.ID]; exist {
-		con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval/2),
+		con.event.RegisterTime(startTime.Add(config.RoundInterval/2),
 			func(time.Time) {
 				go func() {
-					con.runCRS()
+					con.runCRS(round)
 				}()
 			})
 	}
 
-	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval/2),
+	con.event.RegisterTime(startTime.Add(config.RoundInterval/2+config.LambdaDKG),
 		func(time.Time) {
-			go func() {
-				ticker := newTicker(con.gov, con.round, TickerDKG)
-				<-ticker.Tick()
+			go func(nextRound uint64) {
 				// Normally, gov.CRS would return non-nil. Use this for in case of
 				// unexpected network fluctuation and ensure the robustness.
-				for (con.gov.CRS(con.round+1) == common.Hash{}) {
+				for (con.gov.CRS(nextRound) == common.Hash{}) {
 					con.logger.Info("CRS is not ready yet. Try again later...",
 						"nodeID", con.ID)
 					time.Sleep(500 * time.Millisecond)
 				}
-				nextDkgSet, err := con.nodeSetCache.GetDKGSet(con.round + 1)
+				nextDkgSet, err := con.nodeSetCache.GetDKGSet(nextRound)
 				if err != nil {
 					con.logger.Error("Error getting DKG set",
-						"round", con.round+1, "error", err)
+						"round", nextRound,
+						"error", err)
 					return
 				}
 				if _, exist := nextDkgSet[con.ID]; !exist {
 					return
 				}
-				con.logger.Info("Selected as DKG set", "round", con.round+1)
+				con.logger.Info("Selected as DKG set", "round", nextRound)
 				con.cfgModule.registerDKG(
-					con.round+1, int(con.currentConfig.DKGSetSize/3)+1)
+					nextRound, int(config.DKGSetSize/3)+1)
 				con.event.RegisterTime(
-					startTime.Add(con.currentConfig.RoundInterval*2/3),
+					startTime.Add(config.RoundInterval*2/3),
 					func(time.Time) {
 						func() {
 							con.dkgReady.L.Lock()
 							defer con.dkgReady.L.Unlock()
 							con.dkgRunning = 0
 						}()
-						con.runDKGTSIG(con.round + 1)
+						con.logger.Debug("Calling Governance.Configuration",
+							"round", nextRound)
+						nextConfig := con.gov.Configuration(nextRound)
+						con.runDKGTSIG(nextRound, nextConfig)
 					})
-			}()
+			}(round + 1)
 		})
-	con.event.RegisterTime(startTime.Add(con.currentConfig.RoundInterval),
+	con.event.RegisterTime(startTime.Add(config.RoundInterval),
 		func(time.Time) {
 			// Change round.
-			con.round++
+			// Get configuration for next round.
+			nextRound := round + 1
 			con.logger.Debug("Calling Governance.Configuration",
-				"round", con.round+1)
-			con.lattice.AppendConfig(con.round+1, con.gov.Configuration(con.round+1))
-			con.initialRound(startTime.Add(con.currentConfig.RoundInterval))
+				"round", nextRound)
+			nextConfig := con.gov.Configuration(nextRound)
+			// Get configuration for the round next to next round. Configuration
+			// for that round should be ready at this moment and is required for
+			// lattice module. This logic is related to:
+			//  - roundShift
+			//  - notifyGenesisRound
+			futureRound := nextRound + 1
+			con.logger.Debug("Calling Governance.Configuration",
+				"round", futureRound)
+			futureConfig := con.gov.Configuration(futureRound)
+			con.logger.Debug("Append Config", "round", futureRound)
+			if err := con.lattice.AppendConfig(
+				futureRound, futureConfig); err != nil {
+				con.logger.Debug("Unable to append config",
+					"round", futureRound,
+					"error", err)
+				panic(err)
+			}
+			con.initialRound(
+				startTime.Add(config.RoundInterval), nextRound, nextConfig)
+			con.round = nextRound
 		})
 }
 
@@ -737,14 +756,6 @@ MessageLoop:
 						con.logger.Error("SanityCheck failed", "error", err)
 						continue MessageLoop
 					}
-				}
-				// TODO(mission): check with full node if this verification is required.
-				con.logger.Debug("Calling Application.VerifyBlock", "block", val)
-				switch con.app.VerifyBlock(val) {
-				case types.VerifyInvalidBlock:
-					con.logger.Error("VerifyBlock fail")
-					continue MessageLoop
-				default:
 				}
 				func() {
 					con.lock.Lock()
@@ -872,7 +883,7 @@ func (con *Consensus) ProcessAgreementResult(
 	agreement := con.baModules[rand.Position.ChainID]
 	aID := agreement.agreementID()
 	if rand.Position.Newer(&aID) {
-		con.logger.Info("Syncing BA", "position", rand.Position)
+		con.logger.Info("Syncing BA", "position", &rand.Position)
 		nodes, err := con.nodeSetCache.GetNodeSet(rand.Position.Round)
 		if err != nil {
 			return err
@@ -973,7 +984,7 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 	}
 	con.logger.Debug("Calling Network.BroadcastRandomnessResult",
 		"hash", rand.BlockHash,
-		"position", rand.Position,
+		"position", &rand.Position,
 		"randomness", hex.EncodeToString(rand.Randomness))
 	con.network.BroadcastRandomnessResult(rand)
 	if err := con.ccModule.processBlockRandomnessResult(rand); err != nil {

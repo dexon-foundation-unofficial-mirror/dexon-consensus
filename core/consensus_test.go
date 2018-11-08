@@ -522,7 +522,7 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 		con.cfgModule.registerDKG(uint64(0), n/3+1)
 	}
 	for _, con := range cons {
-		con.runDKGTSIG(uint64(0))
+		con.runDKGTSIG(0, gov.Configuration(0))
 	}
 	for _, con := range cons {
 		func() {
@@ -536,7 +536,7 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 	crsFinish := make(chan struct{})
 	for _, con := range cons {
 		go func(con *Consensus) {
-			con.runCRS()
+			con.runCRS(0)
 			crsFinish <- struct{}{}
 		}(con)
 	}
