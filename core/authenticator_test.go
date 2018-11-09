@@ -53,15 +53,12 @@ func (s *AuthenticatorTestSuite) TestBlock() {
 
 func (s *AuthenticatorTestSuite) TestVote() {
 	k := s.setupAuthenticator()
-	v := &types.Vote{
-		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
-		Type:       types.VoteCom,
-		BlockHash:  common.NewRandomHash(),
-		Period:     123,
-		Position: types.Position{
-			ChainID: 4,
-			Height:  6,
-		}}
+	v := types.NewVote(types.VoteCom, common.NewRandomHash(), 123)
+	v.Position = types.Position{
+		ChainID: 4,
+		Height:  6,
+	}
+	v.ProposerID = types.NodeID{Hash: common.NewRandomHash()}
 	s.NoError(k.SignVote(v))
 	ok, err := k.VerifyVote(v)
 	s.True(ok)

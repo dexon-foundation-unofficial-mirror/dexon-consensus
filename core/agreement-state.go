@@ -72,11 +72,7 @@ func (s *initialState) nextState() (agreementState, error) {
 	hash := s.a.recv.ProposeBlock()
 	s.a.lock.Lock()
 	defer s.a.lock.Unlock()
-	s.a.recv.ProposeVote(&types.Vote{
-		Type:      types.VoteInit,
-		BlockHash: hash,
-		Period:    s.a.period,
-	})
+	s.a.recv.ProposeVote(types.NewVote(types.VoteInit, hash, s.a.period))
 	return newPreCommitState(s.a), nil
 }
 
@@ -98,11 +94,7 @@ func (s *preCommitState) nextState() (agreementState, error) {
 	if hash == nullBlockHash {
 		hash = s.a.leader.leaderBlockHash()
 	}
-	s.a.recv.ProposeVote(&types.Vote{
-		Type:      types.VotePreCom,
-		BlockHash: hash,
-		Period:    s.a.period,
-	})
+	s.a.recv.ProposeVote(types.NewVote(types.VotePreCom, hash, s.a.period))
 	return newCommitState(s.a), nil
 }
 
@@ -127,11 +119,7 @@ func (s *commitState) nextState() (agreementState, error) {
 	} else {
 		hash = skipBlockHash
 	}
-	s.a.recv.ProposeVote(&types.Vote{
-		Type:      types.VoteCom,
-		BlockHash: hash,
-		Period:    s.a.period,
-	})
+	s.a.recv.ProposeVote(types.NewVote(types.VoteCom, hash, s.a.period))
 	return newForwardState(s.a), nil
 }
 

@@ -569,11 +569,8 @@ func (s *ConsensusTestSuite) TestSyncBA() {
 		Position:  pos,
 	}
 	for _, auth := range auths {
-		vote := &types.Vote{
-			Type:      types.VoteCom,
-			BlockHash: hash,
-			Position:  pos,
-		}
+		vote := types.NewVote(types.VoteCom, hash, 0)
+		vote.Position = pos
 		s.Require().NoError(auth.SignVote(vote))
 		baResult.Votes = append(baResult.Votes, *vote)
 	}
@@ -604,11 +601,8 @@ func (s *ConsensusTestSuite) TestSyncBA() {
 	s.Require().NoError(auths[0].SignVote(&baResult.Votes[0]))
 
 	for _, auth := range auths {
-		vote := &types.Vote{
-			Type:      types.VoteCom,
-			BlockHash: hash,
-			Position:  pos,
-		}
+		vote := types.NewVote(types.VoteCom, hash, 0)
+		vote.Position = pos
 		s.Require().NoError(auth.SignVote(vote))
 		baResult.Votes = append(baResult.Votes, *vote)
 	}

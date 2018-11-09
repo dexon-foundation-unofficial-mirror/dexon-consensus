@@ -74,11 +74,7 @@ func (s *AgreementStateTestSuite) prepareVote(
 	nID types.NodeID, voteType types.VoteType, blockHash common.Hash,
 	period uint64) (
 	vote *types.Vote) {
-	vote = &types.Vote{
-		Type:      voteType,
-		BlockHash: blockHash,
-		Period:    period,
-	}
+	vote = types.NewVote(voteType, blockHash, period)
 	s.Require().NoError(s.auths[nID].SignVote(vote))
 	return
 }

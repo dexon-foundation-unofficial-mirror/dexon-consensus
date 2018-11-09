@@ -36,13 +36,18 @@ const (
 	MaxVoteType
 )
 
+// VoteHeader is the header for vote, which can be used as map keys.
+type VoteHeader struct {
+	ProposerID NodeID      `json:"proposer_id"`
+	Type       VoteType    `json:"type"`
+	BlockHash  common.Hash `json:"block_hash"`
+	Period     uint64      `json:"period"`
+	Position   Position    `json:"position"`
+}
+
 // Vote is the vote structure defined in Crypto Shuffle Algorithm.
 type Vote struct {
-	ProposerID NodeID           `json:"proposer_id"`
-	Type       VoteType         `json:"type"`
-	BlockHash  common.Hash      `json:"block_hash"`
-	Period     uint64           `json:"period"`
-	Position   Position         `json:"position"`
+	VoteHeader `json:"header"`
 	Signature  crypto.Signature `json:"signature"`
 }
 
@@ -51,14 +56,26 @@ func (v *Vote) String() string {
 		&v.Position, v.Period, v.Type, v.BlockHash.String()[:6])
 }
 
+// NewVote constructs a Vote instance with header fields.
+func NewVote(t VoteType, hash common.Hash, period uint64) *Vote {
+	return &Vote{
+		VoteHeader: VoteHeader{
+			Type:      t,
+			BlockHash: hash,
+			Period:    period,
+		}}
+}
+
 // Clone returns a deep copy of a vote.
 func (v *Vote) Clone() *Vote {
 	return &Vote{
-		ProposerID: v.ProposerID,
-		Type:       v.Type,
-		BlockHash:  v.BlockHash,
-		Period:     v.Period,
-		Position:   v.Position,
-		Signature:  v.Signature.Clone(),
+		VoteHeader: VoteHeader{
+			ProposerID: v.ProposerID,
+			Type:       v.Type,
+			BlockHash:  v.BlockHash,
+			Period:     v.Period,
+			Position:   v.Position,
+		},
+		Signature: v.Signature.Clone(),
 	}
 }
