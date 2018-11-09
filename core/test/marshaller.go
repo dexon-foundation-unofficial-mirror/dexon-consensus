@@ -101,6 +101,12 @@ func (m *DefaultMarshaller) Unmarshal(
 			break
 		}
 		msg = *packed
+	case "pull-request":
+		req := &PullRequest{}
+		if err = json.Unmarshal(payload, req); err != nil {
+			break
+		}
+		msg = req
 	default:
 		if m.fallback == nil {
 			err = fmt.Errorf("unknown msg type: %v", msgType)
@@ -144,6 +150,9 @@ func (m *DefaultMarshaller) Marshal(
 		payload, err = json.Marshal(msg)
 	case packedStateChanges:
 		msgType = "packed-state-changes"
+		payload, err = json.Marshal(msg)
+	case *PullRequest:
+		msgType = "pull-request"
 		payload, err = json.Marshal(msg)
 	default:
 		if m.fallback == nil {

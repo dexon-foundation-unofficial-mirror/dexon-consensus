@@ -19,16 +19,26 @@ package test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
+)
+
+const (
+	// Count of rounds of notary set cached in network module.
+	cachedNotarySetSize = 10
+	// Count of maximum count of peers to pull votes from.
+	maxPullingPeerCount = 3
 )
 
 // NetworkType is the simulation network type.
@@ -48,22 +58,100 @@ type NetworkConfig struct {
 	PeerPort   int
 }
 
+// PullRequest is a generic request to pull everything (ex. vote, block...).
+type PullRequest struct {
+	Requester types.NodeID
+	Type      string
+	Identity  interface{}
+}
+
+// MarshalJSON implements json.Marshaller.
+func (req *PullRequest) MarshalJSON() (b []byte, err error) {
+	var idAsBytes []byte
+	// Make sure caller prepare correct identity for pull requests.
+	switch req.Type {
+	case "block":
+		idAsBytes, err = json.Marshal(req.Identity.(common.Hashes))
+	case "vote":
+		idAsBytes, err = json.Marshal(req.Identity.(types.Position))
+	default:
+		err = fmt.Errorf("unknown ID type for pull request: %v", req.Type)
+	}
+	if err != nil {
+		return
+	}
+	b, err = json.Marshal(&struct {
+		Requester types.NodeID `json:"req"`
+		Type      string       `json:"type"`
+		Identity  []byte       `json:"id"`
+	}{req.Requester, req.Type, idAsBytes})
+	return
+}
+
+// UnmarshalJSON iumplements json.Unmarshaller.
+func (req *PullRequest) UnmarshalJSON(data []byte) (err error) {
+	rawReq := &struct {
+		Requester types.NodeID `json:"req"`
+		Type      string       `json:"type"`
+		Identity  []byte       `json:"id"`
+	}{}
+	if err = json.Unmarshal(data, rawReq); err != nil {
+		return
+	}
+	var ID interface{}
+	switch rawReq.Type {
+	case "block":
+		hashes := common.Hashes{}
+		if err = json.Unmarshal(rawReq.Identity, &hashes); err != nil {
+			break
+		}
+		ID = hashes
+	case "vote":
+		pos := types.Position{}
+		if err = json.Unmarshal(rawReq.Identity, &pos); err != nil {
+			break
+		}
+		ID = pos
+	default:
+		err = fmt.Errorf("unknown pull request type: %v", rawReq.Type)
+	}
+	if err != nil {
+		return
+	}
+	req.Requester = rawReq.Requester
+	req.Type = rawReq.Type
+	req.Identity = ID
+	return
+}
+
 // Network implements core.Network interface based on TransportClient.
 type Network struct {
-	config             NetworkConfig
-	ctx                context.Context
-	ctxCancel          context.CancelFunc
-	trans              TransportClient
-	fromTransport      <-chan *TransportEnvelope
-	toConsensus        chan interface{}
-	toNode             chan interface{}
-	sentRandomnessLock sync.Mutex
-	sentRandomness     map[common.Hash]struct{}
-	sentAgreementLock  sync.Mutex
-	sentAgreement      map[common.Hash]struct{}
-	blockCacheLock     sync.RWMutex
-	blockCache         map[common.Hash]*types.Block
-	stateModule        *State
+	ID                   types.NodeID
+	config               NetworkConfig
+	ctx                  context.Context
+	ctxCancel            context.CancelFunc
+	trans                TransportClient
+	fromTransport        <-chan *TransportEnvelope
+	toConsensus          chan interface{}
+	toNode               chan interface{}
+	sentRandomnessLock   sync.Mutex
+	sentRandomness       map[common.Hash]struct{}
+	sentAgreementLock    sync.Mutex
+	sentAgreement        map[common.Hash]struct{}
+	blockCacheLock       sync.RWMutex
+	blockCache           map[common.Hash]*types.Block
+	voteCacheLock        sync.RWMutex
+	voteCache            map[types.Position]map[types.VoteHeader]*types.Vote
+	voteCacheSize        int
+	votePositions        []types.Position
+	stateModule          *State
+	notarySetLock        sync.RWMutex
+	notarySets           []map[types.NodeID]struct{}
+	notarySetMinRound    uint64
+	peers                map[types.NodeID]struct{}
+	unreceivedBlocksLock sync.RWMutex
+	unreceivedBlocks     map[common.Hash]chan<- common.Hash
+	latencyModel         LatencyModel
 }
 
 // NewNetwork setup network stuffs for nodes, which provides an
@@ -72,12 +160,17 @@ func NewNetwork(pubKey crypto.PublicKey, latency LatencyModel,
 	marshaller Marshaller, config NetworkConfig) (n *Network) {
 	// Construct basic network instance.
 	n = &Network{
-		config:         config,
-		toConsensus:    make(chan interface{}, 1000),
-		toNode:         make(chan interface{}, 1000),
-		sentRandomness: make(map[common.Hash]struct{}),
-		sentAgreement:  make(map[common.Hash]struct{}),
-		blockCache:     make(map[common.Hash]*types.Block),
+		ID:               types.NewNodeID(pubKey),
+		config:           config,
+		toConsensus:      make(chan interface{}, 1000),
+		toNode:           make(chan interface{}, 1000),
+		sentRandomness:   make(map[common.Hash]struct{}),
+		sentAgreement:    make(map[common.Hash]struct{}),
+		blockCache:       make(map[common.Hash]*types.Block),
+		unreceivedBlocks: make(map[common.Hash]chan<- common.Hash),
+		latencyModel:     latency,
+		voteCache: make(
+			map[types.Position]map[types.VoteHeader]*types.Vote),
 	}
 	n.ctx, n.ctxCancel = context.WithCancel(context.Background())
 	// Construct transport layer.
@@ -96,23 +189,12 @@ func NewNetwork(pubKey crypto.PublicKey, latency LatencyModel,
 
 // PullBlocks implements core.Network interface.
 func (n *Network) PullBlocks(hashes common.Hashes) {
-	go func() {
-		n.blockCacheLock.RLock()
-		defer n.blockCacheLock.RUnlock()
-		for _, hash := range hashes {
-			// TODO(jimmy-dexon): request block from network instead of cache.
-			if block, exist := n.blockCache[hash]; exist {
-				n.toConsensus <- block
-				continue
-			}
-			panic(fmt.Errorf("unknown block %s requested", hash))
-		}
-	}()
+	go n.pullBlocksAsync(hashes)
 }
 
 // PullVotes implements core.Network interface.
 func (n *Network) PullVotes(pos types.Position) {
-	// TODO(jimmy-dexon): implement this.
+	go n.pullVotesAsync(pos)
 }
 
 // BroadcastVote implements core.Network interface.
@@ -120,6 +202,7 @@ func (n *Network) BroadcastVote(vote *types.Vote) {
 	if err := n.trans.Broadcast(vote); err != nil {
 		panic(err)
 	}
+	n.addVoteToCache(vote)
 }
 
 // BroadcastBlock implements core.Network interface.
@@ -127,6 +210,7 @@ func (n *Network) BroadcastBlock(block *types.Block) {
 	if err := n.trans.Broadcast(block); err != nil {
 		panic(err)
 	}
+	n.addBlockToCache(block)
 }
 
 // BroadcastAgreementResult implements core.Network interface.
@@ -223,26 +307,32 @@ func (n *Network) Setup(serverEndpoint interface{}) (err error) {
 	if err != nil {
 		return
 	}
+	peerKeys := n.trans.Peers()
+	n.peers = make(map[types.NodeID]struct{})
+	for _, k := range peerKeys {
+		n.peers[types.NewNodeID(k)] = struct{}{}
+	}
 	return
 }
 
 func (n *Network) dispatchMsg(e *TransportEnvelope) {
 	switch v := e.Msg.(type) {
 	case *types.Block:
+		n.addBlockToCache(v)
+		// Notify pulling routine about the newly arrived block.
 		func() {
-			n.blockCacheLock.Lock()
-			defer n.blockCacheLock.Unlock()
-			if len(n.blockCache) > 500 {
-				// Randomly purge one block from cache.
-				for k := range n.blockCache {
-					delete(n.blockCache, k)
-					break
-				}
+			n.unreceivedBlocksLock.Lock()
+			defer n.unreceivedBlocksLock.Unlock()
+			if ch, exists := n.unreceivedBlocks[v.Hash]; exists {
+				ch <- v.Hash
 			}
-			n.blockCache[v.Hash] = v
 		}()
 		n.toConsensus <- e.Msg
-	case *types.Vote, *types.AgreementResult, *types.BlockRandomnessResult,
+	case *types.Vote:
+		// Add this vote to cache.
+		n.addVoteToCache(v)
+		n.toConsensus <- e.Msg
+	case *types.AgreementResult, *types.BlockRandomnessResult,
 		*typesDKG.PrivateShare, *typesDKG.PartialSignature:
 		n.toConsensus <- e.Msg
 	case packedStateChanges:
@@ -253,8 +343,51 @@ func (n *Network) dispatchMsg(e *TransportEnvelope) {
 		if err := n.stateModule.AddRequestsFromOthers([]byte(v)); err != nil {
 			panic(err)
 		}
+	case *PullRequest:
+		go n.handlePullRequest(v)
 	default:
 		n.toNode <- e.Msg
+	}
+}
+
+func (n *Network) handlePullRequest(req *PullRequest) {
+	switch req.Type {
+	case "block":
+		hashes := req.Identity.(common.Hashes)
+		func() {
+			n.blockCacheLock.Lock()
+			defer n.blockCacheLock.Unlock()
+		All:
+			for _, h := range hashes {
+				b, exists := n.blockCache[h]
+				if !exists {
+					continue
+				}
+				select {
+				case <-n.ctx.Done():
+					break All
+				default:
+				}
+				if err := n.trans.Send(req.Requester, b); err != nil {
+					log.Println("unable to send block", req.Requester, err)
+				}
+			}
+		}()
+	case "vote":
+		pos := req.Identity.(types.Position)
+		func() {
+			n.voteCacheLock.Lock()
+			defer n.voteCacheLock.Unlock()
+			if votes, exists := n.voteCache[pos]; exists {
+				for _, v := range votes {
+					if err := n.trans.Send(req.Requester, v); err != nil {
+						log.Println("unable to send vote", req.Requester, err)
+					}
+				}
+			}
+		}()
+	default:
+		panic(fmt.Errorf("unknown type of pull request: %v", req.Type))
 	}
 }
 
@@ -319,4 +452,147 @@ func (n *Network) ReceiveChanForNode() <-chan interface{} {
 // addStateModule attaches a State instance to this network.
 func (n *Network) addStateModule(s *State) {
 	n.stateModule = s
+}
+
+// appendRoundSetting updates essential info to network module for each round.
+func (n *Network) appendRoundSetting(
+	round uint64, notarySet map[types.NodeID]struct{}) {
+	n.notarySetLock.Lock()
+	defer n.notarySetLock.Unlock()
+	if len(n.notarySets) != 0 {
+		// This network module is already initialized, do some check against
+		// the inputs.
+		if round != n.notarySetMinRound+uint64(len(n.notarySets)) {
+			panic(fmt.Errorf(
+				"round not increasing when appending round setting: %v", round))
+		}
+	} else {
+		n.notarySetMinRound = round
+	}
+	n.notarySets = append(n.notarySets, notarySet)
+	// Purge cached notary sets.
+	if len(n.notarySets) > cachedNotarySetSize {
+		n.notarySets = n.notarySets[1:]
+		n.notarySetMinRound++
+	}
+	return
+}
+
+func (n *Network) pullBlocksAsync(hashes common.Hashes) {
+	// Setup notification channels for each block hash.
+	notYetReceived := make(map[common.Hash]struct{})
+	ch := make(chan common.Hash, len(hashes))
+	func() {
+		n.unreceivedBlocksLock.Lock()
+		defer n.unreceivedBlocksLock.Unlock()
+		for _, h := range hashes {
+			if _, exists := n.unreceivedBlocks[h]; exists {
+				panic(fmt.Errorf("attempting to pull one block multiple times"))
+			}
+			n.unreceivedBlocks[h] = ch
+		}
+	}()
+	// Clean all unreceived block entry in unrecelivedBlocks field when leaving.
+	defer func() {
+		n.unreceivedBlocksLock.Lock()
+		defer n.unreceivedBlocksLock.Unlock()
+		for _, h := range hashes {
+			delete(n.unreceivedBlocks, h)
+		}
+	}()
+	req := &PullRequest{
+		Requester: n.ID,
+		Type:      "block",
+		Identity:  hashes,
+	}
+	// Randomly pick peers to send pull requests.
+Loop:
+	for nID := range n.peers {
+		if err := n.trans.Send(nID, req); err != nil {
+			// Try next peer.
+			continue
+		}
+		select {
+		case <-n.ctx.Done():
+			break Loop
+		case <-time.After(2 * n.latencyModel.Delay()):
+			// Consume everything in the notification channel.
+			for {
+				select {
+				case h, ok := <-ch:
+					if !ok {
+						// This network module is closed.
+						break Loop
+					}
+					delete(notYetReceived, h)
+					if len(notYetReceived) == 0 {
+						break Loop
+					}
+				default:
+					continue Loop
+				}
+			}
+		}
+	}
+}
+
+func (n *Network) pullVotesAsync(pos types.Position) {
+	// Randomly pick several peers to pull votes from.
+	req := &PullRequest{
+		Requester: n.ID,
+		Type:      "vote",
+		Identity:  pos,
+	}
+	// Get corresponding notary set.
+	notarySet := func() map[types.NodeID]struct{} {
+		n.notarySetLock.Lock()
+		defer n.notarySetLock.Unlock()
+		return n.notarySets[pos.Round-n.notarySetMinRound]
+	}()
+	// Randomly select one peer from notary set and send a pull request.
+	sentCount := 0
+	for nID := range notarySet {
+		if err := n.trans.Send(nID, req); err != nil {
+			// Try next peer.
+			continue
+		}
+		sentCount++
+		if sentCount >= maxPullingPeerCount {
+			break
+		}
+	}
+}
+
+func (n *Network) addBlockToCache(b *types.Block) {
+	n.blockCacheLock.Lock()
+	defer n.blockCacheLock.Unlock()
+	if len(n.blockCache) > 1000 {
+		// Randomly purge one block from cache.
+		for k := range n.blockCache {
+			delete(n.blockCache, k)
+			break
+		}
+	}
+	n.blockCache[b.Hash] = b
+}
+
+func (n *Network) addVoteToCache(v *types.Vote) {
+	n.voteCacheLock.Lock()
+	defer n.voteCacheLock.Unlock()
+	if n.voteCacheSize >= 128 {
+		pos := n.votePositions[0]
+		n.voteCacheSize -= len(n.voteCache[pos])
+		delete(n.voteCache, pos)
+		n.votePositions = n.votePositions[1:]
+	}
+	if _, exists := n.voteCache[v.Position]; !exists {
+		n.votePositions = append(n.votePositions, v.Position)
+		n.voteCache[v.Position] =
+			make(map[types.VoteHeader]*types.Vote)
+	}
+	if _, exists := n.voteCache[v.Position][v.VoteHeader]; exists {
+		return
+	}
+	n.voteCache[v.Position][v.VoteHeader] = v
+	n.voteCacheSize++
 }
