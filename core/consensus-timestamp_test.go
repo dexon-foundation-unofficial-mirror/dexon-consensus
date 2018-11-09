@@ -170,7 +170,7 @@ func (s *ConsensusTimestampTest) TestTimestampConfigChange() {
 	s.Require().NoError(err)
 }
 
-func (s *ConsensusTimestampTest) TestRoundInterleave() {
+func (s *ConsensusTimestampTest) TestTimestampRoundInterleave() {
 	chainNum := 9
 	sigma := 100 * time.Millisecond
 	now := time.Now().UTC()
