@@ -157,3 +157,16 @@ func cloneDKGFinalize(final *typesDKG.Finalize) (
 	}
 	return
 }
+
+func cloneBlockRandomnessResult(rand *types.BlockRandomnessResult) (
+	copied *types.BlockRandomnessResult) {
+	b, err := rlp.EncodeToBytes(rand)
+	if err != nil {
+		panic(err)
+	}
+	copied = &types.BlockRandomnessResult{}
+	if err = rlp.DecodeBytes(b, copied); err != nil {
+		panic(err)
+	}
+	return
+}

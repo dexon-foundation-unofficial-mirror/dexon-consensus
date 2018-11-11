@@ -719,7 +719,6 @@ func (con *Consensus) initialRound(
 			}
 			con.initialRound(
 				startTime.Add(config.RoundInterval), nextRound, nextConfig)
-			con.round = nextRound
 		})
 }
 
@@ -907,9 +906,6 @@ func (con *Consensus) ProcessAgreementResult(
 		return nil
 	}
 	if !con.ccModule.blockRegistered(rand.BlockHash) {
-		return nil
-	}
-	if DiffUint64(con.round, rand.Position.Round) > 1 {
 		return nil
 	}
 	// Sanity check done.

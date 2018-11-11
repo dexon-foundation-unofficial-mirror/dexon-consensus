@@ -207,6 +207,8 @@ func (n *Network) BroadcastVote(vote *types.Vote) {
 
 // BroadcastBlock implements core.Network interface.
 func (n *Network) BroadcastBlock(block *types.Block) {
+	// Avoid data race in fake transport.
+	block = n.cloneForFake(block).(*types.Block)
 	if err := n.trans.Broadcast(block); err != nil {
 		panic(err)
 	}
@@ -316,7 +318,8 @@ func (n *Network) Setup(serverEndpoint interface{}) (err error) {
 }
 
 func (n *Network) dispatchMsg(e *TransportEnvelope) {
-	switch v := e.Msg.(type) {
+	msg := n.cloneForFake(e.Msg)
+	switch v := msg.(type) {
 	case *types.Block:
 		n.addBlockToCache(v)
 		// Notify pulling routine about the newly arrived block.
@@ -327,14 +330,14 @@ func (n *Network) dispatchMsg(e *TransportEnvelope) {
 				ch <- v.Hash
 			}
 		}()
-		n.toConsensus <- e.Msg
+		n.toConsensus <- v
 	case *types.Vote:
 		// Add this vote to cache.
 		n.addVoteToCache(v)
-		n.toConsensus <- e.Msg
+		n.toConsensus <- v
 	case *types.AgreementResult, *types.BlockRandomnessResult,
 		*typesDKG.PrivateShare, *typesDKG.PartialSignature:
-		n.toConsensus <- e.Msg
+		n.toConsensus <- v
 	case packedStateChanges:
 		if n.stateModule == nil {
 			panic(errors.New(
@@ -346,7 +349,7 @@ func (n *Network) dispatchMsg(e *TransportEnvelope) {
 	case *PullRequest:
 		go n.handlePullRequest(v)
 	default:
-		n.toNode <- e.Msg
+		n.toNode <- v
 	}
 }
 
@@ -595,4 +598,18 @@ func (n *Network) addVoteToCache(v *types.Vote) {
 	}
 	n.voteCache[v.Position][v.VoteHeader] = v
 	n.voteCacheSize++
+}
+
+func (n *Network) cloneForFake(v interface{}) interface{} {
+	if n.config.Type != NetworkTypeFake {
+		return v
+	}
+	switch val := v.(type) {
+	case *types.Block:
+		return val.Clone()
+	case *types.BlockRandomnessResult:
+		// Perform deep copy for randomness result.
+		return cloneBlockRandomnessResult(val)
+	}
+	return v
 }

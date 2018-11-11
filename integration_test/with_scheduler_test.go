@@ -25,11 +25,11 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type NonByzantineTestSuite struct {
+type WithSchedulerTestSuite struct {
 	suite.Suite
 }
 
-func (s *NonByzantineTestSuite) TestNonByzantine() {
+func (s *WithSchedulerTestSuite) TestNonByzantine() {
 	var (
 		networkLatency = &test.NormalLatencyModel{
 			Sigma: 20,
@@ -67,7 +67,7 @@ func (s *NonByzantineTestSuite) TestNonByzantine() {
 	req.NoError(VerifyApps(apps))
 }
 
-func (s *NonByzantineTestSuite) TestConfigurationChange() {
+func (s *WithSchedulerTestSuite) TestConfigurationChange() {
 	// This test case verify the correctness of core.Lattice when configuration
 	// changes.
 	// - Configuration changes are registered at 'pickedNode', and would carried
@@ -137,6 +137,6 @@ func (s *NonByzantineTestSuite) TestConfigurationChange() {
 	req.NoError(VerifyApps(apps))
 }
 
-func TestNonByzantine(t *testing.T) {
-	suite.Run(t, new(NonByzantineTestSuite))
+func TestWithScheduler(t *testing.T) {
+	suite.Run(t, new(WithSchedulerTestSuite))
 }

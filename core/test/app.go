@@ -76,6 +76,7 @@ type AppDeliveredRecord struct {
 	ConsensusTime   time.Time
 	ConsensusHeight uint64
 	When            time.Time
+	Pos             types.Position
 }
 
 // App implements Application interface for testing purpose.
@@ -89,7 +90,7 @@ type App struct {
 	DeliverSequence    common.Hashes
 	deliveredLock      sync.RWMutex
 	blocks             map[common.Hash]*types.Block
-	blocksLock         sync.Mutex
+	blocksLock         sync.RWMutex
 	state              *State
 }
 
@@ -162,7 +163,7 @@ func (app *App) TotalOrderingDelivered(blockHashes common.Hashes, mode uint32) {
 
 // BlockDelivered implements Application interface.
 func (app *App) BlockDelivered(
-	blockHash common.Hash, _ types.Position, result types.FinalizationResult) {
+	blockHash common.Hash, pos types.Position, result types.FinalizationResult) {
 	func() {
 		app.deliveredLock.Lock()
 		defer app.deliveredLock.Unlock()
@@ -170,6 +171,7 @@ func (app *App) BlockDelivered(
 			ConsensusTime:   result.Timestamp,
 			ConsensusHeight: result.Height,
 			When:            time.Now().UTC(),
+			Pos:             pos,
 		}
 		app.DeliverSequence = append(app.DeliverSequence, blockHash)
 	}()
@@ -178,8 +180,8 @@ func (app *App) BlockDelivered(
 		if app.state == nil {
 			return
 		}
-		app.blocksLock.Lock()
-		defer app.blocksLock.Unlock()
+		app.blocksLock.RLock()
+		defer app.blocksLock.RUnlock()
 		b := app.blocks[blockHash]
 		if err := app.state.Apply(b.Payload); err != nil {
 			if err != ErrDuplicatedChange {
@@ -187,6 +189,16 @@ func (app *App) BlockDelivered(
 			}
 		}
 	}()
+}
+
+// GetLatestDeliveredPosition would return the latest position of delivered
+// block seen by this application instance.
+func (app *App) GetLatestDeliveredPosition() types.Position {
+	app.deliveredLock.RLock()
+	defer app.deliveredLock.RUnlock()
+	app.blocksLock.RLock()
+	defer app.blocksLock.RUnlock()
+	return app.blocks[app.DeliverSequence[len(app.DeliverSequence)-1]].Position
 }
 
 // Compare performs these checks against another App instance
