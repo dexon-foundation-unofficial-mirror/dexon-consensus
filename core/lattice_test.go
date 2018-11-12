@@ -191,8 +191,8 @@ func (s *LatticeTestSuite) TestBasicUsage() {
 			req.NoError(err)
 			req.NoError(other.processBlock(&b))
 			revealed += b.Hash.String() + ","
-			revealSeq[revealed] = struct{}{}
 		}
+		revealSeq[revealed] = struct{}{}
 		apps = append(apps, other.app)
 	}
 	// Make sure not only one revealing sequence.
