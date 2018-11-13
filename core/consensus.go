@@ -284,6 +284,7 @@ type Consensus struct {
 	// Dexon consensus v1's modules.
 	lattice  *Lattice
 	ccModule *compactionChain
+	toSyncer *totalOrderingSyncer
 
 	// Interfaces.
 	db        blockdb.BlockDatabase
@@ -1066,6 +1067,7 @@ func (con *Consensus) processFinalizedBlock(block *types.Block) (err error) {
 				}
 				err = nil
 			}
+			con.lattice.ProcessFinalizedBlock(b)
 			con.deliverBlock(b)
 		}
 	}
