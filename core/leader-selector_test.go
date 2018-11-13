@@ -150,6 +150,34 @@ func (s *LeaderSelectorTestSuite) TestValidLeaderFn() {
 	s.Len(leader.pendingBlocks, 0)
 }
 
+func (s *LeaderSelectorTestSuite) TestPotentialLeader() {
+	leader := s.newLeader()
+	blocks := make(map[common.Hash]*types.Block)
+	for i := 0; i < 10; i++ {
+		if i > 0 {
+			s.mockValidLeaderDefault = false
+		}
+		prv, err := ecdsa.NewPrivateKey()
+		s.Require().NoError(err)
+		block := &types.Block{
+			ProposerID: types.NewNodeID(prv.PublicKey()),
+			Hash:       common.NewRandomHash(),
+		}
+		s.Require().NoError(
+			NewAuthenticator(prv).SignCRS(block, leader.hashCRS))
+		ok, _ := leader.potentialLeader(block)
+		s.Require().NoError(leader.processBlock(block))
+		if i > 0 {
+			if ok {
+				s.Contains(leader.pendingBlocks, block)
+			} else {
+				s.NotContains(leader.pendingBlocks, block)
+			}
+			blocks[block.Hash] = block
+		}
+	}
+}
+
 func TestLeaderSelector(t *testing.T) {
 	suite.Run(t, new(LeaderSelectorTestSuite))
 }

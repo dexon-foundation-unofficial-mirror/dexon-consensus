@@ -83,6 +83,18 @@ type FinalizationResult struct {
 	Height     uint64      `json:"height"`
 }
 
+// Clone returns a deep copy of FinalizationResult
+func (f FinalizationResult) Clone() FinalizationResult {
+	frcopy := FinalizationResult{
+		ParentHash: f.ParentHash,
+		Timestamp:  f.Timestamp,
+		Height:     f.Height,
+	}
+	frcopy.Randomness = make([]byte, len(f.Randomness))
+	copy(frcopy.Randomness, f.Randomness)
+	return frcopy
+}
+
 type rlpFinalizationResult struct {
 	ParentHash common.Hash
 	Randomness []byte
@@ -223,9 +235,7 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.Position.Height = b.Position.Height
 	bcopy.Signature = b.Signature.Clone()
 	bcopy.CRSSignature = b.CRSSignature.Clone()
-	bcopy.Finalization.ParentHash = b.Finalization.ParentHash
-	bcopy.Finalization.Timestamp = b.Finalization.Timestamp
-	bcopy.Finalization.Height = b.Finalization.Height
+	bcopy.Finalization = b.Finalization.Clone()
 	bcopy.Witness.Height = b.Witness.Height
 	bcopy.Witness.Data = make([]byte, len(b.Witness.Data))
 	copy(bcopy.Witness.Data, b.Witness.Data)
@@ -235,8 +245,6 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.Payload = make([]byte, len(b.Payload))
 	copy(bcopy.Payload, b.Payload)
 	bcopy.PayloadHash = b.PayloadHash
-	bcopy.Finalization.Randomness = make([]byte, len(b.Finalization.Randomness))
-	copy(bcopy.Finalization.Randomness, b.Finalization.Randomness)
 	return
 }
 

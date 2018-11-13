@@ -101,13 +101,17 @@ func (l *leaderSelector) leaderBlockHash() common.Hash {
 	defer l.lock.Unlock()
 	newPendingBlocks := []*types.Block{}
 	for _, b := range l.pendingBlocks {
+		ok, dist := l.potentialLeader(b)
+		if !ok {
+			continue
+		}
 		ok, err := l.validLeader(b)
 		if err != nil {
 			l.logger.Error("Error checking validLeader", "error", err, "block", b)
 			continue
 		}
 		if ok {
-			l.updateLeader(b)
+			l.updateLeader(b, dist)
 		} else {
 			newPendingBlocks = append(newPendingBlocks, b)
 		}
@@ -126,6 +130,10 @@ func (l *leaderSelector) processBlock(block *types.Block) error {
 	}
 	l.lock.Lock()
 	defer l.lock.Unlock()
+	ok, dist := l.potentialLeader(block)
+	if !ok {
+		return nil
+	}
 	ok, err = l.validLeader(block)
 	if err != nil {
 		return err
@@ -134,14 +142,20 @@ func (l *leaderSelector) processBlock(block *types.Block) error {
 		l.pendingBlocks = append(l.pendingBlocks, block)
 		return nil
 	}
-	l.updateLeader(block)
+	l.updateLeader(block, dist)
 	return nil
 }
-func (l *leaderSelector) updateLeader(block *types.Block) {
+
+func (l *leaderSelector) potentialLeader(block *types.Block) (bool, *big.Int) {
 	dist := l.distance(block.CRSSignature)
 	cmp := l.minCRSBlock.Cmp(dist)
 	if cmp > 0 || (cmp == 0 && block.Hash.Less(l.minBlockHash)) {
-		l.minCRSBlock = dist
-		l.minBlockHash = block.Hash
+		return true, dist
 	}
+	return false, dist
+}
+
+func (l *leaderSelector) updateLeader(block *types.Block, dist *big.Int) {
+	l.minCRSBlock = dist
+	l.minBlockHash = block.Hash
 }

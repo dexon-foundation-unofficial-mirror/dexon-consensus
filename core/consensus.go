@@ -1002,9 +1002,8 @@ func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
 
 // deliverBlock deliver a block to application layer.
 func (con *Consensus) deliverBlock(b *types.Block) {
-	// TODO(mission): clone types.FinalizationResult
 	con.logger.Debug("Calling Application.BlockDelivered", "block", b)
-	con.app.BlockDelivered(b.Hash, b.Position, b.Finalization)
+	con.app.BlockDelivered(b.Hash, b.Position, b.Finalization.Clone())
 	if b.Position.Round+roundShift == con.roundToNotify {
 		// Only the first block delivered of that round would
 		// trigger this noitification.
