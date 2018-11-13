@@ -63,7 +63,7 @@ func (s *NodeSetCacheTestSuite) TestGovernanceIntf() {
 	var gov Governance
 	_, pubKeys, err := test.NewKeys(7)
 	s.Require().NoError(err)
-	gov, err = test.NewGovernance(pubKeys, 250*time.Millisecond)
+	gov, err = test.NewGovernance(pubKeys, 250*time.Millisecond, ConfigRoundShift)
 	s.Require().NoError(err)
 	_, ok := gov.(NodeSetCacheInterface)
 	s.True(ok)

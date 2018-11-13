@@ -159,14 +159,3 @@ func DiffUint64(a, b uint64) uint64 {
 	}
 	return b - a
 }
-
-// notifyGenesisRounds notifies governance to generate configs based on genesis
-// state.
-func notifyGenesisRounds(initBlock *types.Block, gov Governance) {
-	if initBlock.Position.Round != 0 || !initBlock.IsGenesis() {
-		return
-	}
-	for round := uint64(0); round < roundShift; round++ {
-		gov.NotifyRoundHeight(round, 0)
-	}
-}

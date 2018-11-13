@@ -315,11 +315,7 @@ func NewConsensus(
 	logger common.Logger) *Consensus {
 
 	// TODO(w): load latest blockHeight from DB, and use config at that height.
-	var (
-		round uint64
-		// round 0 and 1 are decided at beginning.
-		roundToNotify = round + 2
-	)
+	var round uint64
 	logger.Debug("Calling Governance.Configuration", "round", round)
 	config := gov.Configuration(round)
 	nodeSetCache := NewNodeSetCache(gov)
@@ -366,7 +362,6 @@ func NewConsensus(
 		authModule:       authModule,
 		event:            common.NewEvent(),
 		logger:           logger,
-		roundToNotify:    roundToNotify,
 	}
 
 	validLeader := func(block *types.Block) (bool, error) {
@@ -416,9 +411,9 @@ func NewConsensus(
 
 // Run starts running DEXON Consensus.
 func (con *Consensus) Run(initBlock *types.Block) {
-	con.logger.Debug("Calling Governance.NotifyRoundHeight for genesis rounds",
-		"block", initBlock)
-	notifyGenesisRounds(initBlock, con.gov)
+	// The block past from full node should be delivered already or known by
+	// full node. We don't have to notify it.
+	con.roundToNotify = initBlock.Position.Round + 1
 	initRound := initBlock.Position.Round
 	con.logger.Debug("Calling Governance.Configuration", "round", initRound)
 	initConfig := con.gov.Configuration(initRound)
@@ -1004,7 +999,7 @@ func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
 func (con *Consensus) deliverBlock(b *types.Block) {
 	con.logger.Debug("Calling Application.BlockDelivered", "block", b)
 	con.app.BlockDelivered(b.Hash, b.Position, b.Finalization.Clone())
-	if b.Position.Round+roundShift == con.roundToNotify {
+	if b.Position.Round == con.roundToNotify {
 		// Only the first block delivered of that round would
 		// trigger this noitification.
 		con.logger.Debug("Calling Governance.NotifyRoundHeight",

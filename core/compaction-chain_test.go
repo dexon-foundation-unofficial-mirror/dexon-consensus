@@ -38,7 +38,8 @@ func (s *CompactionChainTestSuite) SetupTest() {
 func (s *CompactionChainTestSuite) newCompactionChain() *compactionChain {
 	_, pubKeys, err := test.NewKeys(4)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(pubKeys, 100*time.Millisecond)
+	gov, err := test.NewGovernance(
+		pubKeys, 100*time.Millisecond, ConfigRoundShift)
 	s.Require().NoError(err)
 	cc := newCompactionChain(gov)
 	cc.init(&types.Block{})

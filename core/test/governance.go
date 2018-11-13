@@ -35,6 +35,7 @@ import (
 
 // Governance is an implementation of Goverance for testing purpose.
 type Governance struct {
+	roundShift           uint64
 	configs              []*types.Config
 	nodeSets             [][]crypto.PublicKey
 	stateModule          *State
@@ -44,13 +45,14 @@ type Governance struct {
 }
 
 // NewGovernance constructs a Governance instance.
-func NewGovernance(genesisNodes []crypto.PublicKey,
-	lambda time.Duration) (g *Governance, err error) {
+func NewGovernance(genesisNodes []crypto.PublicKey, lambda time.Duration,
+	roundShift uint64) (g *Governance, err error) {
 	// Setup a State instance.
 	// TODO(mission): it's not a good idea to embed initialization of one
 	//                public class in another, I did this to make the range of
 	//                modification smaller.
 	g = &Governance{
+		roundShift:           roundShift,
 		pendingConfigChanges: make(map[uint64]map[StateChangeType]interface{}),
 		stateModule:          NewState(genesisNodes, lambda, true),
 	}
@@ -95,17 +97,20 @@ func (g *Governance) CRS(round uint64) common.Hash {
 
 // NotifyRoundHeight notifies governace contract to snapshot config.
 func (g *Governance) NotifyRoundHeight(round, height uint64) {
-	g.CatchUpWithRound(round)
+	// Snapshot configuration for the shifted round, this behavior is synced with
+	// full node's implementation.
+	shiftedRound := round + g.roundShift
+	g.CatchUpWithRound(shiftedRound)
 	// Apply change request for next round.
 	func() {
 		g.lock.Lock()
 		defer g.lock.Unlock()
-		for t, v := range g.pendingConfigChanges[round+1] {
+		for t, v := range g.pendingConfigChanges[shiftedRound+1] {
 			if err := g.stateModule.RequestChange(t, v); err != nil {
 				panic(err)
 			}
 		}
-		delete(g.pendingConfigChanges, round+1)
+		delete(g.pendingConfigChanges, shiftedRound+1)
 		g.broadcastPendingStateChanges()
 	}()
 }
@@ -280,6 +285,7 @@ func (g *Governance) Clone() *Governance {
 	}
 	// Clone pending changes.
 	return &Governance{
+		roundShift:           g.roundShift,
 		configs:              copiedConfigs,
 		stateModule:          copiedState,
 		nodeSets:             copiedNodeSets,
@@ -289,6 +295,10 @@ func (g *Governance) Clone() *Governance {
 
 // Equal checks equality between two Governance instances.
 func (g *Governance) Equal(other *Governance, checkState bool) bool {
+	// Check roundShift.
+	if g.roundShift != other.roundShift {
+		return false
+	}
 	// Check configs.
 	if !reflect.DeepEqual(g.configs, other.configs) {
 		return false

@@ -17,9 +17,9 @@
 
 package core
 
-// round shift refers to the difference between block's round and config round
-// derived from its state.
+// ConfigRoundShift refers to the difference between block's round and config
+// round derived from its state.
 //
 // For example, when round shift is 2, a block in round 0 should derive config
 // for round 2.
-const roundShift uint64 = 2
+const ConfigRoundShift uint64 = 2

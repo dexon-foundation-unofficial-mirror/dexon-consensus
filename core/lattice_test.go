@@ -104,7 +104,7 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 	// Setup governance.
 	_, pubKeys, err := test.NewKeys(int(cfg.NotarySetSize))
 	req.NoError(err)
-	gov, err := test.NewGovernance(pubKeys, cfg.LambdaBA)
+	gov, err := test.NewGovernance(pubKeys, cfg.LambdaBA, ConfigRoundShift)
 	req.NoError(err)
 	// Setup application.
 	app := test.NewApp(gov.State())

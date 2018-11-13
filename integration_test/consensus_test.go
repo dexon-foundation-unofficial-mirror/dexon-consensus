@@ -109,10 +109,12 @@ func (s *ConsensusTestSuite) TestSimple() {
 	req.NoError(err)
 	// Setup seed governance instance. Give a short latency to make this test
 	// run faster.
-	seedGov, err := test.NewGovernance(pubKeys, 30*time.Millisecond)
+	seedGov, err := test.NewGovernance(
+		pubKeys, 30*time.Millisecond, core.ConfigRoundShift)
 	req.NoError(err)
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeRoundInterval, 25*time.Second))
+	seedGov.NotifyRoundHeight(0, 0)
 	// A short round interval.
 	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
 	for _, n := range nodes {

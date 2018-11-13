@@ -33,10 +33,10 @@ func (s *GovernanceTestSuite) TestEqual() {
 	// Setup a base governance.
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
-	g1, err := NewGovernance(genesisNodes, 100*time.Millisecond)
+	g1, err := NewGovernance(genesisNodes, 100*time.Millisecond, 2)
 	req.NoError(err)
 	// Create a governance with different lambda.
-	g2, err := NewGovernance(genesisNodes, 50*time.Millisecond)
+	g2, err := NewGovernance(genesisNodes, 50*time.Millisecond, 2)
 	req.NoError(err)
 	req.False(g1.Equal(g2, true))
 	// Create configs for 3 rounds for g1.
@@ -57,13 +57,18 @@ func (s *GovernanceTestSuite) TestEqual() {
 	g1.CatchUpWithRound(5)
 	g4.CatchUpWithRound(5)
 	req.False(g1.Equal(g4, true))
+	// Make a clone.
+	g5 := g1.Clone()
+	// Change its roundShift
+	g5.roundShift = 3
+	req.False(g1.Equal(g5, true))
 }
 
 func (s *GovernanceTestSuite) TestRegisterChange() {
 	req := s.Require()
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
-	g, err := NewGovernance(genesisNodes, 100*time.Millisecond)
+	g, err := NewGovernance(genesisNodes, 100*time.Millisecond, 2)
 	req.NoError(err)
 	// Unable to register change for genesis round.
 	req.Error(g.RegisterConfigChange(0, StateChangeNumChains, uint32(32)))
@@ -79,12 +84,12 @@ func (s *GovernanceTestSuite) TestRegisterChange() {
 	req.NoError(g.RegisterConfigChange(7, StateChangeNumChains, uint32(40)))
 	// In local mode, state for round 6 would be ready after notified with
 	// round 5.
-	g.NotifyRoundHeight(5, 0)
+	g.NotifyRoundHeight(3, 0)
 	// In local mode, state for round 7 would be ready after notified with
 	// round 6.
-	g.NotifyRoundHeight(6, 0)
+	g.NotifyRoundHeight(4, 0)
 	// Notify governance to take a snapshot for round 7's configuration.
-	g.NotifyRoundHeight(7, 0)
+	g.NotifyRoundHeight(5, 0)
 	req.Equal(g.Configuration(6).NumChains, uint32(32))
 	req.Equal(g.Configuration(7).NumChains, uint32(40))
 }

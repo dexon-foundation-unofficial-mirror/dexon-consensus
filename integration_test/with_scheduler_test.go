@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dexon-foundation/dexon-consensus/core"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/stretchr/testify/suite"
 )
@@ -49,7 +50,8 @@ func (s *WithSchedulerTestSuite) TestNonByzantine() {
 	prvKeys, pubKeys, err := test.NewKeys(numNodes)
 	req.NoError(err)
 	// Setup governance.
-	gov, err := test.NewGovernance(pubKeys, 250*time.Millisecond)
+	gov, err := test.NewGovernance(
+		pubKeys, 250*time.Millisecond, core.ConfigRoundShift)
 	req.NoError(err)
 	// Setup nodes.
 	nodes, err := PrepareNodes(
@@ -89,7 +91,8 @@ func (s *WithSchedulerTestSuite) TestConfigurationChange() {
 	prvKeys, pubKeys, err := test.NewKeys(numNodes)
 	req.NoError(err)
 	// Setup governance.
-	gov, err := test.NewGovernance(pubKeys, 250*time.Millisecond)
+	gov, err := test.NewGovernance(
+		pubKeys, 250*time.Millisecond, core.ConfigRoundShift)
 	req.NoError(err)
 	// Change default round interval, expect 1 round produce 30 blocks.
 	gov.State().RequestChange(test.StateChangeRoundInterval, 15*time.Second)

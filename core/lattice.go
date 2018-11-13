@@ -282,7 +282,6 @@ func (l *Lattice) PurgeBlocks(blocks []*types.Block) error {
 func (l *Lattice) AppendConfig(round uint64, config *types.Config) (err error) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
-
 	l.pool.resize(config.NumChains)
 	if err = l.data.appendConfig(round, config); err != nil {
 		return

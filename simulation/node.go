@@ -87,7 +87,8 @@ func newNode(
 	}
 	// Sync config to state in governance.
 	cConfig := config.Node.Consensus
-	gov, err := test.NewGovernance([]crypto.PublicKey{pubKey}, time.Millisecond)
+	gov, err := test.NewGovernance(
+		[]crypto.PublicKey{pubKey}, time.Millisecond, core.ConfigRoundShift)
 	if err != nil {
 		panic(err)
 	}
