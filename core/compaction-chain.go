@@ -255,6 +255,10 @@ func (cc *compactionChain) processBlockRandomnessResult(
 	rand *types.BlockRandomnessResult) error {
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
+	// prevBlock is already delivered so it doesn't need to process randomness.
+	if rand.BlockHash == cc.prevBlock.Hash {
+		return nil
+	}
 	// TODO(jimmy-dexon): the result should not be discarded here. Blocks may
 	// be registered later.
 	if !cc.blockRegisteredNoLock(rand.BlockHash) {
