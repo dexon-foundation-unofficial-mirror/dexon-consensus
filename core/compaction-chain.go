@@ -42,6 +42,7 @@ type compactionChain struct {
 	chainUnsynced          uint32
 	tsigVerifier           *TSigVerifierCache
 	blocks                 map[common.Hash]*types.Block
+	blockRandomness        map[common.Hash][]byte
 	pendingBlocks          []*types.Block
 	pendingFinalizedBlocks *finalizedBlockHeap
 	lock                   sync.RWMutex
@@ -55,6 +56,7 @@ func newCompactionChain(gov Governance) *compactionChain {
 		gov:                    gov,
 		tsigVerifier:           NewTSigVerifierCache(gov, 7),
 		blocks:                 make(map[common.Hash]*types.Block),
+		blockRandomness:        make(map[common.Hash][]byte),
 		pendingFinalizedBlocks: pendingFinalizedBlocks,
 	}
 }
@@ -131,7 +133,7 @@ func (cc *compactionChain) extractBlocks() []*types.Block {
 	defer cc.lock.Unlock()
 	// cc.pendingBlocks[0] will not be popped and will equal to cc.prevBlock.
 	for len(cc.pendingBlocks) > 1 &&
-		(len(cc.pendingBlocks[1].Finalization.Randomness) != 0 ||
+		(len(cc.blockRandomness[cc.pendingBlocks[1].Hash]) != 0 ||
 			cc.pendingBlocks[1].Position.Round == 0) {
 		delete(cc.blocks, cc.pendingBlocks[0].Hash)
 		cc.pendingBlocks = cc.pendingBlocks[1:]
@@ -139,6 +141,10 @@ func (cc *compactionChain) extractBlocks() []*types.Block {
 		block := cc.pendingBlocks[0]
 		block.Finalization.ParentHash = prevBlock.Hash
 		block.Finalization.Height = prevBlock.Finalization.Height + 1
+		if block.Position.Round != 0 {
+			block.Finalization.Randomness = cc.blockRandomness[block.Hash]
+			delete(cc.blockRandomness, block.Hash)
+		}
 		deliveringBlocks = append(deliveringBlocks, block)
 		prevBlock = block
 	}
@@ -255,16 +261,12 @@ func (cc *compactionChain) processBlockRandomnessResult(
 	rand *types.BlockRandomnessResult) error {
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
-	// prevBlock is already delivered so it doesn't need to process randomness.
-	if rand.BlockHash == cc.prevBlock.Hash {
-		return nil
-	}
 	// TODO(jimmy-dexon): the result should not be discarded here. Blocks may
 	// be registered later.
 	if !cc.blockRegisteredNoLock(rand.BlockHash) {
 		return ErrBlockNotRegistered
 	}
-	cc.blocks[rand.BlockHash].Finalization.Randomness = rand.Randomness
+	cc.blockRandomness[rand.BlockHash] = rand.Randomness
 	return nil
 }
 
