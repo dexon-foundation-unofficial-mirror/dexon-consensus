@@ -494,6 +494,12 @@ BALoop:
 		select {
 		case newNotary := <-recv.restartNotary:
 			if newNotary {
+				con.logger.Debug("Calling Governance.CRS", "round", recv.round)
+				crs = con.gov.CRS(recv.round)
+				if (crs == common.Hash{}) {
+					// Governance is out-of-sync.
+					continue BALoop
+				}
 				configForNewRound := con.gov.Configuration(recv.round)
 				recv.changeNotaryTime =
 					recv.changeNotaryTime.Add(configForNewRound.RoundInterval)
@@ -501,8 +507,6 @@ BALoop:
 				if err != nil {
 					panic(err)
 				}
-				con.logger.Debug("Calling Governance.CRS", "round", recv.round)
-				crs = con.gov.CRS(recv.round)
 				con.logger.Debug("Calling Governance.Configuration",
 					"round", recv.round)
 				nIDs = nodes.GetSubSet(
@@ -879,6 +883,9 @@ func (con *Consensus) ProcessAgreementResult(
 	// Syncing BA Module.
 	agreement := con.baModules[rand.Position.ChainID]
 	aID := agreement.agreementID()
+	if isStop(aID) {
+		return nil
+	}
 	if rand.Position.Newer(&aID) {
 		con.logger.Info("Syncing BA", "position", &rand.Position)
 		nodes, err := con.nodeSetCache.GetNodeSet(rand.Position.Round)
