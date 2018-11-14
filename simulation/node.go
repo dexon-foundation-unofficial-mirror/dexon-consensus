@@ -139,6 +139,8 @@ func (n *node) run(serverEndpoint interface{}, dMoment time.Time) {
 		n.gov.State().RequestChange(test.StateAddNode, pubKey)
 		hashes = append(hashes, nID.Hash)
 	}
+	// This notification is implictly called in full node.
+	n.gov.NotifyRoundHeight(0, 0)
 	// Setup of governance is ready, can be switched to remote mode.
 	n.gov.SwitchToRemoteMode(n.netModule)
 	// Setup Consensus.
