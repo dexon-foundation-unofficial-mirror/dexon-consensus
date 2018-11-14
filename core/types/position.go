@@ -29,7 +29,8 @@ type Position struct {
 }
 
 func (pos *Position) String() string {
-	return fmt.Sprintf("[%d:%d:%d]", pos.Round, pos.ChainID, pos.Height)
+	return fmt.Sprintf("Position{Round:%d Chain:%d Height:%d}",
+		pos.Round, pos.ChainID, pos.Height)
 }
 
 // Equal checks if two positions are equal, it panics when their chainIDs

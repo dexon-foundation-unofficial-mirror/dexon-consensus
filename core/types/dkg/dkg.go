@@ -61,7 +61,7 @@ type MasterPublicKey struct {
 }
 
 func (d *MasterPublicKey) String() string {
-	return fmt.Sprintf("MasterPublicKey[%s:%d]",
+	return fmt.Sprintf("MasterPublicKey{KP:%s Round:%d}",
 		d.ProposerID.String()[:6],
 		d.Round)
 }
@@ -141,11 +141,11 @@ type Complaint struct {
 
 func (c *Complaint) String() string {
 	if c.IsNack() {
-		return fmt.Sprintf("DKGNackComplaint[%s:%d]%s",
+		return fmt.Sprintf("DKGNackComplaint{CP:%s Round:%d PSP:%s}",
 			c.ProposerID.String()[:6], c.Round,
 			c.PrivateShare.ProposerID.String()[:6])
 	}
-	return fmt.Sprintf("Complaint[%s:%d]%v",
+	return fmt.Sprintf("DKGComplaint{CP:%s Round:%d PrivateShare:%v}",
 		c.ProposerID.String()[:6], c.Round, c.PrivateShare)
 }
 
@@ -175,7 +175,7 @@ type Finalize struct {
 }
 
 func (final *Finalize) String() string {
-	return fmt.Sprintf("DKGFinal[%s:%d]",
+	return fmt.Sprintf("DKGFinal{FP:%s Round:%d}",
 		final.ProposerID.String()[:6],
 		final.Round)
 }

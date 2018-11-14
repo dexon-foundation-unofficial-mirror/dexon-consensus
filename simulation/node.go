@@ -20,6 +20,7 @@ package simulation
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
@@ -29,6 +30,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/dexon-foundation/dexon-consensus/simulation/config"
+	"github.com/dexon-foundation/dexon/log"
 )
 
 type infoStatus string
@@ -144,6 +146,8 @@ func (n *node) run(serverEndpoint interface{}, dMoment time.Time) {
 	// Setup of governance is ready, can be switched to remote mode.
 	n.gov.SwitchToRemoteMode(n.netModule)
 	// Setup Consensus.
+	logger := log.New()
+	logger.SetHandler(log.StreamHandler(os.Stderr, log.LogfmtFormat()))
 	n.consensus = core.NewConsensus(
 		dMoment,
 		n.app,
@@ -151,7 +155,7 @@ func (n *node) run(serverEndpoint interface{}, dMoment time.Time) {
 		n.db,
 		n.netModule,
 		n.prvKey,
-		&common.SimpleLogger{})
+		logger)
 	go n.consensus.Run(&types.Block{})
 
 	// Blocks forever.

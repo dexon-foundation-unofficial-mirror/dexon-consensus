@@ -221,7 +221,7 @@ func (b *Block) DecodeRLP(s *rlp.Stream) error {
 }
 
 func (b *Block) String() string {
-	return fmt.Sprintf("Block(%v:%s)", b.Hash.String()[:6], &b.Position)
+	return fmt.Sprintf("Block{Hash:%v %s}", b.Hash.String()[:6], &b.Position)
 }
 
 // Clone returns a deep copy of a block.
