@@ -27,6 +27,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -217,7 +218,7 @@ func (s *LatticeDataTestSuite) TestSanityCheck() {
 		Timestamp: time.Now().UTC(),
 	})
 	// Invalid chain ID.
-	check(ErrInvalidChainID, &types.Block{
+	check(utils.ErrInvalidChainID, &types.Block{
 		ParentHash: blocks[1][0].Hash,
 		Position: types.Position{
 			ChainID: 100,

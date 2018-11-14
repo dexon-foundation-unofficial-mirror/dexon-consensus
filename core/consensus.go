@@ -29,6 +29,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 // Errors for consensus core.
@@ -187,7 +188,7 @@ type consensusDKGReceiver struct {
 	ID           types.NodeID
 	gov          Governance
 	authModule   *Authenticator
-	nodeSetCache *NodeSetCache
+	nodeSetCache *utils.NodeSetCache
 	cfgModule    *configurationChain
 	network      Network
 	logger       common.Logger
@@ -295,7 +296,7 @@ type Consensus struct {
 
 	// Misc.
 	dMoment       time.Time
-	nodeSetCache  *NodeSetCache
+	nodeSetCache  *utils.NodeSetCache
 	round         uint64
 	roundToNotify uint64
 	lock          sync.RWMutex
@@ -319,7 +320,7 @@ func NewConsensus(
 	var round uint64
 	logger.Debug("Calling Governance.Configuration", "round", round)
 	config := gov.Configuration(round)
-	nodeSetCache := NewNodeSetCache(gov)
+	nodeSetCache := utils.NewNodeSetCache(gov)
 	logger.Debug("Calling Governance.CRS", "round", round)
 	// Setup auth module.
 	authModule := NewAuthenticator(prv)

@@ -15,16 +15,14 @@
 // along with the dexon-consensus library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package core
+package utils
 
 import (
 	"testing"
-	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
-	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -56,17 +54,6 @@ func (g *nsIntf) NodeSet(round uint64) []crypto.PublicKey {
 
 type NodeSetCacheTestSuite struct {
 	suite.Suite
-}
-
-func (s *NodeSetCacheTestSuite) TestGovernanceIntf() {
-	// NodeSetCacheInterface should let Governance implement it.
-	var gov Governance
-	_, pubKeys, err := test.NewKeys(7)
-	s.Require().NoError(err)
-	gov, err = test.NewGovernance(pubKeys, 250*time.Millisecond, ConfigRoundShift)
-	s.Require().NoError(err)
-	_, ok := gov.(NodeSetCacheInterface)
-	s.True(ok)
 }
 
 func (s *NodeSetCacheTestSuite) TestBasicUsage() {

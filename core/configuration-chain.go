@@ -26,6 +26,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 // Errors for configuration chain..
@@ -51,7 +52,7 @@ type configurationChain struct {
 	tsig            map[common.Hash]*tsigProtocol
 	tsigTouched     map[common.Hash]struct{}
 	tsigReady       *sync.Cond
-	cache           *NodeSetCache
+	cache           *utils.NodeSetCache
 	dkgSet          map[types.NodeID]struct{}
 	mpkReady        bool
 	pendingPrvShare map[types.NodeID]*typesDKG.PrivateShare
@@ -64,7 +65,7 @@ func newConfigurationChain(
 	ID types.NodeID,
 	recv dkgReceiver,
 	gov Governance,
-	cache *NodeSetCache,
+	cache *utils.NodeSetCache,
 	logger common.Logger) *configurationChain {
 	return &configurationChain{
 		ID:          ID,

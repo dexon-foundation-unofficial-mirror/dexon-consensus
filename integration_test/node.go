@@ -27,6 +27,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 type consensusEventType int
@@ -162,7 +163,7 @@ func (n *Node) handleProposeBlock(when time.Time, payload interface{}) (
 	})
 	b, err := n.prepareBlock(pos.round, pos.chain, when)
 	if err != nil {
-		if err == core.ErrInvalidChainID {
+		if err == utils.ErrInvalidChainID {
 			// This chain is not included in this round, retry in next round.
 			events = append(events, newProposeBlockEvent(
 				n.ID, b.Position.Round+1, b.Position.ChainID,

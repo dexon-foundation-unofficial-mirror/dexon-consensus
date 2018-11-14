@@ -26,12 +26,12 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 // Errors for sanity check error.
 var (
 	ErrDuplicatedAckOnOneChain = fmt.Errorf("duplicated ack on one chain")
-	ErrInvalidChainID          = fmt.Errorf("invalid chain id")
 	ErrInvalidProposerID       = fmt.Errorf("invalid proposer id")
 	ErrInvalidWitness          = fmt.Errorf("invalid witness data")
 	ErrInvalidBlock            = fmt.Errorf("invalid block")
@@ -181,7 +181,7 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 	}
 	// Check if the chain id is valid.
 	if b.Position.ChainID >= config.numChains {
-		return ErrInvalidChainID
+		return utils.ErrInvalidChainID
 	}
 	// Make sure parent block is arrived.
 	chain := data.chains[b.Position.ChainID]
@@ -382,7 +382,7 @@ func (data *latticeData) prepareBlock(b *types.Block) error {
 	}
 	// If chainID is illegal in this round, reject it.
 	if b.Position.ChainID >= config.numChains {
-		return ErrInvalidChainID
+		return utils.ErrInvalidChainID
 	}
 	// Reset fields to make sure we got these information from parent block.
 	b.Position.Height = 0

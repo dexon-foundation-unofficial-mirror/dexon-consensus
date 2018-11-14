@@ -15,7 +15,7 @@
 // along with the dexon-consensus library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package core
+package utils
 
 import (
 	"errors"
@@ -29,6 +29,8 @@ import (
 var (
 	// ErrRoundNotReady means we got nil config.
 	ErrRoundNotReady = errors.New("round is not ready")
+	// ErrInvalidChainID means the chain ID is unexpected.
+	ErrInvalidChainID = errors.New("invalid chain id")
 )
 
 type sets struct {

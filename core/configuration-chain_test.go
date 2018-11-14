@@ -32,6 +32,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 type ConfigurationChainTestSuite struct {
@@ -174,7 +175,7 @@ func (s *ConfigurationChainTestSuite) runDKG(
 	for _, nID := range s.nIDs {
 		gov, err := test.NewGovernance(pks, 50*time.Millisecond, ConfigRoundShift)
 		s.Require().NoError(err)
-		cache := NewNodeSetCache(gov)
+		cache := utils.NewNodeSetCache(gov)
 		cfgChains[nID] = newConfigurationChain(
 			nID, recv, gov, cache, &common.NullLogger{})
 		recv.nodes[nID] = cfgChains[nID]
