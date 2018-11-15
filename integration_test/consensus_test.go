@@ -28,6 +28,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -69,6 +70,8 @@ func (s *ConsensusTestSuite) setupNodes(
 			test.NetworkConfig{Type: test.NetworkTypeFake})
 		gov := seedGov.Clone()
 		gov.SwitchToRemoteMode(networkModule)
+		gov.NotifyRoundHeight(0, 0)
+		networkModule.AddNodeSetCache(utils.NewNodeSetCache(gov))
 		app := test.NewApp(gov.State())
 		// Now is the consensus module.
 		con := core.NewConsensus(
@@ -114,7 +117,6 @@ func (s *ConsensusTestSuite) TestSimple() {
 	req.NoError(err)
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeRoundInterval, 25*time.Second))
-	seedGov.NotifyRoundHeight(0, 0)
 	// A short round interval.
 	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
 	for _, n := range nodes {

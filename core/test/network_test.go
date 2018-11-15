@@ -26,7 +26,10 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
+	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -35,7 +38,7 @@ type NetworkTestSuite struct {
 }
 
 func (s *NetworkTestSuite) setupNetworks(
-	peerCount int) map[types.NodeID]*Network {
+	pubKeys []crypto.PublicKey) map[types.NodeID]*Network {
 	var (
 		server = NewFakeTransportServer()
 		wg     sync.WaitGroup
@@ -43,8 +46,6 @@ func (s *NetworkTestSuite) setupNetworks(
 	serverChannel, err := server.Host()
 	s.Require().NoError(err)
 	// Setup several network modules.
-	_, pubKeys, err := NewKeys(peerCount)
-	s.Require().NoError(err)
 	networks := make(map[types.NodeID]*Network)
 	for _, key := range pubKeys {
 		n := NewNetwork(
@@ -60,7 +61,7 @@ func (s *NetworkTestSuite) setupNetworks(
 			go n.Run()
 		}()
 	}
-	s.Require().NoError(server.WaitForPeers(uint32(peerCount)))
+	s.Require().NoError(server.WaitForPeers(uint32(len(pubKeys))))
 	wg.Wait()
 	return networks
 }
@@ -112,7 +113,9 @@ func (s *NetworkTestSuite) TestPullBlocks() {
 		peerCount = 10
 		req       = s.Require()
 	)
-	networks := s.setupNetworks(peerCount)
+	_, pubKeys, err := NewKeys(peerCount)
+	req.NoError(err)
+	networks := s.setupNetworks(pubKeys)
 	// Generate several random hashes.
 	hashes := common.Hashes{}
 	for range networks {
@@ -132,6 +135,8 @@ func (s *NetworkTestSuite) TestPullBlocks() {
 			req.NoError(master.trans.Send(n.ID, &types.Block{Hash: h}))
 		}
 	}
+	// Make sure each node receive their blocks.
+	time.Sleep(1 * time.Second)
 	// Initiate a pull request from network 0 by removing corresponding hash in
 	// hashes.
 	master.PullBlocks(hashes)
@@ -170,7 +175,9 @@ func (s *NetworkTestSuite) TestPullVotes() {
 		voteTestCount = 15
 		req           = s.Require()
 	)
-	networks := s.setupNetworks(peerCount)
+	_, pubKeys, err := NewKeys(peerCount)
+	req.NoError(err)
+	networks := s.setupNetworks(pubKeys)
 	// Randomly pick one network instance as master.
 	var master *Network
 	for _, master = range networks {
@@ -202,10 +209,6 @@ func (s *NetworkTestSuite) TestPullVotes() {
 			notarySets[v.Position.Round][n.ID] = struct{}{}
 		}
 	}
-	// Let master knows all notary sets.
-	for i, notarySet := range notarySets {
-		master.appendRoundSetting(uint64(i), notarySet)
-	}
 	// Randomly generate votes set to test.
 	votesToTest := make(map[types.VoteHeader]struct{})
 	for len(votesToTest) < voteTestCount {
@@ -232,6 +235,79 @@ func (s *NetworkTestSuite) TestPullVotes() {
 			delete(votesToTest, vv.VoteHeader)
 		case <-ctx.Done():
 			req.True(false)
+		default:
+		}
+	}
+}
+
+func (s *NetworkTestSuite) TestBroadcastToSet() {
+	// Make sure when a network module attached to a utils.NodeSetCache,
+	// These function would broadcast to correct nodes, not all peers.
+	//  - BroadcastVote, notary set.
+	//  - BroadcastBlock, notary set.
+	//  - BroadcastDKGPrivateShare, DKG set.
+	//  - BroadcastDKGPartialSignature, DKG set.
+	var (
+		req       = s.Require()
+		peerCount = 5
+	)
+	_, pubKeys, err := NewKeys(peerCount)
+	req.NoError(err)
+	gov, err := NewGovernance(pubKeys, time.Second, 2)
+	req.NoError(err)
+	req.NoError(gov.State().RequestChange(StateChangeDKGSetSize, uint32(1)))
+	req.NoError(gov.State().RequestChange(StateChangeNotarySetSize, uint32(1)))
+	networks := s.setupNetworks(pubKeys)
+	cache := utils.NewNodeSetCache(gov)
+	// Cache required set of nodeIDs.
+	dkgSet, err := cache.GetDKGSet(0)
+	req.NoError(err)
+	req.Len(dkgSet, 1)
+	notarySet, err := cache.GetNotarySet(0, 0)
+	req.NoError(err)
+	req.Len(notarySet, 1)
+	var (
+		// Some node don't belong to any set.
+		nerd                *Network
+		dkgNode, notaryNode *Network
+	)
+	for nID, n := range networks {
+		if _, exists := dkgSet[nID]; exists {
+			continue
+		}
+		if _, exists := notarySet[nID]; exists {
+			continue
+		}
+		nerd = n
+		break
+	}
+	for nID := range dkgSet {
+		dkgNode = networks[nID]
+		break
+	}
+	for nID := range notarySet {
+		notaryNode = networks[nID]
+		break
+	}
+	req.NotNil(nerd)
+	req.NotNil(dkgNode)
+	req.NotNil(notaryNode)
+	nerd.AddNodeSetCache(cache)
+	// Try broadcasting with datum from round 0, and make sure only node belongs
+	// to that set receiving the message.
+	nerd.BroadcastVote(&types.Vote{})
+	req.IsType(<-notaryNode.ReceiveChan(), &types.Vote{})
+	nerd.BroadcastBlock(&types.Block{})
+	req.IsType(<-notaryNode.ReceiveChan(), &types.Block{})
+	nerd.BroadcastDKGPrivateShare(&typesDKG.PrivateShare{})
+	req.IsType(<-dkgNode.ReceiveChan(), &typesDKG.PrivateShare{})
+	nerd.BroadcastDKGPartialSignature(&typesDKG.PartialSignature{})
+	req.IsType(<-dkgNode.ReceiveChan(), &typesDKG.PartialSignature{})
+	// There should be no remaining message in each node.
+	for _, n := range networks {
+		select {
+		case <-n.ReceiveChan():
+			req.False(true)
 		default:
 		}
 	}

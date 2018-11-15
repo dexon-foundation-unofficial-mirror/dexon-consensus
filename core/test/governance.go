@@ -237,16 +237,6 @@ func (g *Governance) CatchUpWithRound(round uint64) {
 		config, nodeSet := g.stateModule.Snapshot()
 		g.configs = append(g.configs, config)
 		g.nodeSets = append(g.nodeSets, nodeSet)
-		if g.networkModule == nil {
-			continue
-		}
-		// Notify network module for new notary set.
-		round := uint64(len(g.configs)) - 1
-		notarySet := make(map[types.NodeID]struct{})
-		for _, k := range g.nodeSets[round] {
-			notarySet[types.NewNodeID(k)] = struct{}{}
-		}
-		g.networkModule.appendRoundSetting(round, notarySet)
 	}
 }
 

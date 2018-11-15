@@ -27,7 +27,12 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
+
+// NodeSetCache is type alias to avoid fullnode compile error when moving
+// it to core/utils package.
+type NodeSetCache = utils.NodeSetCache
 
 var (
 	debug = false
