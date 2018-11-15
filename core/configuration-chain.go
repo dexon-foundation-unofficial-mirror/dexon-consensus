@@ -265,13 +265,24 @@ func (cc *configurationChain) runTSig(
 			}
 		}
 	}()
+	timeout := make(chan struct{}, 1)
+	go func() {
+		// TODO(jimmy-dexon): make timeout configurable.
+		time.Sleep(5 * time.Second)
+		timeout <- struct{}{}
+		cc.tsigReady.Broadcast()
+	}()
 	var signature crypto.Signature
 	var err error
 	for func() bool {
 		signature, err = cc.tsig[hash].signature()
+		select {
+		case <-timeout:
+			return false
+		default:
+		}
 		return err == ErrNotEnoughtPartialSignatures
 	}() {
-		// TODO(jimmy-dexon): add a timeout here.
 		cc.tsigReady.Wait()
 	}
 	delete(cc.tsig, hash)

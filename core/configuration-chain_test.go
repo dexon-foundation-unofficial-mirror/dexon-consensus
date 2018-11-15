@@ -330,6 +330,43 @@ func (s *ConfigurationChainTestSuite) TestMultipleTSig() {
 	}
 }
 
+func (s *ConfigurationChainTestSuite) TestTSigTimeout() {
+	k := 2
+	n := 7
+	round := uint64(0)
+	cfgChains := s.runDKG(k, n, round)
+	timeout := 6 * time.Second
+
+	hash := crypto.Keccak256Hash([]byte("🍯🍋"))
+
+	psigs := s.preparePartialSignature(hash, round, cfgChains)
+
+	errs := make(chan error, n)
+	qualify := 0
+	for nID, cc := range cfgChains {
+		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+			continue
+		}
+		qualify++
+		go func(cc *configurationChain) {
+			_, err := cc.runTSig(round, hash)
+			// Prevent racing by collecting errors and check in main thread.
+			errs <- err
+		}(cc)
+		// Only 1 partial signature is provided.
+		err := cc.processPartialSignature(psigs[0])
+		s.Require().NoError(err)
+	}
+	time.Sleep(timeout)
+	s.Require().Len(errs, qualify)
+	for nID, cc := range cfgChains {
+		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+			continue
+		}
+		s.Equal(<-errs, ErrNotEnoughtPartialSignatures)
+	}
+}
+
 func TestConfigurationChain(t *testing.T) {
 	suite.Run(t, new(ConfigurationChainTestSuite))
 }
