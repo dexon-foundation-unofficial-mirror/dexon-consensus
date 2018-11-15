@@ -250,6 +250,14 @@ func (a *agreement) agreementID() types.Position {
 
 // nextState is called at the specific clock time.
 func (a *agreement) nextState() (err error) {
+	if func() bool {
+		a.lock.RLock()
+		defer a.lock.RUnlock()
+		return a.hasOutput
+	}() {
+		a.state = newSleepState(a.data)
+		return
+	}
 	a.state, err = a.state.nextState()
 	return
 }

@@ -40,6 +40,7 @@ const (
 	stateCommit
 	stateForward
 	statePullVote
+	stateSleep
 )
 
 var nullBlockHash = common.Hash{}
@@ -154,5 +155,22 @@ func (s *pullVoteState) state() agreementStateType { return statePullVote }
 func (s *pullVoteState) clocks() int               { return 4 }
 
 func (s *pullVoteState) nextState() (agreementState, error) {
+	return s, nil
+}
+
+// ----- SleepState -----
+// sleepState is a special state after BA has output and waits for restart.
+type sleepState struct {
+	a *agreementData
+}
+
+func newSleepState(a *agreementData) *sleepState {
+	return &sleepState{a: a}
+}
+
+func (s *sleepState) state() agreementStateType { return stateSleep }
+func (s *sleepState) clocks() int               { return 65536 }
+
+func (s *sleepState) nextState() (agreementState, error) {
 	return s, nil
 }

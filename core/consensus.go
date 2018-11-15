@@ -839,6 +839,12 @@ func (con *Consensus) proposeEmptyBlock(
 
 // ProcessVote is the entry point to submit ont vote to a Consensus instance.
 func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
+	if vote.Position.ChainID >= uint32(len(con.baModules)) {
+		return nil
+	}
+	if isStop(con.baModules[vote.Position.ChainID].agreementID()) {
+		return nil
+	}
 	v := vote.Clone()
 	err = con.baModules[v.Position.ChainID].processVote(v)
 	return err
