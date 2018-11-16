@@ -146,7 +146,6 @@ func (l *Lattice) SanityCheck(b *types.Block) (err error) {
 			if _, ok := err.(*ErrAckingBlockNotExists); ok {
 				err = ErrRetrySanityCheckLater
 			}
-			l.logger.Error("Sanity Check failed", "error", err)
 			return
 		}
 		return

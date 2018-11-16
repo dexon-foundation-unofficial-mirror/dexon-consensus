@@ -701,23 +701,6 @@ func (con *Consensus) initialRound(
 			con.logger.Debug("Calling Governance.Configuration",
 				"round", nextRound)
 			nextConfig := con.gov.Configuration(nextRound)
-			// Get configuration for the round next to next round. Configuration
-			// for that round should be ready at this moment and is required for
-			// lattice module. This logic is related to:
-			//  - roundShift
-			//  - notifyGenesisRound
-			futureRound := nextRound + 1
-			con.logger.Debug("Calling Governance.Configuration",
-				"round", futureRound)
-			futureConfig := con.gov.Configuration(futureRound)
-			con.logger.Debug("Append Config", "round", futureRound)
-			if err := con.lattice.AppendConfig(
-				futureRound, futureConfig); err != nil {
-				con.logger.Debug("Unable to append config",
-					"round", futureRound,
-					"error", err)
-				panic(err)
-			}
 			con.initialRound(
 				startTime.Add(config.RoundInterval), nextRound, nextConfig)
 		})
@@ -1015,6 +998,23 @@ func (con *Consensus) deliverBlock(b *types.Block) {
 	con.logger.Debug("Calling Application.BlockDelivered", "block", b)
 	con.app.BlockDelivered(b.Hash, b.Position, b.Finalization.Clone())
 	if b.Position.Round == con.roundToNotify {
+		// Get configuration for the round next to next round. Configuration
+		// for that round should be ready at this moment and is required for
+		// lattice module. This logic is related to:
+		//  - roundShift
+		//  - notifyGenesisRound
+		futureRound := con.roundToNotify + 1
+		con.logger.Debug("Calling Governance.Configuration",
+			"round", con.roundToNotify)
+		futureConfig := con.gov.Configuration(futureRound)
+		con.logger.Debug("Append Config", "round", futureRound)
+		if err := con.lattice.AppendConfig(
+			futureRound, futureConfig); err != nil {
+			con.logger.Debug("Unable to append config",
+				"round", futureRound,
+				"error", err)
+			panic(err)
+		}
 		// Only the first block delivered of that round would
 		// trigger this noitification.
 		con.logger.Debug("Calling Governance.NotifyRoundHeight",
@@ -1063,7 +1063,10 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 // processFinalizedBlock is the entry point for syncing blocks.
 func (con *Consensus) processFinalizedBlock(block *types.Block) (err error) {
 	if err = con.lattice.SanityCheck(block); err != nil {
-		return
+		if err != ErrRetrySanityCheckLater {
+			return
+		}
+		err = nil
 	}
 	con.ccModule.processFinalizedBlock(block)
 	for {
@@ -1082,6 +1085,10 @@ func (con *Consensus) processFinalizedBlock(block *types.Block) (err error) {
 				err = nil
 			}
 			con.lattice.ProcessFinalizedBlock(b)
+			// TODO(jimmy): BlockConfirmed and DeliverBlock may not be removed if
+			// application implements state snapshot.
+			con.logger.Debug("Calling Application.BlockConfirmed", "block", b)
+			con.app.BlockConfirmed(*b.Clone())
 			con.deliverBlock(b)
 		}
 	}

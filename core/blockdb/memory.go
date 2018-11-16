@@ -124,6 +124,10 @@ func (m *MemBackedBlockDB) Put(block types.Block) error {
 
 // Update updates a block in the database.
 func (m *MemBackedBlockDB) Update(block types.Block) error {
+	if !m.Has(block.Hash) {
+		return ErrBlockDoesNotExist
+	}
+
 	m.blocksMutex.Lock()
 	defer m.blocksMutex.Unlock()
 

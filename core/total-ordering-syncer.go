@@ -156,6 +156,9 @@ func (tos *totalOrderingSyncer) processBlock(
 
 // The finalized block should be passed by the order of consensus height.
 func (tos *totalOrderingSyncer) processFinalizedBlock(block *types.Block) {
+	if tos.synced() {
+		return
+	}
 	tos.lock.Lock()
 	defer tos.lock.Unlock()
 	if len(tos.pendingDeliveryBlocks) > 0 {
