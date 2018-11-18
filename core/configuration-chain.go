@@ -107,6 +107,10 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	cc.dkgLock.Lock()
 	defer cc.dkgLock.Unlock()
 	if cc.dkg == nil || cc.dkg.round != round {
+		if cc.dkg != nil && cc.dkg.round > round {
+			cc.logger.Warn("DKG canceled", "round", round)
+			return nil
+		}
 		return ErrDKGNotRegistered
 	}
 	if func() bool {
@@ -115,6 +119,11 @@ func (cc *configurationChain) runDKG(round uint64) error {
 		_, exist := cc.gpk[round]
 		return exist
 	}() {
+		return nil
+	}
+	cc.logger.Debug("Calling Governance.IsDKGFinal", "round", round)
+	if cc.gov.IsDKGFinal(round) {
+		cc.logger.Warn("DKG already final", "round", round)
 		return nil
 	}
 
@@ -183,10 +192,6 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	if err != nil {
 		return err
 	}
-	signer, err := cc.dkg.recoverShareSecret(gpk.qualifyIDs)
-	if err != nil {
-		return err
-	}
 	qualifies := ""
 	for nID := range gpk.qualifyNodeIDs {
 		qualifies += fmt.Sprintf("%s ", nID.String()[:6])
@@ -196,6 +201,14 @@ func (cc *configurationChain) runDKG(round uint64) error {
 		"round", round,
 		"count", len(gpk.qualifyIDs),
 		"qualifies", qualifies)
+	if _, exist := gpk.qualifyNodeIDs[cc.ID]; !exist {
+		cc.logger.Warn("Self is not in Qualify Nodes")
+		return nil
+	}
+	signer, err := cc.dkg.recoverShareSecret(gpk.qualifyIDs)
+	if err != nil {
+		return err
+	}
 	cc.dkgResult.Lock()
 	defer cc.dkgResult.Unlock()
 	cc.dkgSigner[round] = signer

@@ -443,7 +443,7 @@ func (con *Consensus) Run(initBlock *types.Block) {
 		con.cfgModule.registerDKG(initRound, int(initConfig.DKGSetSize)/3+1)
 		con.event.RegisterTime(con.dMoment.Add(initConfig.RoundInterval/4),
 			func(time.Time) {
-				con.runDKGTSIG(initRound, initConfig)
+				con.runDKG(initRound, initConfig)
 			})
 	}
 	con.initialRound(con.dMoment, initRound, initConfig)
@@ -547,8 +547,8 @@ BALoop:
 	}
 }
 
-// runDKGTSIG starts running DKG+TSIG protocol.
-func (con *Consensus) runDKGTSIG(round uint64, config *types.Config) {
+// runDKG starts running DKG protocol.
+func (con *Consensus) runDKG(round uint64, config *types.Config) {
 	con.dkgReady.L.Lock()
 	defer con.dkgReady.L.Unlock()
 	if con.dkgRunning != 0 {
@@ -572,39 +572,16 @@ func (con *Consensus) runDKGTSIG(round uint64, config *types.Config) {
 		if err := con.cfgModule.runDKG(round); err != nil {
 			panic(err)
 		}
-		nodes, err := con.nodeSetCache.GetNodeSet(round)
-		if err != nil {
-			panic(err)
-		}
-		con.logger.Debug("Calling Governance.Configuration", "round", round)
-		hash := HashConfigurationBlock(
-			nodes.IDs,
-			con.gov.Configuration(round),
-			common.Hash{},
-			con.cfgModule.prevHash)
-		psig, err := con.cfgModule.preparePartialSignature(
-			round, hash)
-		if err != nil {
-			panic(err)
-		}
-		if err = con.authModule.SignDKGPartialSignature(psig); err != nil {
-			panic(err)
-		}
-		if err = con.cfgModule.processPartialSignature(psig); err != nil {
-			panic(err)
-		}
-		con.logger.Debug("Calling Network.BroadcastDKGPartialSignature",
-			"proposer", psig.ProposerID,
-			"round", psig.Round,
-			"hash", psig.Hash)
-		con.network.BroadcastDKGPartialSignature(psig)
-		if _, err = con.cfgModule.runBlockTSig(round, hash); err != nil {
-			panic(err)
-		}
 	}()
 }
 
 func (con *Consensus) runCRS(round uint64) {
+	con.logger.Debug("Calling Governance.CRS to check if already proposed",
+		"round", round+1)
+	if (con.gov.CRS(round+1) != common.Hash{}) {
+		con.logger.Info("CRS already proposed", "round", round+1)
+		return
+	}
 	// Start running next round CRS.
 	con.logger.Debug("Calling Governance.CRS", "round", round)
 	psig, err := con.cfgModule.preparePartialSignature(round, con.gov.CRS(round))
@@ -689,7 +666,7 @@ func (con *Consensus) initialRound(
 						con.logger.Debug("Calling Governance.Configuration",
 							"round", nextRound)
 						nextConfig := con.gov.Configuration(nextRound)
-						con.runDKGTSIG(nextRound, nextConfig)
+						con.runDKG(nextRound, nextConfig)
 					})
 			}(round + 1)
 		})

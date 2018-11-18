@@ -522,7 +522,7 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 		con.cfgModule.registerDKG(uint64(0), n/3+1)
 	}
 	for _, con := range cons {
-		con.runDKGTSIG(0, gov.Configuration(0))
+		con.runDKG(0, gov.Configuration(0))
 	}
 	for _, con := range cons {
 		func() {
