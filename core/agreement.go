@@ -232,6 +232,8 @@ func isStop(aID types.Position) bool {
 
 // clocks returns how many time this state is required.
 func (a *agreement) clocks() int {
+	a.data.lock.RLock()
+	defer a.data.lock.RUnlock()
 	return a.state.clocks()
 }
 
