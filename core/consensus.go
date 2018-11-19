@@ -136,6 +136,8 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 					"hash", hash,
 					"chainID", recv.chainID)
 				recv.agreementModule.addCandidateBlock(block)
+				recv.agreementModule.lock.Lock()
+				defer recv.agreementModule.lock.Unlock()
 				recv.ConfirmBlock(block.Hash, votes)
 			}()
 			return
@@ -570,7 +572,7 @@ func (con *Consensus) runDKG(round uint64, config *types.Config) {
 			}
 		}()
 		if err := con.cfgModule.runDKG(round); err != nil {
-			panic(err)
+			con.logger.Error("Failed to runDKG", "error", err)
 		}
 	}()
 }

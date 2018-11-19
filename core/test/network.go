@@ -544,7 +544,7 @@ func (n *Network) addBlockToCache(b *types.Block) {
 			break
 		}
 	}
-	n.blockCache[b.Hash] = b
+	n.blockCache[b.Hash] = b.Clone()
 }
 
 func (n *Network) addVoteToCache(v *types.Vote) {
