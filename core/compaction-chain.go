@@ -33,6 +33,10 @@ var (
 		"block not registered")
 	ErrNotInitiazlied = fmt.Errorf(
 		"not initialized")
+	ErrTSigNotReady = fmt.Errorf(
+		"tsig not ready")
+	ErrIncorrectBlockRandomnessResult = fmt.Errorf(
+		"incorrect block randomness result")
 )
 
 type finalizedBlockHeap = types.ByFinalizationHeight
@@ -154,6 +158,24 @@ func (cc *compactionChain) extractBlocks() []*types.Block {
 	return deliveringBlocks
 }
 
+func (cc *compactionChain) verifyRandomness(
+	blockHash common.Hash, round uint64, randomness []byte) (bool, error) {
+	if round == 0 {
+		return len(randomness) == 0, nil
+	}
+	// Randomness is not available at round 0.
+	v, ok, err := cc.tsigVerifier.UpdateAndGet(round)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, ErrTSigNotReady
+	}
+	return v.VerifySignature(blockHash, crypto.Signature{
+		Type:      "bls",
+		Signature: randomness}), nil
+}
+
 func (cc *compactionChain) processFinalizedBlock(block *types.Block) {
 	if block.Finalization.Height <= cc.lastBlock().Finalization.Height {
 		return
@@ -166,6 +188,19 @@ func (cc *compactionChain) processFinalizedBlock(block *types.Block) {
 
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
+	// The randomness result is missed previously.
+	if cc.blockRegisteredNoLock(block.Hash) {
+		ok, err := cc.verifyRandomness(
+			block.Hash, block.Position.Round, block.Finalization.Randomness)
+		if err != nil {
+			panic(err)
+		}
+		if ok {
+			cc.blockRandomness[block.Hash] = block.Finalization.Randomness
+		}
+		return
+	}
+
 	heap.Push(cc.pendingFinalizedBlocks, block)
 
 	return
@@ -206,22 +241,14 @@ func (cc *compactionChain) extractFinalizedBlocks() []*types.Block {
 			b.Finalization.Height == prevBlock.Finalization.Height {
 			continue
 		}
-		round := b.Position.Round
-		if round != 0 {
-			// Randomness is not available at round 0.
-			v, ok, err := cc.tsigVerifier.UpdateAndGet(round)
-			if err != nil {
-				continue
-			}
-			if !ok {
-				toPending = append(toPending, b)
-				continue
-			}
-			if ok := v.VerifySignature(b.Hash, crypto.Signature{
-				Type:      "bls",
-				Signature: b.Finalization.Randomness}); !ok {
-				continue
-			}
+		ok, err := cc.verifyRandomness(
+			b.Hash, b.Position.Round, b.Finalization.Randomness)
+		if err != nil {
+			toPending = append(toPending, b)
+			continue
+		}
+		if !ok {
+			continue
 		}
 		// Fork resolution: choose block with smaller hash.
 		if prevBlock.Finalization.Height == b.Finalization.Height {
@@ -261,10 +288,18 @@ func (cc *compactionChain) processBlockRandomnessResult(
 	rand *types.BlockRandomnessResult) error {
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
-	// TODO(jimmy-dexon): the result should not be discarded here. Blocks may
-	// be registered later.
 	if !cc.blockRegisteredNoLock(rand.BlockHash) {
+		// If the randomness result is discarded here, it'll later be processed by
+		//finalized block
 		return ErrBlockNotRegistered
+	}
+	ok, err := cc.verifyRandomness(
+		rand.BlockHash, rand.Position.Round, rand.Randomness)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrIncorrectBlockRandomnessResult
 	}
 	cc.blockRandomness[rand.BlockHash] = rand.Randomness
 	return nil

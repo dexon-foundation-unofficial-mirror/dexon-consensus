@@ -35,7 +35,28 @@ type CompactionChainTestSuite struct {
 func (s *CompactionChainTestSuite) SetupTest() {
 }
 
-func (s *CompactionChainTestSuite) newCompactionChain() *compactionChain {
+type mockTSigVerifier struct {
+	defaultRet bool
+	ret        map[common.Hash]bool
+}
+
+func newMockTSigVerifier(defaultRet bool) *mockTSigVerifier {
+	return &mockTSigVerifier{
+		defaultRet: defaultRet,
+		ret:        make(map[common.Hash]bool),
+	}
+}
+
+func (m *mockTSigVerifier) VerifySignature(
+	hash common.Hash, _ crypto.Signature) bool {
+	if ret, exist := m.ret[hash]; exist {
+		return ret
+	}
+	return m.defaultRet
+}
+
+func (s *CompactionChainTestSuite) newCompactionChain() (
+	*compactionChain, *mockTSigVerifier) {
 	_, pubKeys, err := test.NewKeys(4)
 	s.Require().NoError(err)
 	gov, err := test.NewGovernance(
@@ -43,7 +64,13 @@ func (s *CompactionChainTestSuite) newCompactionChain() *compactionChain {
 	s.Require().NoError(err)
 	cc := newCompactionChain(gov)
 	cc.init(&types.Block{})
-	return cc
+
+	mock := newMockTSigVerifier(true)
+	for i := 0; i < cc.tsigVerifier.cacheSize; i++ {
+		cc.tsigVerifier.verifier[uint64(i)] = mock
+	}
+
+	return cc, mock
 }
 
 func (s *CompactionChainTestSuite) generateBlocks(
@@ -67,7 +94,7 @@ func (s *CompactionChainTestSuite) generateBlocks(
 }
 
 func (s *CompactionChainTestSuite) TestProcessBlock() {
-	cc := s.newCompactionChain()
+	cc, _ := s.newCompactionChain()
 	now := time.Now().UTC()
 	blocks := make([]*types.Block, 10)
 	for idx := range blocks {
@@ -86,7 +113,7 @@ func (s *CompactionChainTestSuite) TestProcessBlock() {
 }
 
 func (s *CompactionChainTestSuite) TestExtractBlocks() {
-	cc := s.newCompactionChain()
+	cc, _ := s.newCompactionChain()
 	s.Require().Equal(uint32(4), cc.gov.Configuration(uint64(0)).NumChains)
 	blocks := make([]*types.Block, 10)
 	for idx := range blocks {
@@ -108,6 +135,7 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 		s.Require().NoError(cc.processBlockRandomnessResult(
 			&types.BlockRandomnessResult{
 				BlockHash:  blocks[i].Hash,
+				Position:   blocks[i].Position,
 				Randomness: h[:],
 			}))
 	}
@@ -128,6 +156,7 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 		s.Require().NoError(cc.processBlockRandomnessResult(
 			&types.BlockRandomnessResult{
 				BlockHash:  blocks[i].Hash,
+				Position:   blocks[i].Position,
 				Randomness: h[:],
 			}))
 	}
@@ -144,6 +173,7 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 		s.Require().NoError(cc.processBlockRandomnessResult(
 			&types.BlockRandomnessResult{
 				BlockHash:  blocks[i].Hash,
+				Position:   blocks[i].Position,
 				Randomness: h[:],
 			}))
 	}
@@ -156,6 +186,7 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 		s.Require().NoError(cc.processBlockRandomnessResult(
 			&types.BlockRandomnessResult{
 				BlockHash:  blocks[i].Hash,
+				Position:   blocks[i].Position,
 				Randomness: h[:],
 			}))
 	}
@@ -174,8 +205,77 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 	}
 }
 
+func (s *CompactionChainTestSuite) TestMissedRandomness() {
+	cc, _ := s.newCompactionChain()
+	s.Require().Equal(uint32(4), cc.gov.Configuration(uint64(0)).NumChains)
+	blocks := make([]*types.Block, 10)
+	for idx := range blocks {
+		blocks[idx] = &types.Block{
+			Hash: common.NewRandomHash(),
+			Position: types.Position{
+				Round:   1,
+				Height:  uint64(idx / 4),
+				ChainID: uint32(idx % 4),
+			},
+		}
+		s.Require().False(cc.blockRegistered(blocks[idx].Hash))
+		cc.registerBlock(blocks[idx])
+		s.Require().True(cc.blockRegistered(blocks[idx].Hash))
+	}
+	for i := range blocks {
+		s.Require().NoError(cc.processBlock(blocks[i]))
+		if i >= 4 && i < 6 {
+			h := common.NewRandomHash()
+			s.Require().NoError(cc.processBlockRandomnessResult(
+				&types.BlockRandomnessResult{
+					BlockHash:  blocks[i].Hash,
+					Position:   blocks[i].Position,
+					Randomness: h[:],
+				}))
+		}
+	}
+	s.Require().Len(cc.extractBlocks(), 0)
+
+	for i := range blocks {
+		if i >= 4 {
+			break
+		}
+		block := blocks[i].Clone()
+		h := common.NewRandomHash()
+		block.Finalization.Randomness = h[:]
+		block.Finalization.Height = uint64(i + 1)
+		cc.processFinalizedBlock(block)
+	}
+	delivered := cc.extractBlocks()
+	s.Require().Len(delivered, 6)
+
+	for i := 6; i < 10; i++ {
+		h := common.NewRandomHash()
+		s.Require().NoError(cc.processBlockRandomnessResult(
+			&types.BlockRandomnessResult{
+				BlockHash:  blocks[i].Hash,
+				Position:   blocks[i].Position,
+				Randomness: h[:],
+			}))
+	}
+
+	delivered = append(delivered, cc.extractBlocks()...)
+	s.Require().Len(delivered, 10)
+
+	// The delivered order should be the same as processing order.
+	for i, block := range delivered {
+		if i > 1 {
+			s.Equal(delivered[i-1].Finalization.Height+1,
+				delivered[i].Finalization.Height)
+			s.Equal(delivered[i-1].Hash,
+				delivered[i].Finalization.ParentHash)
+		}
+		s.Equal(block.Hash, blocks[i].Hash)
+	}
+}
+
 func (s *CompactionChainTestSuite) TestExtractBlocksRound0() {
-	cc := s.newCompactionChain()
+	cc, _ := s.newCompactionChain()
 	s.Require().Equal(uint32(4), cc.gov.Configuration(uint64(0)).NumChains)
 	blocks := make([]*types.Block, 10)
 	for idx := range blocks {
@@ -209,32 +309,8 @@ func (s *CompactionChainTestSuite) TestExtractBlocksRound0() {
 	}
 }
 
-type mockTSigVerifier struct {
-	defaultRet bool
-	ret        map[common.Hash]bool
-}
-
-func newMockTSigVerifier(defaultRet bool) *mockTSigVerifier {
-	return &mockTSigVerifier{
-		defaultRet: defaultRet,
-		ret:        make(map[common.Hash]bool),
-	}
-}
-
-func (m *mockTSigVerifier) VerifySignature(
-	hash common.Hash, _ crypto.Signature) bool {
-	if ret, exist := m.ret[hash]; exist {
-		return ret
-	}
-	return m.defaultRet
-}
-
 func (s *CompactionChainTestSuite) TestSyncFinalizedBlock() {
-	cc := s.newCompactionChain()
-	mock := newMockTSigVerifier(true)
-	for i := 0; i < cc.tsigVerifier.cacheSize; i++ {
-		cc.tsigVerifier.verifier[uint64(i)] = mock
-	}
+	cc, mock := s.newCompactionChain()
 	now := time.Now().UTC()
 	blocks := make([]*types.Block, 10)
 	for idx := range blocks {
@@ -326,11 +402,7 @@ func (s *CompactionChainTestSuite) TestSyncFinalizedBlock() {
 }
 
 func (s *CompactionChainTestSuite) TestSync() {
-	cc := s.newCompactionChain()
-	mock := newMockTSigVerifier(true)
-	for i := 0; i < cc.tsigVerifier.cacheSize; i++ {
-		cc.tsigVerifier.verifier[uint64(i)] = mock
-	}
+	cc, _ := s.newCompactionChain()
 	now := time.Now().UTC()
 	blocks := make([]*types.Block, 20)
 	for idx := range blocks {
@@ -384,13 +456,9 @@ func (s *CompactionChainTestSuite) TestSync() {
 }
 
 func (s *CompactionChainTestSuite) TestBootstrapSync() {
-	cc := s.newCompactionChain()
+	cc, _ := s.newCompactionChain()
 	numChains := cc.gov.Configuration(uint64(0)).NumChains
 	s.Require().Equal(uint32(4), numChains)
-	mock := newMockTSigVerifier(true)
-	for i := 0; i < cc.tsigVerifier.cacheSize; i++ {
-		cc.tsigVerifier.verifier[uint64(i)] = mock
-	}
 	now := time.Now().UTC()
 	blocks := make([]*types.Block, 20)
 	for idx := range blocks {

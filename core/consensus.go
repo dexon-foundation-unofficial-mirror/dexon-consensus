@@ -56,8 +56,6 @@ var (
 		"incorrect vote position")
 	ErrIncorrectVoteProposer = fmt.Errorf(
 		"incorrect vote proposer")
-	ErrIncorrectBlockRandomnessResult = fmt.Errorf(
-		"incorrect block randomness result")
 )
 
 // consensusBAReceiver implements agreementReceiver.
@@ -936,31 +934,17 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 	if rand.Position.Round == 0 {
 		return nil
 	}
-	if !con.ccModule.blockRegistered(rand.BlockHash) {
-		return nil
-	}
-	round := rand.Position.Round
-	v, ok, err := con.ccModule.tsigVerifier.UpdateAndGet(round)
-	if err != nil {
+	if err := con.ccModule.processBlockRandomnessResult(rand); err != nil {
+		if err == ErrBlockNotRegistered {
+			err = nil
+		}
 		return err
-	}
-	if !ok {
-		return nil
-	}
-	if !v.VerifySignature(
-		rand.BlockHash, crypto.Signature{Signature: rand.Randomness}) {
-		return ErrIncorrectBlockRandomnessResult
 	}
 	con.logger.Debug("Calling Network.BroadcastRandomnessResult",
 		"hash", rand.BlockHash,
 		"position", &rand.Position,
 		"randomness", hex.EncodeToString(rand.Randomness))
 	con.network.BroadcastRandomnessResult(rand)
-	if err := con.ccModule.processBlockRandomnessResult(rand); err != nil {
-		if err != ErrBlockNotRegistered {
-			return err
-		}
-	}
 	return nil
 }
 
