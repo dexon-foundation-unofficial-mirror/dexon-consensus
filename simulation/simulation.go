@@ -44,7 +44,7 @@ func Run(cfg *config.Config) {
 		panic(fmt.Errorf("DKGSetSze should not be larger the node num"))
 	}
 
-	dMoment := time.Now().UTC().Add(1 * time.Second)
+	dMoment := time.Now().UTC()
 
 	// init is a function to init a node.
 	init := func(serverEndpoint interface{}) {

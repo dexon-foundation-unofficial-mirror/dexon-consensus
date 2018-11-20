@@ -77,13 +77,13 @@ func (s *GovernanceTestSuite) TestRegisterChange() {
 	req.Equal(g.Configuration(4).NumChains, uint32(20))
 	// Unable to register change for prepared round.
 	req.Error(g.RegisterConfigChange(4, StateChangeNumChains, uint32(32)))
-	// Unable to register change for next notified round.
-	req.Error(g.RegisterConfigChange(5, StateChangeNumChains, uint32(32)))
 	// It's ok to make some change when condition is met.
+	req.NoError(g.RegisterConfigChange(5, StateChangeNumChains, uint32(32)))
 	req.NoError(g.RegisterConfigChange(6, StateChangeNumChains, uint32(32)))
 	req.NoError(g.RegisterConfigChange(7, StateChangeNumChains, uint32(40)))
 	// In local mode, state for round 6 would be ready after notified with
-	// round 5.
+	// round 2.
+	g.NotifyRoundHeight(2, 0)
 	g.NotifyRoundHeight(3, 0)
 	// In local mode, state for round 7 would be ready after notified with
 	// round 6.

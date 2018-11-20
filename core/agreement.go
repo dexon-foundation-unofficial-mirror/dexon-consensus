@@ -311,12 +311,13 @@ func (a *agreement) processVote(vote *types.Vote) error {
 		return err
 	}
 	aID := a.agreementID()
+	// Agreement module has stopped.
+	if isStop(aID) {
+		return nil
+	}
 	if vote.Position != aID {
-		// Agreement module has stopped.
-		if !isStop(aID) {
-			if aID.Newer(&vote.Position) {
-				return nil
-			}
+		if aID.Newer(&vote.Position) {
+			return nil
 		}
 		a.pendingVote = append(a.pendingVote, pendingVote{
 			vote:         vote,

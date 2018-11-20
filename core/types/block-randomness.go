@@ -25,9 +25,10 @@ import (
 
 // AgreementResult describes an agremeent result.
 type AgreementResult struct {
-	BlockHash common.Hash `json:"block_hash"`
-	Position  Position    `json:"position"`
-	Votes     []Vote      `json:"votes"`
+	BlockHash    common.Hash `json:"block_hash"`
+	Position     Position    `json:"position"`
+	Votes        []Vote      `json:"votes"`
+	IsEmptyBlock bool        `json:"is_empty_block"`
 }
 
 func (r *AgreementResult) String() string {

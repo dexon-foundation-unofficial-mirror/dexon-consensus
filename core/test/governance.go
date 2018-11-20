@@ -33,6 +33,9 @@ import (
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
 )
 
+// TODO(mission): add a method to compare config/crs between governance
+//                instances.
+
 // Governance is an implementation of Goverance for testing purpose.
 type Governance struct {
 	roundShift           uint64
@@ -105,6 +108,13 @@ func (g *Governance) NotifyRoundHeight(round, height uint64) {
 	func() {
 		g.lock.Lock()
 		defer g.lock.Unlock()
+		// Check if there is any pending changes for previous rounds.
+		for r := range g.pendingConfigChanges {
+			if r < shiftedRound+1 {
+				panic(fmt.Errorf("pending change no longer applied: %v, now: %v",
+					r, shiftedRound+1))
+			}
+		}
 		for t, v := range g.pendingConfigChanges[shiftedRound+1] {
 			if err := g.stateModule.RequestChange(t, v); err != nil {
 				panic(err)
@@ -346,7 +356,7 @@ func (g *Governance) RegisterConfigChange(
 	}
 	g.lock.Lock()
 	defer g.lock.Unlock()
-	if round <= uint64(len(g.configs)) {
+	if round < uint64(len(g.configs)) {
 		return errors.New(
 			"attempt to register state change for prepared rounds")
 	}

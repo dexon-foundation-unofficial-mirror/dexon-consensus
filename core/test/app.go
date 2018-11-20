@@ -198,6 +198,9 @@ func (app *App) GetLatestDeliveredPosition() types.Position {
 	defer app.deliveredLock.RUnlock()
 	app.blocksLock.RLock()
 	defer app.blocksLock.RUnlock()
+	if len(app.DeliverSequence) == 0 {
+		return types.Position{}
+	}
 	return app.blocks[app.DeliverSequence[len(app.DeliverSequence)-1]].Position
 }
 

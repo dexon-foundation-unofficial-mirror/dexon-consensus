@@ -41,7 +41,6 @@ type Lattice struct {
 	pool       blockPool
 	retryAdd   bool
 	data       *latticeData
-	toSyncer   *totalOrderingSyncer
 	toModule   *totalOrdering
 	ctModule   *consensusTimestamp
 	logger     common.Logger
@@ -65,7 +64,6 @@ func NewLattice(
 		debug:      debug,
 		pool:       newBlockPool(cfg.NumChains),
 		data:       newLatticeData(db, dMoment, round, cfg),
-		toSyncer:   newTotalOrderingSyncer(cfg.NumChains),
 		toModule:   newTotalOrdering(dMoment, cfg),
 		ctModule:   newConsensusTimestamp(dMoment, round, cfg.NumChains),
 		logger:     logger,
@@ -102,7 +100,9 @@ func (l *Lattice) PrepareBlock(
 func (l *Lattice) PrepareEmptyBlock(b *types.Block) (err error) {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
-	l.data.prepareEmptyBlock(b)
+	if err = l.data.prepareEmptyBlock(b); err != nil {
+		return
+	}
 	if b.Hash, err = hashBlock(b); err != nil {
 		return
 	}
@@ -237,40 +237,37 @@ func (l *Lattice) ProcessBlock(
 		return
 	}
 
-	for _, blockToSyncer := range inLattice {
-		toTotalOrdering := l.toSyncer.processBlock(blockToSyncer)
-		// Perform total ordering for each block added to lattice.
-		for _, b = range toTotalOrdering {
-			toDelivered, deliveredMode, err = l.toModule.processBlock(b)
-			if err != nil {
-				// All errors from total ordering is serious, should panic.
-				panic(err)
-			}
-			if len(toDelivered) == 0 {
-				continue
-			}
-			hashes := make(common.Hashes, len(toDelivered))
-			for idx := range toDelivered {
-				hashes[idx] = toDelivered[idx].Hash
-			}
-			if l.debug != nil {
-				l.debug.TotalOrderingDelivered(hashes, deliveredMode)
-			}
-			// Perform consensus timestamp module.
-			if err = l.ctModule.processBlocks(toDelivered); err != nil {
-				return
-			}
-			delivered = append(delivered, toDelivered...)
+	for _, b = range inLattice {
+		toDelivered, deliveredMode, err = l.toModule.processBlock(b)
+		if err != nil {
+			// All errors from total ordering is serious, should panic.
+			panic(err)
 		}
+		if len(toDelivered) == 0 {
+			continue
+		}
+		hashes := make(common.Hashes, len(toDelivered))
+		for idx := range toDelivered {
+			hashes[idx] = toDelivered[idx].Hash
+		}
+		if l.debug != nil {
+			l.debug.TotalOrderingDelivered(hashes, deliveredMode)
+		}
+		// Perform consensus timestamp module.
+		if err = l.ctModule.processBlocks(toDelivered); err != nil {
+			return
+		}
+		delivered = append(delivered, toDelivered...)
 	}
 	return
 }
 
-// NextPosition returns expected position of incoming block for specified chain.
-func (l *Lattice) NextPosition(chainID uint32) types.Position {
+// NextHeight returns expected height of incoming block for specified chain and
+// given round.
+func (l *Lattice) NextHeight(round uint64, chainID uint32) (uint64, error) {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
-	return l.data.nextPosition(chainID)
+	return l.data.nextHeight(round, chainID)
 }
 
 // PurgeBlocks purges blocks' cache in memory, this is called when the caller
@@ -308,5 +305,4 @@ func (l *Lattice) ProcessFinalizedBlock(b *types.Block) {
 		panic(err)
 	}
 	l.pool.purgeBlocks(b.Position.ChainID, b.Position.Height)
-	l.toSyncer.processFinalizedBlock(b)
 }

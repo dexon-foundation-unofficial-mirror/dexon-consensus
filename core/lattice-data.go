@@ -362,6 +362,35 @@ func (data *latticeData) addFinalizedBlock(block *types.Block) (err error) {
 	return
 }
 
+// isBindTip checks if a block's fields should follow up its parent block.
+func (data *latticeData) isBindTip(
+	pos types.Position, tip *types.Block) (bindTip bool, err error) {
+	if tip == nil {
+		return
+	}
+	if pos.Round < tip.Position.Round {
+		err = ErrInvalidRoundID
+		return
+	}
+	tipConfig := data.getConfig(tip.Position.Round)
+	if tip.Timestamp.After(tipConfig.roundEndTime) {
+		if pos.Round == tip.Position.Round {
+			err = ErrRoundNotSwitch
+			return
+		}
+		if pos.Round == tip.Position.Round+1 {
+			bindTip = true
+		}
+	} else {
+		if pos.Round != tip.Position.Round {
+			err = ErrInvalidRoundID
+			return
+		}
+		bindTip = true
+	}
+	return
+}
+
 // prepareBlock setups fields of a block based on its ChainID and Round,
 // including:
 // - Acks
@@ -375,7 +404,6 @@ func (data *latticeData) prepareBlock(b *types.Block) error {
 		config       *latticeDataConfig
 		acks         common.Hashes
 		bindTip      bool
-		chainTip     *types.Block
 	)
 	if config = data.getConfig(b.Position.Round); config == nil {
 		return ErrUnknownRoundID
@@ -388,29 +416,15 @@ func (data *latticeData) prepareBlock(b *types.Block) error {
 	b.Position.Height = 0
 	b.ParentHash = common.Hash{}
 	// Decide valid timestamp range.
-	homeChain := data.chains[b.Position.ChainID]
-	if homeChain.tip != nil {
-		chainTip = homeChain.tip
-		if b.Position.Round < chainTip.Position.Round {
-			return ErrInvalidRoundID
-		}
-		chainTipConfig := data.getConfig(chainTip.Position.Round)
-		if chainTip.Timestamp.After(chainTipConfig.roundEndTime) {
-			if b.Position.Round == chainTip.Position.Round {
-				return ErrRoundNotSwitch
-			}
-			if b.Position.Round == chainTip.Position.Round+1 {
-				bindTip = true
-			}
-		} else {
-			if b.Position.Round != chainTip.Position.Round {
-				return ErrInvalidRoundID
-			}
-			bindTip = true
-		}
+	chainTip := data.chains[b.Position.ChainID].tip
+	if chainTip != nil {
 		// TODO(mission): find a way to prevent us to assign a witness height
 		//                from Jurassic period.
 		b.Witness.Height = chainTip.Witness.Height
+	}
+	bindTip, err := data.isBindTip(b.Position, chainTip)
+	if err != nil {
+		return err
 	}
 	// For blocks with continuous round ID, assign timestamp range based on
 	// parent block and bound config.
@@ -461,40 +475,48 @@ func (data *latticeData) prepareBlock(b *types.Block) error {
 // - ParentHash and Height from parent block. If there is no valid parent block
 //   (ex. Newly added chain or bootstrap), these fields would be setup as
 //   genesis block.
-func (data *latticeData) prepareEmptyBlock(b *types.Block) {
+func (data *latticeData) prepareEmptyBlock(b *types.Block) (err error) {
 	// emptyBlock has no proposer.
 	b.ProposerID = types.NodeID{}
-	var acks common.Hashes
 	// Reset fields to make sure we got these information from parent block.
 	b.Position.Height = 0
-	b.Position.Round = 0
 	b.ParentHash = common.Hash{}
 	b.Timestamp = time.Time{}
 	// Decide valid timestamp range.
-	homeChain := data.chains[b.Position.ChainID]
-	if homeChain.tip != nil {
-		chainTip := homeChain.tip
+	config := data.getConfig(b.Position.Round)
+	chainTip := data.chains[b.Position.ChainID].tip
+	bindTip, err := data.isBindTip(b.Position, chainTip)
+	if err != nil {
+		return
+	}
+	if bindTip {
 		b.ParentHash = chainTip.Hash
-		chainTipConfig := data.getConfig(chainTip.Position.Round)
-		if chainTip.Timestamp.After(chainTipConfig.roundEndTime) {
-			b.Position.Round = chainTip.Position.Round + 1
-		} else {
-			b.Position.Round = chainTip.Position.Round
-		}
 		b.Position.Height = chainTip.Position.Height + 1
-		b.Timestamp = chainTip.Timestamp.Add(chainTipConfig.minBlockTimeInterval)
+		b.Timestamp = chainTip.Timestamp.Add(config.minBlockTimeInterval)
 		b.Witness.Height = chainTip.Witness.Height
 		b.Witness.Data = make([]byte, len(chainTip.Witness.Data))
 		copy(b.Witness.Data, chainTip.Witness.Data)
-		acks = append(acks, chainTip.Hash)
+		b.Acks = common.NewSortedHashes(common.Hashes{chainTip.Hash})
+	} else {
+		b.Timestamp = config.roundBeginTime
 	}
-	b.Acks = common.NewSortedHashes(acks)
+	return
 }
 
 // TODO(mission): make more abstraction for this method.
 // nextHeight returns the next height of a chain.
-func (data *latticeData) nextPosition(chainID uint32) types.Position {
-	return data.chains[chainID].nextPosition()
+func (data *latticeData) nextHeight(
+	round uint64, chainID uint32) (uint64, error) {
+	chainTip := data.chains[chainID].tip
+	bindTip, err := data.isBindTip(
+		types.Position{Round: round, ChainID: chainID}, chainTip)
+	if err != nil {
+		return 0, err
+	}
+	if bindTip {
+		return chainTip.Position.Height + 1, nil
+	}
+	return 0, nil
 }
 
 // findBlock seeks blocks in memory or db.
@@ -607,21 +629,6 @@ func (s *chainStatus) getBlock(idx int) (b *types.Block) {
 func (s *chainStatus) addBlock(b *types.Block) {
 	s.blocks = append(s.blocks, b)
 	s.tip = b
-}
-
-// TODO(mission): change back to nextHeight.
-// nextPosition returns a valid position for new block in this chain.
-func (s *chainStatus) nextPosition() types.Position {
-	if s.tip == nil {
-		return types.Position{
-			ChainID: s.ID,
-			Height:  0,
-		}
-	}
-	return types.Position{
-		ChainID: s.ID,
-		Height:  s.tip.Position.Height + 1,
-	}
 }
 
 // purgeBlock purges a block from cache, make sure this block is already saved

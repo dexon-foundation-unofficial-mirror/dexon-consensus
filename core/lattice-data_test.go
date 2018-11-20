@@ -550,11 +550,13 @@ func (s *LatticeDataTestSuite) TestPrepareBlock() {
 	req.Equal(b01.Position.Height, uint64(1))
 }
 
-func (s *LatticeDataTestSuite) TestNextPosition() {
-	// Test 'NextPosition' method when lattice is ready.
+func (s *LatticeDataTestSuite) TestNextHeight() {
+	// Test 'NextHeight' method when lattice is ready.
 	data, _ := s.genTestCase1()
-	s.Equal(data.nextPosition(0), types.Position{ChainID: 0, Height: 4})
-	// Test 'NextPosition' method when lattice is empty.
+	h, err := data.nextHeight(0, 0)
+	s.Require().NoError(err)
+	s.Require().Equal(h, uint64(4))
+	// Test 'NextHeight' method when lattice is empty.
 	// Setup a configuration that no restriction on block interval and
 	// round cutting.
 	genesisConfig := &types.Config{
@@ -563,7 +565,9 @@ func (s *LatticeDataTestSuite) TestNextPosition() {
 		MinBlockInterval: 1 * time.Second,
 	}
 	data = newLatticeData(nil, time.Now().UTC(), 0, genesisConfig)
-	s.Equal(data.nextPosition(0), types.Position{ChainID: 0, Height: 0})
+	h, err = data.nextHeight(0, 0)
+	s.Require().NoError(err)
+	s.Require().Equal(h, uint64(0))
 }
 
 func (s *LatticeDataTestSuite) TestPrepareEmptyBlock() {

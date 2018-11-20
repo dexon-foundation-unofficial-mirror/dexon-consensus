@@ -187,22 +187,16 @@ func (s *ConsensusTestSuite) prepareConsensus(
 		dMoment, app, gov, db, network, prvKey, &common.NullLogger{})
 	con.ccModule.init(&types.Block{})
 	conn.setCon(nID, con)
-	round := uint64(0)
-	nodes, err := con.nodeSetCache.GetNodeSet(round)
-	s.Require().NoError(err)
-	for i, agreement := range con.baModules {
-		chainID := uint32(i)
-		nIDs := nodes.GetSubSet(
-			int(gov.Configuration(round).NotarySetSize),
-			types.NewNotarySetTarget(
-				gov.CRS(round), chainID))
-		agreement.restart(nIDs, types.Position{
-			Round:   round,
-			ChainID: chainID,
-			Height:  uint64(0),
-		}, gov.CRS(round))
-	}
 	return app, con
+}
+
+func (s *ConsensusTestSuite) prepareAgreementMgrWithoutRunning(
+	con *Consensus, numChains uint32) {
+	// This is a workaround to setup agreementMgr.
+	con.baMgr.appendConfig(0, &types.Config{
+		NumChains:     numChains,
+		RoundInterval: time.Hour,
+	}, common.NewRandomHash())
 }
 
 func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
@@ -453,6 +447,7 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 	cons := map[types.NodeID]*Consensus{}
 	for _, key := range prvKeys {
 		_, con := s.prepareConsensus(dMoment, gov, key, conn)
+		s.prepareAgreementMgrWithoutRunning(con, 4)
 		nID := types.NewNodeID(key.PublicKey())
 		cons[nID] = con
 		nodes = append(nodes, nID)
@@ -492,6 +487,7 @@ func (s *ConsensusTestSuite) TestPrepareGenesisBlock() {
 	s.Require().NoError(err)
 	prvKey := prvKeys[0]
 	_, con := s.prepareConsensus(time.Now().UTC(), gov, prvKey, conn)
+	s.prepareAgreementMgrWithoutRunning(con, 4)
 	block := &types.Block{
 		Position: types.Position{ChainID: 0},
 	}
@@ -547,13 +543,15 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 }
 
 func (s *ConsensusTestSuite) TestSyncBA() {
+	lambdaBA := time.Second
 	conn := s.newNetworkConnection()
 	prvKeys, pubKeys, err := test.NewKeys(4)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(pubKeys, time.Second, ConfigRoundShift)
+	gov, err := test.NewGovernance(pubKeys, lambdaBA, ConfigRoundShift)
 	s.Require().NoError(err)
 	prvKey := prvKeys[0]
 	_, con := s.prepareConsensus(time.Now().UTC(), gov, prvKey, conn)
+	go con.Run(&types.Block{})
 	hash := common.NewRandomHash()
 	auths := make([]*Authenticator, 0, len(prvKeys))
 	for _, prvKey := range prvKeys {
@@ -574,8 +572,13 @@ func (s *ConsensusTestSuite) TestSyncBA() {
 		s.Require().NoError(auth.SignVote(vote))
 		baResult.Votes = append(baResult.Votes, *vote)
 	}
+	// Make sure each agreement module is running. ProcessAgreementResult only
+	// works properly when agreement module is running:
+	//  - the bias for round begin time would be 4 * lambda.
+	//  - the ticker is 1 lambdaa.
+	time.Sleep(5 * lambdaBA)
 	s.Require().NoError(con.ProcessAgreementResult(baResult))
-	aID := con.baModules[0].agreementID()
+	aID := con.baMgr.baModules[0].agreementID()
 	s.Equal(pos, aID)
 
 	// Test negative case.

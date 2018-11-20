@@ -112,28 +112,28 @@ func (s *WithSchedulerTestSuite) TestConfigurationChange() {
 	for _, pickedNode = range nodes {
 		break
 	}
-	// Config changes for round 4, numChains from 4 to 7.
+	// Config changes for round 5, numChains from 4 to 7.
 	req.NoError(pickedNode.gov().RegisterConfigChange(
-		4, test.StateChangeNumChains, uint32(7)))
+		5, test.StateChangeNumChains, uint32(7)))
 	req.NoError(pickedNode.gov().RegisterConfigChange(
-		4, test.StateChangeK, 3))
+		5, test.StateChangeK, 3))
 	req.NoError(pickedNode.gov().RegisterConfigChange(
-		4, test.StateChangePhiRatio, float32(0.5)))
-	// Config changes for round 5, numChains from 7 to 9.
+		5, test.StateChangePhiRatio, float32(0.5)))
+	// Config changes for round 6, numChains from 7 to 9.
 	req.NoError(pickedNode.gov().RegisterConfigChange(
-		5, test.StateChangeNumChains, maxNumChains))
+		6, test.StateChangeNumChains, maxNumChains))
 	req.NoError(pickedNode.gov().RegisterConfigChange(
-		5, test.StateChangeK, 0))
-	// Config changes for round 6, numChains from 9 to 7.
+		6, test.StateChangeK, 0))
+	// Config changes for round 7, numChains from 9 to 7.
 	req.NoError(pickedNode.gov().RegisterConfigChange(
-		6, test.StateChangeNumChains, uint32(7)))
-	req.NoError(pickedNode.gov().RegisterConfigChange(
-		6, test.StateChangeK, 1))
-	// Config changes for round 6, numChains from 7 to 5.
-	req.NoError(pickedNode.gov().RegisterConfigChange(
-		7, test.StateChangeNumChains, uint32(5)))
+		7, test.StateChangeNumChains, uint32(7)))
 	req.NoError(pickedNode.gov().RegisterConfigChange(
 		7, test.StateChangeK, 1))
+	// Config changes for round 8, numChains from 7 to 5.
+	req.NoError(pickedNode.gov().RegisterConfigChange(
+		8, test.StateChangeNumChains, uint32(5)))
+	req.NoError(pickedNode.gov().RegisterConfigChange(
+		8, test.StateChangeK, 1))
 	// Perform test.
 	sch.Run(4)
 	// Check results by comparing test.App instances.
