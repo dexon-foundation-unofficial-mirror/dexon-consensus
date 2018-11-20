@@ -34,6 +34,10 @@ import (
 // it to core/utils package.
 type NodeSetCache = utils.NodeSetCache
 
+// NewNodeSetCache is function alias to avoid fullnode compile error when moving
+// it to core/utils package.
+var NewNodeSetCache = utils.NewNodeSetCache
+
 var (
 	debug = false
 	// ErrEmptyTimestamps would be reported if Block.timestamps is empty.
