@@ -21,6 +21,7 @@ import (
 	"container/heap"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
@@ -39,6 +40,13 @@ var (
 		"incorrect block randomness result")
 )
 
+const maxPendingPeriod = 3 * time.Second
+
+type pendingRandomnessResult struct {
+	receivedTime time.Time
+	randResult   *types.BlockRandomnessResult
+}
+
 type finalizedBlockHeap = types.ByFinalizationHeight
 
 type compactionChain struct {
@@ -47,6 +55,7 @@ type compactionChain struct {
 	tsigVerifier           *TSigVerifierCache
 	blocks                 map[common.Hash]*types.Block
 	blockRandomness        map[common.Hash][]byte
+	pendingRandomness      map[common.Hash]pendingRandomnessResult
 	pendingBlocks          []*types.Block
 	pendingFinalizedBlocks *finalizedBlockHeap
 	lock                   sync.RWMutex
@@ -61,6 +70,7 @@ func newCompactionChain(gov Governance) *compactionChain {
 		tsigVerifier:           NewTSigVerifierCache(gov, 7),
 		blocks:                 make(map[common.Hash]*types.Block),
 		blockRandomness:        make(map[common.Hash][]byte),
+		pendingRandomness:      make(map[common.Hash]pendingRandomnessResult),
 		pendingFinalizedBlocks: pendingFinalizedBlocks,
 	}
 }
@@ -83,6 +93,10 @@ func (cc *compactionChain) registerBlock(block *types.Block) {
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
 	cc.blocks[block.Hash] = block
+	if rand, exist := cc.pendingRandomness[block.Hash]; exist {
+		cc.blockRandomness[rand.randResult.BlockHash] = rand.randResult.Randomness
+		delete(cc.pendingRandomness, block.Hash)
+	}
 }
 
 func (cc *compactionChain) blockRegistered(hash common.Hash) bool {
@@ -286,13 +300,6 @@ func (cc *compactionChain) extractFinalizedBlocks() []*types.Block {
 
 func (cc *compactionChain) processBlockRandomnessResult(
 	rand *types.BlockRandomnessResult) error {
-	cc.lock.Lock()
-	defer cc.lock.Unlock()
-	if !cc.blockRegisteredNoLock(rand.BlockHash) {
-		// If the randomness result is discarded here, it'll later be processed by
-		//finalized block
-		return ErrBlockNotRegistered
-	}
 	ok, err := cc.verifyRandomness(
 		rand.BlockHash, rand.Position.Round, rand.Randomness)
 	if err != nil {
@@ -301,8 +308,27 @@ func (cc *compactionChain) processBlockRandomnessResult(
 	if !ok {
 		return ErrIncorrectBlockRandomnessResult
 	}
+	cc.lock.Lock()
+	defer cc.lock.Unlock()
+	if !cc.blockRegisteredNoLock(rand.BlockHash) {
+		cc.purgePending()
+		cc.pendingRandomness[rand.BlockHash] = pendingRandomnessResult{
+			receivedTime: time.Now(),
+			randResult:   rand,
+		}
+		return ErrBlockNotRegistered
+	}
 	cc.blockRandomness[rand.BlockHash] = rand.Randomness
 	return nil
+}
+
+func (cc *compactionChain) purgePending() {
+	now := time.Now()
+	for key, rand := range cc.pendingRandomness {
+		if now.After(rand.receivedTime.Add(maxPendingPeriod)) {
+			delete(cc.pendingRandomness, key)
+		}
+	}
 }
 
 func (cc *compactionChain) lastBlock() *types.Block {

@@ -1,18 +1,18 @@
-// Copyright 2018 The dexon-consensus-core Authors
-// This file is part of the dexon-consensus-core library.
+// Copyright 2018 The dexon-consensus Authors
+// This file is part of the dexon-consensus library.
 //
-// The dexon-consensus-core library is free software: you can redistribute it
+// The dexon-consensus library is free software: you can redistribute it
 // and/or modify it under the terms of the GNU Lesser General Public License as
 // published by the Free Software Foundation, either version 3 of the License,
 // or (at your option) any later version.
 //
-// The dexon-consensus-core library is distributed in the hope that it will be
+// The dexon-consensus library is distributed in the hope that it will be
 // useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser
 // General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the dexon-consensus-core library. If not, see
+// along with the dexon-consensus library. If not, see
 // <http://www.gnu.org/licenses/>.
 
 package core
@@ -382,15 +382,29 @@ Loop:
 				// This round is finished.
 				break Loop
 			}
-			nextHeight, err := mgr.lattice.NextHeight(recv.round, setting.chainID)
-			if err != nil {
-				panic(err)
+			oldPos := agr.agreementID()
+			var nextHeight uint64
+			for {
+				nextHeight, err = mgr.lattice.NextHeight(recv.round, setting.chainID)
+				if err != nil {
+					panic(err)
+				}
+				if isStop(oldPos) || nextHeight == 0 {
+					break
+				}
+				if nextHeight > oldPos.Height {
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
+				mgr.logger.Debug("Lattice not ready!!!",
+					"old", &oldPos, "next", nextHeight)
 			}
-			agr.restart(setting.notarySet, types.Position{
+			nextPos := types.Position{
 				Round:   recv.round,
 				ChainID: setting.chainID,
 				Height:  nextHeight,
-			}, setting.crs)
+			}
+			agr.restart(setting.notarySet, nextPos, setting.crs)
 		default:
 		}
 		if agr.pullVotes() {

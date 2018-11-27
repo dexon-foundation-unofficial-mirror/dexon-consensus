@@ -144,6 +144,54 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 		}
 	}
 	recv.consensus.ccModule.registerBlock(block)
+	if block.Position.Height != 0 &&
+		!recv.consensus.lattice.Exist(block.ParentHash) {
+		go func(hash common.Hash) {
+			parentHash := hash
+			for {
+				recv.consensus.logger.Warn("Parent block not confirmed",
+					"hash", parentHash,
+					"chainID", recv.chainID)
+				ch := make(chan *types.Block)
+				if !func() bool {
+					recv.consensus.lock.Lock()
+					defer recv.consensus.lock.Unlock()
+					if _, exist := recv.consensus.baConfirmedBlock[parentHash]; exist {
+						return false
+					}
+					recv.consensus.baConfirmedBlock[parentHash] = ch
+					return true
+				}() {
+					return
+				}
+				var block *types.Block
+			PullBlockLoop:
+				for {
+					recv.consensus.logger.Debug("Calling Network.PullBlock for parent",
+						"hash", parentHash)
+					recv.consensus.network.PullBlocks(common.Hashes{parentHash})
+					select {
+					case block = <-ch:
+						break PullBlockLoop
+					case <-time.After(1 * time.Second):
+					}
+				}
+				recv.consensus.logger.Info("Receive parent block",
+					"hash", block.ParentHash,
+					"chainID", recv.chainID)
+				recv.consensus.ccModule.registerBlock(block)
+				if err := recv.consensus.processBlock(block); err != nil {
+					recv.consensus.logger.Error("Failed to process block", "error", err)
+					return
+				}
+				parentHash = block.ParentHash
+				if block.Position.Height == 0 ||
+					recv.consensus.lattice.Exist(parentHash) {
+					return
+				}
+			}
+		}(block.ParentHash)
+	}
 	voteList := make([]types.Vote, 0, len(votes))
 	for _, vote := range votes {
 		if vote.BlockHash != hash {
@@ -157,7 +205,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 		Votes:        voteList,
 		IsEmptyBlock: isEmptyBlockConfirmed,
 	}
-	recv.consensus.logger.Debug("Calling Network.BroadcastAgreementResult",
+	recv.consensus.logger.Debug("Propose AgreementResult",
 		"result", result)
 	recv.consensus.network.BroadcastAgreementResult(result)
 	if err := recv.consensus.processBlock(block); err != nil {
@@ -766,7 +814,8 @@ func (con *Consensus) ProcessAgreementResult(
 	if !con.cfgModule.touchTSigHash(rand.BlockHash) {
 		return nil
 	}
-	con.logger.Debug("Calling Network.BroadcastAgreementResult", "result", rand)
+	con.logger.Debug("Rebroadcast AgreementResult",
+		"result", rand)
 	con.network.BroadcastAgreementResult(rand)
 	dkgSet, err := con.nodeSetCache.GetDKGSet(rand.Position.Round)
 	if err != nil {
@@ -892,6 +941,8 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		go con.event.NotifyTime(b.Finalization.Timestamp)
 	}
 	deliveredBlocks = con.ccModule.extractBlocks()
+	con.logger.Debug("Last block in compaction chain",
+		"block", con.ccModule.lastBlock())
 	for _, b := range deliveredBlocks {
 		if err = con.db.Update(*b); err != nil {
 			panic(err)

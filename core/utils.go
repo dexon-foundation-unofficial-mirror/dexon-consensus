@@ -61,7 +61,7 @@ func Debugf(format string, args ...interface{}) {
 // Debugln is like fmt.Println, but only output when we are in debug mode.
 func Debugln(args ...interface{}) {
 	if debug {
-		fmt.Println(args)
+		fmt.Println(args...)
 	}
 }
 

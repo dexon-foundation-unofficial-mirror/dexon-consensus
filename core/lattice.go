@@ -155,6 +155,16 @@ func (l *Lattice) SanityCheck(b *types.Block) (err error) {
 	return
 }
 
+// Exist checks if the block is known to lattice.
+func (l *Lattice) Exist(hash common.Hash) bool {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+	if _, err := l.data.findBlock(hash); err != nil {
+		return false
+	}
+	return true
+}
+
 // addBlockToLattice adds a block into lattice, and delivers blocks with the
 // acks already delivered.
 //
@@ -164,6 +174,8 @@ func (l *Lattice) addBlockToLattice(
 
 	if tip := l.data.chains[input.Position.ChainID].tip; tip != nil {
 		if !input.Position.Newer(&tip.Position) {
+			l.logger.Warn("Dropping block: older than tip",
+				"block", input, "tip", tip)
 			return
 		}
 	}
@@ -203,7 +215,7 @@ func (l *Lattice) addBlockToLattice(
 		if l.debug != nil {
 			l.debug.StronglyAcked(b.Hash)
 		}
-		l.logger.Debug("Calling Application.BlockConfirmed", "block", input)
+		l.logger.Debug("Calling Application.BlockConfirmed", "block", b)
 		l.app.BlockConfirmed(*b.Clone())
 		// Purge blocks in pool with the same chainID and lower height.
 		l.pool.purgeBlocks(b.Position.ChainID, b.Position.Height)
@@ -298,11 +310,4 @@ func (l *Lattice) AppendConfig(round uint64, config *types.Config) (err error) {
 
 // ProcessFinalizedBlock is used for syncing lattice data.
 func (l *Lattice) ProcessFinalizedBlock(b *types.Block) {
-	defer func() { l.retryAdd = true }()
-	l.lock.Lock()
-	defer l.lock.Unlock()
-	if err := l.data.addFinalizedBlock(b); err != nil {
-		panic(err)
-	}
-	l.pool.purgeBlocks(b.Position.ChainID, b.Position.Height)
 }
