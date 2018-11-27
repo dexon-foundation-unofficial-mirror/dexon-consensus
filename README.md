@@ -17,22 +17,23 @@ DEXON Consensus
     cd dexon-consensus
     ```
 
-2. Install go dependency management tool
-   ```
-   ./bin/install_tools.sh
-   ```
-
-3. Install all dependencies
-   ```
-   dep ensure
-   ```
-
-4. Setup GOAPTH, the GOPATH could be anywhere in the system. Here we use `$HOME/go`:
+2. Setup GOPATH, the GOPATH could be anywhere in the system. Here we use `$HOME/go`:
    ```
    export GOPATH=$HOME/go
    export PATH=$GOPATH/bin:$PATH
    ```
    You should write these settings to your `.bashrc` file.
+
+
+3. Install go dependency management tool
+   ```
+   ./bin/install_tools.sh
+   ```
+
+4. Install all dependencies
+   ```
+   dep ensure
+   ```
 
 ### Run Unit Tests
 
