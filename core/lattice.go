@@ -211,10 +211,6 @@ func (l *Lattice) addBlockToLattice(
 	}
 
 	for _, b := range outputBlocks {
-		// TODO(jimmy-dexon): change this name of classic DEXON algorithm.
-		if l.debug != nil {
-			l.debug.StronglyAcked(b.Hash)
-		}
 		l.logger.Debug("Calling Application.BlockConfirmed", "block", b)
 		l.app.BlockConfirmed(*b.Clone())
 		// Purge blocks in pool with the same chainID and lower height.

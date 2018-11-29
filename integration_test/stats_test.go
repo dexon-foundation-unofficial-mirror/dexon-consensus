@@ -42,7 +42,7 @@ func (s *EventStatsTestSuite) TestCalculate() {
 	req.Nil(err)
 	req.True(stats.All.ProposedBlockCount > 350)
 	req.True(stats.All.ReceivedBlockCount > 350)
-	req.True(stats.All.StronglyAckedBlockCount > 350)
+	req.True(stats.All.ConfirmedBlockCount > 350)
 	req.True(stats.All.TotalOrderedBlockCount >= 350)
 	req.True(stats.All.DeliveredBlockCount >= 350)
 	req.Equal(stats.All.ProposingLatency, 300*time.Millisecond)
@@ -51,7 +51,7 @@ func (s *EventStatsTestSuite) TestCalculate() {
 	for _, vStats := range stats.ByNode {
 		req.True(vStats.ProposedBlockCount > 50)
 		req.True(vStats.ReceivedBlockCount > 50)
-		req.True(vStats.StronglyAckedBlockCount > 50)
+		req.True(vStats.ConfirmedBlockCount > 50)
 		req.True(vStats.TotalOrderedBlockCount >= 50)
 		req.True(vStats.DeliveredBlockCount >= 50)
 		req.Equal(vStats.ProposingLatency, 300*time.Millisecond)

@@ -372,15 +372,14 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 
 	// Verify the cached status of each app.
 	verify := func(app *test.App) {
-		// Check blocks that are strongly acked.
-		req.Contains(app.Acked, b00.Hash)
-		req.Contains(app.Acked, b10.Hash)
-		req.Contains(app.Acked, b20.Hash)
-		req.Contains(app.Acked, b30.Hash)
-		req.Contains(app.Acked, b01.Hash)
-		req.Contains(app.Acked, b11.Hash)
-		req.Contains(app.Acked, b21.Hash)
-		req.Contains(app.Acked, b31.Hash)
+		req.Contains(app.Confirmed, b00.Hash)
+		req.Contains(app.Confirmed, b10.Hash)
+		req.Contains(app.Confirmed, b20.Hash)
+		req.Contains(app.Confirmed, b30.Hash)
+		req.Contains(app.Confirmed, b01.Hash)
+		req.Contains(app.Confirmed, b11.Hash)
+		req.Contains(app.Confirmed, b21.Hash)
+		req.Contains(app.Confirmed, b31.Hash)
 		// Genesis blocks are delivered by total ordering as a set.
 		delivered0 := common.Hashes{b00.Hash, b10.Hash, b20.Hash, b30.Hash}
 		sort.Sort(delivered0)

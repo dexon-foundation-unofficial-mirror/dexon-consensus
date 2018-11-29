@@ -17,15 +17,15 @@ var (
 // StatsSet represents accumulatee result of a group of related events
 // (ex. All events from one node).
 type StatsSet struct {
-	ProposedBlockCount      int
-	ReceivedBlockCount      int
-	StronglyAckedBlockCount int
-	TotalOrderedBlockCount  int
-	DeliveredBlockCount     int
-	ProposingLatency        time.Duration
-	ReceivingLatency        time.Duration
-	PrepareExecLatency      time.Duration
-	ProcessExecLatency      time.Duration
+	ProposedBlockCount     int
+	ReceivedBlockCount     int
+	ConfirmedBlockCount    int
+	TotalOrderedBlockCount int
+	DeliveredBlockCount    int
+	ProposingLatency       time.Duration
+	ReceivingLatency       time.Duration
+	PrepareExecLatency     time.Duration
+	ProcessExecLatency     time.Duration
 }
 
 // newBlockProposeEvent accumulates a block proposing event.
@@ -59,12 +59,11 @@ func (s *StatsSet) newBlockReceiveEvent(
 	// Find statistics from test.App
 	block := payload.PiggyBack.(*types.Block)
 	app.Check(func(app *test.App) {
-		// Is this block strongly acked?
-		if _, exists := app.Acked[block.Hash]; !exists {
+		// Is this block confirmed?
+		if _, exists := app.Confirmed[block.Hash]; !exists {
 			return
 		}
-		s.StronglyAckedBlockCount++
-
+		s.ConfirmedBlockCount++
 		// Is this block total ordered?
 		if _, exists := app.TotalOrderedByHash[block.Hash]; !exists {
 			return

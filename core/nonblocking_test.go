@@ -31,7 +31,6 @@ import (
 type slowApp struct {
 	sleep                  time.Duration
 	blockConfirmed         map[common.Hash]struct{}
-	stronglyAcked          map[common.Hash]struct{}
 	totalOrderingDelivered map[common.Hash]struct{}
 	blockDelivered         map[common.Hash]struct{}
 }
@@ -40,7 +39,6 @@ func newSlowApp(sleep time.Duration) *slowApp {
 	return &slowApp{
 		sleep:                  sleep,
 		blockConfirmed:         make(map[common.Hash]struct{}),
-		stronglyAcked:          make(map[common.Hash]struct{}),
 		totalOrderingDelivered: make(map[common.Hash]struct{}),
 		blockDelivered:         make(map[common.Hash]struct{}),
 	}
@@ -61,11 +59,6 @@ func (app *slowApp) VerifyBlock(_ *types.Block) types.BlockVerifyStatus {
 func (app *slowApp) BlockConfirmed(block types.Block) {
 	time.Sleep(app.sleep)
 	app.blockConfirmed[block.Hash] = struct{}{}
-}
-
-func (app *slowApp) StronglyAcked(blockHash common.Hash) {
-	time.Sleep(app.sleep)
-	app.stronglyAcked[blockHash] = struct{}{}
 }
 
 func (app *slowApp) TotalOrderingDelivered(blockHashes common.Hashes, mode uint32) {
@@ -137,7 +130,6 @@ func (s *NonBlockingTestSuite) TestNonBlocking() {
 			Hash:    hash,
 			Witness: types.Witness{},
 		})
-		nbModule.StronglyAcked(hash)
 		nbModule.BlockDelivered(
 			hash, types.Position{}, types.FinalizationResult{})
 	}
@@ -149,7 +141,6 @@ func (s *NonBlockingTestSuite) TestNonBlocking() {
 	nbModule.wait()
 	for _, hash := range hashes {
 		s.Contains(app.blockConfirmed, hash)
-		s.Contains(app.stronglyAcked, hash)
 		s.Contains(app.totalOrderingDelivered, hash)
 		s.Contains(app.blockDelivered, hash)
 	}

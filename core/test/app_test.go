@@ -59,9 +59,8 @@ func (s *AppTestSuite) SetupSuite() {
 
 func (s *AppTestSuite) setupAppByTotalOrderDeliver(
 	app *App, to *AppTotalOrderRecord) {
-
 	for _, h := range to.BlockHashes {
-		app.StronglyAcked(h)
+		app.BlockConfirmed(types.Block{Hash: h})
 	}
 	app.TotalOrderingDelivered(to.BlockHashes, to.Mode)
 	for _, h := range to.BlockHashes {
@@ -100,7 +99,7 @@ func (s *AppTestSuite) TestCompare() {
 	s.setupAppByTotalOrderDeliver(app2, s.to1)
 	s.setupAppByTotalOrderDeliver(app2, s.to2)
 	hash := common.NewRandomHash()
-	app2.StronglyAcked(hash)
+	app2.BlockConfirmed(types.Block{Hash: hash})
 	app2.TotalOrderingDelivered(common.Hashes{hash}, core.TotalOrderingModeNormal)
 	s.deliverBlockWithTimeFromSequenceLength(app2, hash)
 	req.Equal(ErrMismatchBlockHashSequence, app1.Compare(app2))
@@ -109,7 +108,7 @@ func (s *AppTestSuite) TestCompare() {
 	s.setupAppByTotalOrderDeliver(app3, s.to1)
 	s.setupAppByTotalOrderDeliver(app3, s.to2)
 	for _, h := range s.to3.BlockHashes {
-		app3.StronglyAcked(h)
+		app3.BlockConfirmed(types.Block{Hash: h})
 	}
 	app3.TotalOrderingDelivered(s.to3.BlockHashes, s.to3.Mode)
 	wrongTime := time.Time{}.Add(
@@ -137,12 +136,12 @@ func (s *AppTestSuite) TestVerify() {
 	// A delivered block without strongly ack
 	s.deliverBlock(app1, common.NewRandomHash(), time.Time{},
 		uint64(len(app1.DeliverSequence)))
-	req.Equal(ErrDeliveredBlockNotAcked, app1.Verify())
+	req.Equal(ErrDeliveredBlockNotConfirmed, app1.Verify())
 	// The consensus time is out of order.
 	app2 := NewApp(nil)
 	s.setupAppByTotalOrderDeliver(app2, s.to1)
 	for _, h := range s.to2.BlockHashes {
-		app2.StronglyAcked(h)
+		app2.BlockConfirmed(types.Block{Hash: h})
 	}
 	app2.TotalOrderingDelivered(s.to2.BlockHashes, s.to2.Mode)
 	s.deliverBlock(app2, s.to2.BlockHashes[0], time.Time{},
@@ -152,18 +151,18 @@ func (s *AppTestSuite) TestVerify() {
 	app3 := NewApp(nil)
 	s.setupAppByTotalOrderDeliver(app3, s.to1)
 	hash := common.NewRandomHash()
-	app3.StronglyAcked(hash)
+	app3.BlockConfirmed(types.Block{Hash: hash})
 	s.deliverBlockWithTimeFromSequenceLength(app3, hash)
 	req.Equal(ErrMismatchTotalOrderingAndDelivered, app3.Verify())
 	// A delivered block is not found in total ordering delivers.
 	app4 := NewApp(nil)
 	s.setupAppByTotalOrderDeliver(app4, s.to1)
 	for _, h := range s.to2.BlockHashes {
-		app4.StronglyAcked(h)
+		app4.BlockConfirmed(types.Block{Hash: h})
 	}
 	app4.TotalOrderingDelivered(s.to2.BlockHashes, s.to2.Mode)
 	hash = common.NewRandomHash()
-	app4.StronglyAcked(hash)
+	app4.BlockConfirmed(types.Block{Hash: hash})
 	app4.TotalOrderingDelivered(common.Hashes{hash}, core.TotalOrderingModeNormal)
 	s.deliverBlockWithTimeFromSequenceLength(app4, hash)
 	// Witness ack on unknown block.
@@ -173,7 +172,7 @@ func (s *AppTestSuite) TestVerify() {
 	app6 := NewApp(nil)
 	s.setupAppByTotalOrderDeliver(app6, s.to1)
 	for _, h := range s.to2.BlockHashes {
-		app6.StronglyAcked(h)
+		app6.BlockConfirmed(types.Block{Hash: h})
 	}
 	app6.TotalOrderingDelivered(s.to2.BlockHashes, s.to2.Mode)
 	s.deliverBlock(app6, s.to2.BlockHashes[0], time.Time{}.Add(

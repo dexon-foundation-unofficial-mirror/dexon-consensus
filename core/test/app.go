@@ -47,20 +47,14 @@ var (
 	// consensus height not equal to height of previous block plus one.
 	ErrConsensusHeightOutOfOrder = fmt.Errorf(
 		"consensus height out of order")
-	// ErrDeliveredBlockNotAcked means some block delivered (confirmed) but
-	// not strongly acked.
-	ErrDeliveredBlockNotAcked = fmt.Errorf("delivered block not acked")
+	// ErrDeliveredBlockNotConfirmed means some block delivered (confirmed) but
+	// not confirmed.
+	ErrDeliveredBlockNotConfirmed = fmt.Errorf("delivered block not confirmed")
 	// ErrMismatchTotalOrderingAndDelivered mean the sequence of total ordering
 	// and delivered are different.
 	ErrMismatchTotalOrderingAndDelivered = fmt.Errorf(
 		"mismatch total ordering and delivered sequence")
 )
-
-// AppAckedRecord caches information when this application received
-// a strongly-acked notification.
-type AppAckedRecord struct {
-	When time.Time
-}
 
 // AppTotalOrderRecord caches information when this application received
 // a total-ordering deliver notification.
@@ -81,28 +75,25 @@ type AppDeliveredRecord struct {
 
 // App implements Application interface for testing purpose.
 type App struct {
-	Acked              map[common.Hash]*AppAckedRecord
-	ackedLock          sync.RWMutex
+	Confirmed          map[common.Hash]*types.Block
+	confirmedLock      sync.RWMutex
 	TotalOrdered       []*AppTotalOrderRecord
 	TotalOrderedByHash map[common.Hash]*AppTotalOrderRecord
 	totalOrderedLock   sync.RWMutex
 	Delivered          map[common.Hash]*AppDeliveredRecord
 	DeliverSequence    common.Hashes
 	deliveredLock      sync.RWMutex
-	blocks             map[common.Hash]*types.Block
-	blocksLock         sync.RWMutex
 	state              *State
 }
 
 // NewApp constructs a TestApp instance.
 func NewApp(state *State) *App {
 	return &App{
-		Acked:              make(map[common.Hash]*AppAckedRecord),
+		Confirmed:          make(map[common.Hash]*types.Block),
 		TotalOrdered:       []*AppTotalOrderRecord{},
 		TotalOrderedByHash: make(map[common.Hash]*AppTotalOrderRecord),
 		Delivered:          make(map[common.Hash]*AppDeliveredRecord),
 		DeliverSequence:    common.Hashes{},
-		blocks:             make(map[common.Hash]*types.Block),
 		state:              state,
 	}
 }
@@ -129,17 +120,9 @@ func (app *App) VerifyBlock(block *types.Block) types.BlockVerifyStatus {
 
 // BlockConfirmed implements Application interface.
 func (app *App) BlockConfirmed(b types.Block) {
-	app.blocksLock.Lock()
-	defer app.blocksLock.Unlock()
-	app.blocks[b.Hash] = &b
-}
-
-// StronglyAcked implements Application interface.
-func (app *App) StronglyAcked(blockHash common.Hash) {
-	app.ackedLock.Lock()
-	defer app.ackedLock.Unlock()
-
-	app.Acked[blockHash] = &AppAckedRecord{When: time.Now().UTC()}
+	app.confirmedLock.Lock()
+	defer app.confirmedLock.Unlock()
+	app.Confirmed[b.Hash] = &b
 }
 
 // TotalOrderingDelivered implements Application interface.
@@ -180,9 +163,9 @@ func (app *App) BlockDelivered(
 		if app.state == nil {
 			return
 		}
-		app.blocksLock.RLock()
-		defer app.blocksLock.RUnlock()
-		b := app.blocks[blockHash]
+		app.confirmedLock.RLock()
+		defer app.confirmedLock.RUnlock()
+		b := app.Confirmed[blockHash]
 		if err := app.state.Apply(b.Payload); err != nil {
 			if err != ErrDuplicatedChange {
 				panic(err)
@@ -196,12 +179,12 @@ func (app *App) BlockDelivered(
 func (app *App) GetLatestDeliveredPosition() types.Position {
 	app.deliveredLock.RLock()
 	defer app.deliveredLock.RUnlock()
-	app.blocksLock.RLock()
-	defer app.blocksLock.RUnlock()
+	app.confirmedLock.RLock()
+	defer app.confirmedLock.RUnlock()
 	if len(app.DeliverSequence) == 0 {
 		return types.Position{}
 	}
-	return app.blocks[app.DeliverSequence[len(app.DeliverSequence)-1]].Position
+	return app.Confirmed[app.DeliverSequence[len(app.DeliverSequence)-1]].Position
 }
 
 // Compare performs these checks against another App instance
@@ -236,6 +219,8 @@ func (app *App) Compare(other *App) error {
 // Verify checks the integrity of date received by this App instance.
 func (app *App) Verify() error {
 	// TODO(mission): verify blocks' position when delivered.
+	app.confirmedLock.RLock()
+	defer app.confirmedLock.RUnlock()
 	app.deliveredLock.RLock()
 	defer app.deliveredLock.RUnlock()
 
@@ -245,16 +230,11 @@ func (app *App) Verify() error {
 	if len(app.DeliverSequence) != len(app.Delivered) {
 		return ErrApplicationIntegrityFailed
 	}
-
-	app.ackedLock.RLock()
-	defer app.ackedLock.RUnlock()
-
 	expectHeight := uint64(1)
 	prevTime := time.Time{}
 	for _, h := range app.DeliverSequence {
-		// Make sure delivered block is strongly acked.
-		if _, acked := app.Acked[h]; !acked {
-			return ErrDeliveredBlockNotAcked
+		if _, exists := app.Confirmed[h]; !exists {
+			return ErrDeliveredBlockNotConfirmed
 		}
 		rec, exists := app.Delivered[h]
 		if !exists {
@@ -302,8 +282,8 @@ Loop:
 
 // Check provides a backdoor to check status of App with reader lock.
 func (app *App) Check(checker func(*App)) {
-	app.ackedLock.RLock()
-	defer app.ackedLock.RUnlock()
+	app.confirmedLock.RLock()
+	defer app.confirmedLock.RUnlock()
 	app.totalOrderedLock.RLock()
 	defer app.totalOrderedLock.RUnlock()
 	app.deliveredLock.RLock()

@@ -49,9 +49,6 @@ type Application interface {
 // Debug describes the application interface that requires
 // more detailed consensus execution.
 type Debug interface {
-	// StronglyAcked is called when a block is strongly acked.
-	StronglyAcked(blockHash common.Hash)
-
 	// TotalOrderingDelivered is called when the total ordering algorithm deliver
 	// a set of block.
 	TotalOrderingDelivered(common.Hashes, uint32)

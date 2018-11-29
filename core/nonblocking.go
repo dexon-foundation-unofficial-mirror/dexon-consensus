@@ -29,10 +29,6 @@ type blockConfirmedEvent struct {
 	block *types.Block
 }
 
-type stronglyAckedEvent struct {
-	blockHash common.Hash
-}
-
 type totalOrderingDeliveredEvent struct {
 	blockHashes common.Hashes
 	mode        uint32
@@ -93,8 +89,6 @@ func (nb *nonBlocking) run() {
 			nb.running.Add(1)
 		}()
 		switch e := event.(type) {
-		case stronglyAckedEvent:
-			nb.debug.StronglyAcked(e.blockHash)
 		case blockConfirmedEvent:
 			nb.app.BlockConfirmed(*e.block)
 		case totalOrderingDeliveredEvent:
@@ -137,13 +131,6 @@ func (nb *nonBlocking) VerifyBlock(block *types.Block) types.BlockVerifyStatus {
 // BlockConfirmed is called when a block is confirmed and added to lattice.
 func (nb *nonBlocking) BlockConfirmed(block types.Block) {
 	nb.addEvent(blockConfirmedEvent{&block})
-}
-
-// StronglyAcked is called when a block is strongly acked.
-func (nb *nonBlocking) StronglyAcked(blockHash common.Hash) {
-	if nb.debug != nil {
-		nb.addEvent(stronglyAckedEvent{blockHash})
-	}
 }
 
 // TotalOrderingDelivered is called when the total ordering algorithm deliver

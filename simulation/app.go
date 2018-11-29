@@ -132,11 +132,6 @@ func (a *simApp) PrepareWitness(height uint64) (types.Witness, error) {
 	return a.latestWitness, nil
 }
 
-// StronglyAcked is called when a block is strongly acked by DEXON
-// Reliabe Broadcast algorithm.
-func (a *simApp) StronglyAcked(blockHash common.Hash) {
-}
-
 // TotalOrderingDelivered is called when blocks are delivered by the total
 // ordering algorithm.
 func (a *simApp) TotalOrderingDelivered(

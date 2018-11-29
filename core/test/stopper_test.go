@@ -40,7 +40,7 @@ func (s *StopperTestSuite) deliver(
 		s.Require().NoError(db.Put(*b))
 	}
 	for _, h := range hashes {
-		app.StronglyAcked(h)
+		app.BlockConfirmed(types.Block{Hash: h})
 	}
 	app.TotalOrderingDelivered(hashes, core.TotalOrderingModeNormal)
 	for _, h := range hashes {
