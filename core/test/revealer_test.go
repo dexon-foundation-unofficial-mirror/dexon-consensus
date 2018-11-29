@@ -157,6 +157,66 @@ func (s *RevealerTestSuite) TestRandomTipReveal() {
 	s.baseTest(revealer, 10, checkFunc)
 }
 
+func (s *RevealerTestSuite) TestCompactionChainReveal() {
+	db, err := blockdb.NewMemBackedBlockDB()
+	s.Require().NoError(err)
+	// Put several blocks with finalization field ready.
+	b1 := &types.Block{
+		Hash: common.NewRandomHash(),
+		Finalization: types.FinalizationResult{
+			Height: 1,
+		}}
+	b2 := &types.Block{
+		Hash: common.NewRandomHash(),
+		Finalization: types.FinalizationResult{
+			ParentHash: b1.Hash,
+			Height:     2,
+		}}
+	b3 := &types.Block{
+		Hash: common.NewRandomHash(),
+		Finalization: types.FinalizationResult{
+			ParentHash: b2.Hash,
+			Height:     3,
+		}}
+	s.Require().NoError(db.Put(*b1))
+	s.Require().NoError(db.Put(*b3))
+	iter, err := db.GetAll()
+	s.Require().NoError(err)
+	// The compaction chain is not complete, we can't construct a revealer
+	// instance successfully.
+	r, err := NewCompactionChainRevealer(iter, 0)
+	s.Require().Nil(r)
+	s.Require().IsType(ErrNotValidCompactionChain, err)
+	// Put a block to make the compaction chain complete.
+	s.Require().NoError(db.Put(*b2))
+	// We can construct that revealer now.
+	iter, err = db.GetAll()
+	s.Require().NoError(err)
+	r, err = NewCompactionChainRevealer(iter, 0)
+	s.Require().NotNil(r)
+	s.Require().NoError(err)
+	// The revealing order should be ok.
+	chk := func(h uint64) {
+		b, err := r.Next()
+		s.Require().NoError(err)
+		s.Require().Equal(b.Finalization.Height, h)
+	}
+	chk(1)
+	chk(2)
+	chk(3)
+	// Iteration should be finished
+	_, err = r.Next()
+	s.Require().IsType(blockdb.ErrIterationFinished, err)
+	// Test 'startHeight' parameter.
+	iter, err = db.GetAll()
+	s.Require().NoError(err)
+	r, err = NewCompactionChainRevealer(iter, 2)
+	s.Require().NotNil(r)
+	s.Require().NoError(err)
+	chk(2)
+	chk(3)
+}
+
 func TestRevealer(t *testing.T) {
 	suite.Run(t, new(RevealerTestSuite))
 }

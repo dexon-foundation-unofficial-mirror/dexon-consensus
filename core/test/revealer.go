@@ -15,26 +15,10 @@
 // along with the dexon-consensus library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-// Copyright 2018 The dexon-consensus Authors
-// This file is part of the dexon-consensus library.
-//
-// The dexon-consensus library is free software: you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public License as
-// published by the Free Software Foundation, either version 3 of the License,
-// or (at your option) any later version.
-//
-// The dexon-consensus library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the dexon-consensus library. If not, see
-// <http://www.gnu.org/licenses/>.
-
 package test
 
 import (
+	"errors"
 	"math/rand"
 	"sort"
 	"time"
@@ -42,6 +26,11 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+)
+
+// Errors returns from revealer.
+var (
+	ErrNotValidCompactionChain = errors.New("not valid compaction chain")
 )
 
 // isAllAckingBlockRevealed is a helper to check if all acking blocks of
@@ -279,4 +268,64 @@ func (r *RandomTipRevealer) Reset() {
 	for i := range r.chainTip {
 		r.chainTip[i] = 0
 	}
+}
+
+// CompactionChainRevealer implements Revealer interface, which would load
+// all blocks from blockdb, reveal them in the order of compaction chain, from
+// the genesis block to the latest one.
+type CompactionChainRevealer struct {
+	blocks          types.ByFinalizationHeight
+	nextRevealIndex int
+}
+
+// NewCompactionChainRevealer constructs a revealer in the order of compaction
+// chain.
+func NewCompactionChainRevealer(iter blockdb.BlockIterator,
+	startHeight uint64) (r *CompactionChainRevealer, err error) {
+	blocksByHash, err := loadAllBlocks(iter)
+	if err != nil {
+		return
+	}
+	if startHeight == 0 {
+		startHeight = 1
+	}
+	blocks := types.ByFinalizationHeight{}
+	for _, b := range blocksByHash {
+		if b.Finalization.Height < startHeight {
+			continue
+		}
+		blocks = append(blocks, b)
+	}
+	sort.Sort(types.ByFinalizationHeight(blocks))
+	// Make sure the finalization height of blocks are incremental with step 1.
+	for idx, b := range blocks {
+		if idx == 0 {
+			continue
+		}
+		if b.Finalization.Height != blocks[idx-1].Finalization.Height+1 {
+			err = ErrNotValidCompactionChain
+			return
+		}
+	}
+	r = &CompactionChainRevealer{
+		blocks: blocks,
+	}
+	r.Reset()
+	return
+}
+
+// Next implements Revealer.Next method, which would reveal blocks in the order
+// of compaction chain.
+func (r *CompactionChainRevealer) Next() (types.Block, error) {
+	if r.nextRevealIndex == len(r.blocks) {
+		return types.Block{}, blockdb.ErrIterationFinished
+	}
+	b := r.blocks[r.nextRevealIndex]
+	r.nextRevealIndex++
+	return *b, nil
+}
+
+// Reset implement Revealer.Reset method, which would reset revealing.
+func (r *CompactionChainRevealer) Reset() {
+	r.nextRevealIndex = 0
 }

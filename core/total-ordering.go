@@ -44,9 +44,9 @@ const (
 )
 
 var (
-	// ErrNotValidDAG would be reported when block subbmitted to totalOrdering
+	// ErrInvalidDAG is reported when block subbmitted to totalOrdering
 	// didn't form a DAG.
-	ErrNotValidDAG = errors.New("not a valid dag")
+	ErrInvalidDAG = errors.New("invalid dag")
 	// ErrFutureRoundDelivered means some blocks from later rounds are
 	// delivered, this means program error.
 	ErrFutureRoundDelivered = errors.New("future round delivered")
@@ -347,7 +347,7 @@ func (v *totalOrderingCandidateInfo) addBlock(b *types.Block) error {
 		rec.count = 1
 	} else {
 		if b.Position.Height <= rec.minHeight {
-			return ErrNotValidDAG
+			return ErrInvalidDAG
 		}
 		rec.count++
 	}
@@ -640,12 +640,12 @@ func (global *totalOrderingGlobalVector) addBlock(
 	if tip != nil {
 		// Perform light weight sanity check based on tip.
 		if tip.Position.Round > b.Position.Round {
-			err = ErrNotValidDAG
+			err = ErrInvalidDAG
 			return
 		}
 		if DiffUint64(tip.Position.Round, b.Position.Round) > 1 {
 			if b.Position.Height != 0 {
-				err = ErrNotValidDAG
+				err = ErrInvalidDAG
 				return
 			}
 			// Add breakpoint.
@@ -657,7 +657,7 @@ func (global *totalOrderingGlobalVector) addBlock(
 				})
 		} else {
 			if b.Position.Height != tip.Position.Height+1 {
-				err = ErrNotValidDAG
+				err = ErrInvalidDAG
 				return
 			}
 		}
@@ -792,9 +792,9 @@ type totalOrdering struct {
 }
 
 // newTotalOrdering constructs an totalOrdering instance.
-func newTotalOrdering(dMoment time.Time, cfg *types.Config) *totalOrdering {
+func newTotalOrdering(dMoment time.Time, round uint64, cfg *types.Config) *totalOrdering {
 	config := &totalOrderingConfig{}
-	config.fromConfig(0, cfg)
+	config.fromConfig(round, cfg)
 	config.setRoundBeginTime(dMoment)
 	candidates := make([]*totalOrderingCandidateInfo, config.numChains)
 	to := &totalOrdering{
@@ -816,6 +816,7 @@ func newTotalOrdering(dMoment time.Time, cfg *types.Config) *totalOrdering {
 // round R, next time you can only add the config for round R+1.
 func (to *totalOrdering) appendConfig(
 	round uint64, config *types.Config) error {
+
 	if round != uint64(len(to.configs))+to.configs[0].roundID {
 		return ErrRoundNotIncreasing
 	}

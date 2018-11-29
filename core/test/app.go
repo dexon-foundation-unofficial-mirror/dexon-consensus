@@ -280,8 +280,8 @@ Loop:
 	return nil
 }
 
-// Check provides a backdoor to check status of App with reader lock.
-func (app *App) Check(checker func(*App)) {
+// WithLock provides a backdoor to check status of App with reader lock.
+func (app *App) WithLock(function func(*App)) {
 	app.confirmedLock.RLock()
 	defer app.confirmedLock.RUnlock()
 	app.totalOrderedLock.RLock()
@@ -289,5 +289,5 @@ func (app *App) Check(checker func(*App)) {
 	app.deliveredLock.RLock()
 	defer app.deliveredLock.RUnlock()
 
-	checker(app)
+	function(app)
 }

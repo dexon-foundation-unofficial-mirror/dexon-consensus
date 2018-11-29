@@ -61,7 +61,7 @@ func (s *StopByConfirmedBlocks) ShouldStop(nID types.NodeID) bool {
 	lastChecked := s.lastCheckDelivered[nID]
 	currentConfirmedBlocks := s.confirmedBlocks[nID]
 	db := s.dbs[nID]
-	s.apps[nID].Check(func(app *App) {
+	s.apps[nID].WithLock(func(app *App) {
 		for _, h := range app.DeliverSequence[lastChecked:] {
 			b, err := db.Get(h)
 			if err != nil {
@@ -116,7 +116,7 @@ func (s *StopByRound) ShouldStop(nID types.NodeID) bool {
 	if curRound := s.currentRounds[nID]; curRound < s.untilRound {
 		lastChecked := s.lastCheckDelivered[nID]
 		db := s.dbs[nID]
-		s.apps[nID].Check(func(app *App) {
+		s.apps[nID].WithLock(func(app *App) {
 			for _, h := range app.DeliverSequence[lastChecked:] {
 				b, err := db.Get(h)
 				if err != nil {

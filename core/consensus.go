@@ -639,9 +639,9 @@ func (con *Consensus) initialRound(
 
 // Stop the Consensus core.
 func (con *Consensus) Stop() {
+	con.ctxCancel()
 	con.baMgr.stop()
 	con.event.Reset()
-	con.ctxCancel()
 }
 
 func (con *Consensus) processMsg(msgChan <-chan interface{}) {
@@ -761,43 +761,8 @@ func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
 func (con *Consensus) ProcessAgreementResult(
 	rand *types.AgreementResult) error {
 	// Sanity Check.
-	notarySet, err := con.nodeSetCache.GetNotarySet(
-		rand.Position.Round, rand.Position.ChainID)
-	if err != nil {
+	if err := VerifyAgreementResult(rand, con.nodeSetCache); err != nil {
 		return err
-	}
-	if len(rand.Votes) < len(notarySet)/3*2+1 {
-		return ErrNotEnoughVotes
-	}
-	if len(rand.Votes) > len(notarySet) {
-		return ErrIncorrectVoteProposer
-	}
-	for _, vote := range rand.Votes {
-		if rand.IsEmptyBlock {
-			if (vote.BlockHash != common.Hash{}) {
-				return ErrIncorrectVoteBlockHash
-			}
-		} else {
-			if vote.BlockHash != rand.BlockHash {
-				return ErrIncorrectVoteBlockHash
-			}
-		}
-		if vote.Type != types.VoteCom {
-			return ErrIncorrectVoteType
-		}
-		if vote.Position != rand.Position {
-			return ErrIncorrectVotePosition
-		}
-		if _, exist := notarySet[vote.ProposerID]; !exist {
-			return ErrIncorrectVoteProposer
-		}
-		ok, err := verifyVoteSignature(&vote)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return ErrIncorrectVoteSignature
-		}
 	}
 	// Syncing BA Module.
 	if err := con.baMgr.processAgreementResult(rand); err != nil {

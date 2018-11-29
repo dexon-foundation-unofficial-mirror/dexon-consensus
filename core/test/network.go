@@ -437,6 +437,11 @@ func (n *Network) Broadcast(msg interface{}) {
 	}
 }
 
+// Send exports 'Send' method of Transport.
+func (n *Network) Send(nodeID types.NodeID, msg interface{}) error {
+	return n.trans.Send(nodeID, msg)
+}
+
 // ReceiveChanForNode returns a channel for messages not handled by
 // core.Consensus.
 func (n *Network) ReceiveChanForNode() <-chan interface{} {

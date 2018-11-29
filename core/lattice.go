@@ -39,7 +39,6 @@ type Lattice struct {
 	app        Application
 	debug      Debug
 	pool       blockPool
-	retryAdd   bool
 	data       *latticeData
 	toModule   *totalOrdering
 	ctModule   *consensusTimestamp
@@ -64,7 +63,7 @@ func NewLattice(
 		debug:      debug,
 		pool:       newBlockPool(cfg.NumChains),
 		data:       newLatticeData(db, dMoment, round, cfg),
-		toModule:   newTotalOrdering(dMoment, cfg),
+		toModule:   newTotalOrdering(dMoment, round, cfg),
 		ctModule:   newConsensusTimestamp(dMoment, round, cfg.NumChains),
 		logger:     logger,
 	}
@@ -306,4 +305,31 @@ func (l *Lattice) AppendConfig(round uint64, config *types.Config) (err error) {
 
 // ProcessFinalizedBlock is used for syncing lattice data.
 func (l *Lattice) ProcessFinalizedBlock(b *types.Block) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	// Syncing state for core.latticeData module.
+	if err := l.data.addFinalizedBlock(b); err != nil {
+		panic(err)
+	}
+	l.pool.purgeBlocks(b.Position.ChainID, b.Position.Height)
+	// Syncing state for core.totalOrdering module.
+	toDelivered, deliveredMode, err := l.toModule.processBlock(b)
+	if err != nil {
+		panic(err)
+	}
+	if len(toDelivered) == 0 {
+		return
+	}
+	hashes := make(common.Hashes, len(toDelivered))
+	for idx := range toDelivered {
+		hashes[idx] = toDelivered[idx].Hash
+	}
+	if l.debug != nil {
+		l.debug.TotalOrderingDelivered(hashes, deliveredMode)
+	}
+	// Sync core.consensusTimestamp module.
+	if err = l.ctModule.processBlocks(toDelivered); err != nil {
+		panic(err)
+	}
+	return
 }

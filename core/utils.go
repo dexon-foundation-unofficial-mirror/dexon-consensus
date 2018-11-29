@@ -167,6 +167,51 @@ func VerifyBlock(b *types.Block) (err error) {
 	return
 }
 
+// VerifyAgreementResult perform sanity check against a types.AgreementResult
+// instance.
+func VerifyAgreementResult(
+	res *types.AgreementResult, cache *utils.NodeSetCache) error {
+	notarySet, err := cache.GetNotarySet(
+		res.Position.Round, res.Position.ChainID)
+	if err != nil {
+		return err
+	}
+	if len(res.Votes) < len(notarySet)/3*2+1 {
+		return ErrNotEnoughVotes
+	}
+	if len(res.Votes) > len(notarySet) {
+		return ErrIncorrectVoteProposer
+	}
+	for _, vote := range res.Votes {
+		if res.IsEmptyBlock {
+			if (vote.BlockHash != common.Hash{}) {
+				return ErrIncorrectVoteBlockHash
+			}
+		} else {
+			if vote.BlockHash != res.BlockHash {
+				return ErrIncorrectVoteBlockHash
+			}
+		}
+		if vote.Type != types.VoteCom {
+			return ErrIncorrectVoteType
+		}
+		if vote.Position != res.Position {
+			return ErrIncorrectVotePosition
+		}
+		if _, exist := notarySet[vote.ProposerID]; !exist {
+			return ErrIncorrectVoteProposer
+		}
+		ok, err := verifyVoteSignature(&vote)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return ErrIncorrectVoteSignature
+		}
+	}
+	return nil
+}
+
 // DiffUint64 calculates difference between two uint64.
 func DiffUint64(a, b uint64) uint64 {
 	if a > b {

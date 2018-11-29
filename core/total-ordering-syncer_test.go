@@ -44,7 +44,7 @@ func (s *TotalOrderingSyncerTestSuite) genDeliverySet(numChains uint32) (
 		RoundInterval: 1000 * time.Second,
 	}
 
-	to := newTotalOrdering(genesisTime, genesisConfig)
+	to := newTotalOrdering(genesisTime, 0, genesisConfig)
 
 	gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
 		NumChains:            numChains,

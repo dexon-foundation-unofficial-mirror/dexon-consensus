@@ -157,7 +157,7 @@ func (s *TotalOrderingTestSuite) TestBlockRelation() {
 		NumChains:     uint32(len(nodes)),
 	}
 	genesisTime := time.Now().UTC()
-	to := newTotalOrdering(genesisTime, genesisConfig)
+	to := newTotalOrdering(genesisTime, 0, genesisConfig)
 	s.checkNotDeliver(to, blockA)
 	s.checkNotDeliver(to, blockB)
 	s.checkNotDeliver(to, blockC)
@@ -345,7 +345,7 @@ func (s *TotalOrderingTestSuite) TestCycleDetection() {
 		NumChains:     uint32(len(nodes)),
 	}
 	genesisTime := time.Now().UTC()
-	to := newTotalOrdering(genesisTime, genesisConfig)
+	to := newTotalOrdering(genesisTime, 0, genesisConfig)
 	s.checkNotDeliver(to, b00)
 	s.checkNotDeliver(to, b01)
 	s.checkNotDeliver(to, b02)
@@ -375,7 +375,7 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 		NumChains:     uint32(len(nodes)),
 	}
 	genesisTime := time.Now().UTC()
-	to := newTotalOrdering(genesisTime, genesisConfig)
+	to := newTotalOrdering(genesisTime, 0, genesisConfig)
 	genNextBlock := func(b *types.Block) *types.Block {
 		return &types.Block{
 			ProposerID: b.ProposerID,
@@ -487,7 +487,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 		NumChains:     uint32(len(nodes)),
 	}
 	genesisTime := time.Now().UTC()
-	to := newTotalOrdering(genesisTime, genesisConfig)
+	to := newTotalOrdering(genesisTime, 0, genesisConfig)
 	// Setup blocks.
 	b00 := s.genGenesisBlock(nodes, 0, common.Hashes{})
 	b10 := s.genGenesisBlock(nodes, 1, common.Hashes{})
@@ -830,7 +830,7 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 		}
 		req         = s.Require()
 		genesisTime = time.Now().UTC()
-		to          = newTotalOrdering(genesisTime, genesisConfig)
+		to          = newTotalOrdering(genesisTime, 0, genesisConfig)
 	)
 	// Setup blocks.
 	b00 := s.genGenesisBlock(nodes, 0, common.Hashes{})
@@ -992,7 +992,7 @@ func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 				PhiRatio:      phi,
 				NumChains:     numChains,
 			}
-			to := newTotalOrdering(genesisTime, genesisConfig)
+			to := newTotalOrdering(genesisTime, 0, genesisConfig)
 			// Add config for next round.
 			s.Require().NoError(to.appendConfig(1, &types.Config{
 				K:         0,
@@ -1010,7 +1010,7 @@ func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 				PhiRatio:      phi,
 				NumChains:     numChains,
 			}
-			to := newTotalOrdering(genesisTime, genesisConfig)
+			to := newTotalOrdering(genesisTime, 0, genesisConfig)
 			// Add config for next round.
 			s.Require().NoError(to.appendConfig(1, &types.Config{
 				K:         1,
@@ -1028,7 +1028,7 @@ func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 				PhiRatio:      phi,
 				NumChains:     numChains,
 			}
-			to := newTotalOrdering(genesisTime, genesisConfig)
+			to := newTotalOrdering(genesisTime, 0, genesisConfig)
 			s.Require().NoError(to.appendConfig(1, &types.Config{
 				K:         2,
 				PhiRatio:  0.5,
@@ -1045,7 +1045,7 @@ func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 				PhiRatio:      phi,
 				NumChains:     numChains,
 			}
-			to := newTotalOrdering(genesisTime, genesisConfig)
+			to := newTotalOrdering(genesisTime, 0, genesisConfig)
 			s.Require().NoError(to.appendConfig(1, &types.Config{
 				K:         3,
 				PhiRatio:  0.5,
@@ -1085,7 +1085,7 @@ func (s *TotalOrderingTestSuite) baseTestForRoundChange(
 	revealingSequence := make(map[string]struct{})
 	orderingSequence := make(map[string]struct{})
 	for i := 0; i < repeat; i++ {
-		to := newTotalOrdering(genesisTime, configs[0])
+		to := newTotalOrdering(genesisTime, 0, configs[0])
 		for roundID, config := range configs[1:] {
 			req.NoError(to.appendConfig(uint64(roundID+1), config))
 		}
@@ -1212,7 +1212,7 @@ func (s *TotalOrderingTestSuite) TestSync() {
 		PhiRatio:      0.67,
 		NumChains:     numChains,
 	}
-	to1 := newTotalOrdering(genesisTime, genesisConfig)
+	to1 := newTotalOrdering(genesisTime, 0, genesisConfig)
 	s.Require().NoError(to1.appendConfig(1, &types.Config{
 		K:         0,
 		PhiRatio:  0.5,
@@ -1236,7 +1236,7 @@ func (s *TotalOrderingTestSuite) TestSync() {
 	}
 	// Run new total ordering again.
 	offset := len(deliveredBlockSets1) / 2
-	to2 := newTotalOrdering(genesisTime, genesisConfig)
+	to2 := newTotalOrdering(genesisTime, 0, genesisConfig)
 	s.Require().NoError(to2.appendConfig(1, &types.Config{
 		K:         0,
 		PhiRatio:  0.5,
@@ -1338,7 +1338,7 @@ func (s *TotalOrderingTestSuite) TestSyncWithConfigChange() {
 		blocks = append(blocks, &b)
 	}
 
-	to1 := newTotalOrdering(genesisTime, configs[0])
+	to1 := newTotalOrdering(genesisTime, 0, configs[0])
 	for i, cfg := range configs[1:] {
 		req.NoError(to1.appendConfig(uint64(i+1), cfg))
 	}
@@ -1366,7 +1366,7 @@ func (s *TotalOrderingTestSuite) TestSyncWithConfigChange() {
 		// or nothing is tested.
 		req.True(uint64(0) < offsetRound && offsetRound < uint64(len(configs)-1))
 
-		to2 := newTotalOrdering(genesisTime, configs[0])
+		to2 := newTotalOrdering(genesisTime, 0, configs[0])
 		for i, cfg := range configs[1:] {
 			req.NoError(to2.appendConfig(uint64(i+1), cfg))
 		}
