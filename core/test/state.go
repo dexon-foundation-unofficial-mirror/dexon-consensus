@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"errors"
 	"math"
+	"sort"
 	"sync"
 	"time"
 
@@ -98,8 +99,9 @@ type State struct {
 	dkgFinals           map[uint64]map[types.NodeID]*typesDKG.Finalize
 	crs                 []common.Hash
 	// Other stuffs
-	local bool
-	lock  sync.RWMutex
+	local           bool
+	lock            sync.RWMutex
+	appliedRequests map[common.Hash]struct{}
 	// Pending change requests.
 	ownRequests    map[common.Hash]*StateChangeRequest
 	globalRequests map[common.Hash]*StateChangeRequest
@@ -137,6 +139,7 @@ func NewState(
 			map[uint64]map[types.NodeID][]*typesDKG.Complaint),
 		dkgMasterPublicKeys: make(
 			map[uint64]map[types.NodeID]*typesDKG.MasterPublicKey),
+		appliedRequests: make(map[common.Hash]struct{}),
 	}
 }
 
@@ -422,7 +425,8 @@ func (s *State) Clone() (copied *State) {
 			map[uint64]map[types.NodeID][]*typesDKG.Complaint),
 		dkgMasterPublicKeys: make(
 			map[uint64]map[types.NodeID]*typesDKG.MasterPublicKey),
-		dkgFinals: make(map[uint64]map[types.NodeID]*typesDKG.Finalize),
+		dkgFinals:       make(map[uint64]map[types.NodeID]*typesDKG.Finalize),
+		appliedRequests: make(map[common.Hash]struct{}),
 	}
 	// Nodes
 	for nID, key := range s.nodes {
@@ -457,6 +461,9 @@ func (s *State) Clone() (copied *State) {
 	for _, crs := range s.crs {
 		copied.crs = append(copied.crs, crs)
 	}
+	for hash := range s.appliedRequests {
+		copied.appliedRequests[hash] = struct{}{}
+	}
 	// Pending Changes
 	copied.ownRequests = make(map[common.Hash]*StateChangeRequest)
 	for k, req := range s.ownRequests {
@@ -469,6 +476,14 @@ func (s *State) Clone() (copied *State) {
 	return
 }
 
+type reqByTime []*StateChangeRequest
+
+func (req reqByTime) Len() int      { return len(req) }
+func (req reqByTime) Swap(i, j int) { req[i], req[j] = req[j], req[i] }
+func (req reqByTime) Less(i, j int) bool {
+	return req[i].Timestamp < req[j].Timestamp
+}
+
 // Apply change requests, this function would also
 // be called when we extract these request from delivered blocks.
 func (s *State) Apply(reqsAsBytes []byte) (err error) {
@@ -477,12 +492,16 @@ func (s *State) Apply(reqsAsBytes []byte) (err error) {
 	if err != nil {
 		return
 	}
+	sort.Sort(reqByTime(reqs))
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	for _, req := range reqs {
 		// Remove this request from pending set once it's about to apply.
 		delete(s.globalRequests, req.Hash)
 		delete(s.ownRequests, req.Hash)
+		if _, exist := s.appliedRequests[req.Hash]; exist {
+			continue
+		}
 		if err = s.isValidRequest(req); err != nil {
 			if err == ErrDuplicatedChange {
 				err = nil
@@ -493,6 +512,7 @@ func (s *State) Apply(reqsAsBytes []byte) (err error) {
 		if err = s.applyRequest(req); err != nil {
 			return
 		}
+		s.appliedRequests[req.Hash] = struct{}{}
 	}
 	return
 }
