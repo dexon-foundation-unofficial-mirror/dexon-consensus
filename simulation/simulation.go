@@ -19,16 +19,21 @@ package simulation
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"sync"
 	"time"
 
+	"github.com/dexon-foundation/dexon/log"
+
+	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/simulation/config"
 )
 
 // Run starts the simulation.
-func Run(cfg *config.Config) {
+func Run(cfg *config.Config, logPrefix string) {
 	var (
 		networkType = cfg.Networking.Type
 		server      *PeerServer
@@ -46,8 +51,22 @@ func Run(cfg *config.Config) {
 
 	dMoment := time.Now().UTC()
 
+	newLogger := func(logPrefix string) common.Logger {
+		mw := io.Writer(os.Stderr)
+		if logPrefix != "" {
+			f, err := os.Create(logPrefix + ".log")
+			if err != nil {
+				panic(err)
+			}
+			mw = io.MultiWriter(os.Stderr, f)
+		}
+		logger := log.New()
+		logger.SetHandler(log.StreamHandler(mw, log.LogfmtFormat()))
+		return logger
+	}
+
 	// init is a function to init a node.
-	init := func(serverEndpoint interface{}) {
+	init := func(serverEndpoint interface{}, logger common.Logger) {
 		prv, err := ecdsa.NewPrivateKey()
 		if err != nil {
 			panic(err)
@@ -56,7 +75,7 @@ func Run(cfg *config.Config) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			v.run(serverEndpoint, dMoment)
+			v.run(serverEndpoint, dMoment, logger)
 		}()
 	}
 
@@ -64,7 +83,7 @@ func Run(cfg *config.Config) {
 	case test.NetworkTypeTCP:
 		// Intialized a simulation on multiple remotely peers.
 		// The peer-server would be initialized with another command.
-		init(nil)
+		init(nil, newLogger(logPrefix))
 	case test.NetworkTypeTCPLocal, test.NetworkTypeFake:
 		// Initialize a local simulation with a peer server.
 		var serverEndpoint interface{}
@@ -79,7 +98,11 @@ func Run(cfg *config.Config) {
 		}()
 		// Initialize all nodes.
 		for i := uint32(0); i < cfg.Node.Num; i++ {
-			init(serverEndpoint)
+			prefix := fmt.Sprintf("%s.%d", logPrefix, i)
+			if logPrefix == "" {
+				prefix = ""
+			}
+			init(serverEndpoint, newLogger(prefix))
 		}
 	}
 	wg.Wait()
