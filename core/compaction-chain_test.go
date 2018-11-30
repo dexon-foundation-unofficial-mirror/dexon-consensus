@@ -73,26 +73,6 @@ func (s *CompactionChainTestSuite) newCompactionChain() (
 	return cc, mock
 }
 
-func (s *CompactionChainTestSuite) generateBlocks(
-	size int, cc *compactionChain) []*types.Block {
-	now := time.Now().UTC()
-	blocks := make([]*types.Block, size)
-	for idx := range blocks {
-		blocks[idx] = &types.Block{
-			Hash: common.NewRandomHash(),
-			Finalization: types.FinalizationResult{
-				Timestamp: now,
-			},
-		}
-		now = now.Add(100 * time.Millisecond)
-	}
-	for _, block := range blocks {
-		err := cc.processBlock(block)
-		s.Require().Nil(err)
-	}
-	return blocks
-}
-
 func (s *CompactionChainTestSuite) TestProcessBlock() {
 	cc, _ := s.newCompactionChain()
 	now := time.Now().UTC()
@@ -142,14 +122,12 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 	delivered := cc.extractBlocks()
 	s.Require().Len(delivered, 4)
 	s.Require().Equal(uint32(0), cc.chainUnsynced)
-
 	// Randomness is not yet ready for extract.
 	for i := 4; i < 6; i++ {
 		s.Require().NoError(cc.processBlock(blocks[i]))
 	}
 	delivered = append(delivered, cc.extractBlocks()...)
 	s.Require().Len(delivered, 4)
-
 	// Make some randomness ready.
 	for i := 4; i < 6; i++ {
 		h := common.NewRandomHash()
@@ -162,7 +140,6 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 	}
 	delivered = append(delivered, cc.extractBlocks()...)
 	s.Require().Len(delivered, 6)
-
 	// Later block's randomness is ready.
 	for i := 6; i < 10; i++ {
 		s.Require().NoError(cc.processBlock(blocks[i]))
@@ -179,7 +156,6 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 	}
 	delivered = append(delivered, cc.extractBlocks()...)
 	s.Require().Len(delivered, 6)
-
 	// Prior block's randomness is ready.
 	for i := 6; i < 8; i++ {
 		h := common.NewRandomHash()
@@ -192,7 +168,6 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 	}
 	delivered = append(delivered, cc.extractBlocks()...)
 	s.Require().Len(delivered, 10)
-
 	// The delivered order should be the same as processing order.
 	for i, block := range delivered {
 		if i > 1 {
@@ -206,6 +181,10 @@ func (s *CompactionChainTestSuite) TestExtractBlocks() {
 }
 
 func (s *CompactionChainTestSuite) TestMissedRandomness() {
+	// This test case makes sure a block's randomness field can be fulfilled by
+	// calling:
+	//  - core.compactionChain.processBlockRandomnessResult
+	//  - core.compactionChain.processFinalizedBlock
 	cc, _ := s.newCompactionChain()
 	s.Require().Equal(uint32(4), cc.gov.Configuration(uint64(0)).NumChains)
 	blocks := make([]*types.Block, 10)
@@ -222,6 +201,7 @@ func (s *CompactionChainTestSuite) TestMissedRandomness() {
 		cc.registerBlock(blocks[idx])
 		s.Require().True(cc.blockRegistered(blocks[idx].Hash))
 	}
+	// Block#4, #5, contains randomness.
 	for i := range blocks {
 		s.Require().NoError(cc.processBlock(blocks[i]))
 		if i >= 4 && i < 6 {
@@ -235,7 +215,8 @@ func (s *CompactionChainTestSuite) TestMissedRandomness() {
 		}
 	}
 	s.Require().Len(cc.extractBlocks(), 0)
-
+	// Give compactionChain module randomnessResult via finalized block
+	// #0, #1, #2, #3, #4.
 	for i := range blocks {
 		if i >= 4 {
 			break
@@ -248,7 +229,7 @@ func (s *CompactionChainTestSuite) TestMissedRandomness() {
 	}
 	delivered := cc.extractBlocks()
 	s.Require().Len(delivered, 6)
-
+	// Give compactionChain module randomnessResult#6-9.
 	for i := 6; i < 10; i++ {
 		h := common.NewRandomHash()
 		s.Require().NoError(cc.processBlockRandomnessResult(
@@ -258,10 +239,8 @@ func (s *CompactionChainTestSuite) TestMissedRandomness() {
 				Randomness: h[:],
 			}))
 	}
-
 	delivered = append(delivered, cc.extractBlocks()...)
 	s.Require().Len(delivered, 10)
-
 	// The delivered order should be the same as processing order.
 	for i, block := range delivered {
 		if i > 1 {
@@ -295,167 +274,22 @@ func (s *CompactionChainTestSuite) TestExtractBlocksRound0() {
 	}
 	delivered := cc.extractBlocks()
 	s.Require().Len(delivered, 4)
-
 	// Round 0 should be able to be extracted without randomness.
 	for i := 4; i < 10; i++ {
 		s.Require().NoError(cc.processBlock(blocks[i]))
 	}
 	delivered = append(delivered, cc.extractBlocks()...)
 	s.Require().Len(delivered, 10)
-
 	// The delivered order should be the same as processing order.
 	for i, block := range delivered {
 		s.Equal(block.Hash, blocks[i].Hash)
 	}
 }
 
-func (s *CompactionChainTestSuite) TestSyncFinalizedBlock() {
-	cc, mock := s.newCompactionChain()
-	now := time.Now().UTC()
-	blocks := make([]*types.Block, 10)
-	for idx := range blocks {
-		blocks[idx] = &types.Block{
-			Hash: common.NewRandomHash(),
-			Finalization: types.FinalizationResult{
-				Timestamp: now,
-				Height:    uint64(idx + 1),
-			},
-		}
-		now = now.Add(100 * time.Millisecond)
-		if idx > 0 {
-			blocks[idx].Finalization.ParentHash = blocks[idx-1].Hash
-		}
-	}
-	cc.processFinalizedBlock(blocks[1])
-	cc.processFinalizedBlock(blocks[3])
-	s.Len(cc.extractFinalizedBlocks(), 0)
-
-	cc.processFinalizedBlock(blocks[0])
-	confirmed := cc.extractFinalizedBlocks()
-	s.Equal(blocks[1].Hash, cc.lastBlock().Hash)
-	s.Require().Len(confirmed, 2)
-	s.Equal(confirmed[0].Hash, blocks[0].Hash)
-	s.Equal(confirmed[1].Hash, blocks[1].Hash)
-	hash := common.NewRandomHash()
-	cc.processFinalizedBlock(&types.Block{
-		Hash: hash,
-		Position: types.Position{
-			Round: uint64(1),
-		},
-		Finalization: types.FinalizationResult{
-			Height: uint64(3),
-		},
-	})
-	// Should not deliver block with error tsig
-	mock.ret[hash] = false
-	s.Len(cc.extractFinalizedBlocks(), 0)
-	// The error block should be discarded.
-	s.Len(cc.extractFinalizedBlocks(), 0)
-
-	// Shuold not deliver block if dkg is not final
-	round99 := uint64(99)
-	s.Require().False(cc.gov.IsDKGFinal(round99))
-	blocks[2].Position.Round = round99
-	cc.processFinalizedBlock(blocks[2])
-	s.Len(cc.extractFinalizedBlocks(), 0)
-
-	// Deliver blocks.
-	blocks[3].Position.Round = round99
-	cc.tsigVerifier.verifier[round99] = mock
-	confirmed = cc.extractFinalizedBlocks()
-	s.Equal(blocks[3].Hash, cc.lastBlock().Hash)
-	s.Require().Len(confirmed, 2)
-	s.Equal(confirmed[0].Hash, blocks[2].Hash)
-	s.Equal(confirmed[1].Hash, blocks[3].Hash)
-
-	// Inserting a bad block. The later block should not be discarded.
-	cc.processFinalizedBlock(blocks[5])
-	cc.processFinalizedBlock(&types.Block{
-		Hash: hash,
-		Position: types.Position{
-			Round: uint64(1),
-		},
-		Finalization: types.FinalizationResult{
-			Height: uint64(5),
-		},
-	})
-	s.Len(cc.extractFinalizedBlocks(), 0)
-	// Good block is inserted, the later block should be delivered.
-	cc.processFinalizedBlock(blocks[4])
-	confirmed = cc.extractFinalizedBlocks()
-	s.Equal(blocks[5].Hash, cc.lastBlock().Hash)
-	s.Require().Len(confirmed, 2)
-	s.Equal(confirmed[0].Hash, blocks[4].Hash)
-	s.Equal(confirmed[1].Hash, blocks[5].Hash)
-
-	// Ignore finalized block if it already confirmed.
-	cc.init(blocks[5])
-	cc.processFinalizedBlock(blocks[6])
-	s.Require().NoError(cc.processBlock(blocks[5]))
-	s.Require().NoError(cc.processBlock(blocks[6]))
-	confirmed = cc.extractBlocks()
-	s.Require().Len(confirmed, 1)
-	s.Equal(confirmed[0].Hash, blocks[6].Hash)
-	s.Equal(blocks[6].Hash, cc.lastBlock().Hash)
-	s.Require().Len(cc.extractFinalizedBlocks(), 0)
-	s.Require().Len(*cc.pendingFinalizedBlocks, 0)
-}
-
-func (s *CompactionChainTestSuite) TestSync() {
-	cc, _ := s.newCompactionChain()
-	now := time.Now().UTC()
-	blocks := make([]*types.Block, 20)
-	for idx := range blocks {
-		blocks[idx] = &types.Block{
-			Hash: common.NewRandomHash(),
-			Finalization: types.FinalizationResult{
-				Timestamp: now,
-				Height:    uint64(idx + 1),
-			},
-		}
-		now = now.Add(100 * time.Millisecond)
-		if idx > 0 {
-			blocks[idx].Finalization.ParentHash = blocks[idx-1].Hash
-		}
-		if idx > 10 {
-			blocks[idx].Finalization.Height = 0
-		}
-	}
-	cc.init(blocks[1])
-	s.Require().NoError(cc.processBlock(blocks[11]))
-	s.Len(cc.extractBlocks(), 0)
-	for i := 2; i <= 10; i++ {
-		cc.processFinalizedBlock(blocks[i])
-	}
-	s.Require().Len(cc.extractFinalizedBlocks(), 9)
-	// Syncing is almost done here. The finalized block matches the first block
-	// processed.
-	b11 := blocks[11].Clone()
-	b11.Finalization.Height = uint64(12)
-	cc.processFinalizedBlock(b11)
-	s.Require().Len(cc.extractFinalizedBlocks(), 1)
-	s.Len(cc.extractBlocks(), 0)
-	// Sync is done.
-	s.Require().NoError(cc.processBlock(blocks[12]))
-	confirmed := cc.extractBlocks()
-	s.Require().Len(confirmed, 1)
-	s.Equal(confirmed[0].Hash, blocks[12].Hash)
-	s.Equal(blocks[11].Hash, blocks[12].Finalization.ParentHash)
-	s.Equal(uint64(13), blocks[12].Finalization.Height)
-	for i := 13; i < 20; i++ {
-		s.Require().NoError(cc.processBlock(blocks[i]))
-	}
-	confirmed = cc.extractBlocks()
-	s.Require().Len(confirmed, 7)
-	offset := 13
-	for i, b := range confirmed {
-		s.Equal(blocks[offset+i].Hash, b.Hash)
-		s.Equal(blocks[offset+i-1].Hash, b.Finalization.ParentHash)
-		s.Equal(uint64(offset+i+1), b.Finalization.Height)
-	}
-}
-
 func (s *CompactionChainTestSuite) TestBootstrapSync() {
+	// This test case make sure compactionChain module would only deliver
+	// blocks unless tips of each chain are received, when this module is
+	// initialized with a block with finalizationHeight == 0.
 	cc, _ := s.newCompactionChain()
 	numChains := cc.gov.Configuration(uint64(0)).NumChains
 	s.Require().Equal(uint32(4), numChains)
@@ -473,34 +307,27 @@ func (s *CompactionChainTestSuite) TestBootstrapSync() {
 			},
 		}
 		now = now.Add(100 * time.Millisecond)
-		if idx > 0 {
-			blocks[idx].Finalization.ParentHash = blocks[idx-1].Hash
-		}
-		if idx > 2 {
-			blocks[idx].Finalization.Height = 0
-		}
 	}
-	cc.init(&types.Block{})
-	b2 := blocks[2].Clone()
-	b2.Finalization.Height = 0
-	s.Require().NoError(cc.processBlock(b2))
-	s.Require().NoError(cc.processBlock(blocks[3]))
+	s.Require().NoError(cc.processBlock(blocks[1]))
 	s.Len(cc.extractBlocks(), 0)
-	cc.processFinalizedBlock(blocks[2])
-	cc.processFinalizedBlock(blocks[1])
-	s.Require().Len(cc.extractFinalizedBlocks(), 0)
-	s.Require().Len(cc.extractBlocks(), 0)
-	cc.processFinalizedBlock(blocks[0])
-	confirmed := cc.extractFinalizedBlocks()
-	s.Require().Len(confirmed, 3)
-	s.Equal(confirmed[0].Hash, blocks[0].Hash)
-	s.Equal(confirmed[1].Hash, blocks[1].Hash)
-	s.Equal(confirmed[2].Hash, blocks[2].Hash)
-	confirmed = cc.extractBlocks()
-	s.Require().Len(confirmed, 1)
-	s.Equal(confirmed[0].Hash, blocks[3].Hash)
-	s.Equal(blocks[2].Hash, blocks[3].Finalization.ParentHash)
-	s.Equal(uint64(4), blocks[3].Finalization.Height)
+	s.Require().NoError(cc.processBlock(blocks[2]))
+	s.Len(cc.extractBlocks(), 0)
+	// Although genesis block is received, we can't deliver them until tip blocks
+	// of each chain is received.
+	s.Require().NoError(cc.processBlock(blocks[0]))
+	s.Len(cc.extractBlocks(), 0)
+	// Once we receive the tip of chain#3 then we can deliver all tips.
+	s.Require().NoError(cc.processBlock(blocks[3]))
+	confirmed := cc.extractBlocks()
+	s.Require().Len(confirmed, 4)
+	s.Equal(confirmed[0].Hash, blocks[1].Hash)
+	s.Equal(blocks[1].Finalization.Height, uint64(1))
+	s.Equal(confirmed[1].Hash, blocks[2].Hash)
+	s.Equal(blocks[2].Finalization.Height, uint64(2))
+	s.Equal(confirmed[2].Hash, blocks[0].Hash)
+	s.Equal(blocks[0].Finalization.Height, uint64(3))
+	s.Equal(confirmed[3].Hash, blocks[3].Hash)
+	s.Equal(blocks[3].Finalization.Height, uint64(4))
 }
 
 func TestCompactionChain(t *testing.T) {

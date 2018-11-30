@@ -18,7 +18,6 @@
 package core
 
 import (
-	"container/heap"
 	"fmt"
 	"sync"
 	"time"
@@ -50,40 +49,40 @@ type pendingRandomnessResult struct {
 type finalizedBlockHeap = types.ByFinalizationHeight
 
 type compactionChain struct {
-	gov                    Governance
-	chainUnsynced          uint32
-	tsigVerifier           *TSigVerifierCache
-	blocks                 map[common.Hash]*types.Block
-	blockRandomness        map[common.Hash][]byte
-	pendingRandomness      map[common.Hash]pendingRandomnessResult
-	pendingBlocks          []*types.Block
-	pendingFinalizedBlocks *finalizedBlockHeap
-	lock                   sync.RWMutex
-	prevBlock              *types.Block
+	gov               Governance
+	chainUnsynced     uint32
+	tsigVerifier      *TSigVerifierCache
+	blocks            map[common.Hash]*types.Block
+	blockRandomness   map[common.Hash][]byte
+	pendingRandomness map[common.Hash]pendingRandomnessResult
+	pendingBlocks     []*types.Block
+	lock              sync.RWMutex
+	prevBlock         *types.Block
 }
 
 func newCompactionChain(gov Governance) *compactionChain {
-	pendingFinalizedBlocks := &finalizedBlockHeap{}
-	heap.Init(pendingFinalizedBlocks)
 	return &compactionChain{
-		gov:                    gov,
-		tsigVerifier:           NewTSigVerifierCache(gov, 7),
-		blocks:                 make(map[common.Hash]*types.Block),
-		blockRandomness:        make(map[common.Hash][]byte),
-		pendingRandomness:      make(map[common.Hash]pendingRandomnessResult),
-		pendingFinalizedBlocks: pendingFinalizedBlocks,
+		gov:               gov,
+		tsigVerifier:      NewTSigVerifierCache(gov, 7),
+		blocks:            make(map[common.Hash]*types.Block),
+		blockRandomness:   make(map[common.Hash][]byte),
+		pendingRandomness: make(map[common.Hash]pendingRandomnessResult),
 	}
 }
 
+// init the compaction chain module with a finalized block, or just an empty
+// block for bootstrap case.
 func (cc *compactionChain) init(initBlock *types.Block) {
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
 	cc.prevBlock = initBlock
 	cc.pendingBlocks = []*types.Block{}
+	// It's the bootstrap case, compactionChain would only deliver blocks until
+	// tips of all chains are received.
 	if initBlock.Finalization.Height == 0 {
 		cc.chainUnsynced = cc.gov.Configuration(uint64(0)).NumChains
-		cc.pendingBlocks = append(cc.pendingBlocks, initBlock)
 	}
+	cc.pendingBlocks = append(cc.pendingBlocks, initBlock)
 }
 
 func (cc *compactionChain) registerBlock(block *types.Block) {
@@ -190,16 +189,14 @@ func (cc *compactionChain) verifyRandomness(
 		Signature: randomness}), nil
 }
 
-func (cc *compactionChain) processFinalizedBlock(block *types.Block) {
+func (cc *compactionChain) processFinalizedBlock(block *types.Block) error {
 	if block.Finalization.Height <= cc.lastBlock().Finalization.Height {
-		return
+		return nil
 	}
-
 	// Block of round 0 should not have randomness.
 	if block.Position.Round == 0 && len(block.Finalization.Randomness) != 0 {
-		return
+		return nil
 	}
-
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
 	// The randomness result is missed previously.
@@ -207,95 +204,13 @@ func (cc *compactionChain) processFinalizedBlock(block *types.Block) {
 		ok, err := cc.verifyRandomness(
 			block.Hash, block.Position.Round, block.Finalization.Randomness)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		if ok {
 			cc.blockRandomness[block.Hash] = block.Finalization.Randomness
 		}
-		return
 	}
-
-	heap.Push(cc.pendingFinalizedBlocks, block)
-
-	return
-}
-
-func (cc *compactionChain) extractFinalizedBlocks() []*types.Block {
-	prevBlock := cc.lastBlock()
-
-	blocks := func() []*types.Block {
-		cc.lock.Lock()
-		defer cc.lock.Unlock()
-		blocks := []*types.Block{}
-		prevHeight := prevBlock.Finalization.Height
-		for cc.pendingFinalizedBlocks.Len() != 0 {
-			tip := (*cc.pendingFinalizedBlocks)[0]
-			// Pop blocks that are already confirmed.
-			if tip.Finalization.Height <= prevBlock.Finalization.Height {
-				heap.Pop(cc.pendingFinalizedBlocks)
-				continue
-			}
-			// Since we haven't verified the finalized block,
-			// it is possible to be forked.
-			if tip.Finalization.Height == prevHeight ||
-				tip.Finalization.Height == prevHeight+1 {
-				prevHeight = tip.Finalization.Height
-				blocks = append(blocks, tip)
-				heap.Pop(cc.pendingFinalizedBlocks)
-			} else {
-				break
-			}
-		}
-		return blocks
-	}()
-	toPending := []*types.Block{}
-	confirmed := []*types.Block{}
-	for _, b := range blocks {
-		if b.Hash == prevBlock.Hash &&
-			b.Finalization.Height == prevBlock.Finalization.Height {
-			continue
-		}
-		ok, err := cc.verifyRandomness(
-			b.Hash, b.Position.Round, b.Finalization.Randomness)
-		if err != nil {
-			toPending = append(toPending, b)
-			continue
-		}
-		if !ok {
-			continue
-		}
-		// Fork resolution: choose block with smaller hash.
-		if prevBlock.Finalization.Height == b.Finalization.Height {
-			//TODO(jimmy-dexon): remove this panic after test.
-			if true {
-				// workaround to `go vet` error
-				panic(fmt.Errorf(
-					"forked finalized block %s,%s", prevBlock.Hash, b.Hash))
-			}
-			if b.Hash.Less(prevBlock.Hash) {
-				confirmed = confirmed[:len(confirmed)-1]
-			} else {
-				continue
-			}
-		}
-		if b.Finalization.Height-prevBlock.Finalization.Height > 1 {
-			toPending = append(toPending, b)
-			continue
-		}
-		confirmed = append(confirmed, b)
-		prevBlock = b
-	}
-	cc.lock.Lock()
-	defer cc.lock.Unlock()
-	if len(confirmed) != 0 && cc.prevBlock.Finalization.Height == 0 {
-		// Pop the initBlock inserted when bootstrapping.
-		cc.pendingBlocks = cc.pendingBlocks[1:]
-	}
-	cc.prevBlock = prevBlock
-	for _, b := range toPending {
-		heap.Push(cc.pendingFinalizedBlocks, b)
-	}
-	return confirmed
+	return nil
 }
 
 func (cc *compactionChain) processBlockRandomnessResult(

@@ -921,39 +921,9 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 	return
 }
 
-// processFinalizedBlock is the entry point for syncing blocks.
-func (con *Consensus) processFinalizedBlock(block *types.Block) (err error) {
-	if err = con.lattice.SanityCheck(block); err != nil {
-		if err != ErrRetrySanityCheckLater {
-			return
-		}
-		err = nil
-	}
-	con.ccModule.processFinalizedBlock(block)
-	for {
-		confirmed := con.ccModule.extractFinalizedBlocks()
-		if len(confirmed) == 0 {
-			break
-		}
-		if err = con.lattice.ctModule.processBlocks(confirmed); err != nil {
-			return
-		}
-		for _, b := range confirmed {
-			if err = con.db.Put(*b); err != nil {
-				if err != blockdb.ErrBlockExists {
-					return
-				}
-				err = nil
-			}
-			con.lattice.ProcessFinalizedBlock(b)
-			// TODO(jimmy): BlockConfirmed and DeliverBlock may not be removed if
-			// application implements state snapshot.
-			con.logger.Debug("Calling Application.BlockConfirmed", "block", b)
-			con.app.BlockConfirmed(*b.Clone())
-			con.deliverBlock(b)
-		}
-	}
-	return
+// processFinalizedBlock is the entry point for handling finalized blocks.
+func (con *Consensus) processFinalizedBlock(block *types.Block) error {
+	return con.ccModule.processFinalizedBlock(block)
 }
 
 // PrepareBlock would setup header fields of block based on its ProposerID.
