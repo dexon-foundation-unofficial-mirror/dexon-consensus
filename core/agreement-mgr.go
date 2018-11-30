@@ -387,7 +387,12 @@ Loop:
 			for {
 				nextHeight, err = mgr.lattice.NextHeight(recv.round, setting.chainID)
 				if err != nil {
-					panic(err)
+					mgr.logger.Debug("Error getting next height",
+						"error", err,
+						"round", recv.round,
+						"chainID", setting.chainID)
+					err = nil
+					nextHeight = oldPos.Height
 				}
 				if isStop(oldPos) || nextHeight == 0 {
 					break

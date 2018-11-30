@@ -401,7 +401,7 @@ func NewConsensus(
 		ID:               ID,
 		ccModule:         newCompactionChain(gov),
 		lattice:          lattice,
-		app:              app,
+		app:              newNonBlocking(app, debugApp),
 		gov:              gov,
 		db:               db,
 		network:          network,

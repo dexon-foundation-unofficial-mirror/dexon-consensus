@@ -420,6 +420,9 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		req.Equal(t, app.Delivered[b11.Hash].ConsensusTime)
 	}
 	for _, obj := range objs {
+		if nb, ok := obj.con.app.(*nonBlocking); ok {
+			nb.wait()
+		}
 		verify(obj.app)
 	}
 }
