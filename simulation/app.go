@@ -137,9 +137,14 @@ func (a *simApp) PrepareWitness(height uint64) (types.Witness, error) {
 func (a *simApp) TotalOrderingDelivered(
 	blockHashes common.Hashes, mode uint32) {
 	fmt.Println("OUTPUT", a.NodeID, mode, blockHashes)
+	latencies := []time.Duration{}
+	for _, h := range blockHashes {
+		latencies = append(latencies, time.Since(a.blockSeen[h]))
+	}
 	blockList := &BlockList{
-		ID:        a.DeliverID,
-		BlockHash: blockHashes,
+		ID:             a.DeliverID,
+		BlockHash:      blockHashes,
+		ConfirmLatency: latencies,
 	}
 	a.netModule.Report(blockList)
 	a.DeliverID++

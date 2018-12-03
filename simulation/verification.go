@@ -77,7 +77,7 @@ func (totalOrder *TotalOrderResult) processStatus(blocks BlockList) {
 }
 
 // PushBlocks push a BlockList into the TotalOrderResult and return true if
-// there is new blocks ready for verifiy
+// there are new blocks ready for verification.
 func (totalOrder *TotalOrderResult) PushBlocks(blocks BlockList) (ready bool) {
 	totalOrder.processStatus(blocks)
 	if blocks.ID != totalOrder.curID {
@@ -98,7 +98,7 @@ func (totalOrder *TotalOrderResult) PushBlocks(blocks BlockList) (ready bool) {
 	return true
 }
 
-// PushTimestamp log the information in the msg.
+// PushTimestamp logs the information in the msg.
 func (totalOrder *TotalOrderResult) PushTimestamp(msg timestampMessage) bool {
 	pushLatency := func(latency *[]time.Duration, t1, t2 time.Time) {
 		*latency = append(*latency, t2.Sub(t1))
@@ -220,8 +220,7 @@ func VerifyTotalOrder(id types.NodeID,
 func LogStatus(peerTotalOrder PeerTotalOrder) {
 	for nID, totalOrder := range peerTotalOrder {
 		log.Printf("[Node %s]\n", nID)
-		log.Printf("    BPS: %.6f\n",
-			totalOrder.CalculateBlocksPerSecond())
+		log.Printf("    BPS: %.6f\n", totalOrder.CalculateBlocksPerSecond())
 		log.Printf("    Confirm Latency: %.2fms\n",
 			totalOrder.CalculateAverageConfirmLatency()*1000)
 		log.Printf("    Confirm Blocks: %v\n", len(totalOrder.status.confirmLatency))
