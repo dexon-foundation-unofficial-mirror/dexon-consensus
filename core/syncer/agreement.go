@@ -105,6 +105,10 @@ func (a *agreement) processBlock(b *types.Block) {
 
 func (a *agreement) processAgreementResult(r *types.AgreementResult) {
 	// Cache those results that CRS is not ready yet.
+	if _, exists := a.confirmedBlocks[r.BlockHash]; exists {
+		a.logger.Info("agreement result already confirmed", "result", r)
+		return
+	}
 	if r.Position.Round > a.latestCRSRound {
 		pendingsForRound, exists := a.pendings[r.Position.Round]
 		if !exists {

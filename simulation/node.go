@@ -153,7 +153,7 @@ func (n *node) run(
 		n.netModule,
 		n.prvKey,
 		logger)
-	go n.consensus.Run(&types.Block{})
+	go n.consensus.Run()
 
 	// Blocks forever.
 MainLoop:

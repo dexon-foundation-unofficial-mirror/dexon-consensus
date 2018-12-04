@@ -54,6 +54,7 @@ type Consensus struct {
 
 	lattice           *core.Lattice
 	latticeLastRound  uint64
+	randomnessResults []*types.BlockRandomnessResult
 	blocks            []types.ByPosition
 	agreements        []*agreement
 	configs           []*types.Config
@@ -175,11 +176,11 @@ func (con *Consensus) checkIfSynced(blocks []*types.Block) {
 // con.blocks are all in the same round, for avoiding config change while
 // syncing.
 func (con *Consensus) ensureAgreementOverlapRound() bool {
+	con.lock.Lock()
+	defer con.lock.Unlock()
 	if con.agreementRoundCut > 0 {
 		return true
 	}
-	con.lock.Lock()
-	defer con.lock.Unlock()
 	// Clean empty blocks on tips of chains.
 	for idx, bs := range con.blocks {
 		for len(bs) > 0 && con.isEmptyBlock(bs[0]) {
@@ -412,10 +413,30 @@ func (con *Consensus) SyncBlocks(
 		con.moduleWaitGroup.Wait()
 		// Stop agreements.
 		con.stopAgreement()
-		// TODO: flush all blocks in con.blocks into core.Consensus, and build
+		// flush all blocks in con.blocks into core.Consensus, and build
 		// core.Consensus from syncer.
-		con.logger.Info("syncer.Consensus synced")
-		return &core.Consensus{}, nil
+		lastBlock := blocks[len(blocks)-1]
+		con.logger.Info("syncer.Consensus synced", "last-block", lastBlock)
+		confirmedBlocks := []*types.Block{}
+		func() {
+			con.lock.Lock()
+			defer con.lock.Unlock()
+			for _, bs := range con.blocks {
+				confirmedBlocks = append(confirmedBlocks, bs...)
+			}
+		}()
+		return core.NewConsensusFromSyncer(
+			lastBlock,
+			con.roundBeginTimes[lastBlock.Position.Round],
+			con.app,
+			con.gov,
+			con.db,
+			con.network,
+			con.prv,
+			con.lattice,
+			confirmedBlocks,
+			con.randomnessResults,
+			con.logger)
 	}
 	return nil, nil
 }
@@ -470,7 +491,7 @@ func (con *Consensus) setupConfigs(blocks []*types.Block) {
 	con.resizeByNumChains(curMaxNumChains)
 	// Notify core.Lattice for new configs.
 	if con.lattice != nil {
-		for con.latticeLastRound+1 < uint64(len(con.configs)) {
+		for con.latticeLastRound+1 <= maxRound {
 			con.latticeLastRound++
 			if err := con.lattice.AppendConfig(
 				con.latticeLastRound,
@@ -546,6 +567,15 @@ func (con *Consensus) startNetwork() {
 					pos = v.Position
 				case *types.AgreementResult:
 					pos = v.Position
+				case *types.BlockRandomnessResult:
+					func() {
+						con.lock.Lock()
+						defer con.lock.Unlock()
+						if v.Position.Round >= con.agreementRoundCut {
+							con.randomnessResults = append(con.randomnessResults, v)
+						}
+					}()
+					continue Loop
 				default:
 					continue Loop
 				}

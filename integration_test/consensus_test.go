@@ -113,7 +113,9 @@ func (s *ConsensusTestSuite) verifyNodes(nodes map[types.NodeID]*node) {
 }
 
 func (s *ConsensusTestSuite) syncBlocksWithSomeNode(
-	sourceNode *node, syncerObj *syncer.Consensus, nextSyncHeight uint64) (
+	sourceNode, syncNode *node,
+	syncerObj *syncer.Consensus,
+	nextSyncHeight uint64) (
 	syncedCon *core.Consensus, syncerHeight uint64, err error) {
 
 	syncerHeight = nextSyncHeight
@@ -129,6 +131,18 @@ func (s *ConsensusTestSuite) syncBlocksWithSomeNode(
 	// Load all blocks from revealer and dump them into syncer.
 	var compactionChainBlocks []*types.Block
 	syncBlocks := func() (done bool) {
+		// Apply txs in blocks to make sure our governance instance is ready.
+		// This action should be performed by fullnode in production mode.
+		for _, b := range compactionChainBlocks {
+			if err = syncNode.gov.State().Apply(b.Payload); err != nil {
+				if err != test.ErrDuplicatedChange {
+					return
+				}
+				err = nil
+			}
+			syncNode.gov.CatchUpWithRound(
+				b.Position.Round + core.ConfigRoundShift)
+		}
 		syncedCon, err = syncerObj.SyncBlocks(compactionChainBlocks, true)
 		if syncedCon != nil || err != nil {
 			done = true
@@ -187,7 +201,7 @@ func (s *ConsensusTestSuite) TestSimple() {
 	// A short round interval.
 	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
 	for _, n := range nodes {
-		go n.con.Run(&types.Block{})
+		go n.con.Run()
 	}
 Loop:
 	for {
@@ -260,7 +274,7 @@ func (s *ConsensusTestSuite) TestNumChainsChange() {
 		5, test.StateChangeRoundInterval, 55*time.Second))
 	// Run test.
 	for _, n := range nodes {
-		go n.con.Run(&types.Block{})
+		go n.con.Run()
 	}
 Loop:
 	for {
@@ -288,6 +302,7 @@ func (s *ConsensusTestSuite) TestSync() {
 		peerCount  = 4
 		dMoment    = time.Now().UTC()
 		untilRound = uint64(5)
+		stopRound  = uint64(3)
 		aliveRound = uint64(1)
 		errChan    = make(chan error, 100)
 	)
@@ -306,13 +321,11 @@ func (s *ConsensusTestSuite) TestSync() {
 	// later.
 	syncNode := nodes[types.NewNodeID(pubKeys[0])]
 	syncNode.con = nil
-	// Use other node's governance instance. Normally, fullnode would make
-	// governance when syncing. In our test, it's the simplest way to achieve
-	// that.
-	syncNode.gov = nodes[types.NewNodeID(pubKeys[1])].gov
+	// Pick a node to stop when synced.
+	stoppedNode := nodes[types.NewNodeID(pubKeys[1])]
 	for _, n := range nodes {
 		if n.ID != syncNode.ID {
-			go n.con.Run(&types.Block{})
+			go n.con.Run()
 		}
 	}
 	// Clean syncNode's network receive channel, or it might exceed the limit
@@ -366,26 +379,17 @@ ReachAlive:
 	// another go routine.
 	go func() {
 		var (
-			node         *node
 			syncedHeight uint64
 			err          error
 			syncedCon    *core.Consensus
 		)
 	SyncLoop:
 		for {
-			for _, n := range nodes {
-				if n.ID == syncNode.ID {
-					continue
-				}
-				node = n
-				break
-			}
 			syncedCon, syncedHeight, err = s.syncBlocksWithSomeNode(
-				node, syncerObj, syncedHeight)
+				stoppedNode, syncNode, syncerObj, syncedHeight)
 			if syncedCon != nil {
-				// TODO(mission): run it and make sure it can follow up with
-				//                other nodes.
-				runnerCtxCancel()
+				syncNode.con = syncedCon
+				go syncNode.con.Run()
 				break SyncLoop
 			}
 			if err != nil {
@@ -405,6 +409,29 @@ ReachAlive:
 		for {
 			time.Sleep(5 * time.Second)
 			for _, n := range nodes {
+				if n.ID == stoppedNode.ID {
+					if n.con == nil {
+						continue
+					}
+					if n.app.GetLatestDeliveredPosition().Round < stopRound {
+						continue
+					}
+					// Stop a node, we should still be able to proceed.
+					stoppedNode.con.Stop()
+					stoppedNode.con = nil
+					s.T().Log("one node stopped")
+					// Initiate a dummy routine to consume the receive channel.
+					go func() {
+						for {
+							select {
+							case <-runnerCtx.Done():
+								return
+							case <-stoppedNode.network.ReceiveChan():
+							}
+						}
+					}()
+					continue
+				}
 				if n.app.GetLatestDeliveredPosition().Round < untilRound {
 					continue ReachFinished
 				}

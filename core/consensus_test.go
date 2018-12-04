@@ -553,7 +553,7 @@ func (s *ConsensusTestSuite) TestSyncBA() {
 	s.Require().NoError(err)
 	prvKey := prvKeys[0]
 	_, con := s.prepareConsensus(time.Now().UTC(), gov, prvKey, conn)
-	go con.Run(&types.Block{})
+	go con.Run()
 	hash := common.NewRandomHash()
 	auths := make([]*Authenticator, 0, len(prvKeys))
 	for _, prvKey := range prvKeys {
