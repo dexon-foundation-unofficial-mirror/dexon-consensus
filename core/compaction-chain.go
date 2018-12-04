@@ -82,7 +82,6 @@ func (cc *compactionChain) init(initBlock *types.Block) {
 	if initBlock.Finalization.Height == 0 {
 		cc.chainUnsynced = cc.gov.Configuration(uint64(0)).NumChains
 	}
-	cc.pendingBlocks = append(cc.pendingBlocks, initBlock)
 }
 
 func (cc *compactionChain) registerBlock(block *types.Block) {
@@ -111,7 +110,7 @@ func (cc *compactionChain) blockRegisteredNoLock(
 }
 
 func (cc *compactionChain) processBlock(block *types.Block) error {
-	prevBlock := cc.lastBlock()
+	prevBlock := cc.lastDeliveredBlock()
 	if prevBlock == nil {
 		return ErrNotInitiazlied
 	}
@@ -125,7 +124,7 @@ func (cc *compactionChain) processBlock(block *types.Block) error {
 }
 
 func (cc *compactionChain) extractBlocks() []*types.Block {
-	prevBlock := cc.lastBlock()
+	prevBlock := cc.lastDeliveredBlock()
 
 	// Check if we're synced.
 	if !func() bool {
@@ -138,9 +137,6 @@ func (cc *compactionChain) extractBlocks() []*types.Block {
 		if prevBlock.Finalization.Height == 0 {
 			return cc.chainUnsynced == 0
 		}
-		if prevBlock.Hash != cc.pendingBlocks[0].Hash {
-			return false
-		}
 		return true
 	}() {
 		return []*types.Block{}
@@ -148,14 +144,12 @@ func (cc *compactionChain) extractBlocks() []*types.Block {
 	deliveringBlocks := make([]*types.Block, 0)
 	cc.lock.Lock()
 	defer cc.lock.Unlock()
-	// cc.pendingBlocks[0] will not be popped and will equal to cc.prevBlock.
-	for len(cc.pendingBlocks) > 1 &&
-		(len(cc.blockRandomness[cc.pendingBlocks[1].Hash]) != 0 ||
-			cc.pendingBlocks[1].Position.Round == 0) {
+	var block *types.Block
+	for len(cc.pendingBlocks) > 0 &&
+		(len(cc.blockRandomness[cc.pendingBlocks[0].Hash]) != 0 ||
+			cc.pendingBlocks[0].Position.Round == 0) {
 		delete(cc.blocks, cc.pendingBlocks[0].Hash)
-		cc.pendingBlocks = cc.pendingBlocks[1:]
-
-		block := cc.pendingBlocks[0]
+		block, cc.pendingBlocks = cc.pendingBlocks[0], cc.pendingBlocks[1:]
 		block.Finalization.ParentHash = prevBlock.Hash
 		block.Finalization.Height = prevBlock.Finalization.Height + 1
 		if block.Position.Round != 0 {
@@ -165,9 +159,7 @@ func (cc *compactionChain) extractBlocks() []*types.Block {
 		deliveringBlocks = append(deliveringBlocks, block)
 		prevBlock = block
 	}
-
 	cc.prevBlock = prevBlock
-
 	return deliveringBlocks
 }
 
@@ -190,7 +182,7 @@ func (cc *compactionChain) verifyRandomness(
 }
 
 func (cc *compactionChain) processFinalizedBlock(block *types.Block) error {
-	if block.Finalization.Height <= cc.lastBlock().Finalization.Height {
+	if block.Finalization.Height <= cc.lastDeliveredBlock().Finalization.Height {
 		return nil
 	}
 	// Block of round 0 should not have randomness.
@@ -246,8 +238,20 @@ func (cc *compactionChain) purgePending() {
 	}
 }
 
-func (cc *compactionChain) lastBlock() *types.Block {
+// lastDeliveredBlock returns the last delivered block, or the one used to
+// initialize this module.
+func (cc *compactionChain) lastDeliveredBlock() *types.Block {
 	cc.lock.RLock()
 	defer cc.lock.RUnlock()
 	return cc.prevBlock
+}
+
+// lastPendingBlock returns the last pending block.
+func (cc *compactionChain) lastPendingBlock() *types.Block {
+	cc.lock.RLock()
+	defer cc.lock.RUnlock()
+	if len(cc.pendingBlocks) > 0 {
+		return cc.pendingBlocks[0]
+	}
+	return nil
 }

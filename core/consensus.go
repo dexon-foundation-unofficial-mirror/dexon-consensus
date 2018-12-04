@@ -1018,8 +1018,9 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		go con.event.NotifyTime(b.Finalization.Timestamp)
 	}
 	deliveredBlocks = con.ccModule.extractBlocks()
-	con.logger.Debug("Last block in compaction chain",
-		"block", con.ccModule.lastBlock())
+	con.logger.Debug("Last blocks in compaction chain",
+		"delivered", con.ccModule.lastDeliveredBlock(),
+		"pending", con.ccModule.lastPendingBlock())
 	for _, b := range deliveredBlocks {
 		if err = con.db.Update(*b); err != nil {
 			panic(err)

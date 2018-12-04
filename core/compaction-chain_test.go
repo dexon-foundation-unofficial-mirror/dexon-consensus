@@ -89,7 +89,7 @@ func (s *CompactionChainTestSuite) TestProcessBlock() {
 	for _, block := range blocks {
 		s.Require().NoError(cc.processBlock(block))
 	}
-	s.Len(cc.pendingBlocks, len(blocks)+1)
+	s.Len(cc.pendingBlocks, len(blocks))
 }
 
 func (s *CompactionChainTestSuite) TestExtractBlocks() {
