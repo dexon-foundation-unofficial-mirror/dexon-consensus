@@ -611,6 +611,15 @@ func (con *Consensus) runCRS(round uint64) {
 		con.logger.Info("CRS already proposed", "round", round+1)
 		return
 	}
+	con.logger.Debug("Calling Governance.IsDKGFinal to check if ready to run CRS",
+		"round", round)
+	for !con.gov.IsDKGFinal(round) {
+		con.logger.Debug("DKG is not ready for running CRS. Retry later...",
+			"round", round)
+		time.Sleep(500 * time.Millisecond)
+	}
+	// Wait some time for DKG to recover private share.
+	time.Sleep(100 * time.Millisecond)
 	// Start running next round CRS.
 	con.logger.Debug("Calling Governance.CRS", "round", round)
 	psig, err := con.cfgModule.preparePartialSignature(round, con.gov.CRS(round))

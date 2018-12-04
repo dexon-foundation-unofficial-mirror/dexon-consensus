@@ -85,3 +85,35 @@ func (logger *SimpleLogger) Warn(msg string, ctx ...interface{}) {
 func (logger *SimpleLogger) Error(msg string, ctx ...interface{}) {
 	log.Println(composeVargs(msg, ctx)...)
 }
+
+// CustomLogger logs everything.
+type CustomLogger struct {
+	logger *log.Logger
+}
+
+// NewCustomLogger creates a new custom logger.
+func NewCustomLogger(logger *log.Logger) *CustomLogger {
+	return &CustomLogger{
+		logger: logger,
+	}
+}
+
+// Debug implements Logger interface.
+func (logger *CustomLogger) Debug(msg string, ctx ...interface{}) {
+	logger.logger.Println(composeVargs(msg, ctx)...)
+}
+
+// Info implements Logger interface.
+func (logger *CustomLogger) Info(msg string, ctx ...interface{}) {
+	logger.logger.Println(composeVargs(msg, ctx)...)
+}
+
+// Warn implements Logger interface.
+func (logger *CustomLogger) Warn(msg string, ctx ...interface{}) {
+	logger.logger.Println(composeVargs(msg, ctx)...)
+}
+
+// Error implements Logger interface.
+func (logger *CustomLogger) Error(msg string, ctx ...interface{}) {
+	logger.logger.Println(composeVargs(msg, ctx)...)
+}

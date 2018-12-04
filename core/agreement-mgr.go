@@ -251,8 +251,8 @@ func (mgr *agreementMgr) processAgreementResult(
 		nIDs := nodes.GetSubSet(
 			int(mgr.gov.Configuration(result.Position.Round).NotarySetSize),
 			types.NewNotarySetTarget(crs, result.Position.ChainID))
-		for _, vote := range result.Votes {
-			agreement.processVote(&vote)
+		for key := range result.Votes {
+			agreement.processVote(&result.Votes[key])
 		}
 		agreement.restart(nIDs, result.Position, crs)
 	}
