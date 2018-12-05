@@ -394,6 +394,7 @@ func (mgr *agreementMgr) baRoutineForOneRound(
 	setting *baRoundSetting) (err error) {
 	agr := setting.agr
 	recv := setting.recv
+	oldPos := agr.agreementID()
 Loop:
 	for {
 		select {
@@ -407,7 +408,6 @@ Loop:
 				// This round is finished.
 				break Loop
 			}
-			oldPos := agr.agreementID()
 			var nextHeight uint64
 			for {
 				nextHeight, err = mgr.lattice.NextHeight(recv.round, setting.chainID)
@@ -425,15 +425,16 @@ Loop:
 				if nextHeight > oldPos.Height {
 					break
 				}
-				time.Sleep(100 * time.Millisecond)
 				mgr.logger.Debug("Lattice not ready!!!",
 					"old", &oldPos, "next", nextHeight)
+				time.Sleep(100 * time.Millisecond)
 			}
 			nextPos := types.Position{
 				Round:   recv.round,
 				ChainID: setting.chainID,
 				Height:  nextHeight,
 			}
+			oldPos = nextPos
 			agr.restart(setting.notarySet, nextPos, setting.crs)
 		default:
 		}
