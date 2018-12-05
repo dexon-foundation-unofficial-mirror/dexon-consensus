@@ -239,10 +239,10 @@ func (con *Consensus) ensureAgreementOverlapRound() bool {
 
 func (con *Consensus) findLatticeSyncBlock(
 	blocks []*types.Block) (*types.Block, error) {
-	var lastBlock = blocks[len(blocks)-1]
+	lastBlock := blocks[len(blocks)-1]
+	round := lastBlock.Position.Round
 	for {
 		// Find round r which r-1, r, r+1 are all in same total ordering config.
-		round := lastBlock.Position.Round
 		for {
 			sameAsPrevRound := round == 0 || !con.isConfigChanged(
 				con.configs[round-1], con.configs[round])
@@ -257,7 +257,7 @@ func (con *Consensus) findLatticeSyncBlock(
 			}
 			round--
 		}
-		// Find the oldest block which round is "round".
+		// Find the newset block which round is "round".
 		for lastBlock.Position.Round != round {
 			if (lastBlock.Finalization.ParentHash == common.Hash{}) {
 				return nil, ErrGenesisBlockReached
