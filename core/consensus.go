@@ -340,10 +340,11 @@ type Consensus struct {
 	toSyncer *totalOrderingSyncer
 
 	// Interfaces.
-	db      blockdb.BlockDatabase
-	app     Application
-	gov     Governance
-	network Network
+	db       blockdb.BlockDatabase
+	app      Application
+	debugApp Debug
+	gov      Governance
+	network  Network
 
 	// Misc.
 	dMoment       time.Time
@@ -372,7 +373,10 @@ func NewConsensus(
 	// Setup auth module.
 	authModule := NewAuthenticator(prv)
 	// Check if the application implement Debug interface.
-	debugApp, _ := app.(Debug)
+	var debugApp Debug
+	if a, ok := app.(Debug); ok {
+		debugApp = a
+	}
 	// Get configuration for genesis round.
 	var round uint64
 	logger.Debug("Calling Governance.Configuration", "round", round)
@@ -407,6 +411,7 @@ func NewConsensus(
 		ccModule:         newCompactionChain(gov),
 		lattice:          lattice,
 		app:              newNonBlocking(app, debugApp),
+		debugApp:         debugApp,
 		gov:              gov,
 		db:               db,
 		network:          network,
@@ -961,6 +966,9 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 // preProcessBlock performs Byzantine Agreement on the block.
 func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
 	err = con.baMgr.processBlock(b)
+	if err == nil && con.debugApp != nil {
+		con.debugApp.BlockReceived(b.Hash)
+	}
 	return
 }
 
@@ -1027,6 +1035,9 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		}
 		con.cfgModule.untouchTSigHash(b.Hash)
 		con.deliverBlock(b)
+		if con.debugApp != nil {
+			con.debugApp.BlockReady(b.Hash)
+		}
 	}
 	if err = con.lattice.PurgeBlocks(deliveredBlocks); err != nil {
 		return

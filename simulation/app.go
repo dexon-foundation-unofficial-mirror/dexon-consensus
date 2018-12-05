@@ -44,22 +44,41 @@ type timestampMessage struct {
 	Timestamp time.Time      `json:"timestamp"`
 }
 
+const (
+	// Block received or created in agreement.
+	blockEventReceived int = iota
+	// Block confirmed in agreement, sent into lattice
+	blockEventConfirmed
+	// Block delivered by lattice.
+	blockEventDelivered
+	// block is ready (Randomness calculated)
+	blockEventReady
+
+	blockEventCount
+)
+
+type blockEventMessage struct {
+	BlockHash  common.Hash `json:"hash"`
+	Timestamps []time.Time `json:"timestamps"`
+}
+
 // simApp is an DEXON app for simulation.
 type simApp struct {
-	NodeID      types.NodeID
-	Outputs     []*types.Block
-	Early       bool
-	netModule   *test.Network
-	stateModule *test.State
-	DeliverID   int
-	// blockSeen stores the time when block is delivered by Total Ordering.
-	blockSeen map[common.Hash]time.Time
+	NodeID          types.NodeID
+	Outputs         []*types.Block
+	Early           bool
+	netModule       *test.Network
+	stateModule     *test.State
+	DeliverID       int
+	blockTimestamps map[common.Hash][]time.Time
+	blockSeen       map[common.Hash]time.Time
 	// uncofirmBlocks stores the blocks whose timestamps are not ready.
 	unconfirmedBlocks  map[types.NodeID]common.Hashes
 	blockByHash        map[common.Hash]*types.Block
 	blockByHashMutex   sync.RWMutex
 	latestWitness      types.Witness
 	latestWitnessReady *sync.Cond
+	lock               sync.RWMutex
 }
 
 // newSimApp returns point to a new instance of simApp.
@@ -71,6 +90,7 @@ func newSimApp(
 		stateModule:        stateModule,
 		DeliverID:          0,
 		blockSeen:          make(map[common.Hash]time.Time),
+		blockTimestamps:    make(map[common.Hash][]time.Time),
 		unconfirmedBlocks:  make(map[types.NodeID]common.Hashes),
 		blockByHash:        make(map[common.Hash]*types.Block),
 		latestWitnessReady: sync.NewCond(&sync.Mutex{}),
@@ -84,6 +104,7 @@ func (a *simApp) BlockConfirmed(block types.Block) {
 	// TODO(jimmy-dexon) : Remove block in this hash if it's no longer needed.
 	a.blockByHash[block.Hash] = &block
 	a.blockSeen[block.Hash] = time.Now().UTC()
+	a.updateBlockEvent(block.Hash)
 }
 
 // VerifyBlock implements core.Application.
@@ -139,7 +160,7 @@ func (a *simApp) TotalOrderingDelivered(
 	fmt.Println("OUTPUT", a.NodeID, mode, blockHashes)
 	latencies := []time.Duration{}
 	for _, h := range blockHashes {
-		latencies = append(latencies, time.Since(a.blockSeen[h]))
+		latencies = append(latencies, time.Since(a.blockTimestamps[h][blockEventConfirmed]))
 	}
 	blockList := &BlockList{
 		ID:             a.DeliverID,
@@ -153,6 +174,7 @@ func (a *simApp) TotalOrderingDelivered(
 // BlockDelivered is called when a block in compaction chain is delivered.
 func (a *simApp) BlockDelivered(
 	blockHash common.Hash, pos types.Position, result types.FinalizationResult) {
+
 	if len(result.Randomness) == 0 && pos.Round > 0 {
 		panic(fmt.Errorf("Block %s randomness is empty", blockHash))
 	}
@@ -177,6 +199,8 @@ func (a *simApp) BlockDelivered(
 		}
 		a.latestWitnessReady.Broadcast()
 	}()
+
+	a.updateBlockEvent(blockHash)
 
 	seenTime, exist := a.blockSeen[blockHash]
 	if !exist {
@@ -205,4 +229,28 @@ func (a *simApp) BlockDelivered(
 		Payload: jsonPayload,
 	}
 	a.netModule.Report(msg)
+}
+
+// BlockReceived is called when a block is received in agreement.
+func (a *simApp) BlockReceived(hash common.Hash) {
+	a.updateBlockEvent(hash)
+}
+
+// BlockReady is called when a block is ready.
+func (a *simApp) BlockReady(hash common.Hash) {
+	a.updateBlockEvent(hash)
+}
+
+func (a *simApp) updateBlockEvent(hash common.Hash) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	a.blockTimestamps[hash] = append(a.blockTimestamps[hash], time.Now().UTC())
+	if len(a.blockTimestamps[hash]) == blockEventCount {
+		msg := &blockEventMessage{
+			BlockHash:  hash,
+			Timestamps: a.blockTimestamps[hash],
+		}
+		a.netModule.Report(msg)
+		delete(a.blockTimestamps, hash)
+	}
 }

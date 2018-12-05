@@ -280,6 +280,12 @@ Loop:
 	return nil
 }
 
+// BlockReceived implements interface Debug.
+func (app *App) BlockReceived(hash common.Hash) {}
+
+// BlockReady implements interface Debug.
+func (app *App) BlockReady(hash common.Hash) {}
+
 // WithLock provides a backdoor to check status of App with reader lock.
 func (app *App) WithLock(function func(*App)) {
 	app.confirmedLock.RLock()

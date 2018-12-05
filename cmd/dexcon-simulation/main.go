@@ -20,6 +20,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -67,6 +68,15 @@ func main() {
 			log.Fatal("could not start CPU profile: ", err)
 		}
 		defer pprof.StopCPUProfile()
+	}
+
+	if *logfile != "" {
+		f, err := os.Create(*logfile)
+		if err != nil {
+			log.Fatal("could not create log file: ", err)
+		}
+		mw := io.MultiWriter(os.Stdout, f)
+		log.SetOutput(mw)
 	}
 
 	cfg, err := config.Read(*configFile)

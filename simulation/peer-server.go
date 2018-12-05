@@ -24,7 +24,9 @@ import (
 	"log"
 	"reflect"
 	"sync"
+	"time"
 
+	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/dexon-foundation/dexon-consensus/simulation/config"
@@ -41,6 +43,7 @@ type PeerServer struct {
 	cfg              *config.Config
 	ctx              context.Context
 	ctxCancel        context.CancelFunc
+	blockEvents      map[types.NodeID]map[common.Hash][]time.Time
 }
 
 // NewPeerServer returns a new PeerServer instance.
@@ -51,6 +54,7 @@ func NewPeerServer() *PeerServer {
 		peerTotalOrder: make(PeerTotalOrder),
 		ctx:            ctx,
 		ctxCancel:      cancel,
+		blockEvents:    make(map[types.NodeID]map[common.Hash][]time.Time),
 	}
 }
 
@@ -114,6 +118,17 @@ func (p *PeerServer) handleMessage(id types.NodeID, m *message) {
 	}
 }
 
+func (p *PeerServer) handleBlockEventMessage(id types.NodeID, msg *blockEventMessage) {
+	if _, exist := p.blockEvents[id]; !exist {
+		p.blockEvents[id] = make(map[common.Hash][]time.Time)
+	}
+	nodeEvents := p.blockEvents[id]
+	if _, exist := nodeEvents[msg.BlockHash]; !exist {
+		nodeEvents[msg.BlockHash] = []time.Time{}
+	}
+	nodeEvents[msg.BlockHash] = msg.Timestamps
+}
+
 func (p *PeerServer) mainLoop() {
 	for {
 		select {
@@ -134,6 +149,8 @@ func (p *PeerServer) mainLoop() {
 				p.handleBlockList(e.From, val)
 			case *message:
 				p.handleMessage(e.From, val)
+			case *blockEventMessage:
+				p.handleBlockEventMessage(e.From, val)
 			default:
 				panic(fmt.Errorf("unknown message: %v", reflect.TypeOf(e.Msg)))
 			}
@@ -181,5 +198,22 @@ func (p *PeerServer) Run() {
 	LogStatus(p.peerTotalOrder)
 	if err := p.trans.Close(); err != nil {
 		log.Printf("Error shutting down peerServer: %v\n", err)
+	}
+	p.logBlockEvents()
+}
+
+func (p *PeerServer) logBlockEvents() {
+	diffs := [blockEventCount - 1][]float64{}
+	for _, bs := range p.blockEvents {
+		for _, ts := range bs {
+			for i := 0; i < blockEventCount-1; i++ {
+				diffs[i] = append(diffs[i], float64(ts[i+1].Sub(ts[i]))/1000000000)
+			}
+		}
+	}
+	log.Printf("===== block event mean and std dev (%d blocks) =====\n", len(diffs[0]))
+	for i, a := range diffs {
+		m, d := calcMeanAndStdDeviation(a)
+		log.Printf("  event %d: mean = %f, std dev = %f\n", i, m, d)
 	}
 }

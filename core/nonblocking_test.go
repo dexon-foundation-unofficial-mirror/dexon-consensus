@@ -74,6 +74,10 @@ func (app *slowApp) BlockDelivered(blockHash common.Hash,
 	app.blockDelivered[blockHash] = struct{}{}
 }
 
+func (app *slowApp) BlockReceived(hash common.Hash) {}
+
+func (app *slowApp) BlockReady(hash common.Hash) {}
+
 // noDebugApp is to make sure nonBlocking works when Debug interface
 // is not implemented by the provided Application instance.
 type noDebugApp struct {

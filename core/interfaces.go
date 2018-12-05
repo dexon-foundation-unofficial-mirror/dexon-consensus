@@ -41,7 +41,7 @@ type Application interface {
 	// BlockConfirmed is called when a block is confirmed and added to lattice.
 	BlockConfirmed(block types.Block)
 
-	// BlockDelivered is called when a block is add to the compaction chain.
+	// BlockDelivered is called when a block is added to the compaction chain.
 	BlockDelivered(blockHash common.Hash,
 		blockPosition types.Position, result types.FinalizationResult)
 }
@@ -49,9 +49,13 @@ type Application interface {
 // Debug describes the application interface that requires
 // more detailed consensus execution.
 type Debug interface {
+	// BlockReceived is called when the block received in agreement.
+	BlockReceived(common.Hash)
 	// TotalOrderingDelivered is called when the total ordering algorithm deliver
 	// a set of block.
 	TotalOrderingDelivered(common.Hashes, uint32)
+	// BlockReady is called when the block's randomness is ready.
+	BlockReady(common.Hash)
 }
 
 // Network describs the network interface that interacts with DEXON consensus
