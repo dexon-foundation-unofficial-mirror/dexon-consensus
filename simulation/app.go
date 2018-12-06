@@ -159,9 +159,13 @@ func (a *simApp) TotalOrderingDelivered(
 	blockHashes common.Hashes, mode uint32) {
 	fmt.Println("OUTPUT", a.NodeID, mode, blockHashes)
 	latencies := []time.Duration{}
-	for _, h := range blockHashes {
-		latencies = append(latencies, time.Since(a.blockTimestamps[h][blockEventConfirmed]))
-	}
+	func() {
+		a.lock.RLock()
+		defer a.lock.RUnlock()
+		for _, h := range blockHashes {
+			latencies = append(latencies, time.Since(a.blockTimestamps[h][blockEventConfirmed]))
+		}
+	}()
 	blockList := &BlockList{
 		ID:             a.DeliverID,
 		BlockHash:      blockHashes,
