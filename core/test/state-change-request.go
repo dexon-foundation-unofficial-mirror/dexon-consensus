@@ -18,10 +18,13 @@
 package test
 
 import (
+	"fmt"
+	"math"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
 	"github.com/dexon-foundation/dexon/rlp"
 )
@@ -43,7 +46,6 @@ const (
 	StateChangeLambdaDKG
 	StateChangeRoundInterval
 	StateChangeMinBlockInterval
-	StateChangeMaxBlockInterval
 	StateChangeK
 	StateChangePhiRatio
 	StateChangeNotarySetSize
@@ -132,4 +134,58 @@ func (req *StateChangeRequest) Equal(other *StateChangeRequest) error {
 		return nil
 	}
 	return ErrStatePendingChangesNotEqual
+}
+
+// String dump the state change request into string form.
+func (req *StateChangeRequest) String() (ret string) {
+	ret = "stateChangeRequest"
+	switch req.Type {
+	case StateChangeNothing:
+		ret += "{Type:Nothing}"
+	case StateAddCRS:
+		crsReq := req.Payload.(*crsAdditionRequest)
+		ret += fmt.Sprintf("{Type:AddCRS Round:%v CRS:%s",
+			crsReq.Round,
+			crsReq.CRS.String()[:6])
+	case StateAddDKGComplaint:
+		ret += fmt.Sprintf(
+			"{Type:AddDKGComplaint %s", req.Payload.(*typesDKG.Complaint))
+	case StateAddDKGMasterPublicKey:
+		ret += fmt.Sprintf(
+			"{Type:AddDKGMasterPublicKey %s",
+			req.Payload.(*typesDKG.MasterPublicKey))
+	case StateAddDKGFinal:
+		ret += fmt.Sprintf(
+			"{Type:AddDKGFinal %s", req.Payload.(*typesDKG.Finalize))
+	case StateChangeNumChains:
+		ret += fmt.Sprintf("{Type:ChangeNumChains %v", req.Payload.(uint32))
+	case StateChangeLambdaBA:
+		ret += fmt.Sprintf(
+			"{Type:ChangeLambdaBA %v", time.Duration(req.Payload.(uint64)))
+	case StateChangeLambdaDKG:
+		ret += fmt.Sprintf(
+			"{Type:ChangeLambdaDKG %v", time.Duration(req.Payload.(uint64)))
+	case StateChangeRoundInterval:
+		ret += fmt.Sprintf(
+			"{Type:ChangeRoundInterval %v", time.Duration(req.Payload.(uint64)))
+	case StateChangeMinBlockInterval:
+		ret += fmt.Sprintf(
+			"{Type:ChangeMinBlockInterval %v",
+			time.Duration(req.Payload.(uint64)))
+	case StateChangeK:
+		ret += fmt.Sprintf("Type:ChangeK %v", req.Payload.(uint64))
+	case StateChangePhiRatio:
+		ret += fmt.Sprintf(
+			"{Type:ChangePhiRatio %v", math.Float32frombits(req.Payload.(uint32)))
+	case StateChangeNotarySetSize:
+		ret += fmt.Sprintf("{Type:ChangeNotarySetSize %v", req.Payload.(uint32))
+	case StateChangeDKGSetSize:
+		ret += fmt.Sprintf("{Type:ChangeDKGSetSize %v", req.Payload.(uint32))
+	case StateAddNode:
+		ret += fmt.Sprintf(
+			"{Type:AddNode %s",
+			types.NewNodeID(req.Payload.(crypto.PublicKey)).String()[:6])
+	}
+	panic(fmt.Errorf(
+		"attempting to dump unknown type of state change request: %v", req.Type))
 }

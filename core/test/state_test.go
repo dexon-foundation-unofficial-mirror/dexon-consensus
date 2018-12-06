@@ -132,7 +132,6 @@ func (s *StateTestSuite) makeConfigChanges(st *State) {
 	st.RequestChange(StateChangeLambdaDKG, time.Millisecond)
 	st.RequestChange(StateChangeRoundInterval, time.Hour)
 	st.RequestChange(StateChangeMinBlockInterval, time.Second)
-	st.RequestChange(StateChangeMaxBlockInterval, time.Minute)
 	st.RequestChange(StateChangeK, 1)
 	st.RequestChange(StateChangePhiRatio, float32(0.5))
 	st.RequestChange(StateChangeNotarySetSize, uint32(5))
@@ -159,10 +158,10 @@ func (s *StateTestSuite) TestEqual() {
 	)
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
-	st := NewState(genesisNodes, lambda, true)
+	st := NewState(genesisNodes, lambda, &common.NullLogger{}, true)
 	req.NoError(st.Equal(st))
 	// One node is missing.
-	st1 := NewState(genesisNodes, lambda, true)
+	st1 := NewState(genesisNodes, lambda, &common.NullLogger{}, true)
 	for nID := range st1.nodes {
 		delete(st1.nodes, nID)
 		break
@@ -216,7 +215,7 @@ func (s *StateTestSuite) TestPendingChangesEqual() {
 	// Setup a non-local mode State instance.
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
-	st := NewState(genesisNodes, lambda, false)
+	st := NewState(genesisNodes, lambda, &common.NullLogger{}, false)
 	req.NoError(st.Equal(st))
 	// Apply some changes.
 	s.makeConfigChanges(st)
@@ -236,7 +235,7 @@ func (s *StateTestSuite) TestLocalMode() {
 	)
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
-	st := NewState(genesisNodes, lambda, true)
+	st := NewState(genesisNodes, lambda, &common.NullLogger{}, true)
 	config1, nodes1 := st.Snapshot()
 	req.True(s.compareNodes(genesisNodes, nodes1))
 	// Check settings of config1 affected by genesisNodes and lambda.
@@ -296,7 +295,7 @@ func (s *StateTestSuite) TestPacking() {
 	// Make config changes.
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
-	st := NewState(genesisNodes, lambda, false)
+	st := NewState(genesisNodes, lambda, &common.NullLogger{}, false)
 	s.makeConfigChanges(st)
 	// Add new CRS.
 	crs := common.NewRandomHash()
@@ -357,8 +356,8 @@ func (s *StateTestSuite) TestRequestBroadcastAndPack() {
 	)
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
-	st := NewState(genesisNodes, lambda, false)
-	st1 := NewState(genesisNodes, lambda, false)
+	st := NewState(genesisNodes, lambda, &common.NullLogger{}, false)
+	st1 := NewState(genesisNodes, lambda, &common.NullLogger{}, false)
 	req.NoError(st.Equal(st1))
 	// Make configuration changes.
 	s.makeConfigChanges(st)

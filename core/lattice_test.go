@@ -102,9 +102,11 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 	db, err := blockdb.NewMemBackedBlockDB()
 	req.NoError(err)
 	// Setup governance.
+	logger := &common.NullLogger{}
 	_, pubKeys, err := test.NewKeys(int(cfg.NotarySetSize))
 	req.NoError(err)
-	gov, err := test.NewGovernance(pubKeys, cfg.LambdaBA, ConfigRoundShift)
+	gov, err := test.NewGovernance(test.NewState(
+		pubKeys, cfg.LambdaBA, logger, true), ConfigRoundShift)
 	req.NoError(err)
 	// Setup application.
 	app := test.NewApp(gov.State())
@@ -128,7 +130,7 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 			app,
 			app,
 			db,
-			&common.NullLogger{})}
+			logger)}
 }
 
 func (s *LatticeTestSuite) TestBasicUsage() {

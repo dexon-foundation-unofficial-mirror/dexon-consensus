@@ -59,8 +59,8 @@ func (s *CompactionChainTestSuite) newCompactionChain() (
 	*compactionChain, *mockTSigVerifier) {
 	_, pubKeys, err := test.NewKeys(4)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(
-		pubKeys, 100*time.Millisecond, ConfigRoundShift)
+	gov, err := test.NewGovernance(test.NewState(
+		pubKeys, 100*time.Millisecond, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 	cc := newCompactionChain(gov)
 	cc.init(&types.Block{})

@@ -173,7 +173,8 @@ func (s *ConfigurationChainTestSuite) runDKG(
 	}
 
 	for _, nID := range s.nIDs {
-		gov, err := test.NewGovernance(pks, 50*time.Millisecond, ConfigRoundShift)
+		gov, err := test.NewGovernance(test.NewState(
+			pks, 50*time.Millisecond, &common.NullLogger{}, true), ConfigRoundShift)
 		s.Require().NoError(err)
 		cache := utils.NewNodeSetCache(gov)
 		cfgChains[nID] = newConfigurationChain(

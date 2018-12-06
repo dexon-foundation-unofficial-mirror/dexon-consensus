@@ -90,7 +90,6 @@ type State struct {
 	dkgSetSize       uint32
 	roundInterval    time.Duration
 	minBlockInterval time.Duration
-	maxBlockInterval time.Duration
 	// Nodes
 	nodes map[types.NodeID]crypto.PublicKey
 	// DKG & CRS
@@ -100,6 +99,7 @@ type State struct {
 	crs                 []common.Hash
 	// Other stuffs
 	local           bool
+	logger          common.Logger
 	lock            sync.RWMutex
 	appliedRequests map[common.Hash]struct{}
 	// Pending change requests.
@@ -111,7 +111,10 @@ type State struct {
 //  - node set
 //  - crs
 func NewState(
-	nodePubKeys []crypto.PublicKey, lambda time.Duration, local bool) *State {
+	nodePubKeys []crypto.PublicKey,
+	lambda time.Duration,
+	logger common.Logger,
+	local bool) *State {
 	nodes := make(map[types.NodeID]crypto.PublicKey)
 	for _, key := range nodePubKeys {
 		nodes[types.NewNodeID(key)] = key
@@ -119,12 +122,12 @@ func NewState(
 	genesisCRS := crypto.Keccak256Hash([]byte("__ DEXON"))
 	return &State{
 		local:            local,
+		logger:           logger,
 		numChains:        uint32(len(nodes)),
 		lambdaBA:         lambda,
 		lambdaDKG:        lambda * 10,
 		roundInterval:    lambda * 10000,
 		minBlockInterval: time.Millisecond * 1,
-		maxBlockInterval: lambda * 8,
 		crs:              []common.Hash{genesisCRS},
 		nodes:            nodes,
 		phiRatio:         0.667,
@@ -209,10 +212,6 @@ func (s *State) unpackPayload(
 		var tmp uint64
 		err = rlp.DecodeBytes(raw.Payload, &tmp)
 		v = tmp
-	case StateChangeMaxBlockInterval:
-		var tmp uint64
-		err = rlp.DecodeBytes(raw.Payload, &tmp)
-		v = tmp
 	case StateChangeK:
 		var tmp uint64
 		err = rlp.DecodeBytes(raw.Payload, &tmp)
@@ -275,8 +274,7 @@ func (s *State) Equal(other *State) error {
 		s.notarySetSize == other.notarySetSize &&
 		s.dkgSetSize == other.dkgSetSize &&
 		s.roundInterval == other.roundInterval &&
-		s.minBlockInterval == other.minBlockInterval &&
-		s.maxBlockInterval == other.maxBlockInterval
+		s.minBlockInterval == other.minBlockInterval
 	if !configEqual {
 		return ErrStateConfigNotEqual
 	}
@@ -418,8 +416,8 @@ func (s *State) Clone() (copied *State) {
 		dkgSetSize:       s.dkgSetSize,
 		roundInterval:    s.roundInterval,
 		minBlockInterval: s.minBlockInterval,
-		maxBlockInterval: s.maxBlockInterval,
 		local:            s.local,
+		logger:           s.logger,
 		nodes:            make(map[types.NodeID]crypto.PublicKey),
 		dkgComplaints: make(
 			map[uint64]map[types.NodeID][]*typesDKG.Complaint),
@@ -496,6 +494,7 @@ func (s *State) Apply(reqsAsBytes []byte) (err error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	for _, req := range reqs {
+		s.logger.Debug("Apply Request", "req", req)
 		// Remove this request from pending set once it's about to apply.
 		delete(s.globalRequests, req.Hash)
 		delete(s.ownRequests, req.Hash)
@@ -549,6 +548,7 @@ func (s *State) PackRequests() (b []byte, err error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	for _, v := range s.globalRequests {
+		s.logger.Debug("Pack Request", "req", v)
 		packed = append(packed, v)
 	}
 	return rlp.EncodeToBytes(packed)
@@ -667,8 +667,6 @@ func (s *State) applyRequest(req *StateChangeRequest) error {
 		s.roundInterval = time.Duration(req.Payload.(uint64))
 	case StateChangeMinBlockInterval:
 		s.minBlockInterval = time.Duration(req.Payload.(uint64))
-	case StateChangeMaxBlockInterval:
-		s.maxBlockInterval = time.Duration(req.Payload.(uint64))
 	case StateChangeK:
 		s.k = int(req.Payload.(uint64))
 	case StateChangePhiRatio:
@@ -702,8 +700,7 @@ func (s *State) RequestChange(
 	case StateChangeLambdaBA,
 		StateChangeLambdaDKG,
 		StateChangeRoundInterval,
-		StateChangeMinBlockInterval,
-		StateChangeMaxBlockInterval:
+		StateChangeMinBlockInterval:
 		payload = uint64(payload.(time.Duration))
 	case StateChangeK:
 		payload = uint64(payload.(int))

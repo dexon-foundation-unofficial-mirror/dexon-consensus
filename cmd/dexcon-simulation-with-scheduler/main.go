@@ -29,6 +29,7 @@ import (
 	"runtime/pprof"
 	"time"
 
+	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	integration "github.com/dexon-foundation/dexon-consensus/integration_test"
@@ -82,9 +83,12 @@ func main() {
 	}
 	// Setup governance instance.
 	gov, err := test.NewGovernance(
-		pubKeys,
-		time.Duration(cfg.Networking.Mean)*time.Millisecond,
-		core.ConfigRoundShift)
+		test.NewState(
+			pubKeys,
+			time.Duration(cfg.Networking.Mean)*time.Millisecond,
+			&common.NullLogger{},
+			true,
+		), core.ConfigRoundShift)
 	if err != nil {
 		log.Fatal("could not setup governance: ", err)
 	}

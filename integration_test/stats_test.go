@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/stretchr/testify/suite"
@@ -41,7 +42,9 @@ func (s *EventStatsTestSuite) TestCalculate() {
 	prvKeys, pubKeys, err := test.NewKeys(7)
 	req.NoError(err)
 	gov, err := test.NewGovernance(
-		pubKeys, 100*time.Millisecond, core.ConfigRoundShift)
+		test.NewState(
+			pubKeys, 100*time.Millisecond, &common.NullLogger{}, true),
+		core.ConfigRoundShift)
 	req.NoError(err)
 	nodes, err := PrepareNodes(
 		gov, prvKeys, 7, networkLatency, proposingLatency)

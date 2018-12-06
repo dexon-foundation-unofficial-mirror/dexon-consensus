@@ -24,7 +24,6 @@ import (
 	"reflect"
 	"sort"
 	"sync"
-	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
@@ -48,16 +47,12 @@ type Governance struct {
 }
 
 // NewGovernance constructs a Governance instance.
-func NewGovernance(genesisNodes []crypto.PublicKey, lambda time.Duration,
-	roundShift uint64) (g *Governance, err error) {
+func NewGovernance(state *State, roundShift uint64) (g *Governance, err error) {
 	// Setup a State instance.
-	// TODO(mission): it's not a good idea to embed initialization of one
-	//                public class in another, I did this to make the range of
-	//                modification smaller.
 	g = &Governance{
 		roundShift:           roundShift,
 		pendingConfigChanges: make(map[uint64]map[StateChangeType]interface{}),
-		stateModule:          NewState(genesisNodes, lambda, true),
+		stateModule:          state,
 	}
 	return
 }

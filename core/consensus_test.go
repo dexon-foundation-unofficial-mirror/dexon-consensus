@@ -220,7 +220,8 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	)
 	prvKeys, pubKeys, err := test.NewKeys(4)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(pubKeys, time.Second, ConfigRoundShift)
+	gov, err := test.NewGovernance(test.NewState(
+		pubKeys, time.Second, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 	minInterval := gov.Configuration(0).MinBlockInterval
 	// Setup core.Consensus and test.App.
@@ -442,7 +443,8 @@ func (s *ConsensusTestSuite) TestPrepareBlock() {
 	)
 	prvKeys, pubKeys, err := test.NewKeys(4)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(pubKeys, time.Second, ConfigRoundShift)
+	gov, err := test.NewGovernance(test.NewState(
+		pubKeys, time.Second, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 	dMoment := time.Now().UTC()
 	// Setup core.Consensus and test.App.
@@ -485,7 +487,8 @@ func (s *ConsensusTestSuite) TestPrepareGenesisBlock() {
 	conn := s.newNetworkConnection()
 	prvKeys, pubKeys, err := test.NewKeys(4)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(pubKeys, time.Second, ConfigRoundShift)
+	gov, err := test.NewGovernance(test.NewState(
+		pubKeys, time.Second, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 	prvKey := prvKeys[0]
 	_, con := s.prepareConsensus(time.Now().UTC(), gov, prvKey, conn)
@@ -508,7 +511,8 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 	conn := s.newNetworkConnection()
 	prvKeys, pubKeys, err := test.NewKeys(n)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(pubKeys, lambda, ConfigRoundShift)
+	gov, err := test.NewGovernance(test.NewState(
+		pubKeys, lambda, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 	gov.State().RequestChange(test.StateChangeRoundInterval, 200*lambda)
 	cons := map[types.NodeID]*Consensus{}
@@ -549,7 +553,8 @@ func (s *ConsensusTestSuite) TestSyncBA() {
 	conn := s.newNetworkConnection()
 	prvKeys, pubKeys, err := test.NewKeys(4)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(pubKeys, lambdaBA, ConfigRoundShift)
+	gov, err := test.NewGovernance(test.NewState(
+		pubKeys, lambdaBA, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 	prvKey := prvKeys[0]
 	_, con := s.prepareConsensus(time.Now().UTC(), gov, prvKey, conn)
