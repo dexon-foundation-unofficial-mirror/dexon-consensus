@@ -345,8 +345,8 @@ func (s *LatticeDataTestSuite) TestSanityCheck() {
 
 func (s *LatticeDataTestSuite) TestRandomlyGeneratedBlocks() {
 	var (
-		chainNum    uint32 = 19
-		repeat             = 20
+		chainNum    uint32 = 16
+		repeat             = 10
 		delivered   []*types.Block
 		err         error
 		req         = s.Require()

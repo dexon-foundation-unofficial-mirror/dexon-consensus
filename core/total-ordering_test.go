@@ -977,7 +977,7 @@ func (s *TotalOrderingTestSuite) TestRandomlyGeneratedBlocks() {
 	}
 
 	ackingCountGenerators := []func() int{
-		nil, // Acking frequency with normal distribution.
+		nil,                                     // Acking frequency with normal distribution.
 		test.MaxAckingCountGenerator(0),         // Low acking frequency.
 		test.MaxAckingCountGenerator(numChains), // High acking frequency.
 	}
