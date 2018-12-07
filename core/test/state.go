@@ -177,6 +177,11 @@ func (s *State) Snapshot() (*types.Config, []crypto.PublicKey) {
 	}, nodes
 }
 
+// AttachLogger allows to attach custom logger.
+func (s *State) AttachLogger(logger common.Logger) {
+	s.logger = logger
+}
+
 func (s *State) unpackPayload(
 	raw *rawStateChangeRequest) (v interface{}, err error) {
 	switch raw.Type {

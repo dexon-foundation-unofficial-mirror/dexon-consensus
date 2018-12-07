@@ -196,6 +196,7 @@ func (s *ConsensusTestSuite) prepareAgreementMgrWithoutRunning(
 	con.baMgr.appendConfig(0, &types.Config{
 		NumChains:     numChains,
 		RoundInterval: time.Hour,
+		LambdaBA:      50 * time.Millisecond,
 	}, common.NewRandomHash())
 }
 

@@ -216,6 +216,18 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	return nil
 }
 
+func (cc *configurationChain) isDKGReady(round uint64) bool {
+	if !cc.gov.IsDKGFinal(round) {
+		return false
+	}
+	return func() bool {
+		cc.dkgResult.RLock()
+		defer cc.dkgResult.RUnlock()
+		_, exist := cc.gpk[round]
+		return exist
+	}()
+}
+
 func (cc *configurationChain) preparePartialSignature(
 	round uint64, hash common.Hash) (*typesDKG.PartialSignature, error) {
 	signer, exist := func() (*dkgShareSecret, bool) {
@@ -303,19 +315,6 @@ func (cc *configurationChain) runTSig(
 		return crypto.Signature{}, err
 	}
 	return signature, nil
-}
-
-func (cc *configurationChain) runBlockTSig(
-	round uint64, hash common.Hash) (crypto.Signature, error) {
-	sig, err := cc.runTSig(round, hash)
-	if err != nil {
-		return crypto.Signature{}, err
-	}
-	cc.logger.Info("Block TSIG",
-		"nodeID", cc.ID,
-		"round", round,
-		"signature", sig)
-	return sig, nil
 }
 
 func (cc *configurationChain) runCRSTSig(

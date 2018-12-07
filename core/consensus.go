@@ -70,17 +70,23 @@ type consensusBAReceiver struct {
 	chainID          uint32
 	changeNotaryTime time.Time
 	round            uint64
+	isNotary         bool
 	restartNotary    chan bool
 }
 
 func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {
+	if !recv.isNotary {
+		return
+	}
 	if err := recv.agreementModule.prepareVote(vote); err != nil {
 		recv.consensus.logger.Error("Failed to prepare vote", "error", err)
 		return
 	}
 	go func() {
 		if err := recv.agreementModule.processVote(vote); err != nil {
-			recv.consensus.logger.Error("Failed to process vote", "error", err)
+			recv.consensus.logger.Error("Failed to process self vote",
+				"error", err,
+				"vote", vote)
 			return
 		}
 		recv.consensus.logger.Debug("Calling Network.BroadcastVote",
@@ -90,6 +96,9 @@ func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {
 }
 
 func (recv *consensusBAReceiver) ProposeBlock() common.Hash {
+	if !recv.isNotary {
+		return common.Hash{}
+	}
 	block := recv.consensus.proposeBlock(recv.chainID, recv.round)
 	if block == nil {
 		recv.consensus.logger.Error("unable to propose block")
@@ -123,7 +132,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 		block, exist = recv.agreementModule.findCandidateBlockNoLock(hash)
 		if !exist {
 			recv.consensus.logger.Error("Unknown block confirmed",
-				"hash", hash,
+				"hash", hash.String()[:6],
 				"chainID", recv.chainID)
 			ch := make(chan *types.Block)
 			func() {
@@ -135,7 +144,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 			go func() {
 				block = <-ch
 				recv.consensus.logger.Info("Receive unknown block",
-					"hash", hash,
+					"hash", hash.String()[:6],
 					"chainID", recv.chainID)
 				recv.agreementModule.addCandidateBlock(block)
 				recv.agreementModule.lock.Lock()
@@ -179,11 +188,13 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 					}
 				}
 				recv.consensus.logger.Info("Receive parent block",
-					"hash", block.ParentHash,
+					"hash", block.ParentHash.String()[:6],
 					"chainID", recv.chainID)
 				recv.consensus.ccModule.registerBlock(block)
 				if err := recv.consensus.processBlock(block); err != nil {
-					recv.consensus.logger.Error("Failed to process block", "error", err)
+					recv.consensus.logger.Error("Failed to process block",
+						"block", block,
+						"error", err)
 					return
 				}
 				parentHash = block.ParentHash
@@ -194,24 +205,28 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 			}
 		}(block.ParentHash)
 	}
-	voteList := make([]types.Vote, 0, len(votes))
-	for _, vote := range votes {
-		if vote.BlockHash != hash {
-			continue
+	if recv.isNotary {
+		voteList := make([]types.Vote, 0, len(votes))
+		for _, vote := range votes {
+			if vote.BlockHash != hash {
+				continue
+			}
+			voteList = append(voteList, *vote)
 		}
-		voteList = append(voteList, *vote)
+		result := &types.AgreementResult{
+			BlockHash:    block.Hash,
+			Position:     block.Position,
+			Votes:        voteList,
+			IsEmptyBlock: isEmptyBlockConfirmed,
+		}
+		recv.consensus.logger.Debug("Propose AgreementResult",
+			"result", result)
+		recv.consensus.network.BroadcastAgreementResult(result)
 	}
-	result := &types.AgreementResult{
-		BlockHash:    block.Hash,
-		Position:     block.Position,
-		Votes:        voteList,
-		IsEmptyBlock: isEmptyBlockConfirmed,
-	}
-	recv.consensus.logger.Debug("Propose AgreementResult",
-		"result", result)
-	recv.consensus.network.BroadcastAgreementResult(result)
 	if err := recv.consensus.processBlock(block); err != nil {
-		recv.consensus.logger.Error("Failed to process block", "error", err)
+		recv.consensus.logger.Error("Failed to process block",
+			"block", block,
+			"error", err)
 		return
 	}
 	// Clean the restartNotary channel so BA will not stuck by deadlock.
@@ -232,6 +247,9 @@ CleanChannelLoop:
 }
 
 func (recv *consensusBAReceiver) PullBlocks(hashes common.Hashes) {
+	if !recv.isNotary {
+		return
+	}
 	recv.consensus.logger.Debug("Calling Network.PullBlocks", "hashes", hashes)
 	recv.consensus.network.PullBlocks(hashes)
 }
@@ -312,7 +330,7 @@ func (recv *consensusDKGReceiver) ProposeDKGAntiNackComplaint(
 // ProposeDKGFinalize propose a DKGFinalize message.
 func (recv *consensusDKGReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
 	if err := recv.authModule.SignDKGFinalize(final); err != nil {
-		recv.logger.Error("Faield to sign DKG finalize", "error", err)
+		recv.logger.Error("Failed to sign DKG finalize", "error", err)
 		return
 	}
 	recv.logger.Debug("Calling Governance.AddDKGFinalize", "final", final)
@@ -618,13 +636,11 @@ func (con *Consensus) runCRS(round uint64) {
 	}
 	con.logger.Debug("Calling Governance.IsDKGFinal to check if ready to run CRS",
 		"round", round)
-	for !con.gov.IsDKGFinal(round) {
+	for !con.cfgModule.isDKGReady(round) {
 		con.logger.Debug("DKG is not ready for running CRS. Retry later...",
 			"round", round)
 		time.Sleep(500 * time.Millisecond)
 	}
-	// Wait some time for DKG to recover private share.
-	time.Sleep(100 * time.Millisecond)
 	// Start running next round CRS.
 	con.logger.Debug("Calling Governance.CRS", "round", round)
 	psig, err := con.cfgModule.preparePartialSignature(round, con.gov.CRS(round))
@@ -810,7 +826,8 @@ MessageLoop:
 		case *types.Vote:
 			if err := con.ProcessVote(val); err != nil {
 				con.logger.Error("Failed to process vote",
-					"error", err)
+					"error", err,
+					"vote", val)
 			}
 		case *types.AgreementResult:
 			if err := con.ProcessAgreementResult(val); err != nil {
@@ -889,9 +906,7 @@ func (con *Consensus) ProcessAgreementResult(
 	if rand.Position.Round == 0 {
 		return nil
 	}
-	if !con.ccModule.blockRegistered(rand.BlockHash) {
-		return nil
-	}
+	// TODO(mission): find a way to avoid spamming by older agreement results.
 	// Sanity check done.
 	if !con.cfgModule.touchTSigHash(rand.BlockHash) {
 		return nil
@@ -919,13 +934,16 @@ func (con *Consensus) ProcessAgreementResult(
 	con.logger.Debug("Calling Network.BroadcastDKGPartialSignature",
 		"proposer", psig.ProposerID,
 		"round", psig.Round,
-		"hash", psig.Hash)
+		"hash", psig.Hash.String()[:6])
 	con.network.BroadcastDKGPartialSignature(psig)
 	go func() {
 		tsig, err := con.cfgModule.runTSig(rand.Position.Round, rand.BlockHash)
 		if err != nil {
 			if err != ErrTSigAlreadyRunning {
-				con.logger.Error("Faield to run TSIG", "error", err)
+				con.logger.Error("Failed to run TSIG",
+					"position", &rand.Position,
+					"hash", rand.BlockHash.String()[:6],
+					"error", err)
 			}
 			return
 		}
@@ -952,11 +970,12 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 	if err := con.ccModule.processBlockRandomnessResult(rand); err != nil {
 		if err == ErrBlockNotRegistered {
 			err = nil
+		} else {
+			return err
 		}
-		return err
 	}
 	con.logger.Debug("Calling Network.BroadcastRandomnessResult",
-		"hash", rand.BlockHash,
+		"hash", rand.BlockHash.String()[:6],
 		"position", &rand.Position,
 		"randomness", hex.EncodeToString(rand.Randomness))
 	con.network.BroadcastRandomnessResult(rand)

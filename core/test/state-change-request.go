@@ -185,7 +185,11 @@ func (req *StateChangeRequest) String() (ret string) {
 		ret += fmt.Sprintf(
 			"{Type:AddNode %s",
 			types.NewNodeID(req.Payload.(crypto.PublicKey)).String()[:6])
+	default:
+		panic(fmt.Errorf(
+			"attempting to dump unknown type of state change request: %v",
+			req.Type))
 	}
-	panic(fmt.Errorf(
-		"attempting to dump unknown type of state change request: %v", req.Type))
+	ret += "}"
+	return
 }

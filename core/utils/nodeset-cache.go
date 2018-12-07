@@ -27,8 +27,12 @@ import (
 )
 
 var (
-	// ErrRoundNotReady means we got nil config.
-	ErrRoundNotReady = errors.New("round is not ready")
+	// ErrNodeSetNotReady means we got nil empty node set.
+	ErrNodeSetNotReady = errors.New("node set is not ready")
+	// ErrCRSNotReady means we got empty CRS.
+	ErrCRSNotReady = errors.New("crs is not ready")
+	// ErrConfigurationNotReady means we go nil configuration.
+	ErrConfigurationNotReady = errors.New("configuration is not ready")
 	// ErrInvalidChainID means the chain ID is unexpected.
 	ErrInvalidChainID = errors.New("invalid chain id")
 )
@@ -172,16 +176,15 @@ func (cache *NodeSetCache) update(
 	cache.lock.Lock()
 	defer cache.lock.Unlock()
 
-	// Get the requested round.
+	// Get information for the requested round.
 	keySet := cache.nsIntf.NodeSet(round)
 	if keySet == nil {
-		// That round is not ready yet.
-		err = ErrRoundNotReady
+		err = ErrNodeSetNotReady
 		return
 	}
 	crs := cache.nsIntf.CRS(round)
 	if (crs == common.Hash{}) {
-		err = ErrRoundNotReady
+		err = ErrCRSNotReady
 		return
 	}
 	// Cache new round.
@@ -199,6 +202,10 @@ func (cache *NodeSetCache) update(
 		}
 	}
 	cfg := cache.nsIntf.Configuration(round)
+	if cfg == nil {
+		err = ErrConfigurationNotReady
+		return
+	}
 	nIDs = &sets{
 		nodeSet:   nodeSet,
 		notarySet: make([]map[types.NodeID]struct{}, cfg.NumChains),

@@ -298,7 +298,7 @@ func (mgr *agreementMgr) runBA(initRound uint64, chainID uint32) {
 
 	// Check if this routine needs to awake in this round and prepare essential
 	// variables when yes.
-	checkRound := func() (awake bool) {
+	checkRound := func() (isNotary, isDisabled bool) {
 		defer func() {
 			currentRound = nextRound
 			nextRound++
@@ -318,7 +318,8 @@ func (mgr *agreementMgr) runBA(initRound uint64, chainID uint32) {
 		roundEndTime = config.beginTime.Add(config.roundInterval)
 		// Check if this chain handled by this routine included in this round.
 		if chainID >= config.numChains {
-			return false
+			isDisabled = true
+			return
 		}
 		// Check if this node in notary set of this chain in this round.
 		nodeSet, err := mgr.cache.GetNodeSet(nextRound)
@@ -329,7 +330,18 @@ func (mgr *agreementMgr) runBA(initRound uint64, chainID uint32) {
 		setting.notarySet = nodeSet.GetSubSet(
 			int(config.notarySetSize),
 			types.NewNotarySetTarget(config.crs, chainID))
-		_, awake = setting.notarySet[mgr.ID]
+		_, isNotary = setting.notarySet[mgr.ID]
+		if isNotary {
+			mgr.logger.Info("selected as notary set",
+				"ID", mgr.ID,
+				"round", nextRound,
+				"chainID", chainID)
+		} else {
+			mgr.logger.Info("not selected as notary set",
+				"ID", mgr.ID,
+				"round", nextRound,
+				"chainID", chainID)
+		}
 		// Setup ticker
 		if tickDuration != config.lambdaBA {
 			if setting.ticker != nil {
@@ -348,12 +360,9 @@ Loop:
 		default:
 		}
 		now := time.Now().UTC()
-		if !checkRound() {
-			if now.After(roundEndTime) {
-				// That round is passed.
-				continue Loop
-			}
-			// Sleep until next checkpoint.
+		var isDisabled bool
+		setting.recv.isNotary, isDisabled = checkRound()
+		if isDisabled {
 			select {
 			case <-mgr.ctx.Done():
 				break Loop
