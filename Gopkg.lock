@@ -27,7 +27,7 @@
 
 [[projects]]
   branch = "dev"
-  digest = "1:2b010a52e574bc0f815d5fdf403a8b36384665ac0923c94a28b99f8537fbf9fe"
+  digest = "1:de44df5d2d82983648c5f861dd7b7f54133e14b1c4dc412c58347e3872ab2181"
   name = "github.com/dexon-foundation/dexon"
   packages = [
     "common",
@@ -36,10 +36,19 @@
     "crypto",
     "crypto/secp256k1",
     "crypto/sha3",
+    "log",
     "rlp",
   ]
   pruneopts = "UT"
   revision = "abe4e80a8b6cf9dee93652ea36cdc56065a39a0f"
+
+[[projects]]
+  digest = "1:586ea76dbd0374d6fb649a91d70d652b7fe0ccffb8910a77468e7702e7901f3d"
+  name = "github.com/go-stack/stack"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "2fee6af1a9795aafbe0253a0cfbdf668e1fb8a9a"
+  version = "v1.8.0"
 
 [[projects]]
   branch = "master"
@@ -115,6 +124,7 @@
   input-imports = [
     "github.com/dexon-foundation/bls/ffi/go/bls",
     "github.com/dexon-foundation/dexon/crypto",
+    "github.com/dexon-foundation/dexon/log",
     "github.com/dexon-foundation/dexon/rlp",
     "github.com/naoina/toml",
     "github.com/stretchr/testify/suite",

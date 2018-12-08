@@ -1,0 +1,52 @@
+language: go
+go_import_path: github.com/dexon-foundation/dexon-consensus
+os: linux
+dist: trusty
+sudo: required
+go: 1.11.x
+addons:
+  apt:
+    packages:
+    - openssl
+    - libssl-dev
+    - libgmp-dev
+script:
+- set -e
+- bin/install_tools.sh
+- dep ensure -v
+- make dep
+- |
+  if [ "${TRAVIS_BRANCH}" == "master" ]; then
+    make test
+  else
+    make test-short
+  fi
+- make
+git:
+  depth: 3
+cache:
+  directories:
+  - vendor
+before_cache:
+- rm -rf vendor/github.com/dexon-foundation/bls
+- rm -rf vendor/github.com/dexon-foundation/mcl
+env:
+- ONLY_INTEGRATION_TEST=true NO_TEST_RACE=true
+- ONLY_INTEGRATION_TEST=true
+- NO_INTEGRATION_TEST=true
+matrix:
+  allow_failures:
+  - env: ONLY_INTEGRATION_TEST=true
+  fast_finish: true
+  include:
+  - name: Lint
+    script:
+    - set -e
+    - bin/install_tools.sh
+    - dep ensure -v
+    - make dep
+    - make lint
+    - make vet
+notifications:
+  slack:
+    secure: Asyh9eDoT6/zn6bnpDQ0CabPk6YwP2N5ACmyltT9ozeJLCoOGAsWmmVyUpHJkF/yA6Zd59ilGfC4hFMy+Wk+DZvbQL27QTsgcLf+sHzbD2CunCuJzDkO8b6JSKgZ60BH5XCLSxtf7p/0lYn+MnXCg+Ly/CFN5fwacp6gybZ+UqlH+xjvW8VSZnka2YHzRIB3P5+013scPvjr9WIJ/wxviUZetFM+AOL3Uf2t7hXEGTceYEN8bIchElazJoYpzzN0nZwHJ7/IjdbSWNnXfuJUlEEqrUHeY+shLIGZvGES9zqPIOHPFJQyh3oyknYY08wsZJpU7InS/wbOs43Pte78vhoYQbxIi5Pg4bPGAWJgTePllFV99rk7ELBoDPrEp/auSxlEu1rhq9yFsef0HePrp2KuAQHz5twnnaF3kAR6IUoa/DgWNqgw71QqdWFihEeeQGn/sYUocdp2Jc1ZVIUrafICjCPJFf5pSoAyBVnx0lA4MhyEEVdwtoOR2XXn6G4+58/IF3VfH2gqS8OlE10uA71wQb3np74RBNA4mfke3mjPKwKNXJug/txPBFxsGGq9kOVwYVm4QUwkJ5hbHciGFv29Pzvo1fhJSE5/YluaHhzLHeb8vVTBTPMwzApQBL2ZCdKPZ9bppzJiR+zR+JacE/jrHnQfpMJYoykvcGQrN/s=

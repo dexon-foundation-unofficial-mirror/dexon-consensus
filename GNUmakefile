@@ -44,6 +44,21 @@ else
 endif
 endef
 
+GO_TEST_TIMEOUT := 20m
+
+TEST_TARGET := go list ./... | grep -v 'vendor'
+ifeq ($(NO_INTEGRATION_TEST), true)
+	GO_TEST_TIMEOUT := 10m
+	TEST_TARGET := $(TEST_TARGET) | grep -v 'integration_test'
+else ifeq ($(ONLY_INTEGRATION_TEST), true)
+	TEST_TARGET := $(TEST_TARGET) | grep 'integration_test'
+endif
+
+GO_TEST_FLAG := -v -timeout $(GO_TEST_TIMEOUT)
+ifneq ($(NO_TEST_RACE), true)
+	GO_TEST_FLAG := $(GO_TEST_FLAG) -race
+endif
+
 COMPONENTS = \
 	dexcon-simulation \
 	dexcon-simulation-peer-server \
@@ -83,17 +98,18 @@ lint:
 vet:
 	@go vet `go list ./... | grep -v 'vendor'`
 
+
 test-short:
-	@for pkg in `go list ./... | grep -v 'vendor'`; do \
-		if ! go test -race -short -v $$pkg; then \
+	@for pkg in `$(TEST_TARGET)`; do \
+		if ! go test -short $(GO_TEST_FLAG) $$pkg; then \
 			echo 'Some test failed, abort'; \
 			exit 1; \
 		fi; \
 	done
 
 test:
-	@for pkg in `go list ./... | grep -v 'vendor'`; do \
-		if ! go test -timeout 15m -race -v $$pkg; then \
+	@for pkg in `$(TEST_TARGET)`; do \
+		if ! go test $(GO_TEST_FLAG) $$pkg; then \
 			echo 'Some test failed, abort'; \
 			exit 1; \
 		fi; \

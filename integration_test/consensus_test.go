@@ -19,6 +19,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -208,10 +209,10 @@ func (s *ConsensusTestSuite) TestSimple() {
 Loop:
 	for {
 		<-time.After(5 * time.Second)
-		s.T().Log("check latest position delivered by each node")
+		fmt.Println("check latest position delivered by each node")
 		for _, n := range nodes {
 			latestPos := n.app.GetLatestDeliveredPosition()
-			s.T().Log("latestPos", n.ID, &latestPos)
+			fmt.Println("latestPos", n.ID, &latestPos)
 			if latestPos.Round < untilRound {
 				continue Loop
 			}
@@ -283,10 +284,10 @@ func (s *ConsensusTestSuite) TestNumChainsChange() {
 Loop:
 	for {
 		<-time.After(5 * time.Second)
-		s.T().Log("check latest position delivered by each node")
+		fmt.Println("check latest position delivered by each node")
 		for _, n := range nodes {
 			latestPos := n.app.GetLatestDeliveredPosition()
-			s.T().Log("latestPos", n.ID, &latestPos)
+			fmt.Println("latestPos", n.ID, &latestPos)
 			if latestPos.Round < untilRound {
 				continue Loop
 			}
@@ -320,7 +321,7 @@ func (s *ConsensusTestSuite) TestSync() {
 		core.ConfigRoundShift)
 	req.NoError(err)
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeRoundInterval, 30*time.Second))
+		test.StateChangeRoundInterval, 50*time.Second))
 	// A short round interval.
 	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
 	// Choose the first node as "syncNode" that its consensus' Run() is called
@@ -345,6 +346,24 @@ func (s *ConsensusTestSuite) TestSync() {
 			case <-syncNode.network.ReceiveChan():
 			case <-dummyReceiverCtx.Done():
 				break Loop
+			}
+		}
+	}()
+	// Print status every 5 seconds so CI won't fail.
+	monitorCtx, monitorCancel := context.WithCancel(
+		context.Background())
+	defer monitorCancel()
+	go func() {
+		for {
+			select {
+			case <-time.After(5 * time.Second):
+				for _, n := range nodes {
+					pos := n.app.GetLatestDeliveredPosition()
+					fmt.Println("latestPos", n.ID, &pos)
+					break
+				}
+			case <-monitorCtx.Done():
+				return
 			}
 		}
 	}()
@@ -425,7 +444,7 @@ ReachAlive:
 					// Stop a node, we should still be able to proceed.
 					stoppedNode.con.Stop()
 					stoppedNode.con = nil
-					s.T().Log("one node stopped")
+					fmt.Println("one node stopped")
 					// Initiate a dummy routine to consume the receive channel.
 					go func() {
 						for {

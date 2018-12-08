@@ -18,9 +18,12 @@
 package core
 
 import (
+	"encoding/json"
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/suite"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
@@ -28,7 +31,6 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
-	"github.com/stretchr/testify/suite"
 )
 
 // network implements core.Network.
@@ -101,37 +103,33 @@ func (nc *networkConnection) broadcast(from types.NodeID, msg interface{}) {
 }
 
 func (nc *networkConnection) send(to types.NodeID, msg interface{}) {
-	con, exist := nc.cons[to]
+	ch, exist := nc.cons[to]
 	if !exist {
 		return
 	}
-	go func() {
-		var err error
-		// Testify package does not support concurrent call.
-		// Use panic() to detact error.
-		switch val := msg.(type) {
-		case *types.Block:
-			err = con.preProcessBlock(val)
-		case *types.Vote:
-			err = con.ProcessVote(val)
-		case *types.AgreementResult:
-			err = con.ProcessAgreementResult(val)
-		case *types.BlockRandomnessResult:
-			err = con.ProcessBlockRandomnessResult(val)
-		case *typesDKG.PrivateShare:
-			err = con.cfgModule.processPrivateShare(val)
-		case *typesDKG.PartialSignature:
-			err = con.cfgModule.processPartialSignature(val)
-		}
+	msgCopy := msg
+	// Clone msg if necessary.
+	switch val := msg.(type) {
+	case *types.Block:
+		msgCopy = val.Clone()
+	case *typesDKG.PrivateShare:
+		// Use Marshal/Unmarshal to do deep copy.
+		data, err := json.Marshal(val)
 		if err != nil {
 			panic(err)
 		}
-	}()
+		valCopy := &typesDKG.PrivateShare{}
+		if err := json.Unmarshal(data, valCopy); err != nil {
+			panic(err)
+		}
+		msgCopy = valCopy
+	}
+	ch <- msgCopy
 }
 
 type networkConnection struct {
 	s    *ConsensusTestSuite
-	cons map[types.NodeID]*Consensus
+	cons map[types.NodeID]chan interface{}
 }
 
 func (nc *networkConnection) newNetwork(nID types.NodeID) *network {
@@ -142,7 +140,33 @@ func (nc *networkConnection) newNetwork(nID types.NodeID) *network {
 }
 
 func (nc *networkConnection) setCon(nID types.NodeID, con *Consensus) {
-	nc.cons[nID] = con
+	ch := make(chan interface{}, 1000)
+	go func() {
+		for {
+			msg := <-ch
+			var err error
+			// Testify package does not support concurrent call.
+			// Use panic() to detact error.
+			switch val := msg.(type) {
+			case *types.Block:
+				err = con.preProcessBlock(val)
+			case *types.Vote:
+				err = con.ProcessVote(val)
+			case *types.AgreementResult:
+				err = con.ProcessAgreementResult(val)
+			case *types.BlockRandomnessResult:
+				err = con.ProcessBlockRandomnessResult(val)
+			case *typesDKG.PrivateShare:
+				err = con.cfgModule.processPrivateShare(val)
+			case *typesDKG.PartialSignature:
+				err = con.cfgModule.processPartialSignature(val)
+			}
+			if err != nil {
+				panic(err)
+			}
+		}
+	}()
+	nc.cons[nID] = ch
 }
 
 type ConsensusTestSuite struct {
@@ -153,7 +177,7 @@ type ConsensusTestSuite struct {
 func (s *ConsensusTestSuite) newNetworkConnection() *networkConnection {
 	return &networkConnection{
 		s:    s,
-		cons: make(map[types.NodeID]*Consensus),
+		cons: make(map[types.NodeID]chan interface{}),
 	}
 }
 
