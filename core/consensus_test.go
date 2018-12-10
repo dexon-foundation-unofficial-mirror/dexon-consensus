@@ -533,6 +533,9 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 		n = 7
 		lambda = 100 * time.Millisecond
 	}
+	if isTravisCI() {
+		lambda *= 5
+	}
 	conn := s.newNetworkConnection()
 	prvKeys, pubKeys, err := test.NewKeys(n)
 	s.Require().NoError(err)
@@ -549,7 +552,7 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 		con.cfgModule.registerDKG(uint64(0), n/3+1)
 	}
 	for _, con := range cons {
-		con.runDKG(0, gov.Configuration(0))
+		go con.runDKG(0, gov.Configuration(0))
 	}
 	for _, con := range cons {
 		func() {

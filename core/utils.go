@@ -219,3 +219,15 @@ func DiffUint64(a, b uint64) uint64 {
 	}
 	return b - a
 }
+
+func isCI() bool {
+	return os.Getenv("CI") != ""
+}
+
+func isCircleCI() bool {
+	return isCI() && os.Getenv("CIRCLECI") == "true"
+}
+
+func isTravisCI() bool {
+	return isCI() && os.Getenv("TRAVIS") == "true"
+}
