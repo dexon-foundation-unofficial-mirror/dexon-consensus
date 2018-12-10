@@ -1,13 +1,33 @@
-version: 2
-jobs:
-  build:
+version: 2.1
+commands:
+  init_workspace:
+    steps:
+      - run:
+          name: "Prepare Workspace"
+          command: sudo chown -R `whoami` /go
+      - attach_workspace:
+          at: /go
+  run_test:
+    steps:
+      - run:
+          name: "Running Test"
+          no_output_timeout: 900
+          command: |
+            if [ "${CIRCLE_BRANCH}" == "master" ]; then
+              make test
+            else
+              make test-short
+            fi
+
+executors:
+  go1_11:
     docker:
       - image: circleci/golang:1.11
-
     working_directory: /go/src/github.com/dexon-foundation/dexon-consensus
 
-    environment:
-
+jobs:
+  dep:
+    executor: go1_11
     steps:
       - run: 
           name: Install Dependency Libraries
@@ -22,7 +42,6 @@ jobs:
           keys:
             - v1-vendor-{{ .Branch }}-{{ checksum "Gopkg.lock" }}
       - run: bin/install_tools.sh
-      - run: make check-format
       - run: dep ensure
       - save_cache:
           key: v1-Gopkg.lock-{{ .Branch }}-{{ checksum "Gopkg.toml" }}
@@ -33,15 +52,58 @@ jobs:
           paths:
             - vendor
       - run: make dep
+      - persist_to_workspace:
+          root: /go
+          paths:
+            - src
+            - bin
+  lint:
+    executor: go1_11
+    steps:
+      - init_workspace
+      - run: make check-format
       - run: make lint
       - run: make vet
-      - run:
-          name: Unit Test
-          no_output_timeout: 900
-          command: |
-            if [ "${CIRCLE_BRANCH}" == "master" ]; then
-              make test
-            else
-              make test-short
-            fi
+
+  unit_test:
+    executor: go1_11
+    environment: 
+      NO_INTEGRATION_TEST: true
+    steps:
+      - init_workspace
+      - run_test
+
+  integration_test:
+    executor: go1_11
+    environment: 
+      ONLY_INTEGRATION_TEST: true
+      NO_TEST_RACE: true
+    steps:
+      - init_workspace
+      - run_test
+
+  build:
+    executor: go1_11
+    steps:
+      - init_workspace
       - run: make
+
+workflows:
+  version: 2.1
+
+  test_and_build:
+    jobs:
+      - dep
+      - lint:
+          requires:
+            - dep
+      - unit_test:
+          requires:
+            - lint
+      - integration_test:
+          requires:
+            - lint
+      - build:
+          requires:
+            - unit_test
+            - integration_test
