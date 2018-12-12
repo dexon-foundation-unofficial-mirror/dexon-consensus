@@ -535,11 +535,13 @@ type totalOrderingGlobalVector struct {
 	cachedCandidateInfo *totalOrderingCandidateInfo
 }
 
-func newTotalOrderingGlobalVector(numChains uint32) *totalOrderingGlobalVector {
+func newTotalOrderingGlobalVector(
+	initRound uint64, numChains uint32) *totalOrderingGlobalVector {
 	return &totalOrderingGlobalVector{
 		blocks:      make([][]*types.Block, numChains),
 		tips:        make([]*types.Block, numChains),
 		breakpoints: make([][]*totalOrderingBreakpoint, numChains),
+		curRound:    initRound,
 	}
 }
 
@@ -792,14 +794,14 @@ type totalOrdering struct {
 }
 
 // newTotalOrdering constructs an totalOrdering instance.
-func newTotalOrdering(dMoment time.Time, round uint64, cfg *types.Config) *totalOrdering {
+func newTotalOrdering(
+	dMoment time.Time, round uint64, cfg *types.Config) *totalOrdering {
 	config := &totalOrderingConfig{}
 	config.fromConfig(round, cfg)
 	config.setRoundBeginTime(dMoment)
 	candidates := make([]*totalOrderingCandidateInfo, config.numChains)
 	to := &totalOrdering{
 		pendings:              make(map[common.Hash]*types.Block),
-		globalVector:          newTotalOrderingGlobalVector(config.numChains),
 		dirtyChainIDs:         make([]int, 0, config.numChains),
 		acked:                 make(map[common.Hash]map[common.Hash]struct{}),
 		objCache:              newTotalOrderingObjectCache(config.numChains),
@@ -807,6 +809,8 @@ func newTotalOrdering(dMoment time.Time, round uint64, cfg *types.Config) *total
 		candidates:            candidates,
 		candidateChainIDs:     make([]uint32, 0, config.numChains),
 		curRound:              config.roundID,
+		globalVector: newTotalOrderingGlobalVector(
+			config.roundID, config.numChains),
 	}
 	to.configs = []*totalOrderingConfig{config}
 	return to
@@ -898,7 +902,8 @@ func (to *totalOrdering) clean(b *types.Block) {
 }
 
 // updateVectors is a helper function to update all cached vectors.
-func (to *totalOrdering) updateVectors(b *types.Block) (isOldest bool, err error) {
+func (to *totalOrdering) updateVectors(
+	b *types.Block) (isOldest bool, err error) {
 	var (
 		candidateHash common.Hash
 		chainID       uint32

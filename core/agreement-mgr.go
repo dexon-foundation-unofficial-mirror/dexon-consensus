@@ -20,6 +20,7 @@ package core
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"time"
 
@@ -174,7 +175,7 @@ func (mgr *agreementMgr) appendConfig(
 		recv := &consensusBAReceiver{
 			consensus:     mgr.con,
 			chainID:       i,
-			restartNotary: make(chan bool, 1),
+			restartNotary: make(chan types.Position, 1),
 		}
 		agrModule := newAgreement(
 			mgr.con.ID,
@@ -252,7 +253,9 @@ func (mgr *agreementMgr) processAgreementResult(
 			int(mgr.gov.Configuration(result.Position.Round).NotarySetSize),
 			types.NewNotarySetTarget(crs, result.Position.ChainID))
 		for key := range result.Votes {
-			agreement.processVote(&result.Votes[key])
+			if err := agreement.processVote(&result.Votes[key]); err != nil {
+				return err
+			}
 		}
 		agreement.restart(nIDs, result.Position, crs)
 	}
@@ -388,7 +391,7 @@ Loop:
 		// Run BA for this round.
 		recv.round = currentRound
 		recv.changeNotaryTime = roundEndTime
-		recv.restartNotary <- false
+		recv.restartNotary <- types.Position{ChainID: math.MaxUint32}
 		if err := mgr.baRoutineForOneRound(&setting); err != nil {
 			mgr.logger.Error("BA routine failed",
 				"error", err,
@@ -412,10 +415,17 @@ Loop:
 		default:
 		}
 		select {
-		case newNotary := <-recv.restartNotary:
-			if newNotary {
-				// This round is finished.
-				break Loop
+		case restartPos := <-recv.restartNotary:
+			if !isStop(restartPos) {
+				if restartPos.Round > oldPos.Round {
+					// This round is finished.
+					break Loop
+				}
+				if restartPos.Older(&oldPos) {
+					// The restartNotary event is triggered by 'BlockConfirmed'
+					// of some older block.
+					break
+				}
 			}
 			var nextHeight uint64
 			for {

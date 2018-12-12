@@ -322,6 +322,12 @@ func (s *ConsensusTestSuite) TestSync() {
 	req.NoError(err)
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeRoundInterval, 50*time.Second))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeNumChains, uint32(5)))
+	seedGov.CatchUpWithRound(0)
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeNumChains, uint32(4)))
+	seedGov.CatchUpWithRound(1)
 	// A short round interval.
 	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
 	// Choose the first node as "syncNode" that its consensus' Run() is called
@@ -444,7 +450,7 @@ ReachAlive:
 					// Stop a node, we should still be able to proceed.
 					stoppedNode.con.Stop()
 					stoppedNode.con = nil
-					fmt.Println("one node stopped")
+					fmt.Println("one node stopped", stoppedNode.ID)
 					// Initiate a dummy routine to consume the receive channel.
 					go func() {
 						for {

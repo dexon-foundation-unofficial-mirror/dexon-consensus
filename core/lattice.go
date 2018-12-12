@@ -304,21 +304,21 @@ func (l *Lattice) AppendConfig(round uint64, config *types.Config) (err error) {
 }
 
 // ProcessFinalizedBlock is used for syncing lattice data.
-func (l *Lattice) ProcessFinalizedBlock(b *types.Block) {
+func (l *Lattice) ProcessFinalizedBlock(b *types.Block) ([]*types.Block, error) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 	// Syncing state for core.latticeData module.
 	if err := l.data.addFinalizedBlock(b); err != nil {
-		panic(err)
+		return nil, err
 	}
 	l.pool.purgeBlocks(b.Position.ChainID, b.Position.Height)
 	// Syncing state for core.totalOrdering module.
 	toDelivered, deliveredMode, err := l.toModule.processBlock(b)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	if len(toDelivered) == 0 {
-		return
+		return nil, nil
 	}
 	hashes := make(common.Hashes, len(toDelivered))
 	for idx := range toDelivered {
@@ -329,7 +329,7 @@ func (l *Lattice) ProcessFinalizedBlock(b *types.Block) {
 	}
 	// Sync core.consensusTimestamp module.
 	if err = l.ctModule.processBlocks(toDelivered); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return
+	return toDelivered, nil
 }

@@ -39,6 +39,9 @@ var (
 	ErrGenesisBlockReached = fmt.Errorf("genesis block reached")
 	// ErrInvalidBlockOrder is reported when SyncBlocks receives unordered blocks.
 	ErrInvalidBlockOrder = fmt.Errorf("invalid block order")
+	// ErrMismatchBlockHashSequence means the delivering sequence is not
+	// correct, compared to finalized blocks.
+	ErrMismatchBlockHashSequence = fmt.Errorf("mismatch block hash sequence")
 )
 
 // Consensus is for syncing consensus module.
@@ -52,14 +55,16 @@ type Consensus struct {
 	network      core.Network
 	nodeSetCache *utils.NodeSetCache
 
-	lattice           *core.Lattice
-	latticeLastRound  uint64
-	randomnessResults []*types.BlockRandomnessResult
-	blocks            []types.ByPosition
-	agreements        []*agreement
-	configs           []*types.Config
-	roundBeginTimes   []time.Time
-	agreementRoundCut uint64
+	lattice              *core.Lattice
+	validatedChains      map[uint32]struct{}
+	finalizedBlockHashes common.Hashes
+	latticeLastRound     uint64
+	randomnessResults    []*types.BlockRandomnessResult
+	blocks               []types.ByPosition
+	agreements           []*agreement
+	configs              []*types.Config
+	roundBeginTimes      []time.Time
+	agreementRoundCut    uint64
 
 	// lock for accessing all fields.
 	lock               sync.RWMutex
@@ -92,6 +97,7 @@ func NewConsensus(
 		prv:             prv,
 		logger:          logger,
 		isSynced:        false,
+		validatedChains: make(map[uint32]struct{}),
 		configs:         []*types.Config{gov.Configuration(0)},
 		roundBeginTimes: []time.Time{dMoment},
 		receiveChan:     make(chan *types.Block, 1000),
@@ -125,7 +131,27 @@ func (con *Consensus) initConsensusObj(initBlock *types.Block) {
 	con.startCRSMonitor()
 }
 
-func (con *Consensus) checkIfSynced(blocks []*types.Block) {
+func (con *Consensus) checkIfValidated() bool {
+	con.lock.RLock()
+	defer con.lock.RUnlock()
+	var numChains = con.configs[con.blocks[0][0].Position.Round].NumChains
+	var validatedChainCount uint32
+	// Make sure we validate some block in all chains.
+	for chainID := range con.validatedChains {
+		if chainID < numChains {
+			validatedChainCount++
+		}
+	}
+	if validatedChainCount == numChains {
+		return true
+	}
+	con.logger.Info("not validated yet", "validated-chain", validatedChainCount)
+	return false
+}
+
+func (con *Consensus) checkIfSynced(blocks []*types.Block) bool {
+	con.lock.RLock()
+	defer con.lock.RUnlock()
 	var (
 		numChains      = con.configs[con.blocks[0][0].Position.Round].NumChains
 		compactionTips = make([]*types.Block, numChains)
@@ -142,7 +168,7 @@ func (con *Consensus) checkIfSynced(blocks []*types.Block) {
 			}
 		}
 		if (b.Finalization.ParentHash == common.Hash{}) {
-			return
+			return false
 		}
 		b1, err := con.db.Get(b.Finalization.ParentHash)
 		if err != nil {
@@ -153,8 +179,6 @@ func (con *Consensus) checkIfSynced(blocks []*types.Block) {
 	// Check if chain tips of compaction chain and current cached confirmed
 	// blocks are overlapped on each chain, numChains is decided by the round
 	// of last block we seen on compaction chain.
-	con.lock.RLock()
-	defer con.lock.RUnlock()
 	for chainID, b := range compactionTips {
 		if len(con.blocks[chainID]) > 0 {
 			if !b.Position.Older(&con.blocks[chainID][0].Position) {
@@ -163,13 +187,13 @@ func (con *Consensus) checkIfSynced(blocks []*types.Block) {
 		}
 	}
 	if overlapCount == numChains {
-		con.isSynced = true
-	} else {
-		con.logger.Info("not overlap yet",
-			"overlap-count", overlapCount,
-			"num-chain", numChains,
-			"last-block", blocks[len(blocks)-1])
+		return true
 	}
+	con.logger.Info("not synced yet",
+		"overlap-count", overlapCount,
+		"num-chain", numChains,
+		"last-block", blocks[len(blocks)-1])
+	return false
 }
 
 // ensureAgreementOverlapRound ensures the oldest blocks in each chain in
@@ -333,6 +357,25 @@ func (con *Consensus) findLatticeSyncBlock(
 	}
 }
 
+func (con *Consensus) processFinalizedBlock(block *types.Block) error {
+	if con.lattice == nil {
+		return nil
+	}
+	con.finalizedBlockHashes = append(con.finalizedBlockHashes, block.Hash)
+	delivered, err := con.lattice.ProcessFinalizedBlock(block)
+	if err != nil {
+		return err
+	}
+	for idx, b := range delivered {
+		if con.finalizedBlockHashes[idx] != b.Hash {
+			return ErrMismatchBlockHashSequence
+		}
+		con.validatedChains[b.Position.ChainID] = struct{}{}
+	}
+	con.finalizedBlockHashes = con.finalizedBlockHashes[len(delivered):]
+	return nil
+}
+
 // SyncBlocks syncs blocks from compaction chain, latest is true if the caller
 // regards the blocks are the latest ones. Notice that latest can be true for
 // many times.
@@ -365,8 +408,8 @@ func (con *Consensus) SyncBlocks(
 				return nil, err
 			}
 		}
-		if con.lattice != nil {
-			con.lattice.ProcessFinalizedBlock(b)
+		if err := con.processFinalizedBlock(b); err != nil {
+			return nil, err
 		}
 	}
 	if latest && con.lattice == nil {
@@ -397,7 +440,9 @@ func (con *Consensus) SyncBlocks(
 				b = &b1
 			}
 			for _, b := range blocksToProcess {
-				con.lattice.ProcessFinalizedBlock(b)
+				if err := con.processFinalizedBlock(b); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -405,7 +450,7 @@ func (con *Consensus) SyncBlocks(
 		// Check if compaction and agreements' blocks are overlapped. The
 		// overlapping of compaction chain and BA's oldest blocks means the
 		// syncing is done.
-		con.checkIfSynced(blocks)
+		con.isSynced = con.checkIfValidated() && con.checkIfSynced(blocks)
 	}
 	if con.isSynced {
 		// Stop network and CRS routines, wait until they are all stoped.

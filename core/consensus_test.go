@@ -155,7 +155,7 @@ func (nc *networkConnection) setCon(nID types.NodeID, con *Consensus) {
 			case *types.AgreementResult:
 				err = con.ProcessAgreementResult(val)
 			case *types.BlockRandomnessResult:
-				err = con.ProcessBlockRandomnessResult(val)
+				err = con.ProcessBlockRandomnessResult(val, true)
 			case *typesDKG.PrivateShare:
 				err = con.cfgModule.processPrivateShare(val)
 			case *typesDKG.PartialSignature:
@@ -267,11 +267,12 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 	// It's a helper function to emit one block
 	// to all core.Consensus objects.
 	broadcast := func(b *types.Block) {
+		h := common.NewRandomHash()
+		b.Finalization.Randomness = h[:]
 		for _, obj := range objs {
-			h := common.NewRandomHash()
-			b.Finalization.Randomness = h[:]
-			obj.con.ccModule.registerBlock(b)
-			req.Nil(obj.con.processBlock(b))
+			copied := b.Clone()
+			obj.con.ccModule.registerBlock(copied)
+			req.Nil(obj.con.processBlock(copied))
 		}
 	}
 	// Genesis blocks
