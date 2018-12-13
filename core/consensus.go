@@ -630,15 +630,18 @@ func (con *Consensus) runDKG(round uint64, config *types.Config) {
 }
 
 func (con *Consensus) runCRS(round uint64) {
-	con.logger.Debug("Calling Governance.CRS to check if already proposed",
-		"round", round+1)
-	if (con.gov.CRS(round+1) != common.Hash{}) {
-		con.logger.Info("CRS already proposed", "round", round+1)
-		return
-	}
-	con.logger.Debug("Calling Governance.IsDKGFinal to check if ready to run CRS",
-		"round", round)
-	for !con.cfgModule.isDKGReady(round) {
+	for {
+		con.logger.Debug("Calling Governance.CRS to check if already proposed",
+			"round", round+1)
+		if (con.gov.CRS(round+1) != common.Hash{}) {
+			con.logger.Info("CRS already proposed", "round", round+1)
+			return
+		}
+		con.logger.Debug("Calling Governance.IsDKGFinal to check if ready to run CRS",
+			"round", round)
+		if con.cfgModule.isDKGReady(round) {
+			break
+		}
 		con.logger.Debug("DKG is not ready for running CRS. Retry later...",
 			"round", round)
 		time.Sleep(500 * time.Millisecond)
