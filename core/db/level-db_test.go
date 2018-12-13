@@ -15,7 +15,7 @@
 // along with the dexon-consensus library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package blockdb
+package db
 
 import (
 	"fmt"
@@ -36,10 +36,10 @@ type LevelDBTestSuite struct {
 
 func (s *LevelDBTestSuite) TestBasicUsage() {
 	dbName := fmt.Sprintf("test-db-%v.db", time.Now().UTC())
-	db, err := NewLevelDBBackedBlockDB(dbName)
+	dbInst, err := NewLevelDBBackedDB(dbName)
 	s.Require().Nil(err)
 	defer func(dbName string) {
-		err = db.Close()
+		err = dbInst.Close()
 		s.Nil(err)
 		err = os.RemoveAll(dbName)
 		s.Nil(err)
@@ -47,7 +47,7 @@ func (s *LevelDBTestSuite) TestBasicUsage() {
 
 	// Queried something from an empty database.
 	hash1 := common.NewRandomHash()
-	_, err = db.Get(hash1)
+	_, err = dbInst.GetBlock(hash1)
 	s.Equal(ErrBlockDoesNotExist, err)
 
 	// Update on an empty database should not success.
@@ -59,15 +59,15 @@ func (s *LevelDBTestSuite) TestBasicUsage() {
 			Height: 1,
 		},
 	}
-	err = db.Update(block1)
+	err = dbInst.UpdateBlock(block1)
 	s.Equal(ErrBlockDoesNotExist, err)
 
 	// Put to create a new record should just work fine.
-	err = db.Put(block1)
+	err = dbInst.PutBlock(block1)
 	s.Nil(err)
 
 	// Get it back should work fine.
-	queried, err := db.Get(block1.Hash)
+	queried, err := dbInst.GetBlock(block1.Hash)
 	s.Nil(err)
 	s.Equal(queried.ProposerID, block1.ProposerID)
 
@@ -75,11 +75,11 @@ func (s *LevelDBTestSuite) TestBasicUsage() {
 	now := time.Now().UTC()
 	queried.Timestamp = now
 
-	err = db.Update(queried)
+	err = dbInst.UpdateBlock(queried)
 	s.Nil(err)
 
 	// Try to get it back via NodeID and height.
-	queried, err = db.Get(block1.Hash)
+	queried, err = dbInst.GetBlock(block1.Hash)
 
 	s.Nil(err)
 	s.Equal(now, queried.Timestamp)
@@ -87,10 +87,10 @@ func (s *LevelDBTestSuite) TestBasicUsage() {
 
 func (s *LevelDBTestSuite) TestSyncIndex() {
 	dbName := fmt.Sprintf("test-db-%v-si.db", time.Now().UTC())
-	db, err := NewLevelDBBackedBlockDB(dbName)
+	dbInst, err := NewLevelDBBackedDB(dbName)
 	s.Require().Nil(err)
 	defer func(dbName string) {
-		err = db.Close()
+		err = dbInst.Close()
 		s.Nil(err)
 		err = os.RemoveAll(dbName)
 		s.Nil(err)
@@ -106,21 +106,21 @@ func (s *LevelDBTestSuite) TestSyncIndex() {
 				Height: uint64(i),
 			},
 		}
-		db.Put(block)
+		dbInst.PutBlock(block)
 		blocks[i] = block
 	}
 
 	// Save blocks to db.
-	err = db.Close()
+	err = dbInst.Close()
 	s.Nil(err)
 
 	// Load back blocks(syncIndex is called).
-	db, err = NewLevelDBBackedBlockDB(dbName)
+	dbInst, err = NewLevelDBBackedDB(dbName)
 	s.Require().Nil(err)
 
 	// Verify result.
 	for _, block := range blocks {
-		queried, err := db.Get(block.Hash)
+		queried, err := dbInst.GetBlock(block.Hash)
 		s.Nil(err)
 		s.Equal(block.ProposerID, queried.ProposerID)
 		s.Equal(block.Position.Height, queried.Position.Height)

@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
@@ -203,12 +203,12 @@ func (s *ConsensusTestSuite) prepareConsensus(
 	*test.App, *Consensus) {
 
 	app := test.NewApp(nil)
-	db, err := blockdb.NewMemBackedBlockDB()
+	dbInst, err := db.NewMemBackedDB()
 	s.Require().NoError(err)
 	nID := types.NewNodeID(prvKey.PublicKey())
 	network := conn.newNetwork(nID)
 	con := NewConsensus(
-		dMoment, app, gov, db, network, prvKey, &common.NullLogger{})
+		dMoment, app, gov, dbInst, network, prvKey, &common.NullLogger{})
 	con.ccModule.init(&types.Block{})
 	conn.setCon(nID, con)
 	return app, con

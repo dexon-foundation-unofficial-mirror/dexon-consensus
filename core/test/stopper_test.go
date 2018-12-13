@@ -23,7 +23,7 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -33,11 +33,11 @@ type StopperTestSuite struct {
 }
 
 func (s *StopperTestSuite) deliver(
-	blocks []*types.Block, app *App, db blockdb.BlockDatabase) {
+	blocks []*types.Block, app *App, dbInst db.Database) {
 	hashes := common.Hashes{}
 	for _, b := range blocks {
 		hashes = append(hashes, b.Hash)
-		s.Require().NoError(db.Put(*b))
+		s.Require().NoError(dbInst.PutBlock(*b))
 	}
 	for _, h := range hashes {
 		app.BlockConfirmed(types.Block{Hash: h})
@@ -53,9 +53,9 @@ func (s *StopperTestSuite) deliver(
 func (s *StopperTestSuite) deliverToAllNodes(
 	blocks []*types.Block,
 	apps map[types.NodeID]*App,
-	dbs map[types.NodeID]blockdb.BlockDatabase) {
+	dbInsts map[types.NodeID]db.Database) {
 	for nID := range apps {
-		s.deliver(blocks, apps[nID], dbs[nID])
+		s.deliver(blocks, apps[nID], dbInsts[nID])
 	}
 }
 
@@ -64,23 +64,23 @@ func (s *StopperTestSuite) TestStopByConfirmedBlocks() {
 	// all nodes confirmed at least 'x' count of blocks produced
 	// by themselves.
 	var (
-		req   = s.Require()
-		apps  = make(map[types.NodeID]*App)
-		dbs   = make(map[types.NodeID]blockdb.BlockDatabase)
-		nodes = GenerateRandomNodeIDs(2)
+		req     = s.Require()
+		apps    = make(map[types.NodeID]*App)
+		dbInsts = make(map[types.NodeID]db.Database)
+		nodes   = GenerateRandomNodeIDs(2)
 	)
 	for _, nID := range nodes {
 		apps[nID] = NewApp(nil)
-		db, err := blockdb.NewMemBackedBlockDB()
+		dbInst, err := db.NewMemBackedDB()
 		req.NoError(err)
-		dbs[nID] = db
+		dbInsts[nID] = dbInst
 	}
-	stopper := NewStopByConfirmedBlocks(2, apps, dbs)
+	stopper := NewStopByConfirmedBlocks(2, apps, dbInsts)
 	b00 := &types.Block{
 		ProposerID: nodes[0],
 		Hash:       common.NewRandomHash(),
 	}
-	s.deliverToAllNodes([]*types.Block{b00}, apps, dbs)
+	s.deliverToAllNodes([]*types.Block{b00}, apps, dbInsts)
 	b10 := &types.Block{
 		ProposerID: nodes[1],
 		Hash:       common.NewRandomHash(),
@@ -90,21 +90,21 @@ func (s *StopperTestSuite) TestStopByConfirmedBlocks() {
 		ParentHash: b10.Hash,
 		Hash:       common.NewRandomHash(),
 	}
-	s.deliverToAllNodes([]*types.Block{b10, b11}, apps, dbs)
+	s.deliverToAllNodes([]*types.Block{b10, b11}, apps, dbInsts)
 	req.False(stopper.ShouldStop(nodes[1]))
 	b12 := &types.Block{
 		ProposerID: nodes[1],
 		ParentHash: b11.Hash,
 		Hash:       common.NewRandomHash(),
 	}
-	s.deliverToAllNodes([]*types.Block{b12}, apps, dbs)
+	s.deliverToAllNodes([]*types.Block{b12}, apps, dbInsts)
 	req.False(stopper.ShouldStop(nodes[1]))
 	b01 := &types.Block{
 		ProposerID: nodes[0],
 		ParentHash: b00.Hash,
 		Hash:       common.NewRandomHash(),
 	}
-	s.deliverToAllNodes([]*types.Block{b01}, apps, dbs)
+	s.deliverToAllNodes([]*types.Block{b01}, apps, dbInsts)
 	req.True(stopper.ShouldStop(nodes[0]))
 }
 
@@ -112,18 +112,18 @@ func (s *StopperTestSuite) TestStopByRound() {
 	// This test case make sure at least one block from round R
 	// is delivered by each node.
 	var (
-		req   = s.Require()
-		apps  = make(map[types.NodeID]*App)
-		dbs   = make(map[types.NodeID]blockdb.BlockDatabase)
-		nodes = GenerateRandomNodeIDs(2)
+		req     = s.Require()
+		apps    = make(map[types.NodeID]*App)
+		dbInsts = make(map[types.NodeID]db.Database)
+		nodes   = GenerateRandomNodeIDs(2)
 	)
 	for _, nID := range nodes {
 		apps[nID] = NewApp(nil)
-		db, err := blockdb.NewMemBackedBlockDB()
+		dbInst, err := db.NewMemBackedDB()
 		req.NoError(err)
-		dbs[nID] = db
+		dbInsts[nID] = dbInst
 	}
-	stopper := NewStopByRound(10, apps, dbs)
+	stopper := NewStopByRound(10, apps, dbInsts)
 	b00 := &types.Block{
 		ProposerID: nodes[0],
 		Position: types.Position{
@@ -133,7 +133,7 @@ func (s *StopperTestSuite) TestStopByRound() {
 		},
 		Hash: common.NewRandomHash(),
 	}
-	s.deliverToAllNodes([]*types.Block{b00}, apps, dbs)
+	s.deliverToAllNodes([]*types.Block{b00}, apps, dbInsts)
 	b10 := &types.Block{
 		ProposerID: nodes[1],
 		Position: types.Position{
@@ -153,7 +153,7 @@ func (s *StopperTestSuite) TestStopByRound() {
 		},
 		Hash: common.NewRandomHash(),
 	}
-	s.deliverToAllNodes([]*types.Block{b10, b11}, apps, dbs)
+	s.deliverToAllNodes([]*types.Block{b10, b11}, apps, dbInsts)
 	req.False(stopper.ShouldStop(nodes[0]))
 	req.False(stopper.ShouldStop(nodes[1]))
 	// Deliver one block at round 10 to node0
@@ -168,11 +168,11 @@ func (s *StopperTestSuite) TestStopByRound() {
 		Hash: common.NewRandomHash(),
 	}
 	// None should stop when only one node reach that round.
-	s.deliver([]*types.Block{b12}, apps[nodes[0]], dbs[nodes[0]])
+	s.deliver([]*types.Block{b12}, apps[nodes[0]], dbInsts[nodes[0]])
 	req.False(stopper.ShouldStop(nodes[0]))
 	req.False(stopper.ShouldStop(nodes[1]))
 	// Everyone should stop now.
-	s.deliver([]*types.Block{b12}, apps[nodes[1]], dbs[nodes[1]])
+	s.deliver([]*types.Block{b12}, apps[nodes[1]], dbInsts[nodes[1]])
 	req.True(stopper.ShouldStop(nodes[1]))
 	req.True(stopper.ShouldStop(nodes[0]))
 }

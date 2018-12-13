@@ -18,15 +18,15 @@
 package test
 
 import (
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
-// Revealer defines the interface to reveal a group
+// BlockRevealer defines the interface to reveal a group
 // of pre-generated blocks.
-type Revealer interface {
-	blockdb.BlockIterator
+type BlockRevealer interface {
+	db.BlockIterator
 
 	// Reset the revealing.
 	Reset()

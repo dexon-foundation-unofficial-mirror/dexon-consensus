@@ -24,9 +24,9 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
@@ -323,11 +323,11 @@ func NewBlocksGenerator(
 func (gen *BlocksGenerator) Generate(
 	roundID uint64,
 	roundBegin, roundEnd time.Time,
-	db blockdb.BlockDatabase) (err error) {
+	dbInst db.Database) (err error) {
 	// Find tips of previous round if available.
 	tips := make(map[uint32]*types.Block)
 	if roundID > 0 {
-		tips, err = gen.findTips(roundID-1, db)
+		tips, err = gen.findTips(roundID-1, dbInst)
 		if err != nil {
 			return
 		}
@@ -361,29 +361,29 @@ func (gen *BlocksGenerator) Generate(
 			return
 		}
 		// Persist block to db.
-		if err = db.Put(*newBlock); err != nil {
+		if err = dbInst.PutBlock(*newBlock); err != nil {
 			return
 		}
 	}
 	return
 }
 
-// findTips is an utility to find tips of each chain in that round in blockdb.
-func (gen *BlocksGenerator) findTips(
-	round uint64, db blockdb.Reader) (tips map[uint32]*types.Block, err error) {
-	iter, err := db.GetAll()
+// findTips is an utility to find tips of each chain in that round in db.
+func (gen *BlocksGenerator) findTips(round uint64, dbInst db.Reader) (
+	tips map[uint32]*types.Block, err error) {
+	iter, err := dbInst.GetAllBlocks()
 	if err != nil {
 		return
 	}
-	revealer, err := NewRandomRevealer(iter)
+	revealer, err := NewRandomBlockRevealer(iter)
 	if err != nil {
 		return
 	}
 	tips = make(map[uint32]*types.Block)
 	for {
 		var b types.Block
-		if b, err = revealer.Next(); err != nil {
-			if err == blockdb.ErrIterationFinished {
+		if b, err = revealer.NextBlock(); err != nil {
+			if err == db.ErrIterationFinished {
 				err = nil
 				break
 			}

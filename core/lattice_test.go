@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/stretchr/testify/suite"
@@ -35,7 +35,7 @@ type testLatticeMgr struct {
 	lattice  *Lattice
 	ccModule *compactionChain
 	app      *test.App
-	db       blockdb.BlockDatabase
+	db       db.Database
 }
 
 func (mgr *testLatticeMgr) prepareBlock(
@@ -61,8 +61,8 @@ func (mgr *testLatticeMgr) processBlock(b *types.Block) (err error) {
 			return
 		}
 	}
-	if err = mgr.db.Put(*b); err != nil {
-		if err != blockdb.ErrBlockExists {
+	if err = mgr.db.PutBlock(*b); err != nil {
+		if err != db.ErrBlockExists {
 			return
 		}
 		err = nil
@@ -77,7 +77,7 @@ func (mgr *testLatticeMgr) processBlock(b *types.Block) (err error) {
 		}
 	}
 	for _, b = range mgr.ccModule.extractBlocks() {
-		if err = mgr.db.Update(*b); err != nil {
+		if err = mgr.db.UpdateBlock(*b); err != nil {
 			return
 		}
 		mgr.app.BlockDelivered(b.Hash, b.Position, b.Finalization)
@@ -98,8 +98,8 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 	// Setup private key.
 	prvKey, err := ecdsa.NewPrivateKey()
 	req.NoError(err)
-	// Setup blockdb.
-	db, err := blockdb.NewMemBackedBlockDB()
+	// Setup db.
+	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
 	// Setup governance.
 	logger := &common.NullLogger{}
@@ -121,7 +121,7 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 	return &testLatticeMgr{
 		ccModule: cc,
 		app:      app,
-		db:       db,
+		db:       dbInst,
 		lattice: NewLattice(
 			dMoment,
 			0,
@@ -129,7 +129,7 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 			NewAuthenticator(prvKey),
 			app,
 			app,
-			db,
+			dbInst,
 			logger)}
 }
 
@@ -174,18 +174,18 @@ func (s *LatticeTestSuite) TestBasicUsage() {
 		req.NoError(master.processBlock(b))
 	}
 	// Now we have some blocks, replay them on different lattices.
-	iter, err := master.db.GetAll()
+	iter, err := master.db.GetAllBlocks()
 	req.NoError(err)
-	revealer, err := test.NewRandomRevealer(iter)
+	revealer, err := test.NewRandomBlockRevealer(iter)
 	req.NoError(err)
 	for i := 0; i < otherLatticeNum; i++ {
 		revealer.Reset()
 		revealed := ""
 		other := s.newTestLatticeMgr(&cfg, dMoment)
 		for {
-			b, err := revealer.Next()
+			b, err := revealer.NextBlock()
 			if err != nil {
-				if err == blockdb.ErrIterationFinished {
+				if err == db.ErrIterationFinished {
 					err = nil
 					break
 				}

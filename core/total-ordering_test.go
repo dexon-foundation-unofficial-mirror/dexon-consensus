@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/stretchr/testify/suite"
@@ -52,14 +52,14 @@ func (s *TotalOrderingTestSuite) genGenesisBlock(
 }
 
 func (s *TotalOrderingTestSuite) performOneRun(
-	to *totalOrdering, revealer test.Revealer) (revealed, ordered string) {
+	to *totalOrdering, revealer test.BlockRevealer) (revealed, ordered string) {
 	revealer.Reset()
 	curRound := uint64(0)
 	for {
 		// Reveal next block.
-		b, err := revealer.Next()
+		b, err := revealer.NextBlock()
 		if err != nil {
-			if err == blockdb.ErrIterationFinished {
+			if err == db.ErrIterationFinished {
 				err = nil
 				break
 			}
@@ -940,18 +940,18 @@ func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 		NumChains:            chainNum,
 		MinBlockTimeInterval: 250 * time.Millisecond,
 	}, ackingCountGenerator, hashBlock)
-	db, err := blockdb.NewMemBackedBlockDB()
+	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
 	req.NoError(gen.Generate(
 		0,
 		genesisTime,
 		genesisTime.Add(20*time.Second),
-		db))
-	iter, err := db.GetAll()
+		dbInst))
+	iter, err := dbInst.GetAllBlocks()
 	req.NoError(err)
 	// Setup a revealer that would reveal blocks forming
 	// valid DAGs.
-	revealer, err := test.NewRandomDAGRevealer(iter)
+	revealer, err := test.NewRandomDAGBlockRevealer(iter)
 	req.NoError(err)
 	// TODO (mission): make this part run concurrently.
 	for i := 0; i < repeat; i++ {
@@ -1063,7 +1063,7 @@ func (s *TotalOrderingTestSuite) baseTestForRoundChange(
 		req         = s.Require()
 		genesisTime = time.Now().UTC()
 	)
-	db, err := blockdb.NewMemBackedBlockDB()
+	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
 	// Generate DAG for rounds.
 	// NOTE: the last config won't be tested, just avoid panic
@@ -1073,14 +1073,14 @@ func (s *TotalOrderingTestSuite) baseTestForRoundChange(
 		gen := test.NewBlocksGenerator(
 			test.NewBlocksGeneratorConfig(config), nil, hashBlock)
 		end := begin.Add(config.RoundInterval)
-		req.NoError(gen.Generate(uint64(roundID), begin, end, db))
+		req.NoError(gen.Generate(uint64(roundID), begin, end, dbInst))
 		begin = end
 	}
 	// Test, just dump the whole DAG to total ordering and make sure
 	// repeating it won't change it delivered sequence.
-	iter, err := db.GetAll()
+	iter, err := dbInst.GetAllBlocks()
 	req.NoError(err)
-	revealer, err := test.NewRandomDAGRevealer(iter)
+	revealer, err := test.NewRandomDAGBlockRevealer(iter)
 	req.NoError(err)
 	revealingSequence := make(map[string]struct{})
 	orderingSequence := make(map[string]struct{})
@@ -1196,14 +1196,14 @@ func (s *TotalOrderingTestSuite) TestSync() {
 		NumChains:            numChains,
 		MinBlockTimeInterval: 250 * time.Millisecond,
 	}, nil, hashBlock)
-	db, err := blockdb.NewMemBackedBlockDB()
+	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
-	err = gen.Generate(0, genesisTime, genesisTime.Add(20*time.Second), db)
+	err = gen.Generate(0, genesisTime, genesisTime.Add(20*time.Second), dbInst)
 	req.NoError(err)
-	iter, err := db.GetAll()
+	iter, err := dbInst.GetAllBlocks()
 	req.NoError(err)
 
-	revealer, err := test.NewRandomDAGRevealer(iter)
+	revealer, err := test.NewRandomDAGBlockRevealer(iter)
 	req.NoError(err)
 
 	genesisConfig := &types.Config{
@@ -1220,9 +1220,9 @@ func (s *TotalOrderingTestSuite) TestSync() {
 	}))
 	deliveredBlockSets1 := [][]*types.Block{}
 	for {
-		b, err := revealer.Next()
+		b, err := revealer.NextBlock()
 		if err != nil {
-			if err == blockdb.ErrIterationFinished {
+			if err == db.ErrIterationFinished {
 				err = nil
 				break
 			}
@@ -1303,7 +1303,7 @@ func (s *TotalOrderingTestSuite) TestSyncWithConfigChange() {
 	}
 
 	blocks := []*types.Block{}
-	db, err := blockdb.NewMemBackedBlockDB()
+	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
 
 	for i, cfg := range configs {
@@ -1315,21 +1315,21 @@ func (s *TotalOrderingTestSuite) TestSyncWithConfigChange() {
 			uint64(i),
 			genesisTime.Add(time.Duration(i)*cfg.RoundInterval),
 			genesisTime.Add(time.Duration(i+1)*cfg.RoundInterval),
-			db,
+			dbInst,
 		)
 		req.NoError(err)
 	}
 
-	iter, err := db.GetAll()
+	iter, err := dbInst.GetAllBlocks()
 	req.NoError(err)
 
-	revealer, err := test.NewRandomDAGRevealer(iter)
+	revealer, err := test.NewRandomDAGBlockRevealer(iter)
 	req.NoError(err)
 
 	for {
-		b, err := revealer.Next()
+		b, err := revealer.NextBlock()
 		if err != nil {
-			if err == blockdb.ErrIterationFinished {
+			if err == db.ErrIterationFinished {
 				err = nil
 				break
 			}

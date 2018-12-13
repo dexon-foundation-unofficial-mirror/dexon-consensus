@@ -15,7 +15,7 @@
 // along with the dexon-consensus library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package blockdb
+package db
 
 import (
 	"encoding/json"
@@ -27,36 +27,38 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
-type seqIterator struct {
+type blockSeqIterator struct {
 	idx int
-	db  *MemBackedBlockDB
+	db  *MemBackedDB
 }
 
-func (seq *seqIterator) Next() (types.Block, error) {
+// NextBlock implemenets BlockIterator.NextBlock method.
+func (seq *blockSeqIterator) NextBlock() (types.Block, error) {
 	curIdx := seq.idx
 	seq.idx++
-	return seq.db.getByIndex(curIdx)
+	return seq.db.getBlockByIndex(curIdx)
 }
 
-// MemBackedBlockDB is a memory backed BlockDB implementation.
-type MemBackedBlockDB struct {
+// MemBackedDB is a memory backed DB implementation.
+type MemBackedDB struct {
 	blocksMutex        sync.RWMutex
 	blockHashSequence  common.Hashes
 	blocksByHash       map[common.Hash]*types.Block
 	persistantFilePath string
 }
 
-// NewMemBackedBlockDB initialize a memory-backed block database.
-func NewMemBackedBlockDB(persistantFilePath ...string) (db *MemBackedBlockDB, err error) {
-	db = &MemBackedBlockDB{
+// NewMemBackedDB initialize a memory-backed database.
+func NewMemBackedDB(persistantFilePath ...string) (
+	dbInst *MemBackedDB, err error) {
+	dbInst = &MemBackedDB{
 		blockHashSequence: common.Hashes{},
 		blocksByHash:      make(map[common.Hash]*types.Block),
 	}
 	if len(persistantFilePath) == 0 || len(persistantFilePath[0]) == 0 {
 		return
 	}
-	db.persistantFilePath = persistantFilePath[0]
-	buf, err := ioutil.ReadFile(db.persistantFilePath)
+	dbInst.persistantFilePath = persistantFilePath[0]
+	buf, err := ioutil.ReadFile(dbInst.persistantFilePath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			// Something unexpected happened.
@@ -78,13 +80,13 @@ func NewMemBackedBlockDB(persistantFilePath ...string) (db *MemBackedBlockDB, er
 	if err != nil {
 		return
 	}
-	db.blockHashSequence = toLoad.Sequence
-	db.blocksByHash = toLoad.ByHash
+	dbInst.blockHashSequence = toLoad.Sequence
+	dbInst.blocksByHash = toLoad.ByHash
 	return
 }
 
-// Has returns wheter or not the DB has a block identified with the hash.
-func (m *MemBackedBlockDB) Has(hash common.Hash) bool {
+// HasBlock returns wheter or not the DB has a block identified with the hash.
+func (m *MemBackedDB) HasBlock(hash common.Hash) bool {
 	m.blocksMutex.RLock()
 	defer m.blocksMutex.RUnlock()
 
@@ -92,15 +94,15 @@ func (m *MemBackedBlockDB) Has(hash common.Hash) bool {
 	return ok
 }
 
-// Get returns a block given a hash.
-func (m *MemBackedBlockDB) Get(hash common.Hash) (types.Block, error) {
+// GetBlock returns a block given a hash.
+func (m *MemBackedDB) GetBlock(hash common.Hash) (types.Block, error) {
 	m.blocksMutex.RLock()
 	defer m.blocksMutex.RUnlock()
 
-	return m.internalGet(hash)
+	return m.internalGetBlock(hash)
 }
 
-func (m *MemBackedBlockDB) internalGet(hash common.Hash) (types.Block, error) {
+func (m *MemBackedDB) internalGetBlock(hash common.Hash) (types.Block, error) {
 	b, ok := m.blocksByHash[hash]
 	if !ok {
 		return types.Block{}, ErrBlockDoesNotExist
@@ -108,9 +110,9 @@ func (m *MemBackedBlockDB) internalGet(hash common.Hash) (types.Block, error) {
 	return *b, nil
 }
 
-// Put inserts a new block into the database.
-func (m *MemBackedBlockDB) Put(block types.Block) error {
-	if m.Has(block.Hash) {
+// PutBlock inserts a new block into the database.
+func (m *MemBackedDB) PutBlock(block types.Block) error {
+	if m.HasBlock(block.Hash) {
 		return ErrBlockExists
 	}
 
@@ -122,9 +124,9 @@ func (m *MemBackedBlockDB) Put(block types.Block) error {
 	return nil
 }
 
-// Update updates a block in the database.
-func (m *MemBackedBlockDB) Update(block types.Block) error {
-	if !m.Has(block.Hash) {
+// UpdateBlock updates a block in the database.
+func (m *MemBackedDB) UpdateBlock(block types.Block) error {
+	if !m.HasBlock(block.Hash) {
 		return ErrBlockDoesNotExist
 	}
 
@@ -136,7 +138,7 @@ func (m *MemBackedBlockDB) Update(block types.Block) error {
 }
 
 // Close implement Closer interface, which would release allocated resource.
-func (m *MemBackedBlockDB) Close() (err error) {
+func (m *MemBackedDB) Close() (err error) {
 	// Save internal state to a pretty-print json file. It's a temporary way
 	// to dump private file via JSON encoding.
 	if len(m.persistantFilePath) == 0 {
@@ -164,7 +166,7 @@ func (m *MemBackedBlockDB) Close() (err error) {
 	return
 }
 
-func (m *MemBackedBlockDB) getByIndex(idx int) (types.Block, error) {
+func (m *MemBackedDB) getBlockByIndex(idx int) (types.Block, error) {
 	m.blocksMutex.RLock()
 	defer m.blocksMutex.RUnlock()
 
@@ -173,11 +175,11 @@ func (m *MemBackedBlockDB) getByIndex(idx int) (types.Block, error) {
 	}
 
 	hash := m.blockHashSequence[idx]
-	return m.internalGet(hash)
+	return m.internalGetBlock(hash)
 }
 
-// GetAll implement Reader.GetAll method, which allows caller
+// GetAllBlocks implement Reader.GetAllBlocks method, which allows caller
 // to retrieve all blocks in DB.
-func (m *MemBackedBlockDB) GetAll() (BlockIterator, error) {
-	return &seqIterator{db: m}, nil
+func (m *MemBackedDB) GetAllBlocks() (BlockIterator, error) {
+	return &blockSeqIterator{db: m}, nil
 }

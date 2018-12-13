@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
@@ -53,7 +53,7 @@ func NewLattice(
 	authModule *Authenticator,
 	app Application,
 	debug Debug,
-	db blockdb.BlockDatabase,
+	db db.Database,
 	logger common.Logger) *Lattice {
 
 	// Create genesis latticeDataConfig.

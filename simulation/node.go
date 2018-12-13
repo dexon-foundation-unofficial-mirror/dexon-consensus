@@ -24,8 +24,8 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/dexon-foundation/dexon-consensus/simulation/config"
@@ -55,7 +55,7 @@ type message struct {
 // node represents a node in DexCon.
 type node struct {
 	app       core.Application
-	db        blockdb.BlockDatabase
+	db        db.Database
 	gov       *test.Governance
 	netModule *test.Network
 	ID        types.NodeID
@@ -81,7 +81,7 @@ func newNode(
 			PeerPort:   peerPort,
 		})
 	id := types.NewNodeID(pubKey)
-	db, err := blockdb.NewMemBackedBlockDB(id.String() + ".blockdb")
+	dbInst, err := db.NewMemBackedDB(id.String() + ".db")
 	if err != nil {
 		panic(err)
 	}
@@ -118,7 +118,7 @@ func newNode(
 		prvKey:    prvKey,
 		app:       newSimApp(id, netModule, gov.State()),
 		gov:       gov,
-		db:        db,
+		db:        dbInst,
 		netModule: netModule,
 	}
 }

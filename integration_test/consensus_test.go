@@ -26,8 +26,8 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/syncer"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
@@ -46,7 +46,7 @@ type node struct {
 	con     *core.Consensus
 	app     *test.App
 	gov     *test.Governance
-	db      blockdb.BlockDatabase
+	db      db.Database
 	network *test.Network
 }
 
@@ -65,7 +65,7 @@ func (s *ConsensusTestSuite) setupNodes(
 	nodes := make(map[types.NodeID]*node)
 	wg.Add(len(prvKeys))
 	for _, k := range prvKeys {
-		db, err := blockdb.NewMemBackedBlockDB()
+		dbInst, err := db.NewMemBackedDB()
 		s.Require().NoError(err)
 		// Prepare essential modules: app, gov, db.
 		networkModule := test.NewNetwork(
@@ -83,12 +83,12 @@ func (s *ConsensusTestSuite) setupNodes(
 			dMoment,
 			app,
 			gov,
-			db,
+			dbInst,
 			networkModule,
 			k,
 			&common.NullLogger{},
 		)
-		nodes[con.ID] = &node{con.ID, con, app, gov, db, networkModule}
+		nodes[con.ID] = &node{con.ID, con, app, gov, dbInst, networkModule}
 		go func() {
 			defer wg.Done()
 			s.Require().NoError(networkModule.Setup(serverChannel))
@@ -121,11 +121,11 @@ func (s *ConsensusTestSuite) syncBlocksWithSomeNode(
 
 	syncerHeight = nextSyncHeight
 	// Setup revealer.
-	DBAll, err := sourceNode.db.GetAll()
+	DBAll, err := sourceNode.db.GetAllBlocks()
 	if err != nil {
 		return
 	}
-	r, err := test.NewCompactionChainRevealer(DBAll, nextSyncHeight)
+	r, err := test.NewCompactionChainBlockRevealer(DBAll, nextSyncHeight)
 	if err != nil {
 		return
 	}
@@ -153,9 +153,9 @@ func (s *ConsensusTestSuite) syncBlocksWithSomeNode(
 	}
 	for {
 		var b types.Block
-		b, err = r.Next()
+		b, err = r.NextBlock()
 		if err != nil {
-			if err == blockdb.ErrIterationFinished {
+			if err == db.ErrIterationFinished {
 				err = nil
 				if syncBlocks() {
 					break

@@ -18,12 +18,13 @@
 package test
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -44,17 +45,17 @@ func (s *BlocksGeneratorTestSuite) TestGenerate() {
 		beginTime = time.Now().UTC()
 		endTime   = beginTime.Add(time.Minute)
 	)
-	db, err := blockdb.NewMemBackedBlockDB()
+	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
-	req.NoError(gen.Generate(1, beginTime, endTime, db))
+	req.NoError(gen.Generate(1, beginTime, endTime, dbInst))
 	// Load all blocks in that database for further checking.
-	iter, err := db.GetAll()
+	iter, err := dbInst.GetAllBlocks()
 	req.NoError(err)
 	blocksByChain := make(map[uint32][]*types.Block)
 	blocksByHash := make(map[common.Hash]*types.Block)
 	for {
-		block, err := iter.Next()
-		if err == blockdb.ErrIterationFinished {
+		block, err := iter.NextBlock()
+		if err == db.ErrIterationFinished {
 			break
 		}
 		req.NoError(err)
@@ -127,7 +128,7 @@ func (s *BlocksGeneratorTestSuite) TestGenerateWithMaxAckCount() {
 		genesisTime      = time.Now().UTC()
 	)
 	// Generate with 0 acks.
-	db, err := blockdb.NewMemBackedBlockDB()
+	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
 	gen := NewBlocksGenerator(
 		config, MaxAckingCountGenerator(0), stableRandomHash)
@@ -135,13 +136,13 @@ func (s *BlocksGeneratorTestSuite) TestGenerateWithMaxAckCount() {
 		0,
 		genesisTime,
 		genesisTime.Add(50*time.Second),
-		db))
+		dbInst))
 	// Load blocks to check their acking count.
-	iter, err := db.GetAll()
+	iter, err := dbInst.GetAllBlocks()
 	req.NoError(err)
 	for {
-		block, err := iter.Next()
-		if err == blockdb.ErrIterationFinished {
+		block, err := iter.NextBlock()
+		if err == db.ErrIterationFinished {
 			break
 		}
 		req.NoError(err)
@@ -151,7 +152,7 @@ func (s *BlocksGeneratorTestSuite) TestGenerateWithMaxAckCount() {
 		req.Len(block.Acks, 1)
 	}
 	// Generate with acks as many as possible.
-	db, err = blockdb.NewMemBackedBlockDB()
+	dbInst, err = db.NewMemBackedDB()
 	req.NoError(err)
 	gen = NewBlocksGenerator(
 		config, MaxAckingCountGenerator(config.NumChains), stableRandomHash)
@@ -159,13 +160,13 @@ func (s *BlocksGeneratorTestSuite) TestGenerateWithMaxAckCount() {
 		0,
 		genesisTime,
 		genesisTime.Add(50*time.Second),
-		db))
+		dbInst))
 	// Load blocks to verify the average acking count.
-	iter, err = db.GetAll()
+	iter, err = dbInst.GetAllBlocks()
 	req.NoError(err)
 	for {
-		block, err := iter.Next()
-		if err == blockdb.ErrIterationFinished {
+		block, err := iter.NextBlock()
+		if err == db.ErrIterationFinished {
 			break
 		}
 		req.NoError(err)
@@ -191,14 +192,14 @@ func (s *BlocksGeneratorTestSuite) TestFindTips() {
 		endTime     = genesisTime.Add(100 * time.Second)
 	)
 	gen := NewBlocksGenerator(config, nil, stableRandomHash)
-	db, err := blockdb.NewMemBackedBlockDB()
+	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
 	req.NoError(gen.Generate(
 		0,
 		genesisTime,
 		endTime,
-		db))
-	tips, err := gen.findTips(0, db)
+		dbInst))
+	tips, err := gen.findTips(0, dbInst)
 	req.NoError(err)
 	req.Len(tips, int(config.NumChains))
 	for _, b := range tips {
@@ -208,13 +209,13 @@ func (s *BlocksGeneratorTestSuite) TestFindTips() {
 
 func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 	// This test case run these steps:
-	//  - generate blocks by round but sharing one blockdb.
+	//  - generate blocks by round but sharing one db.
 	//  - if those rounds are continuous, they should be concated.
 	var (
 		req         = s.Require()
 		genesisTime = time.Now().UTC()
 	)
-	db, err := blockdb.NewMemBackedBlockDB()
+	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
 	// Generate round 0 blocks.
 	gen := NewBlocksGenerator(&BlocksGeneratorConfig{
@@ -225,8 +226,8 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 		0,
 		genesisTime,
 		genesisTime.Add(10*time.Second),
-		db))
-	tips0, err := gen.findTips(0, db)
+		dbInst))
+	tips0, err := gen.findTips(0, dbInst)
 	req.NoError(err)
 	req.Len(tips0, 4)
 	// Generate round 1 blocks.
@@ -238,8 +239,8 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 		1,
 		genesisTime.Add(10*time.Second),
 		genesisTime.Add(20*time.Second),
-		db))
-	tips1, err := gen.findTips(1, db)
+		dbInst))
+	tips1, err := gen.findTips(1, dbInst)
 	req.NoError(err)
 	req.Len(tips1, 10)
 	// Generate round 2 blocks.
@@ -251,14 +252,14 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 		2,
 		genesisTime.Add(20*time.Second),
 		genesisTime.Add(30*time.Second),
-		db))
-	tips2, err := gen.findTips(2, db)
+		dbInst))
+	tips2, err := gen.findTips(2, dbInst)
 	req.NoError(err)
 	req.Len(tips2, 7)
 	// Check results, make sure tips0, tips1 are acked by correct blocks.
-	iter, err := db.GetAll()
+	iter, err := dbInst.GetAllBlocks()
 	req.NoError(err)
-	revealer, err := NewRandomRevealer(iter)
+	revealer, err := NewRandomBlockRevealer(iter)
 	req.NoError(err)
 	removeTip := func(tips map[uint32]*types.Block, b *types.Block) {
 		toRemove := []uint32{}
@@ -277,9 +278,9 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 	// Make sure all tips are acked by loading blocks from db
 	// and check them one by one.
 	for {
-		b, err := revealer.Next()
+		b, err := revealer.NextBlock()
 		if err != nil {
-			if err == blockdb.ErrIterationFinished {
+			if err == db.ErrIterationFinished {
 				err = nil
 				break
 			}
@@ -302,9 +303,9 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 	totalAckCount := 0
 	revealer.Reset()
 	for {
-		b, err := revealer.Next()
+		b, err := revealer.NextBlock()
 		if err != nil {
-			if err == blockdb.ErrIterationFinished {
+			if err == db.ErrIterationFinished {
 				err = nil
 				break
 			}
@@ -317,6 +318,7 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 		totalAckCount += len(b.Acks)
 	}
 	// At least all blocks can ack some non-parent block.
+	fmt.Println(totalAckCount, totalBlockCount)
 	req.True(totalAckCount/totalBlockCount >= 2)
 }
 

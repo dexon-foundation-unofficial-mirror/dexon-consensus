@@ -26,8 +26,8 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
@@ -46,7 +46,7 @@ var (
 
 // Consensus is for syncing consensus module.
 type Consensus struct {
-	db           blockdb.BlockDatabase
+	db           db.Database
 	gov          core.Governance
 	dMoment      time.Time
 	logger       common.Logger
@@ -82,7 +82,7 @@ func NewConsensus(
 	dMoment time.Time,
 	app core.Application,
 	gov core.Governance,
-	db blockdb.BlockDatabase,
+	db db.Database,
 	network core.Network,
 	prv crypto.PrivateKey,
 	logger common.Logger) *Consensus {
@@ -170,7 +170,7 @@ func (con *Consensus) checkIfSynced(blocks []*types.Block) bool {
 		if (b.Finalization.ParentHash == common.Hash{}) {
 			return false
 		}
-		b1, err := con.db.Get(b.Finalization.ParentHash)
+		b1, err := con.db.GetBlock(b.Finalization.ParentHash)
 		if err != nil {
 			panic(err)
 		}
@@ -286,7 +286,7 @@ func (con *Consensus) findLatticeSyncBlock(
 			if (lastBlock.Finalization.ParentHash == common.Hash{}) {
 				return nil, ErrGenesisBlockReached
 			}
-			b, err := con.db.Get(lastBlock.Finalization.ParentHash)
+			b, err := con.db.GetBlock(lastBlock.Finalization.ParentHash)
 			if err != nil {
 				return nil, err
 			}
@@ -302,7 +302,7 @@ func (con *Consensus) findLatticeSyncBlock(
 			if (curBlock.Finalization.ParentHash == common.Hash{}) {
 				return nil, ErrGenesisBlockReached
 			}
-			b, err := con.db.Get(curBlock.Finalization.ParentHash)
+			b, err := con.db.GetBlock(curBlock.Finalization.ParentHash)
 			if err != nil {
 				return nil, err
 			}
@@ -318,7 +318,7 @@ func (con *Consensus) findLatticeSyncBlock(
 			if (curBlock.Finalization.ParentHash == common.Hash{}) {
 				break
 			}
-			b, err := con.db.Get(curBlock.Finalization.ParentHash)
+			b, err := con.db.GetBlock(curBlock.Finalization.ParentHash)
 			if err != nil {
 				return nil, err
 			}
@@ -338,7 +338,7 @@ func (con *Consensus) findLatticeSyncBlock(
 				ok = false
 				break
 			}
-			b, err := con.db.Get(curBlock.Finalization.ParentHash)
+			b, err := con.db.GetBlock(curBlock.Finalization.ParentHash)
 			if err != nil {
 				return nil, err
 			}
@@ -403,8 +403,8 @@ func (con *Consensus) SyncBlocks(
 	con.setupConfigs(blocks)
 	for _, b := range blocks {
 		// TODO(haoping) remove this if lattice puts blocks into db.
-		if err := con.db.Put(*b); err != nil {
-			if err != blockdb.ErrBlockExists {
+		if err := con.db.PutBlock(*b); err != nil {
+			if err != db.ErrBlockExists {
 				return nil, err
 			}
 		}
@@ -433,7 +433,7 @@ func (con *Consensus) SyncBlocks(
 				if b.Hash == syncBlock.Hash {
 					break
 				}
-				b1, err := con.db.Get(b.Finalization.ParentHash)
+				b1, err := con.db.GetBlock(b.Finalization.ParentHash)
 				if err != nil {
 					return nil, err
 				}

@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
@@ -34,7 +34,7 @@ type TotalOrderingSyncerTestSuite struct {
 }
 
 func (s *TotalOrderingSyncerTestSuite) genDeliverySet(numChains uint32) (
-	deliverySet [][]*types.Block, revealer *test.RandomDAGRevealer) {
+	deliverySet [][]*types.Block, revealer *test.RandomDAGBlockRevealer) {
 
 	genesisTime := time.Now().UTC()
 	genesisConfig := &types.Config{
@@ -51,25 +51,25 @@ func (s *TotalOrderingSyncerTestSuite) genDeliverySet(numChains uint32) (
 		MinBlockTimeInterval: 250 * time.Millisecond,
 	}, nil, hashBlock)
 
-	db, err := blockdb.NewMemBackedBlockDB()
+	dbInst, err := db.NewMemBackedDB()
 	s.Require().NoError(err)
 	s.Require().NoError(gen.Generate(
 		0,
 		genesisTime,
 		genesisTime.Add(20*time.Second),
-		db))
-	iter, err := db.GetAll()
+		dbInst))
+	iter, err := dbInst.GetAllBlocks()
 	s.Require().NoError(err)
 
-	revealer, err = test.NewRandomDAGRevealer(iter)
+	revealer, err = test.NewRandomDAGBlockRevealer(iter)
 	s.Require().NoError(err)
 
 	revealer.Reset()
 	for {
 		// Reveal next block.
-		b, err := revealer.Next()
+		b, err := revealer.NextBlock()
 		if err != nil {
-			if err == blockdb.ErrIterationFinished {
+			if err == db.ErrIterationFinished {
 				err = nil
 				break
 			}
@@ -120,7 +120,7 @@ func (s *TotalOrderingSyncerTestSuite) TestRandomSync() {
 
 		revealer.Reset()
 		for i := 0; i < skipDAG; i++ {
-			_, err := revealer.Next()
+			_, err := revealer.NextBlock()
 			s.Require().NoError(err)
 		}
 
@@ -134,9 +134,9 @@ func (s *TotalOrderingSyncerTestSuite) TestRandomSync() {
 		deliverySetMap2 := make(map[int][]common.Hash)
 
 		for {
-			b, err := revealer.Next()
+			b, err := revealer.NextBlock()
 			if err != nil {
-				if err != blockdb.ErrIterationFinished {
+				if err != db.ErrIterationFinished {
 					s.Require().NoError(err)
 				}
 				err = nil
@@ -284,9 +284,9 @@ func (s *TotalOrderingSyncerTestSuite) TestBootstrap() {
 	actualDeliveredNum := 0
 	revealer.Reset()
 	for {
-		b, err := revealer.Next()
+		b, err := revealer.NextBlock()
 		if err != nil {
-			if err != blockdb.ErrIterationFinished {
+			if err != db.ErrIterationFinished {
 				s.Require().NoError(err)
 			}
 			err = nil

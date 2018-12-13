@@ -24,11 +24,11 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
-// Errors returns from revealer.
+// Errors returns from block-revealer.
 var (
 	ErrNotValidCompactionChain = errors.New("not valid compaction chain")
 )
@@ -46,15 +46,15 @@ func isAllAckingBlockRevealed(
 	return true
 }
 
-// loadAllBlocks is a helper to load all blocks from blockdb.BlockIterator.
-func loadAllBlocks(iter blockdb.BlockIterator) (
+// loadAllBlocks is a helper to load all blocks from db.BlockIterator.
+func loadAllBlocks(iter db.BlockIterator) (
 	blocks map[common.Hash]*types.Block, err error) {
 
 	blocks = make(map[common.Hash]*types.Block)
 	for {
-		block, err := iter.Next()
+		block, err := iter.NextBlock()
 		if err != nil {
-			if err == blockdb.ErrIterationFinished {
+			if err == db.ErrIterationFinished {
 				// It's safe to ignore iteraion-finished error.
 				err = nil
 			}
@@ -65,10 +65,10 @@ func loadAllBlocks(iter blockdb.BlockIterator) (
 	return
 }
 
-// RandomDAGRevealer implements Revealer interface, which would load
-// all blocks from blockdb, and randomly pick one block to reveal if
-// it still forms a valid DAG in revealed blocks.
-type RandomDAGRevealer struct {
+// RandomDAGBlockRevealer implements BlockRevealer interface, which would load
+// all blocks from db, and randomly pick one block to reveal if it still forms
+// a valid DAG in revealed blocks.
+type RandomDAGBlockRevealer struct {
 	// blocksByChain group all blocks by chains and sorting
 	// them by height.
 	blocksByChain map[uint32][]*types.Block
@@ -84,9 +84,9 @@ type RandomDAGRevealer struct {
 	randGen  *rand.Rand
 }
 
-// NewRandomDAGRevealer constructs RandomDAGRevealer.
-func NewRandomDAGRevealer(
-	iter blockdb.BlockIterator) (r *RandomDAGRevealer, err error) {
+// NewRandomDAGBlockRevealer constructs RandomDAGBlockRevealer.
+func NewRandomDAGBlockRevealer(
+	iter db.BlockIterator) (r *RandomDAGBlockRevealer, err error) {
 
 	blocks, err := loadAllBlocks(iter)
 	if err != nil {
@@ -103,7 +103,7 @@ func NewRandomDAGRevealer(
 	for chainID := range blocksByChain {
 		sort.Sort(types.ByPosition(blocksByChain[chainID]))
 	}
-	r = &RandomDAGRevealer{
+	r = &RandomDAGBlockRevealer{
 		blocksByChain:   blocksByChain,
 		randGen:         rand.New(rand.NewSource(time.Now().UnixNano())),
 		candidateChains: make(map[uint32]struct{}),
@@ -114,7 +114,7 @@ func NewRandomDAGRevealer(
 }
 
 // pickCandidates is a helper function to pick candidates from current tips.
-func (r *RandomDAGRevealer) pickCandidates() {
+func (r *RandomDAGBlockRevealer) pickCandidates() {
 	for chainID, tip := range r.tipIndexes {
 		if _, isPicked := r.candidateChains[chainID]; isPicked {
 			continue
@@ -135,13 +135,13 @@ func (r *RandomDAGRevealer) pickCandidates() {
 	}
 }
 
-// Next implement Revealer.Next method, which would reveal blocks
+// NextBlock implement Revealer.Next method, which would reveal blocks
 // forming valid DAGs.
-func (r *RandomDAGRevealer) Next() (types.Block, error) {
+func (r *RandomDAGBlockRevealer) NextBlock() (types.Block, error) {
 	if len(r.candidates) == 0 {
 		r.pickCandidates()
 		if len(r.candidates) == 0 {
-			return types.Block{}, blockdb.ErrIterationFinished
+			return types.Block{}, db.ErrIterationFinished
 		}
 	}
 
@@ -157,7 +157,7 @@ func (r *RandomDAGRevealer) Next() (types.Block, error) {
 }
 
 // Reset implement Revealer.Reset method, which would reset the revealing.
-func (r *RandomDAGRevealer) Reset() {
+func (r *RandomDAGBlockRevealer) Reset() {
 	r.tipIndexes = make(map[uint32]int)
 	for chainID := range r.blocksByChain {
 		r.tipIndexes[chainID] = 0
@@ -166,23 +166,23 @@ func (r *RandomDAGRevealer) Reset() {
 	r.candidates = []*types.Block{}
 }
 
-// RandomRevealer implements Revealer interface, which would load
-// all blocks from blockdb, and randomly pick one block to reveal.
-type RandomRevealer struct {
+// RandomBlockRevealer implements BlockRevealer interface, which would load
+// all blocks from db, and randomly pick one block to reveal.
+type RandomBlockRevealer struct {
 	blocks  map[common.Hash]*types.Block
 	remains common.Hashes
 	randGen *rand.Rand
 }
 
-// NewRandomRevealer constructs RandomRevealer.
-func NewRandomRevealer(
-	iter blockdb.BlockIterator) (r *RandomRevealer, err error) {
+// NewRandomBlockRevealer constructs RandomBlockRevealer.
+func NewRandomBlockRevealer(
+	iter db.BlockIterator) (r *RandomBlockRevealer, err error) {
 
 	blocks, err := loadAllBlocks(iter)
 	if err != nil {
 		return
 	}
-	r = &RandomRevealer{
+	r = &RandomBlockRevealer{
 		blocks:  blocks,
 		randGen: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
@@ -190,10 +190,11 @@ func NewRandomRevealer(
 	return
 }
 
-// Next implements Revealer.Next method, which would reveal blocks randomly.
-func (r *RandomRevealer) Next() (types.Block, error) {
+// NextBlock implements Revealer.NextBlock method, which would reveal blocks
+// randomly.
+func (r *RandomBlockRevealer) NextBlock() (types.Block, error) {
 	if len(r.remains) == 0 {
-		return types.Block{}, blockdb.ErrIterationFinished
+		return types.Block{}, db.ErrIterationFinished
 	}
 
 	picked := r.randGen.Intn(len(r.remains))
@@ -204,7 +205,7 @@ func (r *RandomRevealer) Next() (types.Block, error) {
 }
 
 // Reset implement Revealer.Reset method, which would reset revealing.
-func (r *RandomRevealer) Reset() {
+func (r *RandomBlockRevealer) Reset() {
 	hashes := common.Hashes{}
 	for hash := range r.blocks {
 		hashes = append(hashes, hash)
@@ -212,9 +213,9 @@ func (r *RandomRevealer) Reset() {
 	r.remains = hashes
 }
 
-// RandomTipRevealer implements Revealer interface, which would load
-// all blocks from blockdb, and randomly pick one chain's tip to reveal.
-type RandomTipRevealer struct {
+// RandomTipBlockRevealer implements BlockRevealer interface, which would load
+// all blocks from db, and randomly pick one chain's tip to reveal.
+type RandomTipBlockRevealer struct {
 	chainsBlock    []map[uint64]*types.Block
 	chainTip       []uint64
 	chainRevealSeq []uint32
@@ -222,15 +223,15 @@ type RandomTipRevealer struct {
 	randGen        *rand.Rand
 }
 
-// NewRandomTipRevealer constructs RandomTipRevealer.
-func NewRandomTipRevealer(
-	iter blockdb.BlockIterator) (r *RandomTipRevealer, err error) {
+// NewRandomTipBlockRevealer constructs RandomTipBlockRevealer.
+func NewRandomTipBlockRevealer(
+	iter db.BlockIterator) (r *RandomTipBlockRevealer, err error) {
 
 	blocks, err := loadAllBlocks(iter)
 	if err != nil {
 		return
 	}
-	r = &RandomTipRevealer{
+	r = &RandomTipBlockRevealer{
 		randGen: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 	for _, b := range blocks {
@@ -245,10 +246,10 @@ func NewRandomTipRevealer(
 	return
 }
 
-// Next implements Revealer.Next method, which would reveal blocks randomly.
-func (r *RandomTipRevealer) Next() (types.Block, error) {
+// NextBlock implements Revealer.Next method, which would reveal blocks randomly.
+func (r *RandomTipBlockRevealer) NextBlock() (types.Block, error) {
 	if len(r.chainRevealSeq) == r.revealed {
-		return types.Block{}, blockdb.ErrIterationFinished
+		return types.Block{}, db.ErrIterationFinished
 	}
 
 	picked := r.chainRevealSeq[r.revealed]
@@ -259,7 +260,7 @@ func (r *RandomTipRevealer) Next() (types.Block, error) {
 }
 
 // Reset implement Revealer.Reset method, which would reset revealing.
-func (r *RandomTipRevealer) Reset() {
+func (r *RandomTipBlockRevealer) Reset() {
 	r.revealed = 0
 	r.randGen.Shuffle(len(r.chainRevealSeq), func(i, j int) {
 		r.chainRevealSeq[i], r.chainRevealSeq[j] =
@@ -270,18 +271,18 @@ func (r *RandomTipRevealer) Reset() {
 	}
 }
 
-// CompactionChainRevealer implements Revealer interface, which would load
-// all blocks from blockdb, reveal them in the order of compaction chain, from
-// the genesis block to the latest one.
-type CompactionChainRevealer struct {
+// CompactionChainBlockRevealer implements BlockRevealer interface, which would
+// load all blocks from db, reveal them in the order of compaction chain,
+// from the genesis block to the latest one.
+type CompactionChainBlockRevealer struct {
 	blocks          types.ByFinalizationHeight
 	nextRevealIndex int
 }
 
-// NewCompactionChainRevealer constructs a revealer in the order of compaction
-// chain.
-func NewCompactionChainRevealer(iter blockdb.BlockIterator,
-	startHeight uint64) (r *CompactionChainRevealer, err error) {
+// NewCompactionChainBlockRevealer constructs a block revealer in the order of
+// compaction chain.
+func NewCompactionChainBlockRevealer(iter db.BlockIterator,
+	startHeight uint64) (r *CompactionChainBlockRevealer, err error) {
 	blocksByHash, err := loadAllBlocks(iter)
 	if err != nil {
 		return
@@ -307,18 +308,18 @@ func NewCompactionChainRevealer(iter blockdb.BlockIterator,
 			return
 		}
 	}
-	r = &CompactionChainRevealer{
+	r = &CompactionChainBlockRevealer{
 		blocks: blocks,
 	}
 	r.Reset()
 	return
 }
 
-// Next implements Revealer.Next method, which would reveal blocks in the order
-// of compaction chain.
-func (r *CompactionChainRevealer) Next() (types.Block, error) {
+// NextBlock implements Revealer.Next method, which would reveal blocks in the
+// order of compaction chain.
+func (r *CompactionChainBlockRevealer) NextBlock() (types.Block, error) {
 	if r.nextRevealIndex == len(r.blocks) {
-		return types.Block{}, blockdb.ErrIterationFinished
+		return types.Block{}, db.ErrIterationFinished
 	}
 	b := r.blocks[r.nextRevealIndex]
 	r.nextRevealIndex++
@@ -326,6 +327,6 @@ func (r *CompactionChainRevealer) Next() (types.Block, error) {
 }
 
 // Reset implement Revealer.Reset method, which would reset revealing.
-func (r *CompactionChainRevealer) Reset() {
+func (r *CompactionChainBlockRevealer) Reset() {
 	r.nextRevealIndex = 0
 }

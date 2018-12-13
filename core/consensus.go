@@ -25,8 +25,8 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
@@ -360,7 +360,7 @@ type Consensus struct {
 	toSyncer *totalOrderingSyncer
 
 	// Interfaces.
-	db       blockdb.BlockDatabase
+	db       db.Database
 	app      Application
 	debugApp Debug
 	gov      Governance
@@ -384,7 +384,7 @@ func NewConsensus(
 	dMoment time.Time,
 	app Application,
 	gov Governance,
-	db blockdb.BlockDatabase,
+	db db.Database,
 	network Network,
 	prv crypto.PrivateKey,
 	logger common.Logger) *Consensus {
@@ -464,7 +464,7 @@ func NewConsensusFromSyncer(
 	initRoundBeginTime time.Time,
 	app Application,
 	gov Governance,
-	db blockdb.BlockDatabase,
+	db db.Database,
 	networkModule Network,
 	prv crypto.PrivateKey,
 	latticeModule *Lattice,
@@ -1033,7 +1033,7 @@ func (con *Consensus) deliverBlock(b *types.Block) {
 
 // processBlock is the entry point to submit one block to a Consensus instance.
 func (con *Consensus) processBlock(block *types.Block) (err error) {
-	if err = con.db.Put(*block); err != nil && err != blockdb.ErrBlockExists {
+	if err = con.db.PutBlock(*block); err != nil && err != db.ErrBlockExists {
 		return
 	}
 	con.lock.Lock()
@@ -1069,7 +1069,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		"delivered", con.ccModule.lastDeliveredBlock(),
 		"pending", con.ccModule.lastPendingBlock())
 	for _, b := range deliveredBlocks {
-		if err = con.db.Update(*b); err != nil {
+		if err = con.db.UpdateBlock(*b); err != nil {
 			panic(err)
 		}
 		con.cfgModule.untouchTSigHash(b.Hash)

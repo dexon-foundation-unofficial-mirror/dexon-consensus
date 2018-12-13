@@ -15,7 +15,7 @@
 // along with the dexon-consensus library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package blockdb
+package db
 
 import (
 	"os"
@@ -26,14 +26,14 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type MemBackedBlockDBTestSuite struct {
+type MemBackedDBTestSuite struct {
 	suite.Suite
 
 	v0            types.NodeID
 	b00, b01, b02 *types.Block
 }
 
-func (s *MemBackedBlockDBTestSuite) SetupSuite() {
+func (s *MemBackedDBTestSuite) SetupSuite() {
 	s.v0 = types.NodeID{Hash: common.NewRandomHash()}
 
 	genesisHash := common.NewRandomHash()
@@ -66,7 +66,7 @@ func (s *MemBackedBlockDBTestSuite) SetupSuite() {
 	}
 }
 
-func (s *MemBackedBlockDBTestSuite) TestSaveAndLoad() {
+func (s *MemBackedDBTestSuite) TestSaveAndLoad() {
 	// Make sure we are able to save/load from file.
 	dbPath := "test-save-and-load.db"
 
@@ -74,49 +74,49 @@ func (s *MemBackedBlockDBTestSuite) TestSaveAndLoad() {
 	_, err := os.Stat(dbPath)
 	s.Require().NotNil(err)
 
-	db, err := NewMemBackedBlockDB(dbPath)
+	dbInst, err := NewMemBackedDB(dbPath)
 	s.Require().Nil(err)
-	s.Require().NotNil(db)
+	s.Require().NotNil(dbInst)
 	defer func() {
-		if db != nil {
+		if dbInst != nil {
 			s.Nil(os.Remove(dbPath))
-			db = nil
+			dbInst = nil
 		}
 	}()
 
-	s.Nil(db.Put(*s.b00))
-	s.Nil(db.Put(*s.b01))
-	s.Nil(db.Put(*s.b02))
-	s.Nil(db.Close())
+	s.Nil(dbInst.PutBlock(*s.b00))
+	s.Nil(dbInst.PutBlock(*s.b01))
+	s.Nil(dbInst.PutBlock(*s.b02))
+	s.Nil(dbInst.Close())
 
 	// Load the json file back to check if all inserted blocks
 	// exists.
-	db, err = NewMemBackedBlockDB(dbPath)
+	dbInst, err = NewMemBackedDB(dbPath)
 	s.Require().Nil(err)
-	s.Require().NotNil(db)
-	s.True(db.Has(s.b00.Hash))
-	s.True(db.Has(s.b01.Hash))
-	s.True(db.Has(s.b02.Hash))
-	s.Nil(db.Close())
+	s.Require().NotNil(dbInst)
+	s.True(dbInst.HasBlock(s.b00.Hash))
+	s.True(dbInst.HasBlock(s.b01.Hash))
+	s.True(dbInst.HasBlock(s.b02.Hash))
+	s.Nil(dbInst.Close())
 }
 
-func (s *MemBackedBlockDBTestSuite) TestIteration() {
+func (s *MemBackedDBTestSuite) TestIteration() {
 	// Make sure the file pointed by 'dbPath' doesn't exist.
-	db, err := NewMemBackedBlockDB()
+	dbInst, err := NewMemBackedDB()
 	s.Require().Nil(err)
-	s.Require().NotNil(db)
+	s.Require().NotNil(dbInst)
 
 	// Setup database.
-	s.Nil(db.Put(*s.b00))
-	s.Nil(db.Put(*s.b01))
-	s.Nil(db.Put(*s.b02))
+	s.Nil(dbInst.PutBlock(*s.b00))
+	s.Nil(dbInst.PutBlock(*s.b01))
+	s.Nil(dbInst.PutBlock(*s.b02))
 
 	// Check if we can iterate all 3 blocks.
-	iter, err := db.GetAll()
+	iter, err := dbInst.GetAllBlocks()
 	s.Require().Nil(err)
 	touched := common.Hashes{}
 	for {
-		b, err := iter.Next()
+		b, err := iter.NextBlock()
 		if err == ErrIterationFinished {
 			break
 		}
@@ -129,6 +129,6 @@ func (s *MemBackedBlockDBTestSuite) TestIteration() {
 	s.Contains(touched, s.b02.Hash)
 }
 
-func TestMemBackedBlockDB(t *testing.T) {
-	suite.Run(t, new(MemBackedBlockDBTestSuite))
+func TestMemBackedDB(t *testing.T) {
+	suite.Run(t, new(MemBackedDBTestSuite))
 }

@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
@@ -60,9 +60,9 @@ func (s *LatticeDataTestSuite) genTestCase1() (
 		NumChains:        chainNum,
 		MinBlockInterval: 2 * time.Nanosecond,
 	}
-	db, err := blockdb.NewMemBackedBlockDB()
+	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
-	data = newLatticeData(db, now, 0, genesisConfig)
+	data = newLatticeData(dbInst, now, 0, genesisConfig)
 	config := &types.Config{
 		RoundInterval:    1000 * time.Second,
 		NumChains:        chainNum,
@@ -365,7 +365,7 @@ func (s *LatticeDataTestSuite) TestRandomlyGeneratedBlocks() {
 		MinBlockInterval: 1 * time.Second,
 	}
 	// Prepare a randomly generated blocks.
-	db, err := blockdb.NewMemBackedBlockDB()
+	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
 	gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
 		NumChains:            genesisConfig.NumChains,
@@ -375,28 +375,28 @@ func (s *LatticeDataTestSuite) TestRandomlyGeneratedBlocks() {
 		0,
 		genesisTime,
 		genesisTime.Add(genesisConfig.RoundInterval),
-		db))
-	iter, err := db.GetAll()
+		dbInst))
+	iter, err := dbInst.GetAllBlocks()
 	req.NoError(err)
 	// Setup a revealer that would reveal blocks randomly but still form
 	// valid DAG without holes.
-	revealer, err := test.NewRandomDAGRevealer(iter)
+	revealer, err := test.NewRandomDAGBlockRevealer(iter)
 	req.Nil(err)
 
 	revealedHashesAsString := map[string]struct{}{}
 	deliveredHashesAsString := map[string]struct{}{}
 	for i := 0; i < repeat; i++ {
-		db, err := blockdb.NewMemBackedBlockDB()
+		dbInst, err := db.NewMemBackedDB()
 		req.NoError(err)
-		data := newLatticeData(db, genesisTime, 0, genesisConfig)
+		data := newLatticeData(dbInst, genesisTime, 0, genesisConfig)
 		deliveredHashes := common.Hashes{}
 		revealedHashes := common.Hashes{}
 		revealer.Reset()
 		for {
 			// Reveal next block.
-			b, err := revealer.Next()
+			b, err := revealer.NextBlock()
 			if err != nil {
-				if err == blockdb.ErrIterationFinished {
+				if err == db.ErrIterationFinished {
 					err = nil
 					break
 				}
@@ -475,9 +475,9 @@ func (s *LatticeDataTestSuite) TestPrepareBlock() {
 		NumChains:        chainNum,
 		MinBlockInterval: 1 * time.Second,
 	}
-	db, err := blockdb.NewMemBackedBlockDB()
+	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
-	data := newLatticeData(db, time.Now().UTC(), 0, genesisConfig)
+	data := newLatticeData(dbInst, time.Now().UTC(), 0, genesisConfig)
 	// Setup genesis blocks.
 	b00 := s.prepareGenesisBlock(0)
 	time.Sleep(minInterval)
@@ -615,11 +615,11 @@ func (s *LatticeDataTestSuite) TestNumChainsChange() {
 		}
 		randObj = rand.New(rand.NewSource(time.Now().UnixNano()))
 	)
-	// Setup blockdb instance.
-	db, err := blockdb.NewMemBackedBlockDB()
+	// Setup db instance.
+	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
 	// Set up latticeData instance.
-	lattice := newLatticeData(db, time.Now().UTC(), 0, configs[0])
+	lattice := newLatticeData(dbInst, time.Now().UTC(), 0, configs[0])
 	req.NoError(lattice.appendConfig(1, configs[1]))
 	req.NoError(lattice.appendConfig(2, configs[2]))
 	req.NoError(lattice.appendConfig(3, configs[3]))
@@ -689,9 +689,9 @@ func (s *LatticeDataTestSuite) TestAppendConfig() {
 		round = uint64(5)
 		cfg   = &types.Config{NumChains: uint32(4)}
 	)
-	db, err := blockdb.NewMemBackedBlockDB()
+	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
-	latticeData := newLatticeData(db, now, round, cfg)
+	latticeData := newLatticeData(dbInst, now, round, cfg)
 	err = latticeData.appendConfig(6, cfg)
 	req.NoError(err)
 	err = latticeData.appendConfig(10, cfg)

@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
@@ -105,8 +105,8 @@ func newLatticeDataConfig(
 
 // latticeData is a module for storing lattice.
 type latticeData struct {
-	// BlockDB for getting blocks purged in memory.
-	db blockdb.Reader
+	// DB for getting blocks purged in memory.
+	db db.Reader
 	// chains stores chains' blocks and other info.
 	chains []*chainStatus
 	// blockByHash stores blocks, indexed by block hash.
@@ -117,7 +117,7 @@ type latticeData struct {
 
 // newLatticeData creates a new latticeData instance.
 func newLatticeData(
-	db blockdb.Reader,
+	db db.Reader,
 	dMoment time.Time,
 	round uint64,
 	config *types.Config) (data *latticeData) {
@@ -146,7 +146,7 @@ func (data *latticeData) checkAckingRelations(b *types.Block) error {
 	for _, hash := range b.Acks {
 		bAck, err := data.findBlock(hash)
 		if err != nil {
-			if err == blockdb.ErrBlockDoesNotExist {
+			if err == db.ErrBlockDoesNotExist {
 				return &ErrAckingBlockNotExists{hash}
 			}
 			return err
@@ -276,7 +276,7 @@ func (data *latticeData) addBlock(
 	// Update lastAckPos.
 	for _, ack := range block.Acks {
 		if bAck, err = data.findBlock(ack); err != nil {
-			if err == blockdb.ErrBlockDoesNotExist {
+			if err == db.ErrBlockDoesNotExist {
 				err = nil
 				continue
 			}
@@ -298,7 +298,7 @@ func (data *latticeData) addBlock(
 			allAckingBlockDelivered := true
 			for _, ack := range tip.Acks {
 				if bAck, err = data.findBlock(ack); err != nil {
-					if err == blockdb.ErrBlockDoesNotExist {
+					if err == db.ErrBlockDoesNotExist {
 						err = nil
 						allAckingBlockDelivered = false
 						break
@@ -525,7 +525,7 @@ func (data *latticeData) findBlock(h common.Hash) (b *types.Block, err error) {
 		return
 	}
 	var tmpB types.Block
-	if tmpB, err = data.db.Get(h); err != nil {
+	if tmpB, err = data.db.GetBlock(h); err != nil {
 		return
 	}
 	b = &tmpB
@@ -632,7 +632,7 @@ func (s *chainStatus) addBlock(b *types.Block) {
 }
 
 // purgeBlock purges a block from cache, make sure this block is already saved
-// in blockdb.
+// in db.
 func (s *chainStatus) purgeBlock(b *types.Block) error {
 	if b.Hash != s.blocks[0].Hash || s.nextOutputIndex <= 0 {
 		return ErrPurgeNotDeliveredBlock

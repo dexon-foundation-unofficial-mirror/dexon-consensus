@@ -15,7 +15,7 @@
 // along with the dexon-consensus library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package blockdb
+package db
 
 import (
 	"errors"
@@ -40,8 +40,8 @@ var (
 	ErrNotImplemented = fmt.Errorf("not implemented")
 )
 
-// BlockDatabase is the interface for a BlockDatabase.
-type BlockDatabase interface {
+// Database is the interface for a Database.
+type Database interface {
 	Reader
 	Writer
 
@@ -52,19 +52,19 @@ type BlockDatabase interface {
 
 // Reader defines the interface for reading blocks into DB.
 type Reader interface {
-	Has(hash common.Hash) bool
-	Get(hash common.Hash) (types.Block, error)
-	GetAll() (BlockIterator, error)
+	HasBlock(hash common.Hash) bool
+	GetBlock(hash common.Hash) (types.Block, error)
+	GetAllBlocks() (BlockIterator, error)
 }
 
 // Writer defines the interface for writing blocks into DB.
 type Writer interface {
-	Update(block types.Block) error
-	Put(block types.Block) error
+	UpdateBlock(block types.Block) error
+	PutBlock(block types.Block) error
 }
 
 // BlockIterator defines an iterator on blocks hold
 // in a DB.
 type BlockIterator interface {
-	Next() (types.Block, error)
+	NextBlock() (types.Block, error)
 }

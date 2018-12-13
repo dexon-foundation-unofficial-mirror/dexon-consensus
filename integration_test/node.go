@@ -23,8 +23,8 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
@@ -76,7 +76,7 @@ type Node struct {
 	appModule        *test.App
 	stateModule      *test.State
 	govModule        *test.Governance
-	dbModule         blockdb.BlockDatabase
+	dbModule         db.Database
 	broadcastTargets map[types.NodeID]struct{}
 	networkLatency   test.LatencyModel
 	proposingLatency test.LatencyModel
@@ -99,8 +99,8 @@ func newNode(
 	// Load all configs prepared in core.Governance into core.Lattice.
 	copiedGov := gov.Clone()
 	configs := loadAllConfigs(copiedGov)
-	// Setup blockdb.
-	db, err := blockdb.NewMemBackedBlockDB()
+	// Setup db.
+	dbInst, err := db.NewMemBackedDB()
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func newNode(
 		core.NewAuthenticator(privateKey),
 		app,
 		app,
-		db,
+		dbInst,
 		&common.NullLogger{})
 	n := &Node{
 		ID:                  types.NewNodeID(privateKey.PublicKey()),
@@ -125,7 +125,7 @@ func newNode(
 		proposingLatency:    proposingLatency,
 		appModule:           app,
 		stateModule:         copiedGov.State(),
-		dbModule:            db,
+		dbModule:            dbInst,
 		govModule:           copiedGov,
 		lattice:             lattice,
 		latticeMaxNumChains: configs[0].NumChains,
@@ -254,7 +254,7 @@ func (n *Node) processBlock(b *types.Block) (events []*test.Event, err error) {
 	}
 	// Deliver blocks.
 	for _, b = range delivered {
-		if err = n.dbModule.Put(*b); err != nil {
+		if err = n.dbModule.PutBlock(*b); err != nil {
 			panic(err)
 		}
 		b.Finalization.Height = n.prevFinalHeight + 1
@@ -349,7 +349,7 @@ func (n *Node) app() *test.App {
 	return n.appModule
 }
 
-func (n *Node) db() blockdb.BlockDatabase {
+func (n *Node) db() db.Database {
 	return n.dbModule
 }
 

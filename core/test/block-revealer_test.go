@@ -22,25 +22,25 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/stretchr/testify/suite"
 )
 
-type RevealerTestSuite struct {
+type BlockRevealerTestSuite struct {
 	suite.Suite
 
-	db              blockdb.BlockDatabase
+	db              db.Database
 	totalBlockCount int
 }
 
-func (s *RevealerTestSuite) SetupSuite() {
+func (s *BlockRevealerTestSuite) SetupSuite() {
 	var (
 		err         error
 		genesisTime = time.Now().UTC()
 	)
 	// Setup block database.
-	s.db, err = blockdb.NewMemBackedBlockDB()
+	s.db, err = db.NewMemBackedDB()
 	s.Require().NoError(err)
 
 	// Randomly generate blocks.
@@ -55,15 +55,15 @@ func (s *RevealerTestSuite) SetupSuite() {
 		genesisTime.Add(30*time.Second),
 		s.db))
 	// Cache the count of total generated block.
-	iter, err := s.db.GetAll()
+	iter, err := s.db.GetAllBlocks()
 	s.Require().NoError(err)
 	blocks, err := loadAllBlocks(iter)
 	s.Require().NoError(err)
 	s.totalBlockCount = len(blocks)
 }
 
-func (s *RevealerTestSuite) baseTest(
-	revealer Revealer,
+func (s *BlockRevealerTestSuite) baseTest(
+	revealer BlockRevealer,
 	repeat int,
 	checkFunc func(*types.Block, map[common.Hash]struct{})) {
 
@@ -72,9 +72,9 @@ func (s *RevealerTestSuite) baseTest(
 		revealed := map[common.Hash]struct{}{}
 		sequence := ""
 		for {
-			b, err := revealer.Next()
+			b, err := revealer.NextBlock()
 			if err != nil {
-				if err == blockdb.ErrIterationFinished {
+				if err == db.ErrIterationFinished {
 					err = nil
 					break
 				}
@@ -94,13 +94,13 @@ func (s *RevealerTestSuite) baseTest(
 
 }
 
-func (s *RevealerTestSuite) TestRandomReveal() {
+func (s *BlockRevealerTestSuite) TestRandomBlockReveal() {
 	// This test case would make sure we could at least generate
 	// two different revealing sequence when revealing more than
 	// 10 times.
-	iter, err := s.db.GetAll()
+	iter, err := s.db.GetAllBlocks()
 	s.Require().Nil(err)
-	revealer, err := NewRandomRevealer(iter)
+	revealer, err := NewRandomBlockRevealer(iter)
 	s.Require().Nil(err)
 
 	checkFunc := func(b *types.Block, revealed map[common.Hash]struct{}) {
@@ -111,15 +111,15 @@ func (s *RevealerTestSuite) TestRandomReveal() {
 	s.baseTest(revealer, 10, checkFunc)
 }
 
-func (s *RevealerTestSuite) TestRandomDAGReveal() {
+func (s *BlockRevealerTestSuite) TestRandomDAGBlockReveal() {
 	// This test case would make sure we could at least generate
 	// two different revealing sequence when revealing more than
 	// 10 times, and each of them would form valid DAGs during
 	// revealing.
 
-	iter, err := s.db.GetAll()
+	iter, err := s.db.GetAllBlocks()
 	s.Require().Nil(err)
-	revealer, err := NewRandomDAGRevealer(iter)
+	revealer, err := NewRandomDAGBlockRevealer(iter)
 	s.Require().Nil(err)
 
 	checkFunc := func(b *types.Block, revealed map[common.Hash]struct{}) {
@@ -134,13 +134,13 @@ func (s *RevealerTestSuite) TestRandomDAGReveal() {
 	s.baseTest(revealer, 10, checkFunc)
 }
 
-func (s *RevealerTestSuite) TestRandomTipReveal() {
+func (s *BlockRevealerTestSuite) TestRandomTipBlockReveal() {
 	// This test case would make sure we could at least generate
 	// two different revealing sequence when revealing more than
 	// 10 times.
-	iter, err := s.db.GetAll()
+	iter, err := s.db.GetAllBlocks()
 	s.Require().Nil(err)
-	revealer, err := NewRandomTipRevealer(iter)
+	revealer, err := NewRandomTipBlockRevealer(iter)
 	s.Require().Nil(err)
 
 	checkFunc := func(b *types.Block, revealed map[common.Hash]struct{}) {
@@ -157,8 +157,8 @@ func (s *RevealerTestSuite) TestRandomTipReveal() {
 	s.baseTest(revealer, 10, checkFunc)
 }
 
-func (s *RevealerTestSuite) TestCompactionChainReveal() {
-	db, err := blockdb.NewMemBackedBlockDB()
+func (s *BlockRevealerTestSuite) TestCompactionChainBlockReveal() {
+	dbInst, err := db.NewMemBackedDB()
 	s.Require().NoError(err)
 	// Put several blocks with finalization field ready.
 	b1 := &types.Block{
@@ -178,26 +178,26 @@ func (s *RevealerTestSuite) TestCompactionChainReveal() {
 			ParentHash: b2.Hash,
 			Height:     3,
 		}}
-	s.Require().NoError(db.Put(*b1))
-	s.Require().NoError(db.Put(*b3))
-	iter, err := db.GetAll()
+	s.Require().NoError(dbInst.PutBlock(*b1))
+	s.Require().NoError(dbInst.PutBlock(*b3))
+	iter, err := dbInst.GetAllBlocks()
 	s.Require().NoError(err)
 	// The compaction chain is not complete, we can't construct a revealer
 	// instance successfully.
-	r, err := NewCompactionChainRevealer(iter, 0)
+	r, err := NewCompactionChainBlockRevealer(iter, 0)
 	s.Require().Nil(r)
 	s.Require().IsType(ErrNotValidCompactionChain, err)
 	// Put a block to make the compaction chain complete.
-	s.Require().NoError(db.Put(*b2))
+	s.Require().NoError(dbInst.PutBlock(*b2))
 	// We can construct that revealer now.
-	iter, err = db.GetAll()
+	iter, err = dbInst.GetAllBlocks()
 	s.Require().NoError(err)
-	r, err = NewCompactionChainRevealer(iter, 0)
+	r, err = NewCompactionChainBlockRevealer(iter, 0)
 	s.Require().NotNil(r)
 	s.Require().NoError(err)
 	// The revealing order should be ok.
 	chk := func(h uint64) {
-		b, err := r.Next()
+		b, err := r.NextBlock()
 		s.Require().NoError(err)
 		s.Require().Equal(b.Finalization.Height, h)
 	}
@@ -205,18 +205,18 @@ func (s *RevealerTestSuite) TestCompactionChainReveal() {
 	chk(2)
 	chk(3)
 	// Iteration should be finished
-	_, err = r.Next()
-	s.Require().IsType(blockdb.ErrIterationFinished, err)
+	_, err = r.NextBlock()
+	s.Require().IsType(db.ErrIterationFinished, err)
 	// Test 'startHeight' parameter.
-	iter, err = db.GetAll()
+	iter, err = dbInst.GetAllBlocks()
 	s.Require().NoError(err)
-	r, err = NewCompactionChainRevealer(iter, 2)
+	r, err = NewCompactionChainBlockRevealer(iter, 2)
 	s.Require().NotNil(r)
 	s.Require().NoError(err)
 	chk(2)
 	chk(3)
 }
 
-func TestRevealer(t *testing.T) {
-	suite.Run(t, new(RevealerTestSuite))
+func TestBlockRevealer(t *testing.T) {
+	suite.Run(t, new(BlockRevealerTestSuite))
 }

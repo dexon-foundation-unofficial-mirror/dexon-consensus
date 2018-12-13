@@ -44,7 +44,7 @@ type blockDeliveredEvent struct {
 // them that makes the methods to be non-blocking.
 //  - Application
 //  - Debug
-//  - It also provides nonblockig for blockdb update.
+//  - It also provides nonblockig for db update.
 type nonBlocking struct {
 	app          Application
 	debug        Debug
@@ -75,7 +75,7 @@ func (nb *nonBlocking) addEvent(event interface{}) {
 
 func (nb *nonBlocking) run() {
 	// This go routine consume the first event from events and call the
-	// corresponding methods of Application/Debug/blockdb.
+	// corresponding methods of Application/Debug/db.
 	for {
 		var event interface{}
 		func() {

@@ -20,7 +20,7 @@ package test
 import (
 	"sync"
 
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
@@ -28,7 +28,7 @@ import (
 // at least X blocks proposed by itself.
 type StopByConfirmedBlocks struct {
 	apps               map[types.NodeID]*App
-	dbs                map[types.NodeID]blockdb.BlockDatabase
+	dbs                map[types.NodeID]db.Database
 	lastCheckDelivered map[types.NodeID]int
 	confirmedBlocks    map[types.NodeID]int
 	blockCount         int
@@ -39,7 +39,7 @@ type StopByConfirmedBlocks struct {
 func NewStopByConfirmedBlocks(
 	blockCount int,
 	apps map[types.NodeID]*App,
-	dbs map[types.NodeID]blockdb.BlockDatabase) *StopByConfirmedBlocks {
+	dbs map[types.NodeID]db.Database) *StopByConfirmedBlocks {
 	confirmedBlocks := make(map[types.NodeID]int)
 	for nID := range apps {
 		confirmedBlocks[nID] = 0
@@ -60,10 +60,10 @@ func (s *StopByConfirmedBlocks) ShouldStop(nID types.NodeID) bool {
 	// Accumulate confirmed blocks proposed by this node in this round.
 	lastChecked := s.lastCheckDelivered[nID]
 	currentConfirmedBlocks := s.confirmedBlocks[nID]
-	db := s.dbs[nID]
+	dbInst := s.dbs[nID]
 	s.apps[nID].WithLock(func(app *App) {
 		for _, h := range app.DeliverSequence[lastChecked:] {
-			b, err := db.Get(h)
+			b, err := dbInst.GetBlock(h)
 			if err != nil {
 				panic(err)
 			}
@@ -90,7 +90,7 @@ type StopByRound struct {
 	currentRounds      map[types.NodeID]uint64
 	lastCheckDelivered map[types.NodeID]int
 	apps               map[types.NodeID]*App
-	dbs                map[types.NodeID]blockdb.BlockDatabase
+	dbs                map[types.NodeID]db.Database
 	lock               sync.Mutex
 }
 
@@ -98,7 +98,7 @@ type StopByRound struct {
 func NewStopByRound(
 	round uint64,
 	apps map[types.NodeID]*App,
-	dbs map[types.NodeID]blockdb.BlockDatabase) *StopByRound {
+	dbs map[types.NodeID]db.Database) *StopByRound {
 	return &StopByRound{
 		untilRound:         round,
 		currentRounds:      make(map[types.NodeID]uint64),
@@ -115,10 +115,10 @@ func (s *StopByRound) ShouldStop(nID types.NodeID) bool {
 	// Cache latest round of this node.
 	if curRound := s.currentRounds[nID]; curRound < s.untilRound {
 		lastChecked := s.lastCheckDelivered[nID]
-		db := s.dbs[nID]
+		dbInst := s.dbs[nID]
 		s.apps[nID].WithLock(func(app *App) {
 			for _, h := range app.DeliverSequence[lastChecked:] {
-				b, err := db.Get(h)
+				b, err := dbInst.GetBlock(h)
 				if err != nil {
 					panic(err)
 				}

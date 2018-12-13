@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/core"
-	"github.com/dexon-foundation/dexon-consensus/core/blockdb"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
@@ -125,13 +125,13 @@ func VerifyApps(apps map[types.NodeID]*test.App) (err error) {
 	return
 }
 
-// CollectAppAndDBFromNodes collects test.App and blockdb.BlockDatabase
+// CollectAppAndDBFromNodes collects test.App and db.Database
 // from nodes.
 func CollectAppAndDBFromNodes(nodes map[types.NodeID]*Node) (
 	apps map[types.NodeID]*test.App,
-	dbs map[types.NodeID]blockdb.BlockDatabase) {
+	dbs map[types.NodeID]db.Database) {
 	apps = make(map[types.NodeID]*test.App)
-	dbs = make(map[types.NodeID]blockdb.BlockDatabase)
+	dbs = make(map[types.NodeID]db.Database)
 	for nID, node := range nodes {
 		apps[nID] = node.app()
 		dbs[nID] = node.db()
