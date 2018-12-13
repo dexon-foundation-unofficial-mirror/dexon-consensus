@@ -103,6 +103,7 @@ func (s *ConsensusTestSuite) setupNodes(
 
 func (s *ConsensusTestSuite) verifyNodes(nodes map[types.NodeID]*node) {
 	for ID, node := range nodes {
+		s.Require().NoError(test.VerifyDB(node.db))
 		s.Require().NoError(node.app.Verify())
 		for otherID, otherNode := range nodes {
 			if ID == otherID {

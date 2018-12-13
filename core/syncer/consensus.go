@@ -42,6 +42,10 @@ var (
 	// ErrMismatchBlockHashSequence means the delivering sequence is not
 	// correct, compared to finalized blocks.
 	ErrMismatchBlockHashSequence = fmt.Errorf("mismatch block hash sequence")
+	// ErrInvalidSyncingFinalizationHeight raised when the blocks to sync is
+	// not following the compaction chain tip in database.
+	ErrInvalidSyncingFinalizationHeight = fmt.Errorf(
+		"invalid syncing finalization height")
 )
 
 // Consensus is for syncing consensus module.
@@ -394,6 +398,15 @@ func (con *Consensus) SyncBlocks(
 			return nil, ErrInvalidBlockOrder
 		}
 	}
+	// Make sure the first block is the next block of current compaction chain
+	// tip in DB.
+	_, tipHeight := con.db.GetCompactionChainTipInfo()
+	if blocks[0].Finalization.Height != tipHeight+1 {
+		con.logger.Error("mismatched finalization height",
+			"now", blocks[0].Finalization.Height,
+			"expected", tipHeight+1)
+		return nil, ErrInvalidSyncingFinalizationHeight
+	}
 	con.logger.Info("syncBlocks",
 		"position", &blocks[0].Position,
 		"final height", blocks[0].Finalization.Height,
@@ -404,9 +417,18 @@ func (con *Consensus) SyncBlocks(
 	for _, b := range blocks {
 		// TODO(haoping) remove this if lattice puts blocks into db.
 		if err := con.db.PutBlock(*b); err != nil {
-			if err != db.ErrBlockExists {
+			// A block might be put into db when confirmed by BA, but not
+			// finalized yet.
+			if err == db.ErrBlockExists {
+				err = con.db.UpdateBlock(*b)
+			}
+			if err != nil {
 				return nil, err
 			}
+		}
+		if err := con.db.PutCompactionChainTipInfo(
+			b.Hash, b.Finalization.Height); err != nil {
+			return nil, err
 		}
 		if err := con.processFinalizedBlock(b); err != nil {
 			return nil, err

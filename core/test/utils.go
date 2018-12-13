@@ -18,6 +18,7 @@
 package test
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -26,6 +27,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
 	"github.com/dexon-foundation/dexon/rlp"
@@ -169,4 +171,33 @@ func cloneBlockRandomnessResult(rand *types.BlockRandomnessResult) (
 		panic(err)
 	}
 	return
+}
+
+var (
+	// ErrCompactionChainTipBlockNotExists raised when the hash of compaction
+	// chain tip doesn't match a block in database.
+	ErrCompactionChainTipBlockNotExists = errors.New(
+		"compaction chain tip block not exists")
+	// ErrEmptyCompactionChainTipInfo raised when a compaction chain tip info
+	// is empty.
+	ErrEmptyCompactionChainTipInfo = errors.New(
+		"empty compaction chain tip info")
+	// ErrMismatchBlockHash raise when the hash for that block mismatched.
+	ErrMismatchBlockHash = errors.New("mismatched block hash")
+)
+
+// VerifyDB check if a database is valid after test.
+func VerifyDB(db db.Database) error {
+	hash, height := db.GetCompactionChainTipInfo()
+	if (hash == common.Hash{}) || height == 0 {
+		return ErrEmptyCompactionChainTipInfo
+	}
+	b, err := db.GetBlock(hash)
+	if err != nil {
+		return err
+	}
+	if b.Hash != hash {
+		return ErrMismatchBlockHash
+	}
+	return nil
 }

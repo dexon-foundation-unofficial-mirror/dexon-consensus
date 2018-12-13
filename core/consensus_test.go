@@ -451,6 +451,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 			nb.wait()
 		}
 		verify(obj.app)
+		req.NoError(test.VerifyDB(obj.con.db))
 	}
 }
 

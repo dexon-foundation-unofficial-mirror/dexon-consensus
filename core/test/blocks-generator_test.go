@@ -18,7 +18,6 @@
 package test
 
 import (
-	"fmt"
 	"sort"
 	"testing"
 	"time"
@@ -318,7 +317,6 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 		totalAckCount += len(b.Acks)
 	}
 	// At least all blocks can ack some non-parent block.
-	fmt.Println(totalAckCount, totalBlockCount)
 	req.True(totalAckCount/totalBlockCount >= 2)
 }
 

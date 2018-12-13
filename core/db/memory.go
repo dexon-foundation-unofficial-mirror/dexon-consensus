@@ -41,10 +41,13 @@ func (seq *blockSeqIterator) NextBlock() (types.Block, error) {
 
 // MemBackedDB is a memory backed DB implementation.
 type MemBackedDB struct {
-	blocksMutex        sync.RWMutex
-	blockHashSequence  common.Hashes
-	blocksByHash       map[common.Hash]*types.Block
-	persistantFilePath string
+	blocksLock               sync.RWMutex
+	blockHashSequence        common.Hashes
+	blocksByHash             map[common.Hash]*types.Block
+	compactionChainTipLock   sync.RWMutex
+	compactionChainTipHash   common.Hash
+	compactionChainTipHeight uint64
+	persistantFilePath       string
 }
 
 // NewMemBackedDB initialize a memory-backed database.
@@ -87,8 +90,8 @@ func NewMemBackedDB(persistantFilePath ...string) (
 
 // HasBlock returns wheter or not the DB has a block identified with the hash.
 func (m *MemBackedDB) HasBlock(hash common.Hash) bool {
-	m.blocksMutex.RLock()
-	defer m.blocksMutex.RUnlock()
+	m.blocksLock.RLock()
+	defer m.blocksLock.RUnlock()
 
 	_, ok := m.blocksByHash[hash]
 	return ok
@@ -96,8 +99,8 @@ func (m *MemBackedDB) HasBlock(hash common.Hash) bool {
 
 // GetBlock returns a block given a hash.
 func (m *MemBackedDB) GetBlock(hash common.Hash) (types.Block, error) {
-	m.blocksMutex.RLock()
-	defer m.blocksMutex.RUnlock()
+	m.blocksLock.RLock()
+	defer m.blocksLock.RUnlock()
 
 	return m.internalGetBlock(hash)
 }
@@ -116,8 +119,8 @@ func (m *MemBackedDB) PutBlock(block types.Block) error {
 		return ErrBlockExists
 	}
 
-	m.blocksMutex.Lock()
-	defer m.blocksMutex.Unlock()
+	m.blocksLock.Lock()
+	defer m.blocksLock.Unlock()
 
 	m.blockHashSequence = append(m.blockHashSequence, block.Hash)
 	m.blocksByHash[block.Hash] = &block
@@ -130,11 +133,33 @@ func (m *MemBackedDB) UpdateBlock(block types.Block) error {
 		return ErrBlockDoesNotExist
 	}
 
-	m.blocksMutex.Lock()
-	defer m.blocksMutex.Unlock()
+	m.blocksLock.Lock()
+	defer m.blocksLock.Unlock()
 
 	m.blocksByHash[block.Hash] = &block
 	return nil
+}
+
+// PutCompactionChainTipInfo saves tip of compaction chain into the database.
+func (m *MemBackedDB) PutCompactionChainTipInfo(
+	blockHash common.Hash, height uint64) error {
+	m.compactionChainTipLock.Lock()
+	defer m.compactionChainTipLock.Unlock()
+	if m.compactionChainTipHeight >= height {
+		return ErrInvalidCompactionChainTipHeight
+	}
+	m.compactionChainTipHeight = height
+	m.compactionChainTipHash = blockHash
+	return nil
+}
+
+// GetCompactionChainTipInfo get the tip info of compaction chain into the
+// database.
+func (m *MemBackedDB) GetCompactionChainTipInfo() (
+	hash common.Hash, height uint64) {
+	m.compactionChainTipLock.RLock()
+	defer m.compactionChainTipLock.RUnlock()
+	return m.compactionChainTipHash, m.compactionChainTipHeight
 }
 
 // Close implement Closer interface, which would release allocated resource.
@@ -145,8 +170,8 @@ func (m *MemBackedDB) Close() (err error) {
 		return
 	}
 
-	m.blocksMutex.RLock()
-	defer m.blocksMutex.RUnlock()
+	m.blocksLock.RLock()
+	defer m.blocksLock.RUnlock()
 
 	toDump := struct {
 		Sequence common.Hashes
@@ -167,8 +192,8 @@ func (m *MemBackedDB) Close() (err error) {
 }
 
 func (m *MemBackedDB) getBlockByIndex(idx int) (types.Block, error) {
-	m.blocksMutex.RLock()
-	defer m.blocksMutex.RUnlock()
+	m.blocksLock.RLock()
+	defer m.blocksLock.RUnlock()
 
 	if idx >= len(m.blockHashSequence) {
 		return types.Block{}, ErrIterationFinished

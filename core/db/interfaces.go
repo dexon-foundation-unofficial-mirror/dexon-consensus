@@ -38,6 +38,11 @@ var (
 	ErrClosed = fmt.Errorf("db closed")
 	// ErrNotImplemented is the error that some interface is not implemented.
 	ErrNotImplemented = fmt.Errorf("not implemented")
+	// ErrInvalidCompactionChainTipHeight means the newly updated height of
+	// the tip of compaction chain is invalid, usually means it's smaller than
+	// current cached one.
+	ErrInvalidCompactionChainTipHeight = fmt.Errorf(
+		"invalid compaction chain tip height")
 )
 
 // Database is the interface for a Database.
@@ -55,12 +60,18 @@ type Reader interface {
 	HasBlock(hash common.Hash) bool
 	GetBlock(hash common.Hash) (types.Block, error)
 	GetAllBlocks() (BlockIterator, error)
+
+	// GetCompactionChainTipInfo returns the block hash and finalization height
+	// of the tip block of compaction chain. Empty hash and zero height means
+	// the compaction chain is empty.
+	GetCompactionChainTipInfo() (common.Hash, uint64)
 }
 
 // Writer defines the interface for writing blocks into DB.
 type Writer interface {
 	UpdateBlock(block types.Block) error
 	PutBlock(block types.Block) error
+	PutCompactionChainTipInfo(common.Hash, uint64) error
 }
 
 // BlockIterator defines an iterator on blocks hold

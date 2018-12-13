@@ -72,61 +72,77 @@ func (s *MemBackedDBTestSuite) TestSaveAndLoad() {
 
 	// Make sure the file pointed by 'dbPath' doesn't exist.
 	_, err := os.Stat(dbPath)
-	s.Require().NotNil(err)
+	s.Require().Error(err)
 
 	dbInst, err := NewMemBackedDB(dbPath)
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	s.Require().NotNil(dbInst)
 	defer func() {
 		if dbInst != nil {
-			s.Nil(os.Remove(dbPath))
+			s.NoError(os.Remove(dbPath))
 			dbInst = nil
 		}
 	}()
 
-	s.Nil(dbInst.PutBlock(*s.b00))
-	s.Nil(dbInst.PutBlock(*s.b01))
-	s.Nil(dbInst.PutBlock(*s.b02))
-	s.Nil(dbInst.Close())
+	s.NoError(dbInst.PutBlock(*s.b00))
+	s.NoError(dbInst.PutBlock(*s.b01))
+	s.NoError(dbInst.PutBlock(*s.b02))
+	s.NoError(dbInst.Close())
 
 	// Load the json file back to check if all inserted blocks
 	// exists.
 	dbInst, err = NewMemBackedDB(dbPath)
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	s.Require().NotNil(dbInst)
 	s.True(dbInst.HasBlock(s.b00.Hash))
 	s.True(dbInst.HasBlock(s.b01.Hash))
 	s.True(dbInst.HasBlock(s.b02.Hash))
-	s.Nil(dbInst.Close())
+	s.NoError(dbInst.Close())
 }
 
 func (s *MemBackedDBTestSuite) TestIteration() {
 	// Make sure the file pointed by 'dbPath' doesn't exist.
 	dbInst, err := NewMemBackedDB()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	s.Require().NotNil(dbInst)
 
 	// Setup database.
-	s.Nil(dbInst.PutBlock(*s.b00))
-	s.Nil(dbInst.PutBlock(*s.b01))
-	s.Nil(dbInst.PutBlock(*s.b02))
+	s.NoError(dbInst.PutBlock(*s.b00))
+	s.NoError(dbInst.PutBlock(*s.b01))
+	s.NoError(dbInst.PutBlock(*s.b02))
 
 	// Check if we can iterate all 3 blocks.
 	iter, err := dbInst.GetAllBlocks()
-	s.Require().Nil(err)
+	s.Require().NoError(err)
 	touched := common.Hashes{}
 	for {
 		b, err := iter.NextBlock()
 		if err == ErrIterationFinished {
 			break
 		}
-		s.Require().Nil(err)
+		s.Require().NoError(err)
 		touched = append(touched, b.Hash)
 	}
 	s.Len(touched, 3)
 	s.Contains(touched, s.b00.Hash)
 	s.Contains(touched, s.b01.Hash)
 	s.Contains(touched, s.b02.Hash)
+}
+
+func (s *MemBackedDBTestSuite) TestCompactionChainTipInfo() {
+	dbInst, err := NewMemBackedDB()
+	s.Require().NoError(err)
+	s.Require().NotNil(dbInst)
+	// Save some tip info.
+	hash := common.NewRandomHash()
+	s.Require().NoError(dbInst.PutCompactionChainTipInfo(hash, 123))
+	// Get it back to check.
+	hashBack, height := dbInst.GetCompactionChainTipInfo()
+	s.Require().Equal(hash, hashBack)
+	s.Require().Equal(height, uint64(123))
+	// Unable to put compaction chain tip info with lower height.
+	err = dbInst.PutCompactionChainTipInfo(hash, 122)
+	s.Require().IsType(err, ErrInvalidCompactionChainTipHeight)
 }
 
 func TestMemBackedDB(t *testing.T) {
