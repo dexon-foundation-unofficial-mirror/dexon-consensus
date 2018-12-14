@@ -323,6 +323,85 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 	}
 }
 
+func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
+	k := 4
+	n := 10
+	round := uint64(0)
+	lambdaDKG := 1000 * time.Millisecond
+	s.setupNodes(n)
+
+	cfgChains := make(map[types.NodeID]*configurationChain)
+	recv := newTestCCReceiver(s)
+
+	pks := make([]crypto.PublicKey, 0, len(s.prvKeys))
+	for _, prv := range s.prvKeys {
+		pks = append(pks, prv.PublicKey())
+	}
+
+	for _, nID := range s.nIDs {
+		state := test.NewState(
+			pks, 100*time.Millisecond, &common.NullLogger{}, true)
+		gov, err := test.NewGovernance(state, ConfigRoundShift)
+		s.Require().NoError(err)
+		s.Require().NoError(state.RequestChange(
+			test.StateChangeLambdaDKG, lambdaDKG))
+		cache := utils.NewNodeSetCache(gov)
+		cfgChains[nID] = newConfigurationChain(
+			nID, recv, gov, cache, &common.NullLogger{})
+		recv.nodes[nID] = cfgChains[nID]
+		recv.govs[nID] = gov
+	}
+
+	for _, cc := range cfgChains {
+		cc.registerDKG(round, k)
+	}
+
+	for _, gov := range recv.govs {
+		s.Require().Len(gov.DKGMasterPublicKeys(round), n)
+	}
+
+	errs := make(chan error, n)
+	wg := sync.WaitGroup{}
+	wg.Add(n)
+	for _, cc := range cfgChains {
+		go func(cc *configurationChain) {
+			defer wg.Done()
+			errs <- cc.runDKG(round)
+		}(cc)
+	}
+	go func() {
+		// Node 0 proposes NackComplaint to all others at 3λ but they should
+		// be ignored because NackComplaint shoould be proposed before 2λ.
+		time.Sleep(lambdaDKG * 3)
+		nID := s.nIDs[0]
+		for _, targetNode := range s.nIDs {
+			if targetNode == nID {
+				continue
+			}
+			recv.ProposeDKGComplaint(&typesDKG.Complaint{
+				ProposerID: nID,
+				Round:      round,
+				PrivateShare: typesDKG.PrivateShare{
+					ProposerID: targetNode,
+					Round:      round,
+				},
+			})
+		}
+	}()
+	wg.Wait()
+	for range cfgChains {
+		s.Require().NoError(<-errs)
+	}
+	for nID, cc := range cfgChains {
+		if _, exist := cc.gpk[round]; !exist {
+			s.FailNow("Should be qualifyied")
+		}
+		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+			s.FailNow("Should be qualifyied")
+		}
+	}
+}
+
 func (s *ConfigurationChainTestSuite) TestMultipleTSig() {
 	k := 2
 	n := 7

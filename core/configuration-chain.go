@@ -153,7 +153,8 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	cc.dkgLock.Lock()
 	// Phase 5(T = 2λ): Propose Anti nack complaint.
 	cc.logger.Debug("Calling Governance.DKGComplaints", "round", round)
-	cc.dkg.processNackComplaints(cc.gov.DKGComplaints(round))
+	complaints := cc.gov.DKGComplaints(round)
+	cc.dkg.processNackComplaints(complaints)
 	cc.dkgLock.Unlock()
 	<-ticker.Tick()
 	cc.dkgLock.Lock()
@@ -163,8 +164,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	<-ticker.Tick()
 	cc.dkgLock.Lock()
 	// Phase 7(T = 4λ): Enforce complaints and nack complaints.
-	cc.logger.Debug("Calling Governance.DKGComplaints", "round", round)
-	cc.dkg.enforceNackComplaints(cc.gov.DKGComplaints(round))
+	cc.dkg.enforceNackComplaints(complaints)
 	// Enforce complaint is done in `processPrivateShare`.
 	// Phase 8(T = 5λ): DKG finalize.
 	cc.dkgLock.Unlock()

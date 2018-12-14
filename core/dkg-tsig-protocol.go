@@ -378,16 +378,21 @@ func NewDKGGroupPublicKey(
 
 	// Calculate qualify members.
 	disqualifyIDs := map[types.NodeID]struct{}{}
-	complaintsByID := map[types.NodeID]int{}
+	complaintsByID := map[types.NodeID]map[types.NodeID]struct{}{}
 	for _, complaint := range complaints {
 		if complaint.IsNack() {
-			complaintsByID[complaint.PrivateShare.ProposerID]++
+			if _, exist := complaintsByID[complaint.PrivateShare.ProposerID]; !exist {
+				complaintsByID[complaint.PrivateShare.ProposerID] =
+					make(map[types.NodeID]struct{})
+			}
+			complaintsByID[complaint.PrivateShare.ProposerID][complaint.ProposerID] =
+				struct{}{}
 		} else {
 			disqualifyIDs[complaint.PrivateShare.ProposerID] = struct{}{}
 		}
 	}
-	for nID, num := range complaintsByID {
-		if num > threshold {
+	for nID, complaints := range complaintsByID {
+		if len(complaints) > threshold {
 			disqualifyIDs[nID] = struct{}{}
 		}
 	}

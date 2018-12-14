@@ -353,6 +353,48 @@ func (s *DKGTSIGProtocolTestSuite) TestComplaint() {
 	s.Len(receiver.complaints, 0)
 }
 
+// TestDuplicateComplaint tests if the duplicated complaint is process properly.
+func (s *DKGTSIGProtocolTestSuite) TestDuplicateComplaint() {
+	k := 3
+	n := 10
+	round := uint64(1)
+	_, pubKeys, err := test.NewKeys(5)
+	s.Require().NoError(err)
+	gov, err := test.NewGovernance(test.NewState(
+		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
+	s.Require().NoError(err)
+
+	receivers, _ := s.newProtocols(k, n, round)
+
+	byzantineID := s.nIDs[0]
+	victomID := s.nIDs[1]
+
+	for _, receiver := range receivers {
+		gov.AddDKGMasterPublicKey(round, receiver.mpk)
+	}
+
+	// Test for nack complaints.
+	complaints := make([]*typesDKG.Complaint, k+1)
+	for i := range complaints {
+		complaints[i] = &typesDKG.Complaint{
+			ProposerID: byzantineID,
+			Round:      round,
+			PrivateShare: typesDKG.PrivateShare{
+				ProposerID: victomID,
+				Round:      round,
+			},
+		}
+		s.Require().True(complaints[i].IsNack())
+	}
+
+	gpk, err := NewDKGGroupPublicKey(round,
+		gov.DKGMasterPublicKeys(round), complaints,
+		k,
+	)
+	s.Require().NoError(err)
+	s.Require().Len(gpk.qualifyIDs, n)
+}
+
 // TestAntiComplaint tests if a nack complaint is received,
 // create an anti complaint.
 func (s *DKGTSIGProtocolTestSuite) TestAntiComplaint() {
