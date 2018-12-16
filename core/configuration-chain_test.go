@@ -18,6 +18,7 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"sync"
@@ -30,6 +31,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/dkg"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
@@ -220,8 +222,10 @@ func (s *ConfigurationChainTestSuite) runDKG(
 			pks, 100*time.Millisecond, &common.NullLogger{}, true), ConfigRoundShift)
 		s.Require().NoError(err)
 		cache := utils.NewNodeSetCache(gov)
+		dbInst, err := db.NewMemBackedDB()
+		s.Require().NoError(err)
 		cfgChains[nID] = newConfigurationChain(
-			nID, recv, gov, cache, &common.NullLogger{})
+			nID, recv, gov, cache, dbInst, &common.NullLogger{})
 		recv.nodes[nID] = cfgChains[nID]
 		recv.govs[nID] = gov
 	}
@@ -346,8 +350,10 @@ func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 		s.Require().NoError(state.RequestChange(
 			test.StateChangeLambdaDKG, lambdaDKG))
 		cache := utils.NewNodeSetCache(gov)
+		dbInst, err := db.NewMemBackedDB()
+		s.Require().NoError(err)
 		cfgChains[nID] = newConfigurationChain(
-			nID, recv, gov, cache, &common.NullLogger{})
+			nID, recv, gov, cache, dbInst, &common.NullLogger{})
 		recv.nodes[nID] = cfgChains[nID]
 		recv.govs[nID] = gov
 	}
@@ -496,6 +502,31 @@ func (s *ConfigurationChainTestSuite) TestTSigTimeout() {
 			continue
 		}
 		s.Equal(<-errs, ErrNotEnoughtPartialSignatures)
+	}
+}
+
+func (s *ConfigurationChainTestSuite) TestDKGSignerRecoverFromDB() {
+	k := 2
+	n := 7
+	round := uint64(0)
+	cfgChains := s.runDKG(k, n, round)
+	hash := crypto.Keccak256Hash([]byte("Hash1"))
+	// Make sure we have more than one configurationChain instance.
+	s.Require().True(len(cfgChains) > 0)
+	for _, cc := range cfgChains {
+		psig1, err := cc.preparePartialSignature(round, hash)
+		s.Require().NoError(err)
+		// Create a cloned configurationChain, we should be able to recover
+		// the DKG signer.
+		clonedCC := newConfigurationChain(
+			cc.ID, cc.recv, cc.gov, cc.cache, cc.db, cc.logger,
+		)
+		psig2, err := clonedCC.preparePartialSignature(round, hash)
+		s.Require().NoError(err)
+		// Make sure the signed signature are equal.
+		s.Require().Equal(bytes.Compare(
+			psig1.PartialSignature.Signature,
+			psig2.PartialSignature.Signature), 0)
 	}
 }
 

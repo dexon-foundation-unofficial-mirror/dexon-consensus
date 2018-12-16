@@ -18,9 +18,12 @@
 package db
 
 import (
+	"encoding/binary"
+
 	"github.com/syndtr/goleveldb/leveldb"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
+	"github.com/dexon-foundation/dexon-consensus/core/crypto/dkg"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/dexon-foundation/dexon/rlp"
 )
@@ -28,6 +31,7 @@ import (
 var (
 	blockKeyPrefix            = []byte("b-")
 	compactionChainTipInfoKey = []byte("cc-tip")
+	dkgPrivateKeyKeyPrefix    = []byte("dkg-prvs")
 )
 
 type compactionChainTipInfo struct {
@@ -195,9 +199,65 @@ func (lvl *LevelDBBackedDB) GetCompactionChainTipInfo() (
 	return
 }
 
+// HasDKGPrivateKey check existence of DKG private key of one round.
+func (lvl *LevelDBBackedDB) HasDKGPrivateKey(round uint64) (bool, error) {
+	exists, err := lvl.db.Has(lvl.getDKGPrivateKeyKey(round), nil)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+// GetDKGPrivateKey get DKG private key of one round.
+func (lvl *LevelDBBackedDB) GetDKGPrivateKey(round uint64) (
+	prv dkg.PrivateKey, err error) {
+	queried, err := lvl.db.Get(lvl.getDKGPrivateKeyKey(round), nil)
+	if err != nil {
+		if err == leveldb.ErrNotFound {
+			err = ErrDKGPrivateKeyDoesNotExist
+		}
+		return
+	}
+	if err = rlp.DecodeBytes(queried, &prv); err != nil {
+		return
+	}
+	return
+}
+
+// PutDKGPrivateKey save DKG private key of one round.
+func (lvl *LevelDBBackedDB) PutDKGPrivateKey(
+	round uint64, prv dkg.PrivateKey) error {
+	// Check existence.
+	exists, err := lvl.HasDKGPrivateKey(round)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return ErrDKGPrivateKeyExists
+	}
+	marshaled, err := rlp.EncodeToBytes(&prv)
+	if err != nil {
+		return err
+	}
+	if err := lvl.db.Put(
+		lvl.getDKGPrivateKeyKey(round), marshaled, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (lvl *LevelDBBackedDB) getBlockKey(hash common.Hash) (ret []byte) {
 	ret = make([]byte, len(blockKeyPrefix)+len(hash[:]))
 	copy(ret, blockKeyPrefix)
 	copy(ret[len(blockKeyPrefix):], hash[:])
+	return
+}
+
+func (lvl *LevelDBBackedDB) getDKGPrivateKeyKey(
+	round uint64) (ret []byte) {
+	ret = make([]byte, len(dkgPrivateKeyKeyPrefix)+8)
+	copy(ret, dkgPrivateKeyKeyPrefix)
+	binary.LittleEndian.PutUint64(
+		ret[len(dkgPrivateKeyKeyPrefix):], round)
 	return
 }

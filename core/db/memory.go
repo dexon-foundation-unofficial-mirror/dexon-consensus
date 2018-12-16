@@ -24,6 +24,7 @@ import (
 	"sync"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
+	"github.com/dexon-foundation/dexon-consensus/core/crypto/dkg"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
@@ -47,6 +48,8 @@ type MemBackedDB struct {
 	compactionChainTipLock   sync.RWMutex
 	compactionChainTipHash   common.Hash
 	compactionChainTipHeight uint64
+	dkgPrivateKeysLock       sync.RWMutex
+	dkgPrivateKeys           map[uint64]*dkg.PrivateKey
 	persistantFilePath       string
 }
 
@@ -56,6 +59,7 @@ func NewMemBackedDB(persistantFilePath ...string) (
 	dbInst = &MemBackedDB{
 		blockHashSequence: common.Hashes{},
 		blocksByHash:      make(map[common.Hash]*types.Block),
+		dkgPrivateKeys:    make(map[uint64]*dkg.PrivateKey),
 	}
 	if len(persistantFilePath) == 0 || len(persistantFilePath[0]) == 0 {
 		return
@@ -160,6 +164,37 @@ func (m *MemBackedDB) GetCompactionChainTipInfo() (
 	m.compactionChainTipLock.RLock()
 	defer m.compactionChainTipLock.RUnlock()
 	return m.compactionChainTipHash, m.compactionChainTipHeight
+}
+
+// HasDKGPrivateKey check existence of DKG private key of one round.
+func (m *MemBackedDB) HasDKGPrivateKey(round uint64) (bool, error) {
+	m.dkgPrivateKeysLock.RLock()
+	defer m.dkgPrivateKeysLock.RUnlock()
+	_, exists := m.dkgPrivateKeys[round]
+	return exists, nil
+}
+
+// GetDKGPrivateKey get DKG private key of one round.
+func (m *MemBackedDB) GetDKGPrivateKey(round uint64) (
+	dkg.PrivateKey, error) {
+	m.dkgPrivateKeysLock.RLock()
+	defer m.dkgPrivateKeysLock.RUnlock()
+	if prv, exists := m.dkgPrivateKeys[round]; exists {
+		return *prv, nil
+	}
+	return dkg.PrivateKey{}, ErrDKGPrivateKeyDoesNotExist
+}
+
+// PutDKGPrivateKey save DKG private key of one round.
+func (m *MemBackedDB) PutDKGPrivateKey(
+	round uint64, prv dkg.PrivateKey) error {
+	m.dkgPrivateKeysLock.Lock()
+	defer m.dkgPrivateKeysLock.Unlock()
+	if _, exists := m.dkgPrivateKeys[round]; exists {
+		return ErrDKGPrivateKeyExists
+	}
+	m.dkgPrivateKeys[round] = &prv
+	return nil
 }
 
 // Close implement Closer interface, which would release allocated resource.

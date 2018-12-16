@@ -24,6 +24,7 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
@@ -53,6 +54,7 @@ type configurationChain struct {
 	tsigTouched     map[common.Hash]struct{}
 	tsigReady       *sync.Cond
 	cache           *utils.NodeSetCache
+	db              db.Database
 	dkgSet          map[types.NodeID]struct{}
 	mpkReady        bool
 	pendingPrvShare map[types.NodeID]*typesDKG.PrivateShare
@@ -66,6 +68,7 @@ func newConfigurationChain(
 	recv dkgReceiver,
 	gov Governance,
 	cache *utils.NodeSetCache,
+	dbInst db.Database,
 	logger common.Logger) *configurationChain {
 	return &configurationChain{
 		ID:          ID,
@@ -78,6 +81,7 @@ func newConfigurationChain(
 		tsigTouched: make(map[common.Hash]struct{}),
 		tsigReady:   sync.NewCond(&sync.Mutex{}),
 		cache:       cache,
+		db:          dbInst,
 		pendingPsig: make(map[common.Hash][]*typesDKG.PartialSignature),
 	}
 }
@@ -104,6 +108,10 @@ func (cc *configurationChain) registerDKG(round uint64, threshold int) {
 }
 
 func (cc *configurationChain) runDKG(round uint64) error {
+	// Check if corresponding DKG signer is ready.
+	if _, _, err := cc.getDKGInfo(round); err == nil {
+		return nil
+	}
 	cc.dkgLock.Lock()
 	defer cc.dkgLock.Unlock()
 	if cc.dkg == nil || cc.dkg.round != round {
@@ -113,20 +121,11 @@ func (cc *configurationChain) runDKG(round uint64) error {
 		}
 		return ErrDKGNotRegistered
 	}
-	if func() bool {
-		cc.dkgResult.RLock()
-		defer cc.dkgResult.RUnlock()
-		_, exist := cc.gpk[round]
-		return exist
-	}() {
-		return nil
-	}
 	cc.logger.Debug("Calling Governance.IsDKGFinal", "round", round)
 	if cc.gov.IsDKGFinal(round) {
 		cc.logger.Warn("DKG already final", "round", round)
 		return nil
 	}
-
 	ticker := newTicker(cc.gov, round, TickerDKG)
 	cc.dkgLock.Unlock()
 	<-ticker.Tick()
@@ -209,6 +208,10 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	if err != nil {
 		return err
 	}
+	// Save private shares to DB.
+	if err = cc.db.PutDKGPrivateKey(round, *signer.privateKey); err != nil {
+		return err
+	}
 	cc.dkgResult.Lock()
 	defer cc.dkgResult.Unlock()
 	cc.dkgSigner[round] = signer
@@ -220,23 +223,74 @@ func (cc *configurationChain) isDKGReady(round uint64) bool {
 	if !cc.gov.IsDKGFinal(round) {
 		return false
 	}
-	return func() bool {
+	_, _, err := cc.getDKGInfo(round)
+	return err == nil
+}
+
+func (cc *configurationChain) getDKGInfo(
+	round uint64) (*DKGGroupPublicKey, *dkgShareSecret, error) {
+	getFromCache := func() (*DKGGroupPublicKey, *dkgShareSecret) {
 		cc.dkgResult.RLock()
 		defer cc.dkgResult.RUnlock()
-		_, exist := cc.gpk[round]
-		return exist
-	}()
+		gpk := cc.gpk[round]
+		signer := cc.dkgSigner[round]
+		return gpk, signer
+	}
+	gpk, signer := getFromCache()
+	if gpk == nil || signer == nil {
+		if err := cc.recoverDKGInfo(round); err != nil {
+			return nil, nil, err
+		}
+		gpk, signer = getFromCache()
+	}
+	if gpk == nil || signer == nil {
+		return nil, nil, ErrDKGNotReady
+	}
+	return gpk, signer, nil
+}
+
+func (cc *configurationChain) recoverDKGInfo(round uint64) error {
+	cc.dkgResult.Lock()
+	defer cc.dkgResult.Unlock()
+	_, signerExists := cc.dkgSigner[round]
+	_, gpkExists := cc.gpk[round]
+	if signerExists && gpkExists {
+		return nil
+	}
+	if !cc.gov.IsDKGFinal(round) {
+		return ErrDKGNotReady
+	}
+
+	threshold := getDKGThreshold(cc.gov.Configuration(round))
+	// Restore group public key.
+	gpk, err := NewDKGGroupPublicKey(round,
+		cc.gov.DKGMasterPublicKeys(round),
+		cc.gov.DKGComplaints(round),
+		threshold)
+	if err != nil {
+		return err
+	}
+	// Restore DKG share secret, this segment of code is copied from
+	// dkgProtocol.recoverShareSecret.
+	if len(gpk.qualifyIDs) < threshold {
+		return ErrNotReachThreshold
+	}
+	// Check if we have private shares in DB.
+	prvKey, err := cc.db.GetDKGPrivateKey(round)
+	if err != nil {
+		return err
+	}
+	cc.gpk[round] = gpk
+	cc.dkgSigner[round] = &dkgShareSecret{
+		privateKey: &prvKey,
+	}
+	return nil
 }
 
 func (cc *configurationChain) preparePartialSignature(
 	round uint64, hash common.Hash) (*typesDKG.PartialSignature, error) {
-	signer, exist := func() (*dkgShareSecret, bool) {
-		cc.dkgResult.RLock()
-		defer cc.dkgResult.RUnlock()
-		signer, exist := cc.dkgSigner[round]
-		return signer, exist
-	}()
-	if !exist {
+	_, signer, _ := cc.getDKGInfo(round)
+	if signer == nil {
 		return nil, ErrDKGNotReady
 	}
 	return &typesDKG.PartialSignature{
@@ -264,13 +318,8 @@ func (cc *configurationChain) untouchTSigHash(hash common.Hash) {
 func (cc *configurationChain) runTSig(
 	round uint64, hash common.Hash) (
 	crypto.Signature, error) {
-	gpk, exist := func() (*DKGGroupPublicKey, bool) {
-		cc.dkgResult.RLock()
-		defer cc.dkgResult.RUnlock()
-		gpk, exist := cc.gpk[round]
-		return gpk, exist
-	}()
-	if !exist {
+	gpk, _, _ := cc.getDKGInfo(round)
+	if gpk == nil {
 		return crypto.Signature{}, ErrDKGNotReady
 	}
 	cc.tsigReady.L.Lock()

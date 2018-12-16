@@ -18,10 +18,12 @@
 package db
 
 import (
+	"bytes"
 	"os"
 	"testing"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
+	"github.com/dexon-foundation/dexon-consensus/core/crypto/dkg"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/stretchr/testify/suite"
 )
@@ -143,6 +145,29 @@ func (s *MemBackedDBTestSuite) TestCompactionChainTipInfo() {
 	// Unable to put compaction chain tip info with lower height.
 	err = dbInst.PutCompactionChainTipInfo(hash, 122)
 	s.Require().IsType(err, ErrInvalidCompactionChainTipHeight)
+}
+
+func (s *MemBackedDBTestSuite) TestDKGPrivateKey() {
+	dbInst, err := NewMemBackedDB()
+	s.Require().NoError(err)
+	s.Require().NotNil(dbInst)
+	p := dkg.NewPrivateKey()
+	// Check existence.
+	exists, err := dbInst.HasDKGPrivateKey(1)
+	s.Require().NoError(err)
+	s.Require().False(exists)
+	// We should be unable to get it, too.
+	_, err = dbInst.GetDKGPrivateKey(1)
+	s.Require().IsType(err, ErrDKGPrivateKeyDoesNotExist)
+	// Put it.
+	s.Require().NoError(dbInst.PutDKGPrivateKey(1, *p))
+	// Put it again, should not success.
+	err = dbInst.PutDKGPrivateKey(1, *p)
+	s.Require().IsType(err, ErrDKGPrivateKeyExists)
+	// Get it back.
+	tmpPrv, err := dbInst.GetDKGPrivateKey(1)
+	s.Require().NoError(err)
+	s.Require().Equal(bytes.Compare(p.Bytes(), tmpPrv.Bytes()), 0)
 }
 
 func TestMemBackedDB(t *testing.T) {

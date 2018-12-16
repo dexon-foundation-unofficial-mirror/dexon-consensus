@@ -18,7 +18,9 @@
 package dkg
 
 import (
+	"encoding/binary"
 	"fmt"
+	"math/rand"
 
 	"github.com/dexon-foundation/bls/ffi/go/bls"
 
@@ -68,4 +70,23 @@ func RecoverGroupPublicKey(pubShares []*PublicKeyShares) *PublicKey {
 		}
 	}
 	return pub
+}
+
+// NewRandomPrivateKeyShares constructs a private key shares randomly.
+func NewRandomPrivateKeyShares() *PrivateKeyShares {
+	// Generate IDs.
+	rndIDs := make(IDs, 0, 10)
+	for i := range rndIDs {
+		id := make([]byte, 8)
+		binary.LittleEndian.PutUint64(id, rand.Uint64())
+		rndIDs[i] = NewID(id)
+	}
+	prvShares := NewEmptyPrivateKeyShares()
+	prvShares.SetParticipants(rndIDs)
+	for _, id := range rndIDs {
+		if err := prvShares.AddShare(id, NewPrivateKey()); err != nil {
+			panic(err)
+		}
+	}
+	return prvShares
 }

@@ -424,6 +424,7 @@ func NewConsensus(
 		recv,
 		gov,
 		nodeSetCache,
+		db,
 		logger)
 	recv.cfgModule = cfgModule
 	// Construct Consensus instance.
@@ -490,6 +491,7 @@ func NewConsensusFromSyncer(
 		recv,
 		gov,
 		nodeSetCache,
+		db,
 		logger)
 	recv.cfgModule = cfgModule
 	// Setup Consensus instance.
@@ -576,7 +578,7 @@ func (con *Consensus) prepare(initBlock *types.Block) error {
 	}
 	if _, exist := dkgSet[con.ID]; exist {
 		con.logger.Info("Selected as DKG set", "round", initRound)
-		con.cfgModule.registerDKG(initRound, int(initConfig.DKGSetSize)/3+1)
+		con.cfgModule.registerDKG(initRound, getDKGThreshold(initConfig))
 		con.event.RegisterTime(con.dMoment.Add(initConfig.RoundInterval/4),
 			func(time.Time) {
 				con.runDKG(initRound, initConfig)
@@ -742,8 +744,7 @@ func (con *Consensus) initialRound(
 					return
 				}
 				con.logger.Info("Selected as DKG set", "round", nextRound)
-				con.cfgModule.registerDKG(
-					nextRound, int(config.DKGSetSize/3)+1)
+				con.cfgModule.registerDKG(nextRound, getDKGThreshold(config))
 				con.event.RegisterTime(
 					startTime.Add(config.RoundInterval*2/3),
 					func(time.Time) {

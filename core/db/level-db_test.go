@@ -18,6 +18,7 @@
 package db
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
+	"github.com/dexon-foundation/dexon-consensus/core/crypto/dkg"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
@@ -147,6 +149,35 @@ func (s *LevelDBTestSuite) TestCompactionChainTipInfo() {
 	// Unable to put compaction chain tip info with lower height.
 	err = dbInst.PutCompactionChainTipInfo(hash, 122)
 	s.Require().IsType(err, ErrInvalidCompactionChainTipHeight)
+}
+
+func (s *LevelDBTestSuite) TestDKGPrivateKey() {
+	dbName := fmt.Sprintf("test-db-%v-dkg-prv.db", time.Now().UTC())
+	dbInst, err := NewLevelDBBackedDB(dbName)
+	s.Require().NoError(err)
+	defer func(dbName string) {
+		err = dbInst.Close()
+		s.NoError(err)
+		err = os.RemoveAll(dbName)
+		s.NoError(err)
+	}(dbName)
+	p := dkg.NewPrivateKey()
+	// Check existence.
+	exists, err := dbInst.HasDKGPrivateKey(1)
+	s.Require().NoError(err)
+	s.Require().False(exists)
+	// We should be unable to get it, too.
+	_, err = dbInst.GetDKGPrivateKey(1)
+	s.Require().IsType(err, ErrDKGPrivateKeyDoesNotExist)
+	// Put it.
+	s.Require().NoError(dbInst.PutDKGPrivateKey(1, *p))
+	// Put it again, should not success.
+	err = dbInst.PutDKGPrivateKey(1, *p)
+	s.Require().IsType(err, ErrDKGPrivateKeyExists)
+	// Get it back.
+	tmpPrv, err := dbInst.GetDKGPrivateKey(1)
+	s.Require().NoError(err)
+	s.Require().Equal(bytes.Compare(p.Bytes(), tmpPrv.Bytes()), 0)
 }
 
 func TestLevelDB(t *testing.T) {

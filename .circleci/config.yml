@@ -68,6 +68,7 @@ jobs:
   unit_test:
     executor: go1_11
     environment: 
+      GOCACHE: "off"
       NO_INTEGRATION_TEST: true
     steps:
       - init_workspace

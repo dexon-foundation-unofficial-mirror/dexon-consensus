@@ -231,3 +231,7 @@ func isCircleCI() bool {
 func isTravisCI() bool {
 	return isCI() && os.Getenv("TRAVIS") == "true"
 }
+
+func getDKGThreshold(config *types.Config) int {
+	return int(config.DKGSetSize/3) + 1
+}
