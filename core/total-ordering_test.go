@@ -55,6 +55,7 @@ func (s *TotalOrderingTestSuite) performOneRun(
 	to *totalOrdering, revealer test.BlockRevealer) (revealed, ordered string) {
 	revealer.Reset()
 	curRound := uint64(0)
+	revealedDAG := make(map[common.Hash]struct{})
 	for {
 		// Reveal next block.
 		b, err := revealer.NextBlock()
@@ -67,13 +68,30 @@ func (s *TotalOrderingTestSuite) performOneRun(
 		s.Require().NoError(err)
 		revealed += b.Hash.String() + ","
 		// Perform total ordering.
-		blocks, _, err := to.processBlock(&b)
+		blocks, mode, err := to.processBlock(&b)
 		s.Require().NoError(err)
 		for _, b := range blocks {
 			ordered += b.Hash.String() + ","
 			// Make sure the round ID is increasing, and no interleave.
 			s.Require().True(b.Position.Round >= curRound)
 			curRound = b.Position.Round
+			// Make sure all acking blocks are already delivered.
+			for _, ack := range b.Acks {
+				s.Require().Contains(revealedDAG, ack)
+			}
+			if mode == TotalOrderingModeFlush {
+				// For blocks delivered by flushing, the acking relations would
+				// exist in one deliver set, however, only later block would
+				// ack previous block, not backward.
+				revealedDAG[b.Hash] = struct{}{}
+			}
+		}
+		// For blocks not delivered by flushing, the acking relations only exist
+		// between deliver sets.
+		if mode != TotalOrderingModeFlush {
+			for _, b := range blocks {
+				revealedDAG[b.Hash] = struct{}{}
+			}
 		}
 	}
 	return
@@ -1300,13 +1318,22 @@ func (s *TotalOrderingTestSuite) TestSyncWithConfigChange() {
 			NumChains:     uint32(20),
 			RoundInterval: roundInterval,
 		},
+		// Sometimes all generated blocks would be delivered, thus the total
+		// ordering module would proceed to next round. We need to prepare
+		// one additional configuration for that possibility.
+		&types.Config{
+			K:             1,
+			PhiRatio:      0.7,
+			NumChains:     uint32(20),
+			RoundInterval: roundInterval,
+		},
 	}
 
 	blocks := []*types.Block{}
 	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
 
-	for i, cfg := range configs {
+	for i, cfg := range configs[:len(configs)-1] {
 		gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
 			NumChains:            cfg.NumChains,
 			MinBlockTimeInterval: 250 * time.Millisecond,
@@ -1393,6 +1420,15 @@ func (s *TotalOrderingTestSuite) TestSyncWithConfigChange() {
 			}
 		}
 	}
+}
+
+func (s *TotalOrderingTestSuite) TestModeDefinition() {
+	// Make sure the copied deliver mode definition is identical between
+	// core and test package.
+	s.Require().Equal(TotalOrderingModeError, test.TotalOrderingModeError)
+	s.Require().Equal(TotalOrderingModeNormal, test.TotalOrderingModeNormal)
+	s.Require().Equal(TotalOrderingModeEarly, test.TotalOrderingModeEarly)
+	s.Require().Equal(TotalOrderingModeFlush, test.TotalOrderingModeFlush)
 }
 
 func TestTotalOrdering(t *testing.T) {

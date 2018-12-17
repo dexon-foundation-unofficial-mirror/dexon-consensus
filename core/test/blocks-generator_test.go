@@ -220,7 +220,7 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 	gen := NewBlocksGenerator(&BlocksGeneratorConfig{
 		NumChains:            4,
 		MinBlockTimeInterval: 250 * time.Millisecond,
-	}, nil, stableRandomHash)
+	}, MaxAckingCountGenerator(4), stableRandomHash)
 	req.NoError(gen.Generate(
 		0,
 		genesisTime,
@@ -233,7 +233,7 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 	gen = NewBlocksGenerator(&BlocksGeneratorConfig{
 		NumChains:            10,
 		MinBlockTimeInterval: 250 * time.Millisecond,
-	}, nil, stableRandomHash)
+	}, MaxAckingCountGenerator(10), stableRandomHash)
 	req.NoError(gen.Generate(
 		1,
 		genesisTime.Add(10*time.Second),
@@ -246,7 +246,7 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 	gen = NewBlocksGenerator(&BlocksGeneratorConfig{
 		NumChains:            7,
 		MinBlockTimeInterval: 250 * time.Millisecond,
-	}, nil, stableRandomHash)
+	}, MaxAckingCountGenerator(7), stableRandomHash)
 	req.NoError(gen.Generate(
 		2,
 		genesisTime.Add(20*time.Second),

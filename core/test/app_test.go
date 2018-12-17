@@ -179,6 +179,21 @@ func (s *AppTestSuite) TestVerify() {
 		time.Duration(len(app6.DeliverSequence))*time.Second),
 		uint64(len(app6.DeliverSequence)+2))
 	req.Equal(ErrConsensusHeightOutOfOrder, app6.Verify())
+	// Test the acking block doesn't delivered.
+	app7 := NewApp(nil)
+	// Patch a block's acks.
+	b7 := &types.Block{
+		Hash: common.NewRandomHash(),
+		Acks: common.NewSortedHashes(common.Hashes{common.NewRandomHash()}),
+	}
+	app7.BlockConfirmed(*b7)
+	app7.TotalOrderingDelivered(
+		common.Hashes{b7.Hash}, core.TotalOrderingModeNormal)
+	app7.BlockDelivered(b7.Hash, types.Position{}, types.FinalizationResult{
+		Timestamp: time.Now(),
+		Height:    1,
+	})
+	req.Equal(ErrAckingBlockNotDelivered, app7.Verify())
 }
 
 func TestApp(t *testing.T) {

@@ -54,6 +54,21 @@ var (
 	// and delivered are different.
 	ErrMismatchTotalOrderingAndDelivered = fmt.Errorf(
 		"mismatch total ordering and delivered sequence")
+	// ErrAckingBlockNotDelivered means the delivered sequence not forming a
+	// DAG.
+	ErrAckingBlockNotDelivered = fmt.Errorf("acking block not delivered")
+)
+
+// This definition is copied from core package.
+const (
+	// TotalOrderingModeError returns mode error.
+	TotalOrderingModeError uint32 = iota
+	// TotalOrderingModeNormal returns mode normal.
+	TotalOrderingModeNormal
+	// TotalOrderingModeEarly returns mode early.
+	TotalOrderingModeEarly
+	// TotalOrderingModeFlush returns mode flush.
+	TotalOrderingModeFlush
 )
 
 // AppTotalOrderRecord caches information when this application received
@@ -233,7 +248,8 @@ func (app *App) Verify() error {
 	expectHeight := uint64(1)
 	prevTime := time.Time{}
 	for _, h := range app.DeliverSequence {
-		if _, exists := app.Confirmed[h]; !exists {
+		_, exists := app.Confirmed[h]
+		if !exists {
 			return ErrDeliveredBlockNotConfirmed
 		}
 		rec, exists := app.Delivered[h]
@@ -247,12 +263,39 @@ func (app *App) Verify() error {
 			return ErrConsensusTimestampOutOfOrder
 		}
 		prevTime = rec.ConsensusTime
-
 		// Make sure the consensus height is incremental.
 		if expectHeight != rec.ConsensusHeight {
 			return ErrConsensusHeightOutOfOrder
 		}
 		expectHeight++
+	}
+	// Check causality.
+	revealedDAG := make(map[common.Hash]struct{})
+	for _, toDeliver := range app.TotalOrdered {
+		for _, h := range toDeliver.BlockHashes {
+			b, exists := app.Confirmed[h]
+			if !exists {
+				return ErrDeliveredBlockNotConfirmed
+			}
+			for _, ack := range b.Acks {
+				if _, ackingBlockExists := revealedDAG[ack]; !ackingBlockExists {
+					return ErrAckingBlockNotDelivered
+				}
+			}
+			if toDeliver.Mode == TotalOrderingModeFlush {
+				// For blocks delivered by flushing, the acking relations would
+				// exist in one deliver set, however, only later block would
+				// ack previous block, not backward.
+				revealedDAG[h] = struct{}{}
+			}
+		}
+		// For blocks not delivered by flushing, the acking relations only exist
+		// between deliver sets.
+		if toDeliver.Mode != TotalOrderingModeFlush {
+			for _, h := range toDeliver.BlockHashes {
+				revealedDAG[h] = struct{}{}
+			}
+		}
 	}
 	// Make sure the order of delivered and total ordering are the same by
 	// comparing the concated string.
