@@ -494,12 +494,17 @@ func NewConsensusFromSyncer(
 		db,
 		logger)
 	recv.cfgModule = cfgModule
+	// Check if the application implement Debug interface.
+	var debugApp Debug
+	if a, ok := app.(Debug); ok {
+		debugApp = a
+	}
 	// Setup Consensus instance.
 	con := &Consensus{
 		ID:               ID,
 		ccModule:         newCompactionChain(gov),
 		lattice:          latticeModule,
-		app:              app,
+		app:              newNonBlocking(app, debugApp),
 		gov:              gov,
 		db:               db,
 		network:          networkModule,

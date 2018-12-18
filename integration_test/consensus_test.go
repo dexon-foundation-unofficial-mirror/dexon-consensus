@@ -145,8 +145,13 @@ func (s *ConsensusTestSuite) syncBlocksWithSomeNode(
 			syncNode.gov.CatchUpWithRound(
 				b.Position.Round + core.ConfigRoundShift)
 		}
-		syncedCon, err = syncerObj.SyncBlocks(compactionChainBlocks, true)
-		if syncedCon != nil || err != nil {
+		var synced bool
+		synced, err = syncerObj.SyncBlocks(compactionChainBlocks, true)
+		if err != nil {
+			done = true
+		}
+		if synced {
+			syncedCon, err = syncerObj.GetSyncedConsensus()
 			done = true
 		}
 		compactionChainBlocks = nil
