@@ -400,12 +400,7 @@ func NewConsensus(
 	}
 	// Get configuration for genesis round.
 	var round uint64
-	logger.Debug("Calling Governance.Configuration", "round", round)
-	config := gov.Configuration(round)
-	if config == nil {
-		logger.Error("Unable to get configuration", "round", round)
-		return nil
-	}
+	config := utils.GetConfigWithPanic(gov, round, logger)
 	// Init lattice.
 	lattice := NewLattice(
 		dMoment, round, config, authModule, app, debugApp, db, logger)
@@ -550,29 +545,19 @@ func (con *Consensus) prepare(initBlock *types.Block) error {
 	// full node. We don't have to notify it.
 	con.roundToNotify = initBlock.Position.Round + 1
 	initRound := initBlock.Position.Round
-	con.logger.Debug("Calling Governance.Configuration", "round", initRound)
-	initConfig := con.gov.Configuration(initRound)
+	initConfig := utils.GetConfigWithPanic(con.gov, initRound, con.logger)
 	// Setup context.
 	con.ccModule.init(initBlock)
-	// Setup agreementMgr module.
-	con.logger.Debug("Calling Governance.Configuration", "round", initRound)
-	initCfg := con.gov.Configuration(initRound)
-	if initCfg == nil {
-		return ErrConfigurationNotReady
-	}
 	con.logger.Debug("Calling Governance.CRS", "round", initRound)
 	initCRS := con.gov.CRS(initRound)
 	if (initCRS == common.Hash{}) {
 		return ErrCRSNotReady
 	}
-	if err := con.baMgr.appendConfig(initRound, initCfg, initCRS); err != nil {
+	if err := con.baMgr.appendConfig(initRound, initConfig, initCRS); err != nil {
 		return err
 	}
 	// Setup lattice module.
-	initPlusOneCfg := con.gov.Configuration(initRound + 1)
-	if initPlusOneCfg == nil {
-		return ErrConfigurationNotReady
-	}
+	initPlusOneCfg := utils.GetConfigWithPanic(con.gov, initRound+1, con.logger)
 	if err := con.lattice.AppendConfig(initRound+1, initPlusOneCfg); err != nil {
 		return err
 	}
@@ -655,7 +640,8 @@ func (con *Consensus) runCRS(round uint64) {
 	}
 	// Start running next round CRS.
 	con.logger.Debug("Calling Governance.CRS", "round", round)
-	psig, err := con.cfgModule.preparePartialSignature(round, con.gov.CRS(round))
+	psig, err := con.cfgModule.preparePartialSignature(
+		round, utils.GetCRSWithPanic(con.gov, round, con.logger))
 	if err != nil {
 		con.logger.Error("Failed to prepare partial signature", "error", err)
 	} else if err = con.authModule.SignDKGPartialSignature(psig); err != nil {
@@ -669,7 +655,8 @@ func (con *Consensus) runCRS(round uint64) {
 			"hash", psig.Hash)
 		con.network.BroadcastDKGPartialSignature(psig)
 		con.logger.Debug("Calling Governance.CRS", "round", round)
-		crs, err := con.cfgModule.runCRSTSig(round, con.gov.CRS(round))
+		crs, err := con.cfgModule.runCRSTSig(
+			round, utils.GetCRSWithPanic(con.gov, round, con.logger))
 		if err != nil {
 			con.logger.Error("Failed to run CRS Tsig", "error", err)
 		} else {
@@ -714,12 +701,11 @@ func (con *Consensus) initialRound(
 					time.Sleep(500 * time.Millisecond)
 				}
 				// Notify BA for new round.
-				con.logger.Debug("Calling Governance.Configuration",
-					"round", nextRound)
-				nextConfig := con.gov.Configuration(nextRound)
+				nextConfig := utils.GetConfigWithPanic(
+					con.gov, nextRound, con.logger)
 				con.logger.Debug("Calling Governance.CRS",
 					"round", nextRound)
-				nextCRS := con.gov.CRS(nextRound)
+				nextCRS := utils.GetCRSWithPanic(con.gov, nextRound, con.logger)
 				if err := con.baMgr.appendConfig(
 					nextRound, nextConfig, nextCRS); err != nil {
 					panic(err)
@@ -758,9 +744,8 @@ func (con *Consensus) initialRound(
 							defer con.dkgReady.L.Unlock()
 							con.dkgRunning = 0
 						}()
-						con.logger.Debug("Calling Governance.Configuration",
-							"round", nextRound)
-						nextConfig := con.gov.Configuration(nextRound)
+						nextConfig := utils.GetConfigWithPanic(
+							con.gov, nextRound, con.logger)
 						con.runDKG(nextRound, nextConfig)
 					})
 			}(round + 1)
@@ -771,9 +756,7 @@ func (con *Consensus) initialRound(
 			// Change round.
 			// Get configuration for next round.
 			nextRound := round + 1
-			con.logger.Debug("Calling Governance.Configuration",
-				"round", nextRound)
-			nextConfig := con.gov.Configuration(nextRound)
+			nextConfig := utils.GetConfigWithPanic(con.gov, nextRound, con.logger)
 			con.initialRound(
 				startTime.Add(config.RoundInterval), nextRound, nextConfig)
 		})
@@ -1026,9 +1009,7 @@ func (con *Consensus) deliverBlock(b *types.Block) {
 		//  - roundShift
 		//  - notifyGenesisRound
 		futureRound := con.roundToNotify + 1
-		con.logger.Debug("Calling Governance.Configuration",
-			"round", con.roundToNotify)
-		futureConfig := con.gov.Configuration(futureRound)
+		futureConfig := utils.GetConfigWithPanic(con.gov, futureRound, con.logger)
 		con.logger.Debug("Append Config", "round", futureRound)
 		if err := con.lattice.AppendConfig(
 			futureRound, futureConfig); err != nil {

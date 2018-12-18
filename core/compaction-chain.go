@@ -25,6 +25,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 // Errors for compaction chain module.
@@ -80,7 +81,7 @@ func (cc *compactionChain) init(initBlock *types.Block) {
 	// It's the bootstrap case, compactionChain would only deliver blocks until
 	// tips of all chains are received.
 	if initBlock.Finalization.Height == 0 {
-		cc.chainUnsynced = cc.gov.Configuration(uint64(0)).NumChains
+		cc.chainUnsynced = utils.GetConfigWithPanic(cc.gov, 0, nil).NumChains
 	}
 }
 

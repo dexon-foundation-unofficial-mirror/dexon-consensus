@@ -248,9 +248,10 @@ func (mgr *agreementMgr) processAgreementResult(
 			"hash", result.BlockHash)
 		mgr.network.PullBlocks(common.Hashes{result.BlockHash})
 		mgr.logger.Debug("Calling Governance.CRS", "round", result.Position.Round)
-		crs := mgr.gov.CRS(result.Position.Round)
+		crs := utils.GetCRSWithPanic(mgr.gov, result.Position.Round, mgr.logger)
 		nIDs := nodes.GetSubSet(
-			int(mgr.gov.Configuration(result.Position.Round).NotarySetSize),
+			int(utils.GetConfigWithPanic(
+				mgr.gov, result.Position.Round, mgr.logger).NotarySetSize),
 			types.NewNotarySetTarget(crs, result.Position.ChainID))
 		for key := range result.Votes {
 			if err := agreement.processVote(&result.Votes[key]); err != nil {

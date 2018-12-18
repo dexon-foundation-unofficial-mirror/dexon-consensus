@@ -104,7 +104,9 @@ func NewConsensus(
 		prv:             prv,
 		logger:          logger,
 		validatedChains: make(map[uint32]struct{}),
-		configs:         []*types.Config{gov.Configuration(0)},
+		configs: []*types.Config{
+			utils.GetConfigWithPanic(gov, 0, logger),
+		},
 		roundBeginTimes: []time.Time{dMoment},
 		receiveChan:     make(chan *types.Block, 1000),
 		pullChan:        make(chan common.Hash, 1000),
@@ -560,17 +562,18 @@ func (con *Consensus) setupConfigs(blocks []*types.Block) {
 		}
 	}
 	// Get configs from governance.
-	untilRound := maxRound + core.ConfigRoundShift
+	//
+	// In fullnode, the notification of new round is yet another TX, which
+	// needs to be executed after corresponding block delivered. Thus, the
+	// configuration for 'maxRound + core.ConfigRoundShift' won't be ready when
+	// seeing this block.
+	untilRound := maxRound + core.ConfigRoundShift - 1
 	curMaxNumChains := uint32(0)
 	func() {
 		con.lock.Lock()
 		defer con.lock.Unlock()
 		for r := uint64(len(con.configs)); r <= untilRound; r++ {
-			cfg := con.gov.Configuration(r)
-			if cfg == nil {
-				panic(fmt.Errorf(
-					"unable to get config for round: %v (syncer)", r))
-			}
+			cfg := utils.GetConfigWithPanic(con.gov, r, con.logger)
 			con.configs = append(con.configs, cfg)
 			con.roundBeginTimes = append(
 				con.roundBeginTimes,

@@ -26,6 +26,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/dkg"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 // Errors for dkg module.
@@ -491,7 +492,7 @@ func (tc *TSigVerifierCache) Update(round uint64) (bool, error) {
 	gpk, err := NewDKGGroupPublicKey(round,
 		tc.intf.DKGMasterPublicKeys(round),
 		tc.intf.DKGComplaints(round),
-		int(tc.intf.Configuration(round).DKGSetSize/3)+1)
+		int(utils.GetConfigWithPanic(tc.intf, round, nil).DKGSetSize/3)+1)
 	if err != nil {
 		return false, err
 	}

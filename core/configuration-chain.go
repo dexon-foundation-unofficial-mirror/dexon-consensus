@@ -261,7 +261,8 @@ func (cc *configurationChain) recoverDKGInfo(round uint64) error {
 		return ErrDKGNotReady
 	}
 
-	threshold := getDKGThreshold(cc.gov.Configuration(round))
+	threshold := getDKGThreshold(
+		utils.GetConfigWithPanic(cc.gov, round, cc.logger))
 	// Restore group public key.
 	gpk, err := NewDKGGroupPublicKey(round,
 		cc.gov.DKGMasterPublicKeys(round),

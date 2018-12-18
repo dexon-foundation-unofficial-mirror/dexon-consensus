@@ -17,7 +17,11 @@
 
 package core
 
-import "time"
+import (
+	"time"
+
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
+)
 
 // TickerType is the type of ticker.
 type TickerType int
@@ -65,11 +69,11 @@ func newTicker(gov Governance, round uint64, tickerType TickerType) (t Ticker) {
 		var duration time.Duration
 		switch tickerType {
 		case TickerBA:
-			duration = gov.Configuration(round).LambdaBA
+			duration = utils.GetConfigWithPanic(gov, round, nil).LambdaBA
 		case TickerDKG:
-			duration = gov.Configuration(round).LambdaDKG
+			duration = utils.GetConfigWithPanic(gov, round, nil).LambdaDKG
 		case TickerCRS:
-			duration = gov.Configuration(round).RoundInterval / 2
+			duration = utils.GetConfigWithPanic(gov, round, nil).RoundInterval / 2
 		}
 		t = newDefaultTicker(duration)
 	}
