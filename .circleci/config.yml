@@ -3,6 +3,11 @@ commands:
   init_workspace:
     steps:
       - run:
+          name: Install Dependency Libraries
+          command: |
+            sudo apt update
+            sudo apt-get install openssl libssl-dev libgmp-dev
+      - run:
           name: "Prepare Workspace"
           command: sudo chown -R `whoami` /go
       - attach_workspace:
@@ -29,11 +34,7 @@ jobs:
   dep:
     executor: go1_11
     steps:
-      - run: 
-          name: Install Dependency Libraries
-          command: |
-            sudo apt update
-            sudo apt-get install openssl libssl-dev libgmp-dev
+      - init_workspace
       - checkout
       - restore_cache:
           keys:
