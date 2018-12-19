@@ -103,6 +103,14 @@ func (au *Authenticator) SignDKGPartialSignature(
 	return
 }
 
+// SignDKGMPKReady signs a DKG ready message.
+func (au *Authenticator) SignDKGMPKReady(
+	ready *typesDKG.MPKReady) (err error) {
+	ready.ProposerID = au.proposerID
+	ready.Signature, err = au.prvKey.Sign(hashDKGMPKReady(ready))
+	return
+}
+
 // SignDKGFinalize signs a DKG finalize message.
 func (au *Authenticator) SignDKGFinalize(
 	final *typesDKG.Finalize) (err error) {

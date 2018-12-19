@@ -105,6 +105,13 @@ func (cc *configurationChain) registerDKG(round uint64, threshold int) {
 		cc.recv,
 		round,
 		threshold)
+	go func() {
+		ticker := newTicker(cc.gov, round, TickerDKG)
+		<-ticker.Tick()
+		cc.dkgLock.Lock()
+		defer cc.dkgLock.Unlock()
+		cc.dkg.proposeMPKReady()
+	}()
 }
 
 func (cc *configurationChain) runDKG(round uint64) error {
@@ -126,13 +133,34 @@ func (cc *configurationChain) runDKG(round uint64) error {
 		cc.logger.Warn("DKG already final", "round", round)
 		return nil
 	}
+	cc.logger.Debug("Calling Governance.IsDKGMPKReady", "round", round)
+	for !cc.gov.IsDKGMPKReady(round) {
+		cc.logger.Info("DKG MPKs are not ready yet. Try again later...",
+			"nodeID", cc.ID)
+		cc.dkgLock.Unlock()
+		time.Sleep(500 * time.Millisecond)
+		cc.dkgLock.Lock()
+	}
 	ticker := newTicker(cc.gov, round, TickerDKG)
 	cc.dkgLock.Unlock()
 	<-ticker.Tick()
 	cc.dkgLock.Lock()
-	// Phase 2(T = 0): Exchange DKG secret key share.
+	// Check if this node successfully join the protocol.
 	cc.logger.Debug("Calling Governance.DKGMasterPublicKeys", "round", round)
-	cc.dkg.processMasterPublicKeys(cc.gov.DKGMasterPublicKeys(round))
+	mpks := cc.gov.DKGMasterPublicKeys(round)
+	inProtocol := false
+	for _, mpk := range mpks {
+		if mpk.ProposerID == cc.ID {
+			inProtocol = true
+			break
+		}
+	}
+	if !inProtocol {
+		cc.logger.Warn("Failed to join DKG protocol", "round", round)
+		return nil
+	}
+	// Phase 2(T = 0): Exchange DKG secret key share.
+	cc.dkg.processMasterPublicKeys(mpks)
 	cc.mpkReady = true
 	for _, prvShare := range cc.pendingPrvShare {
 		if err := cc.dkg.processPrivateShare(prvShare); err != nil {
@@ -219,7 +247,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	return nil
 }
 
-func (cc *configurationChain) isDKGReady(round uint64) bool {
+func (cc *configurationChain) isDKGFinal(round uint64) bool {
 	if !cc.gov.IsDKGFinal(round) {
 		return false
 	}

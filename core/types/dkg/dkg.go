@@ -167,6 +167,27 @@ type PartialSignature struct {
 	Signature        crypto.Signature           `json:"signature"`
 }
 
+// MPKReady describe a dig ready message in DKG protocol.
+type MPKReady struct {
+	ProposerID types.NodeID     `json:"proposer_id"`
+	Round      uint64           `json:"round"`
+	Signature  crypto.Signature `json:"signature"`
+}
+
+func (ready *MPKReady) String() string {
+	return fmt.Sprintf("DKGMPKReady{RP:%s Round:%d}",
+		ready.ProposerID.String()[:6],
+		ready.Round)
+}
+
+// Equal check equality of two MPKReady instances.
+func (ready *MPKReady) Equal(other *MPKReady) bool {
+	return ready.ProposerID.Equal(other.ProposerID) &&
+		ready.Round == other.Round &&
+		ready.Signature.Type == other.Signature.Type &&
+		bytes.Compare(ready.Signature.Signature, other.Signature.Signature) == 0
+}
+
 // Finalize describe a dig finalize message in DKG protocol.
 type Finalize struct {
 	ProposerID types.NodeID     `json:"proposer_id"`

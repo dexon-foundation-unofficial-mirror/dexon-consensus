@@ -551,7 +551,6 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 		_, con := s.prepareConsensus(dMoment, gov, key, conn)
 		nID := types.NewNodeID(key.PublicKey())
 		cons[nID] = con
-		con.cfgModule.registerDKG(uint64(0), n/3+1)
 	}
 	for _, con := range cons {
 		go con.runDKG(0, gov.Configuration(0))

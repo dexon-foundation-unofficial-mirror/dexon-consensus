@@ -39,6 +39,7 @@ const (
 	StateAddCRS
 	StateAddDKGComplaint
 	StateAddDKGMasterPublicKey
+	StateAddDKGMPKReady
 	StateAddDKGFinal
 	// Configuration related.
 	StateChangeNumChains
@@ -115,6 +116,8 @@ func (req *StateChangeRequest) Clone() (copied *StateChangeRequest) {
 			Round: crsReq.Round,
 			CRS:   crsReq.CRS,
 		}
+	case StateAddDKGMPKReady:
+		copied.Payload = cloneDKGMPKReady(req.Payload.(*typesDKG.MPKReady))
 	case StateAddDKGFinal:
 		copied.Payload = cloneDKGFinalize(req.Payload.(*typesDKG.Finalize))
 	case StateAddDKGMasterPublicKey:
@@ -154,6 +157,9 @@ func (req *StateChangeRequest) String() (ret string) {
 		ret += fmt.Sprintf(
 			"{Type:AddDKGMasterPublicKey %s",
 			req.Payload.(*typesDKG.MasterPublicKey))
+	case StateAddDKGMPKReady:
+		ret += fmt.Sprintf(
+			"{Type:AddDKGMPKReady %s", req.Payload.(*typesDKG.MPKReady))
 	case StateAddDKGFinal:
 		ret += fmt.Sprintf(
 			"{Type:AddDKGFinal %s", req.Payload.(*typesDKG.Finalize))

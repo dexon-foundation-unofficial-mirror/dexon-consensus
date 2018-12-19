@@ -164,6 +164,30 @@ func (r *testCCReceiver) ProposeDKGAntiNackComplaint(
 	}()
 }
 
+func (r *testCCReceiver) ProposeDKGMPKReady(ready *typesDKG.MPKReady) {
+	prvKey, exist := r.s.prvKeys[ready.ProposerID]
+	if !exist {
+		panic(errors.New("should exist"))
+	}
+	var err error
+	ready.Signature, err = prvKey.Sign(hashDKGMPKReady(ready))
+	if err != nil {
+		panic(err)
+	}
+	for _, gov := range r.govs {
+		// Use Marshal/Unmarshal to do deep copy.
+		data, err := json.Marshal(ready)
+		if err != nil {
+			panic(err)
+		}
+		readyCopy := &typesDKG.MPKReady{}
+		if err := json.Unmarshal(data, readyCopy); err != nil {
+			panic(err)
+		}
+		gov.AddDKGMPKReady(readyCopy.Round, readyCopy)
+	}
+}
+
 func (r *testCCReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
 	prvKey, exist := r.s.prvKeys[final.ProposerID]
 	if !exist {
@@ -324,6 +348,77 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 		for _, prevTsig := range tsigs {
 			s.Equal(prevTsig, tsig)
 		}
+	}
+}
+
+func (s *ConfigurationChainTestSuite) TestDKGMasterPublicKeyDelayAdd() {
+	k := 4
+	n := 10
+	round := uint64(0)
+	lambdaDKG := 1000 * time.Millisecond
+	s.setupNodes(n)
+
+	cfgChains := make(map[types.NodeID]*configurationChain)
+	recv := newTestCCReceiver(s)
+
+	pks := make([]crypto.PublicKey, 0, len(s.prvKeys))
+	for _, prv := range s.prvKeys {
+		pks = append(pks, prv.PublicKey())
+	}
+
+	delayNode := s.nIDs[0]
+
+	for _, nID := range s.nIDs {
+		state := test.NewState(
+			pks, 100*time.Millisecond, &common.NullLogger{}, true)
+		gov, err := test.NewGovernance(state, ConfigRoundShift)
+		s.Require().NoError(err)
+		s.Require().NoError(state.RequestChange(
+			test.StateChangeLambdaDKG, lambdaDKG))
+		cache := utils.NewNodeSetCache(gov)
+		dbInst, err := db.NewMemBackedDB()
+		s.Require().NoError(err)
+		cfgChains[nID] = newConfigurationChain(
+			nID, recv, gov, cache, dbInst, &common.NullLogger{})
+		recv.nodes[nID] = cfgChains[nID]
+		recv.govs[nID] = gov
+	}
+
+	for nID, cc := range cfgChains {
+		if nID == delayNode {
+			continue
+		}
+		cc.registerDKG(round, k)
+	}
+	time.Sleep(lambdaDKG)
+	cfgChains[delayNode].registerDKG(round, k)
+
+	for _, gov := range recv.govs {
+		s.Require().Len(gov.DKGMasterPublicKeys(round), n-1)
+	}
+
+	errs := make(chan error, n)
+	wg := sync.WaitGroup{}
+	wg.Add(n)
+	for _, cc := range cfgChains {
+		go func(cc *configurationChain) {
+			defer wg.Done()
+			errs <- cc.runDKG(round)
+		}(cc)
+	}
+	wg.Wait()
+	for range cfgChains {
+		s.Require().NoError(<-errs)
+	}
+	for nID, cc := range cfgChains {
+		shouldExist := nID != delayNode
+		_, exist := cc.gpk[round]
+		s.Equal(shouldExist, exist)
+		if !exist {
+			continue
+		}
+		_, exist = cc.gpk[round].qualifyNodeIDs[nID]
+		s.Equal(shouldExist, exist)
 	}
 }
 

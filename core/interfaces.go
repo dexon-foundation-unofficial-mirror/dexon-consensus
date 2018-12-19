@@ -130,6 +130,12 @@ type Governance interface {
 	// DKGMasterPublicKeys gets all the DKGMasterPublicKey of round.
 	DKGMasterPublicKeys(round uint64) []*typesDKG.MasterPublicKey
 
+	// AddDKGMPKReady adds a DKG ready message.
+	AddDKGMPKReady(round uint64, ready *typesDKG.MPKReady)
+
+	// IsDKGFinal checks if DKG is ready.
+	IsDKGMPKReady(round uint64) bool
+
 	// AddDKGFinalize adds a DKG finalize message.
 	AddDKGFinalize(round uint64, final *typesDKG.Finalize)
 

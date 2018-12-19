@@ -329,6 +329,16 @@ func (recv *consensusDKGReceiver) ProposeDKGAntiNackComplaint(
 	recv.network.BroadcastDKGPrivateShare(prv)
 }
 
+// ProposeDKGMPKReady propose a DKGMPKReady message.
+func (recv *consensusDKGReceiver) ProposeDKGMPKReady(ready *typesDKG.MPKReady) {
+	if err := recv.authModule.SignDKGMPKReady(ready); err != nil {
+		recv.logger.Error("Failed to sign DKG ready", "error", err)
+		return
+	}
+	recv.logger.Debug("Calling Governance.AddDKGFinalize", "ready", ready)
+	recv.gov.AddDKGMPKReady(ready.Round, ready)
+}
+
 // ProposeDKGFinalize propose a DKGFinalize message.
 func (recv *consensusDKGReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
 	if err := recv.authModule.SignDKGFinalize(final); err != nil {
@@ -631,7 +641,7 @@ func (con *Consensus) runCRS(round uint64) {
 		}
 		con.logger.Debug("Calling Governance.IsDKGFinal to check if ready to run CRS",
 			"round", round)
-		if con.cfgModule.isDKGReady(round) {
+		if con.cfgModule.isDKGFinal(round) {
 			break
 		}
 		con.logger.Debug("DKG is not ready for running CRS. Retry later...",

@@ -147,6 +147,19 @@ func cloneDKGMasterPublicKey(mpk *typesDKG.MasterPublicKey) (
 	return
 }
 
+func cloneDKGMPKReady(ready *typesDKG.MPKReady) (
+	copied *typesDKG.MPKReady) {
+	b, err := rlp.EncodeToBytes(ready)
+	if err != nil {
+		panic(err)
+	}
+	copied = &typesDKG.MPKReady{}
+	if err = rlp.DecodeBytes(b, copied); err != nil {
+		panic(err)
+	}
+	return
+}
+
 func cloneDKGFinalize(final *typesDKG.Finalize) (
 	copied *typesDKG.Finalize) {
 	b, err := rlp.EncodeToBytes(final)

@@ -43,6 +43,8 @@ var (
 	ErrMissingPreviousCRS = errors.New("missing previous CRS")
 	// ErrUnknownStateChangeType means a StateChangeType is not recognized.
 	ErrUnknownStateChangeType = errors.New("unknown state change type")
+	// ErrProposerMPKIsReady means a proposer of one mpk is ready.
+	ErrProposerMPKIsReady = errors.New("proposer mpk is ready")
 	// ErrProposerIsFinal means a proposer of one complaint is finalized.
 	ErrProposerIsFinal = errors.New("proposer is final")
 	// ErrStateConfigNotEqual means configuration part of two states is not
@@ -59,6 +61,9 @@ var (
 	// states are not equal.
 	ErrStateDKGMasterPublicKeysNotEqual = errors.New(
 		"dkg master public keys not equal")
+	// ErrStateDKGMPKReadysNotEqual means DKG readys of two states are not
+	// equal.
+	ErrStateDKGMPKReadysNotEqual = errors.New("dkg readys not equal")
 	// ErrStateDKGFinalsNotEqual means DKG finalizations of two states are not
 	// equal.
 	ErrStateDKGFinalsNotEqual = errors.New("dkg finalizations not equal")
@@ -95,6 +100,7 @@ type State struct {
 	// DKG & CRS
 	dkgComplaints       map[uint64]map[types.NodeID][]*typesDKG.Complaint
 	dkgMasterPublicKeys map[uint64]map[types.NodeID]*typesDKG.MasterPublicKey
+	dkgReadys           map[uint64]map[types.NodeID]*typesDKG.MPKReady
 	dkgFinals           map[uint64]map[types.NodeID]*typesDKG.Finalize
 	crs                 []common.Hash
 	// Other stuffs
@@ -136,6 +142,8 @@ func NewState(
 		dkgSetSize:       uint32(len(nodes)),
 		ownRequests:      make(map[common.Hash]*StateChangeRequest),
 		globalRequests:   make(map[common.Hash]*StateChangeRequest),
+		dkgReadys: make(
+			map[uint64]map[types.NodeID]*typesDKG.MPKReady),
 		dkgFinals: make(
 			map[uint64]map[types.NodeID]*typesDKG.Finalize),
 		dkgComplaints: make(
@@ -193,6 +201,9 @@ func (s *State) unpackPayload(
 		err = rlp.DecodeBytes(raw.Payload, v)
 	case StateAddDKGMasterPublicKey:
 		v = &typesDKG.MasterPublicKey{}
+		err = rlp.DecodeBytes(raw.Payload, v)
+	case StateAddDKGMPKReady:
+		v = &typesDKG.MPKReady{}
 		err = rlp.DecodeBytes(raw.Payload, v)
 	case StateAddDKGFinal:
 		v = &typesDKG.Finalize{}
@@ -351,6 +362,28 @@ func (s *State) Equal(other *State) error {
 			}
 		}
 	}
+	// Check DKG readys.
+	if len(s.dkgReadys) != len(other.dkgReadys) {
+		return ErrStateDKGMPKReadysNotEqual
+	}
+	for round, readysForRound := range s.dkgReadys {
+		otherReadysForRound, exists := other.dkgReadys[round]
+		if !exists {
+			return ErrStateDKGMPKReadysNotEqual
+		}
+		if len(readysForRound) != len(otherReadysForRound) {
+			return ErrStateDKGMPKReadysNotEqual
+		}
+		for nID, ready := range readysForRound {
+			otherReady, exists := otherReadysForRound[nID]
+			if !exists {
+				return ErrStateDKGMPKReadysNotEqual
+			}
+			if !ready.Equal(otherReady) {
+				return ErrStateDKGMPKReadysNotEqual
+			}
+		}
+	}
 	// Check DKG finals.
 	if len(s.dkgFinals) != len(other.dkgFinals) {
 		return ErrStateDKGFinalsNotEqual
@@ -428,6 +461,7 @@ func (s *State) Clone() (copied *State) {
 			map[uint64]map[types.NodeID][]*typesDKG.Complaint),
 		dkgMasterPublicKeys: make(
 			map[uint64]map[types.NodeID]*typesDKG.MasterPublicKey),
+		dkgReadys:       make(map[uint64]map[types.NodeID]*typesDKG.MPKReady),
 		dkgFinals:       make(map[uint64]map[types.NodeID]*typesDKG.Finalize),
 		appliedRequests: make(map[common.Hash]struct{}),
 	}
@@ -453,6 +487,12 @@ func (s *State) Clone() (copied *State) {
 		for nID, mKey := range mKeysForRound {
 			copied.dkgMasterPublicKeys[round][nID] =
 				cloneDKGMasterPublicKey(mKey)
+		}
+	}
+	for round, readysForRound := range s.dkgReadys {
+		copied.dkgReadys[round] = make(map[types.NodeID]*typesDKG.MPKReady)
+		for nID, ready := range readysForRound {
+			copied.dkgReadys[round][nID] = cloneDKGMPKReady(ready)
 		}
 	}
 	for round, finalsForRound := range s.dkgFinals {
@@ -587,6 +627,23 @@ func (s *State) isValidRequest(req *StateChangeRequest) (err error) {
 	// NOTE: there would be no lock in this helper, callers should be
 	//       responsible for acquiring appropriate lock.
 	switch req.Type {
+	case StateAddDKGMasterPublicKey:
+		mpk := req.Payload.(*typesDKG.MasterPublicKey)
+		// If we've received identical MPK, ignore it.
+		mpkForRound, exists := s.dkgMasterPublicKeys[mpk.Round]
+		if exists {
+			if oldMpk, exists := mpkForRound[mpk.ProposerID]; exists {
+				if !oldMpk.Equal(mpk) {
+					err = ErrDuplicatedChange
+				}
+				return
+			}
+		}
+		// If we've received MPK from that proposer, we would ignore
+		// its mpk.
+		if _, exists := s.dkgReadys[mpk.Round][mpk.ProposerID]; exists {
+			return ErrProposerMPKIsReady
+		}
 	case StateAddDKGComplaint:
 		comp := req.Payload.(*typesDKG.Complaint)
 		// If we've received DKG final from that proposer, we would ignore
@@ -656,6 +713,12 @@ func (s *State) applyRequest(req *StateChangeRequest) error {
 				map[types.NodeID]*typesDKG.MasterPublicKey)
 		}
 		s.dkgMasterPublicKeys[mKey.Round][mKey.ProposerID] = mKey
+	case StateAddDKGMPKReady:
+		ready := req.Payload.(*typesDKG.MPKReady)
+		if _, exists := s.dkgReadys[ready.Round]; !exists {
+			s.dkgReadys[ready.Round] = make(map[types.NodeID]*typesDKG.MPKReady)
+		}
+		s.dkgReadys[ready.Round][ready.ProposerID] = ready
 	case StateAddDKGFinal:
 		final := req.Payload.(*typesDKG.Finalize)
 		if _, exists := s.dkgFinals[final.Round]; !exists {
@@ -714,6 +777,8 @@ func (s *State) RequestChange(
 	// These cases for for type assertion, make sure callers pass expected types.
 	case StateAddCRS:
 		payload = payload.(*crsAdditionRequest)
+	case StateAddDKGMPKReady:
+		payload = payload.(*typesDKG.MPKReady)
 	case StateAddDKGFinal:
 		payload = payload.(*typesDKG.Finalize)
 	case StateAddDKGMasterPublicKey:
@@ -781,6 +846,14 @@ func (s *State) DKGMasterPublicKeys(round uint64) []*typesDKG.MasterPublicKey {
 		mpks = append(mpks, cloneDKGMasterPublicKey(mpk))
 	}
 	return mpks
+}
+
+// IsDKGMPKReady checks if current received dkg readys exceeds threshold.
+// This information won't be snapshot, thus can't be cached in test.Governance.
+func (s *State) IsDKGMPKReady(round uint64, threshold int) bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return len(s.dkgReadys[round]) > threshold
 }
 
 // IsDKGFinal checks if current received dkg finals exceeds threshold.

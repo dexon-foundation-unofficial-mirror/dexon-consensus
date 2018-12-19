@@ -243,6 +243,15 @@ func verifyDKGPartialSignatureSignature(
 	return true, nil
 }
 
+func hashDKGMPKReady(ready *typesDKG.MPKReady) common.Hash {
+	binaryRound := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryRound, ready.Round)
+
+	return crypto.Keccak256Hash(
+		ready.ProposerID.Hash[:],
+		binaryRound,
+	)
+}
 func hashDKGFinalize(final *typesDKG.Finalize) common.Hash {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, final.Round)

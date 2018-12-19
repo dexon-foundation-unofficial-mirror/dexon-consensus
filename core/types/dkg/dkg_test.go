@@ -212,6 +212,37 @@ func (s *DKGTestSuite) TestComplaintEquality() {
 	req.True(comp1.Equal(comp2))
 }
 
+func (s *DKGTestSuite) TestMPKReadyEquality() {
+	var req = s.Require()
+	ready1 := &MPKReady{
+		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
+		Round:      1,
+		Signature: crypto.Signature{
+			Signature: s.genRandomBytes(),
+		},
+	}
+	// Make a copy
+	ready2 := &MPKReady{}
+	s.clone(ready1, ready2)
+	req.True(ready1.Equal(ready2))
+	// Change proposer ID.
+	ready2.ProposerID = types.NodeID{Hash: common.NewRandomHash()}
+	req.False(ready1.Equal(ready2))
+	ready2.ProposerID = ready1.ProposerID
+	// Change round.
+	ready2.Round = ready1.Round + 1
+	req.False(ready1.Equal(ready2))
+	ready2.Round = ready1.Round
+	// Change signature.
+	ready2.Signature = crypto.Signature{
+		Signature: s.genRandomBytes(),
+	}
+	req.False(ready1.Equal(ready2))
+	ready2.Signature = ready1.Signature
+	// After changing every field back, they should be equal.
+	req.True(ready1.Equal(ready2))
+}
+
 func (s *DKGTestSuite) TestFinalizeEquality() {
 	var req = s.Require()
 	final1 := &Finalize{

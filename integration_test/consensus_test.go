@@ -78,17 +78,8 @@ func (s *ConsensusTestSuite) setupNodes(
 		gov.NotifyRoundHeight(0, 0)
 		networkModule.AddNodeSetCache(utils.NewNodeSetCache(gov))
 		app := test.NewApp(gov.State())
-		// Now is the consensus module.
-		con := core.NewConsensus(
-			dMoment,
-			app,
-			gov,
-			dbInst,
-			networkModule,
-			k,
-			&common.NullLogger{},
-		)
-		nodes[con.ID] = &node{con.ID, con, app, gov, dbInst, networkModule}
+		nID := types.NewNodeID(k.PublicKey())
+		nodes[nID] = &node{nID, nil, app, gov, dbInst, networkModule}
 		go func() {
 			defer wg.Done()
 			s.Require().NoError(networkModule.Setup(serverChannel))
@@ -98,6 +89,19 @@ func (s *ConsensusTestSuite) setupNodes(
 	// Make sure transport layer is ready.
 	s.Require().NoError(server.WaitForPeers(uint32(len(prvKeys))))
 	wg.Wait()
+	for _, k := range prvKeys {
+		node := nodes[types.NewNodeID(k.PublicKey())]
+		// Now is the consensus module.
+		node.con = core.NewConsensus(
+			dMoment,
+			node.app,
+			node.gov,
+			node.db,
+			node.network,
+			k,
+			&common.NullLogger{},
+		)
+	}
 	return nodes
 }
 

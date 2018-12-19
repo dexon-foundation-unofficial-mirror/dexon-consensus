@@ -70,6 +70,17 @@ func (s *StateTestSuite) newDKGComplaint(round uint64) *typesDKG.Complaint {
 	}
 }
 
+func (s *StateTestSuite) newDKGMPKReady(round uint64) *typesDKG.MPKReady {
+	prvKey, err := ecdsa.NewPrivateKey()
+	s.Require().NoError(err)
+	pubKey := prvKey.PublicKey()
+	nodeID := types.NewNodeID(pubKey)
+	// TODO(mission): sign it.
+	return &typesDKG.MPKReady{
+		ProposerID: nodeID,
+		Round:      round,
+	}
+}
 func (s *StateTestSuite) newDKGFinal(round uint64) *typesDKG.Finalize {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
@@ -119,9 +130,11 @@ func (s *StateTestSuite) findNode(
 func (s *StateTestSuite) makeDKGChanges(
 	st *State,
 	masterPubKey *typesDKG.MasterPublicKey,
+	ready *typesDKG.MPKReady,
 	complaint *typesDKG.Complaint,
 	final *typesDKG.Finalize) {
 	st.RequestChange(StateAddDKGMasterPublicKey, masterPubKey)
+	st.RequestChange(StateAddDKGMPKReady, ready)
 	st.RequestChange(StateAddDKGComplaint, complaint)
 	st.RequestChange(StateAddDKGFinal, final)
 }
@@ -175,9 +188,10 @@ func (s *StateTestSuite) TestEqual() {
 	crs := common.NewRandomHash()
 	req.NoError(st.ProposeCRS(1, crs))
 	masterPubKey := s.newDKGMasterPublicKey(2)
+	ready := s.newDKGMPKReady(2)
 	comp := s.newDKGComplaint(2)
 	final := s.newDKGFinal(2)
-	s.makeDKGChanges(st, masterPubKey, comp, final)
+	s.makeDKGChanges(st, masterPubKey, ready, comp, final)
 	// Remove dkg complaints from cloned one to check if equal.
 	st3 := st.Clone()
 	req.NoError(st.Equal(st3))
@@ -188,6 +202,11 @@ func (s *StateTestSuite) TestEqual() {
 	req.NoError(st.Equal(st4))
 	delete(st4.dkgMasterPublicKeys, uint64(2))
 	req.Equal(st.Equal(st4), ErrStateDKGMasterPublicKeysNotEqual)
+	// Remove dkg ready from cloned one to check if equal.
+	st4a := st.Clone()
+	req.NoError(st.Equal(st4a))
+	delete(st4a.dkgReadys, uint64(2))
+	req.Equal(st.Equal(st4a), ErrStateDKGMPKReadysNotEqual)
 	// Remove dkg finalize from cloned one to check if equal.
 	st5 := st.Clone()
 	req.NoError(st.Equal(st5))
@@ -222,9 +241,10 @@ func (s *StateTestSuite) TestPendingChangesEqual() {
 	crs := common.NewRandomHash()
 	req.NoError(st.ProposeCRS(1, crs))
 	masterPubKey := s.newDKGMasterPublicKey(2)
+	ready := s.newDKGMPKReady(2)
 	comp := s.newDKGComplaint(2)
 	final := s.newDKGFinal(2)
-	s.makeDKGChanges(st, masterPubKey, comp, final)
+	s.makeDKGChanges(st, masterPubKey, ready, comp, final)
 }
 
 func (s *StateTestSuite) TestLocalMode() {
@@ -266,17 +286,21 @@ func (s *StateTestSuite) TestLocalMode() {
 	// Test adding node set, DKG complaints, final, master public key.
 	// Make sure everything is empty before changed.
 	req.Empty(st.DKGMasterPublicKeys(2))
+	req.False(st.IsDKGMPKReady(2, 0))
 	req.Empty(st.DKGComplaints(2))
 	req.False(st.IsDKGFinal(2, 0))
 	// Add DKG stuffs.
 	masterPubKey := s.newDKGMasterPublicKey(2)
+	ready := s.newDKGMPKReady(2)
 	comp := s.newDKGComplaint(2)
 	final := s.newDKGFinal(2)
-	s.makeDKGChanges(st, masterPubKey, comp, final)
+	s.makeDKGChanges(st, masterPubKey, ready, comp, final)
 	// Check DKGMasterPublicKeys.
 	masterKeyForRound := st.DKGMasterPublicKeys(2)
 	req.Len(masterKeyForRound, 1)
 	req.True(masterKeyForRound[0].Equal(masterPubKey))
+	// Check IsDKGMPKReady.
+	req.True(st.IsDKGMPKReady(2, 0))
 	// Check DKGComplaints.
 	compForRound := st.DKGComplaints(2)
 	req.Len(compForRound, 1)
@@ -307,11 +331,13 @@ func (s *StateTestSuite) TestPacking() {
 	st.RequestChange(StateAddNode, pubKey)
 	// Add DKG stuffs.
 	masterPubKey := s.newDKGMasterPublicKey(2)
+	ready := s.newDKGMPKReady(2)
 	comp := s.newDKGComplaint(2)
 	final := s.newDKGFinal(2)
-	s.makeDKGChanges(st, masterPubKey, comp, final)
+	s.makeDKGChanges(st, masterPubKey, ready, comp, final)
 	// Make sure everything is empty before changed.
 	req.Empty(st.DKGMasterPublicKeys(2))
+	req.False(st.IsDKGMPKReady(2, 0))
 	req.Empty(st.DKGComplaints(2))
 	req.False(st.IsDKGFinal(2, 0))
 	// In remote mode, we need to manually convert own requests to global ones.
@@ -338,6 +364,8 @@ func (s *StateTestSuite) TestPacking() {
 	compForRound := st.DKGComplaints(2)
 	req.Len(compForRound, 1)
 	req.True(compForRound[0].Equal(comp))
+	// Check IsDKGMPKReady.
+	req.True(st.IsDKGMPKReady(2, 0))
 	// Check IsDKGFinal.
 	req.True(st.IsDKGFinal(2, 0))
 }
@@ -371,9 +399,10 @@ func (s *StateTestSuite) TestRequestBroadcastAndPack() {
 	st.RequestChange(StateAddNode, pubKey)
 	// Add DKG stuffs.
 	masterPubKey := s.newDKGMasterPublicKey(2)
+	ready := s.newDKGMPKReady(2)
 	comp := s.newDKGComplaint(2)
 	final := s.newDKGFinal(2)
-	s.makeDKGChanges(st, masterPubKey, comp, final)
+	s.makeDKGChanges(st, masterPubKey, ready, comp, final)
 	// Pack those changes into a byte stream, and pass it to other State
 	// instance.
 	packed, err := st.PackOwnRequests()

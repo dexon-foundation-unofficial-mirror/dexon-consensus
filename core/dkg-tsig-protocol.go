@@ -68,6 +68,9 @@ type dkgReceiver interface {
 	// ProposeDKGAntiNackComplaint propose a DKGPrivateShare as an anti complaint.
 	ProposeDKGAntiNackComplaint(prv *typesDKG.PrivateShare)
 
+	// ProposeDKGMPKReady propose a DKGMPKReady message.
+	ProposeDKGMPKReady(ready *typesDKG.MPKReady)
+
 	// ProposeDKGFinalize propose a DKGFinalize message.
 	ProposeDKGFinalize(final *typesDKG.Finalize)
 }
@@ -337,6 +340,13 @@ func (d *dkgProtocol) processPrivateShare(
 			struct{}{}
 	}
 	return nil
+}
+
+func (d *dkgProtocol) proposeMPKReady() {
+	d.recv.ProposeDKGMPKReady(&typesDKG.MPKReady{
+		ProposerID: d.ID,
+		Round:      d.round,
+	})
 }
 
 func (d *dkgProtocol) proposeFinalize() {

@@ -163,6 +163,9 @@ func (g *Governance) AddDKGMasterPublicKey(
 	if round != masterPublicKey.Round {
 		return
 	}
+	if g.IsDKGMPKReady(masterPublicKey.Round) {
+		return
+	}
 	if err := g.stateModule.RequestChange(
 		StateAddDKGMasterPublicKey, masterPublicKey); err != nil {
 		panic(err)
@@ -174,6 +177,32 @@ func (g *Governance) AddDKGMasterPublicKey(
 func (g *Governance) DKGMasterPublicKeys(
 	round uint64) []*typesDKG.MasterPublicKey {
 	return g.stateModule.DKGMasterPublicKeys(round)
+}
+
+// AddDKGMPKReady adds a DKG ready message.
+func (g *Governance) AddDKGMPKReady(round uint64, ready *typesDKG.MPKReady) {
+	if round != ready.Round {
+		return
+	}
+	if err := g.stateModule.RequestChange(StateAddDKGMPKReady, ready); err != nil {
+		panic(err)
+	}
+	g.broadcastPendingStateChanges()
+}
+
+// IsDKGMPKReady checks if DKG is ready.
+func (g *Governance) IsDKGMPKReady(round uint64) bool {
+	if round == 0 || round == 1 {
+		// Round 0, 1 are genesis round, their configs should be created
+		// by default.
+		g.CatchUpWithRound(round)
+	}
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+	if round >= uint64(len(g.configs)) {
+		return false
+	}
+	return g.stateModule.IsDKGMPKReady(round, int(g.configs[round].DKGSetSize)/3*2)
 }
 
 // AddDKGFinalize adds a DKG finalize message.

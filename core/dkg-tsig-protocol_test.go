@@ -47,6 +47,7 @@ type testDKGReceiver struct {
 	mpk            *typesDKG.MasterPublicKey
 	prvShare       map[types.NodeID]*typesDKG.PrivateShare
 	antiComplaints map[types.NodeID]*typesDKG.PrivateShare
+	ready          []*typesDKG.MPKReady
 	final          []*typesDKG.Finalize
 }
 
@@ -90,6 +91,10 @@ func (r *testDKGReceiver) ProposeDKGAntiNackComplaint(
 	prv.Signature, err = r.prvKey.Sign(hashDKGPrivateShare(prv))
 	r.s.Require().NoError(err)
 	r.antiComplaints[prv.ReceiverID] = prv
+}
+
+func (r *testDKGReceiver) ProposeDKGMPKReady(ready *typesDKG.MPKReady) {
+	r.ready = append(r.ready, ready)
 }
 
 func (r *testDKGReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
@@ -685,6 +690,21 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 	s.True(gpk.VerifySignature(msgHash, sig))
 }
 
+func (s *DKGTSIGProtocolTestSuite) TestProposeReady() {
+	prvKey, err := ecdsa.NewPrivateKey()
+	s.Require().NoError(err)
+	recv := newTestDKGReceiver(s, prvKey)
+	nID := types.NewNodeID(prvKey.PublicKey())
+	protocol := newDKGProtocol(nID, recv, 1, 2)
+	protocol.proposeMPKReady()
+	s.Require().Len(recv.ready, 1)
+	ready := recv.ready[0]
+	s.Equal(&typesDKG.MPKReady{
+		ProposerID: nID,
+		Round:      1,
+	}, ready)
+}
+
 func (s *DKGTSIGProtocolTestSuite) TestProposeFinalize() {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
@@ -716,6 +736,15 @@ func (s *DKGTSIGProtocolTestSuite) TestTSigVerifierCache() {
 		for _, receiver := range receivers {
 			gov.AddDKGMasterPublicKey(round, receiver.mpk)
 		}
+
+		for _, protocol := range protocols {
+			protocol.proposeMPKReady()
+		}
+		for _, recv := range receivers {
+			s.Require().Len(recv.ready, 1)
+			gov.AddDKGMPKReady(recv.ready[0].Round, recv.ready[0])
+		}
+		s.Require().True(gov.IsDKGMPKReady(round))
 
 		for _, protocol := range protocols {
 			protocol.proposeFinalize()
