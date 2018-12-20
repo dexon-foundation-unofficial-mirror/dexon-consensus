@@ -988,7 +988,7 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 			"randomness", hex.EncodeToString(rand.Randomness))
 		con.network.BroadcastRandomnessResult(rand)
 	}
-	return nil
+	return con.deliverFinalizedBlocks()
 }
 
 // preProcessBlock performs Byzantine Agreement on the block.
@@ -1042,6 +1042,28 @@ func (con *Consensus) deliverBlock(b *types.Block) {
 	}
 }
 
+// deliverFinalizedBlocks extracts and delivers finalized blocks to application
+// layer.
+func (con *Consensus) deliverFinalizedBlocks() error {
+	con.lock.Lock()
+	defer con.lock.Unlock()
+	return con.deliverFinalizedBlocksWithoutLock()
+}
+
+func (con *Consensus) deliverFinalizedBlocksWithoutLock() (err error) {
+	deliveredBlocks := con.ccModule.extractBlocks()
+	con.logger.Debug("Last blocks in compaction chain",
+		"delivered", con.ccModule.lastDeliveredBlock(),
+		"pending", con.ccModule.lastPendingBlock())
+	for _, b := range deliveredBlocks {
+		con.deliverBlock(b)
+	}
+	if err = con.lattice.PurgeBlocks(deliveredBlocks); err != nil {
+		return
+	}
+	return
+}
+
 // processBlock is the entry point to submit one block to a Consensus instance.
 func (con *Consensus) processBlock(block *types.Block) (err error) {
 	if err = con.db.PutBlock(*block); err != nil && err != db.ErrBlockExists {
@@ -1075,14 +1097,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		}
 		go con.event.NotifyTime(b.Finalization.Timestamp)
 	}
-	deliveredBlocks = con.ccModule.extractBlocks()
-	con.logger.Debug("Last blocks in compaction chain",
-		"delivered", con.ccModule.lastDeliveredBlock(),
-		"pending", con.ccModule.lastPendingBlock())
-	for _, b := range deliveredBlocks {
-		con.deliverBlock(b)
-	}
-	if err = con.lattice.PurgeBlocks(deliveredBlocks); err != nil {
+	if err = con.deliverFinalizedBlocksWithoutLock(); err != nil {
 		return
 	}
 	return

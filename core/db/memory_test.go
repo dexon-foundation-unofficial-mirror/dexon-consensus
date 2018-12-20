@@ -137,14 +137,19 @@ func (s *MemBackedDBTestSuite) TestCompactionChainTipInfo() {
 	s.Require().NotNil(dbInst)
 	// Save some tip info.
 	hash := common.NewRandomHash()
-	s.Require().NoError(dbInst.PutCompactionChainTipInfo(hash, 123))
+	s.Require().NoError(dbInst.PutCompactionChainTipInfo(hash, 1))
 	// Get it back to check.
 	hashBack, height := dbInst.GetCompactionChainTipInfo()
 	s.Require().Equal(hash, hashBack)
-	s.Require().Equal(height, uint64(123))
+	s.Require().Equal(height, uint64(1))
 	// Unable to put compaction chain tip info with lower height.
-	err = dbInst.PutCompactionChainTipInfo(hash, 122)
+	err = dbInst.PutCompactionChainTipInfo(hash, 0)
 	s.Require().IsType(err, ErrInvalidCompactionChainTipHeight)
+	// Unable to put compaction chain tip info with height not incremental by 1.
+	err = dbInst.PutCompactionChainTipInfo(hash, 3)
+	s.Require().IsType(err, ErrInvalidCompactionChainTipHeight)
+	// It's OK to put compaction chain tip info with height incremental by 1.
+	s.Require().NoError(dbInst.PutCompactionChainTipInfo(hash, 2))
 }
 
 func (s *MemBackedDBTestSuite) TestDKGPrivateKey() {

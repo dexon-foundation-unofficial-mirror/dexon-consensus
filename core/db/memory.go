@@ -149,7 +149,7 @@ func (m *MemBackedDB) PutCompactionChainTipInfo(
 	blockHash common.Hash, height uint64) error {
 	m.compactionChainTipLock.Lock()
 	defer m.compactionChainTipLock.Unlock()
-	if m.compactionChainTipHeight >= height {
+	if m.compactionChainTipHeight+1 != height {
 		return ErrInvalidCompactionChainTipHeight
 	}
 	m.compactionChainTipHeight = height

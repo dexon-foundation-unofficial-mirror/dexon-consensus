@@ -163,7 +163,7 @@ func (lvl *LevelDBBackedDB) PutCompactionChainTipInfo(
 	if err != nil {
 		return err
 	}
-	if info.Height >= height {
+	if info.Height+1 != height {
 		return ErrInvalidCompactionChainTipHeight
 	}
 	if err = lvl.db.Put(compactionChainTipInfoKey, marshaled, nil); err != nil {
