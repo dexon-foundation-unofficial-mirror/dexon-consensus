@@ -576,6 +576,7 @@ func (con *Consensus) prepare(initBlock *types.Block) error {
 	if err != nil {
 		return err
 	}
+	// TODO(jimmy): registerDKG should be called after dmoment.
 	if _, exist := dkgSet[con.ID]; exist {
 		con.logger.Info("Selected as DKG set", "round", initRound)
 		con.cfgModule.registerDKG(initRound, getDKGThreshold(initConfig))
