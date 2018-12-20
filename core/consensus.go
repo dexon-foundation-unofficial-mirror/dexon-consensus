@@ -335,7 +335,7 @@ func (recv *consensusDKGReceiver) ProposeDKGMPKReady(ready *typesDKG.MPKReady) {
 		recv.logger.Error("Failed to sign DKG ready", "error", err)
 		return
 	}
-	recv.logger.Debug("Calling Governance.AddDKGFinalize", "ready", ready)
+	recv.logger.Debug("Calling Governance.AddDKGMPKReady", "ready", ready)
 	recv.gov.AddDKGMPKReady(ready.Round, ready)
 }
 

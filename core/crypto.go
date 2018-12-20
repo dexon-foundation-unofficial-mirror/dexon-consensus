@@ -252,6 +252,21 @@ func hashDKGMPKReady(ready *typesDKG.MPKReady) common.Hash {
 		binaryRound,
 	)
 }
+
+// VerifyDKGMPKReadySignature verifies DKGMPKReady signature.
+func VerifyDKGMPKReadySignature(
+	ready *typesDKG.MPKReady) (bool, error) {
+	hash := hashDKGMPKReady(ready)
+	pubKey, err := crypto.SigToPub(hash, ready.Signature)
+	if err != nil {
+		return false, err
+	}
+	if ready.ProposerID != types.NewNodeID(pubKey) {
+		return false, nil
+	}
+	return true, nil
+}
+
 func hashDKGFinalize(final *typesDKG.Finalize) common.Hash {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, final.Round)

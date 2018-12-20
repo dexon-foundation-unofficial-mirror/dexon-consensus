@@ -251,6 +251,20 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	s.Require().NoError(err)
 	s.False(ok)
 
+	ready := &typesDKG.MPKReady{
+		ProposerID: nID,
+		Round:      5,
+	}
+	ready.Signature, err = prv.Sign(hashDKGMPKReady(ready))
+	s.Require().NoError(err)
+	ok, err = VerifyDKGMPKReadySignature(ready)
+	s.Require().NoError(err)
+	s.True(ok)
+	ready.Round++
+	ok, err = VerifyDKGMPKReadySignature(ready)
+	s.Require().NoError(err)
+	s.False(ok)
+
 	final := &typesDKG.Finalize{
 		ProposerID: nID,
 		Round:      5,
