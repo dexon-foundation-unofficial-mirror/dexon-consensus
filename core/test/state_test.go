@@ -28,6 +28,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -55,12 +56,9 @@ func (s *StateTestSuite) newDKGMasterPublicKey(
 func (s *StateTestSuite) newDKGComplaint(round uint64) *typesDKG.Complaint {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
-	pubKey := prvKey.PublicKey()
-	nodeID := types.NewNodeID(pubKey)
-	// TODO(mission): sign it, and it doesn't make sense to complaint self.
-	return &typesDKG.Complaint{
-		ProposerID: nodeID,
-		Round:      round,
+	nodeID := types.NewNodeID(prvKey.PublicKey())
+	comp := &typesDKG.Complaint{
+		Round: round,
 		PrivateShare: typesDKG.PrivateShare{
 			ProposerID:   nodeID,
 			ReceiverID:   nodeID,
@@ -68,29 +66,23 @@ func (s *StateTestSuite) newDKGComplaint(round uint64) *typesDKG.Complaint {
 			PrivateShare: *dkg.NewPrivateKey(),
 		},
 	}
+	s.Require().NoError(utils.NewSigner(prvKey).SignDKGComplaint(comp))
+	return comp
 }
 
 func (s *StateTestSuite) newDKGMPKReady(round uint64) *typesDKG.MPKReady {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
-	pubKey := prvKey.PublicKey()
-	nodeID := types.NewNodeID(pubKey)
-	// TODO(mission): sign it.
-	return &typesDKG.MPKReady{
-		ProposerID: nodeID,
-		Round:      round,
-	}
+	ready := &typesDKG.MPKReady{Round: round}
+	s.Require().NoError(utils.NewSigner(prvKey).SignDKGMPKReady(ready))
+	return ready
 }
 func (s *StateTestSuite) newDKGFinal(round uint64) *typesDKG.Finalize {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
-	pubKey := prvKey.PublicKey()
-	nodeID := types.NewNodeID(pubKey)
-	// TODO(mission): sign it.
-	return &typesDKG.Finalize{
-		ProposerID: nodeID,
-		Round:      round,
-	}
+	final := &typesDKG.Finalize{Round: round}
+	s.Require().NoError(utils.NewSigner(prvKey).SignDKGFinalize(final))
+	return final
 }
 
 func (s *StateTestSuite) compareNodes(node1, node2 []crypto.PublicKey) bool {

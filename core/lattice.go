@@ -25,6 +25,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 // Errors for sanity check error.
@@ -34,15 +35,15 @@ var (
 
 // Lattice represents a unit to produce a global ordering from multiple chains.
 type Lattice struct {
-	lock       sync.RWMutex
-	authModule *Authenticator
-	app        Application
-	debug      Debug
-	pool       blockPool
-	data       *latticeData
-	toModule   *totalOrdering
-	ctModule   *consensusTimestamp
-	logger     common.Logger
+	lock     sync.RWMutex
+	signer   *utils.Signer
+	app      Application
+	debug    Debug
+	pool     blockPool
+	data     *latticeData
+	toModule *totalOrdering
+	ctModule *consensusTimestamp
+	logger   common.Logger
 }
 
 // NewLattice constructs an Lattice instance.
@@ -50,7 +51,7 @@ func NewLattice(
 	dMoment time.Time,
 	round uint64,
 	cfg *types.Config,
-	authModule *Authenticator,
+	signer *utils.Signer,
 	app Application,
 	debug Debug,
 	db db.Database,
@@ -58,14 +59,14 @@ func NewLattice(
 
 	// Create genesis latticeDataConfig.
 	return &Lattice{
-		authModule: authModule,
-		app:        app,
-		debug:      debug,
-		pool:       newBlockPool(cfg.NumChains),
-		data:       newLatticeData(db, dMoment, round, cfg),
-		toModule:   newTotalOrdering(dMoment, round, cfg),
-		ctModule:   newConsensusTimestamp(dMoment, round, cfg.NumChains),
-		logger:     logger,
+		signer:   signer,
+		app:      app,
+		debug:    debug,
+		pool:     newBlockPool(cfg.NumChains),
+		data:     newLatticeData(db, dMoment, round, cfg),
+		toModule: newTotalOrdering(dMoment, round, cfg),
+		ctModule: newConsensusTimestamp(dMoment, round, cfg.NumChains),
+		logger:   logger,
 	}
 }
 
@@ -89,7 +90,7 @@ func (l *Lattice) PrepareBlock(
 	if b.Witness, err = l.app.PrepareWitness(b.Witness.Height); err != nil {
 		return
 	}
-	if err = l.authModule.SignBlock(b); err != nil {
+	if err = l.signer.SignBlock(b); err != nil {
 		return
 	}
 	return
@@ -102,7 +103,7 @@ func (l *Lattice) PrepareEmptyBlock(b *types.Block) (err error) {
 	if err = l.data.prepareEmptyBlock(b); err != nil {
 		return
 	}
-	if b.Hash, err = hashBlock(b); err != nil {
+	if b.Hash, err = utils.HashBlock(b); err != nil {
 		return
 	}
 	return
@@ -116,7 +117,7 @@ func (l *Lattice) SanityCheck(b *types.Block) (err error) {
 	if b.IsEmpty() {
 		// Only need to verify block's hash.
 		var hash common.Hash
-		if hash, err = hashBlock(b); err != nil {
+		if hash, err = utils.HashBlock(b); err != nil {
 			return
 		}
 		if b.Hash != hash {
@@ -124,7 +125,7 @@ func (l *Lattice) SanityCheck(b *types.Block) (err error) {
 		}
 	} else {
 		// Verify block's signature.
-		if err = l.authModule.VerifyBlock(b); err != nil {
+		if err = utils.VerifyBlockSignature(b); err != nil {
 			return
 		}
 	}

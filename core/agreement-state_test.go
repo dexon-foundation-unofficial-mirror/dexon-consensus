@@ -25,12 +25,13 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 type AgreementStateTestSuite struct {
 	suite.Suite
 	ID          types.NodeID
-	auths       map[types.NodeID]*Authenticator
+	signers     map[types.NodeID]*utils.Signer
 	voteChan    chan *types.Vote
 	blockChan   chan common.Hash
 	confirmChan chan common.Hash
@@ -65,7 +66,7 @@ func (s *AgreementStateTestSuite) proposeBlock(
 		ProposerID: s.ID,
 		Hash:       common.NewRandomHash(),
 	}
-	s.Require().NoError(s.auths[s.ID].SignCRS(block, leader.hashCRS))
+	s.Require().NoError(s.signers[s.ID].SignCRS(block, leader.hashCRS))
 	s.block[block.Hash] = block
 	return block
 }
@@ -75,7 +76,7 @@ func (s *AgreementStateTestSuite) prepareVote(
 	period uint64) (
 	vote *types.Vote) {
 	vote = types.NewVote(voteType, blockHash, period)
-	s.Require().NoError(s.auths[nID].SignVote(vote))
+	s.Require().NoError(s.signers[nID].SignVote(vote))
 	return
 }
 
@@ -83,8 +84,8 @@ func (s *AgreementStateTestSuite) SetupTest() {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
 	s.ID = types.NewNodeID(prvKey.PublicKey())
-	s.auths = map[types.NodeID]*Authenticator{
-		s.ID: NewAuthenticator(prvKey),
+	s.signers = map[types.NodeID]*utils.Signer{
+		s.ID: utils.NewSigner(prvKey),
 	}
 	s.voteChan = make(chan *types.Vote, 100)
 	s.blockChan = make(chan common.Hash, 100)
@@ -102,7 +103,7 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 		s.Require().NoError(err)
 		nID := types.NewNodeID(prvKey.PublicKey())
 		notarySet[nID] = struct{}{}
-		s.auths[nID] = NewAuthenticator(prvKey)
+		s.signers[nID] = utils.NewSigner(prvKey)
 	}
 	notarySet[s.ID] = struct{}{}
 	agreement := newAgreement(
@@ -112,7 +113,7 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 			leader: leader,
 		},
 		leader,
-		s.auths[s.ID],
+		s.signers[s.ID],
 	)
 	agreement.restart(notarySet, types.Position{}, common.NewRandomHash())
 	return agreement
@@ -147,7 +148,7 @@ func (s *AgreementStateTestSuite) TestPreCommitState() {
 		prv, err := ecdsa.NewPrivateKey()
 		s.Require().NoError(err)
 		blocks[i].ProposerID = types.NewNodeID(prv.PublicKey())
-		s.Require().NoError(NewAuthenticator(prv).SignCRS(
+		s.Require().NoError(utils.NewSigner(prv).SignCRS(
 			blocks[i], a.data.leader.hashCRS))
 		s.Require().NoError(a.processBlock(blocks[i]))
 	}

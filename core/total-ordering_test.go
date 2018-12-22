@@ -957,7 +957,7 @@ func (s *TotalOrderingTestSuite) baseTestRandomlyGeneratedBlocks(
 	gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
 		NumChains:            chainNum,
 		MinBlockTimeInterval: 250 * time.Millisecond,
-	}, ackingCountGenerator, hashBlock)
+	}, ackingCountGenerator)
 	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
 	req.NoError(gen.Generate(
@@ -1089,7 +1089,7 @@ func (s *TotalOrderingTestSuite) baseTestForRoundChange(
 	begin := genesisTime
 	for roundID, config := range configs[:len(configs)-1] {
 		gen := test.NewBlocksGenerator(
-			test.NewBlocksGeneratorConfig(config), nil, hashBlock)
+			test.NewBlocksGeneratorConfig(config), nil)
 		end := begin.Add(config.RoundInterval)
 		req.NoError(gen.Generate(uint64(roundID), begin, end, dbInst))
 		begin = end
@@ -1213,7 +1213,7 @@ func (s *TotalOrderingTestSuite) TestSync() {
 	gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
 		NumChains:            numChains,
 		MinBlockTimeInterval: 250 * time.Millisecond,
-	}, nil, hashBlock)
+	}, nil)
 	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
 	err = gen.Generate(0, genesisTime, genesisTime.Add(20*time.Second), dbInst)
@@ -1337,7 +1337,7 @@ func (s *TotalOrderingTestSuite) TestSyncWithConfigChange() {
 		gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
 			NumChains:            cfg.NumChains,
 			MinBlockTimeInterval: 250 * time.Millisecond,
-		}, nil, hashBlock)
+		}, nil)
 		err = gen.Generate(
 			uint64(i),
 			genesisTime.Add(time.Duration(i)*cfg.RoundInterval),

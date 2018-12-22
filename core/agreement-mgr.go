@@ -86,7 +86,7 @@ type agreementMgr struct {
 	network       Network
 	logger        common.Logger
 	cache         *utils.NodeSetCache
-	auth          *Authenticator
+	signer        *utils.Signer
 	lattice       *Lattice
 	ctx           context.Context
 	lastEndTime   time.Time
@@ -119,7 +119,7 @@ func newAgreementMgr(con *Consensus, initRound uint64,
 		network:     con.network,
 		logger:      con.logger,
 		cache:       con.nodeSetCache,
-		auth:        con.authModule,
+		signer:      con.signer,
 		lattice:     con.lattice,
 		ctx:         con.ctx,
 		initRound:   initRound,
@@ -181,7 +181,7 @@ func (mgr *agreementMgr) appendConfig(
 			mgr.con.ID,
 			recv,
 			newLeaderSelector(genValidLeader(mgr), mgr.logger),
-			mgr.auth)
+			mgr.signer)
 		// Hacky way to make agreement module self contained.
 		recv.agreementModule = agrModule
 		mgr.baModules = append(mgr.baModules, agrModule)

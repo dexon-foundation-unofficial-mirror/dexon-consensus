@@ -15,7 +15,7 @@
 // along with the dexon-consensus library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package core
+package utils
 
 import (
 	"testing"
@@ -67,7 +67,7 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 func (s *CryptoTestSuite) newBlock(prevBlock *types.Block) *types.Block {
 	block := s.prepareBlock(prevBlock)
 	var err error
-	block.Hash, err = hashBlock(block)
+	block.Hash, err = HashBlock(block)
 	s.Require().NoError(err)
 	return block
 }
@@ -85,14 +85,13 @@ func (s *CryptoTestSuite) generateCompactionChain(
 }
 
 func (s *CryptoTestSuite) generateBlockChain(
-	length int, prv crypto.PrivateKey) []*types.Block {
+	length int, signer *Signer) []*types.Block {
 	blocks := make([]*types.Block, length)
 	var prevBlock *types.Block
 	for idx := range blocks {
 		block := s.newBlock(prevBlock)
 		blocks[idx] = block
-		var err error
-		block.Signature, err = prv.Sign(block.Hash)
+		err := signer.SignBlock(block)
 		s.Require().NoError(err)
 	}
 	return blocks
@@ -100,9 +99,8 @@ func (s *CryptoTestSuite) generateBlockChain(
 
 func (s *CryptoTestSuite) TestBlockSignature() {
 	prv, err := ecdsa.NewPrivateKey()
-	pub := prv.PublicKey()
 	s.Require().NoError(err)
-	blocks := s.generateBlockChain(10, prv)
+	blocks := s.generateBlockChain(10, NewSigner(prv))
 	blockMap := make(map[common.Hash]*types.Block)
 	for _, block := range blocks {
 		blockMap[block.Hash] = block
@@ -112,17 +110,16 @@ func (s *CryptoTestSuite) TestBlockSignature() {
 			parentBlock, exist := blockMap[block.ParentHash]
 			s.Require().True(exist)
 			s.True(parentBlock.Position.Height == block.Position.Height-1)
-			hash, err := hashBlock(parentBlock)
+			hash, err := HashBlock(parentBlock)
 			s.Require().NoError(err)
 			s.Equal(hash, block.ParentHash)
 		}
-		s.True(verifyBlockSignature(pub, block, block.Signature))
+		s.NoError(VerifyBlockSignature(block))
 	}
 	// Modify Block.Acks and verify signature again.
 	for _, block := range blocks {
 		block.Acks = append(block.Acks, common.NewRandomHash())
-		s.False(verifyBlockSignature(
-			pub, block, block.Signature))
+		s.Error(VerifyBlockSignature(block))
 	}
 }
 
@@ -135,11 +132,11 @@ func (s *CryptoTestSuite) TestVoteSignature() {
 	vote.ProposerID = nID
 	vote.Signature, err = prv.Sign(hashVote(vote))
 	s.Require().NoError(err)
-	ok, err := verifyVoteSignature(vote)
+	ok, err := VerifyVoteSignature(vote)
 	s.Require().NoError(err)
 	s.True(ok)
 	vote.Type = types.VoteCom
-	ok, err = verifyVoteSignature(vote)
+	ok, err = VerifyVoteSignature(vote)
 	s.Require().NoError(err)
 	s.False(ok)
 }
@@ -155,11 +152,11 @@ func (s *CryptoTestSuite) TestCRSSignature() {
 	}
 	block.CRSSignature, err = prv.Sign(hashCRS(block, crs))
 	s.Require().NoError(err)
-	ok, err := verifyCRSSignature(block, crs)
+	ok, err := VerifyCRSSignature(block, crs)
 	s.Require().NoError(err)
 	s.True(ok)
 	block.Position.Height++
-	ok, err = verifyCRSSignature(block, crs)
+	ok, err = VerifyCRSSignature(block, crs)
 	s.Require().NoError(err)
 	s.False(ok)
 }
@@ -175,11 +172,11 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	}
 	prvShare.Signature, err = prv.Sign(hashDKGPrivateShare(prvShare))
 	s.Require().NoError(err)
-	ok, err := verifyDKGPrivateShareSignature(prvShare)
+	ok, err := VerifyDKGPrivateShareSignature(prvShare)
 	s.Require().NoError(err)
 	s.True(ok)
 	prvShare.Round++
-	ok, err = verifyDKGPrivateShareSignature(prvShare)
+	ok, err = VerifyDKGPrivateShareSignature(prvShare)
 	s.Require().NoError(err)
 	s.False(ok)
 
@@ -243,11 +240,11 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	}
 	sig.Signature, err = prv.Sign(hashDKGPartialSignature(sig))
 	s.Require().NoError(err)
-	ok, err = verifyDKGPartialSignatureSignature(sig)
+	ok, err = VerifyDKGPartialSignatureSignature(sig)
 	s.Require().NoError(err)
 	s.True(ok)
 	sig.Round++
-	ok, err = verifyDKGPartialSignatureSignature(sig)
+	ok, err = VerifyDKGPartialSignatureSignature(sig)
 	s.Require().NoError(err)
 	s.False(ok)
 

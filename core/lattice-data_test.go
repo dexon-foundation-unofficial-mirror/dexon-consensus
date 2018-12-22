@@ -166,7 +166,7 @@ func (s *LatticeDataTestSuite) genTestCase1() (
 // hashBlock is a helper to hash a block and check if any error.
 func (s *LatticeDataTestSuite) hashBlock(b *types.Block) {
 	var err error
-	b.Hash, err = hashBlock(b)
+	b.Hash, err = utils.HashBlock(b)
 	s.Require().Nil(err)
 }
 
@@ -370,7 +370,7 @@ func (s *LatticeDataTestSuite) TestRandomlyGeneratedBlocks() {
 	gen := test.NewBlocksGenerator(&test.BlocksGeneratorConfig{
 		NumChains:            genesisConfig.NumChains,
 		MinBlockTimeInterval: genesisConfig.MinBlockInterval,
-	}, nil, hashBlock)
+	}, nil)
 	req.NoError(gen.Generate(
 		0,
 		genesisTime,

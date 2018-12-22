@@ -39,7 +39,7 @@ func (s *BlocksGeneratorTestSuite) TestGenerate() {
 			NumChains:            19,
 			MinBlockTimeInterval: 200 * time.Millisecond,
 		}
-		gen       = NewBlocksGenerator(config, nil, stableRandomHash)
+		gen       = NewBlocksGenerator(config, nil)
 		req       = s.Require()
 		beginTime = time.Now().UTC()
 		endTime   = beginTime.Add(time.Minute)
@@ -129,8 +129,7 @@ func (s *BlocksGeneratorTestSuite) TestGenerateWithMaxAckCount() {
 	// Generate with 0 acks.
 	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
-	gen := NewBlocksGenerator(
-		config, MaxAckingCountGenerator(0), stableRandomHash)
+	gen := NewBlocksGenerator(config, MaxAckingCountGenerator(0))
 	req.NoError(gen.Generate(
 		0,
 		genesisTime,
@@ -153,8 +152,7 @@ func (s *BlocksGeneratorTestSuite) TestGenerateWithMaxAckCount() {
 	// Generate with acks as many as possible.
 	dbInst, err = db.NewMemBackedDB()
 	req.NoError(err)
-	gen = NewBlocksGenerator(
-		config, MaxAckingCountGenerator(config.NumChains), stableRandomHash)
+	gen = NewBlocksGenerator(config, MaxAckingCountGenerator(config.NumChains))
 	req.NoError(gen.Generate(
 		0,
 		genesisTime,
@@ -190,7 +188,7 @@ func (s *BlocksGeneratorTestSuite) TestFindTips() {
 		genesisTime = time.Now().UTC()
 		endTime     = genesisTime.Add(100 * time.Second)
 	)
-	gen := NewBlocksGenerator(config, nil, stableRandomHash)
+	gen := NewBlocksGenerator(config, nil)
 	dbInst, err := db.NewMemBackedDB()
 	req.NoError(err)
 	req.NoError(gen.Generate(
@@ -220,7 +218,7 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 	gen := NewBlocksGenerator(&BlocksGeneratorConfig{
 		NumChains:            4,
 		MinBlockTimeInterval: 250 * time.Millisecond,
-	}, MaxAckingCountGenerator(4), stableRandomHash)
+	}, MaxAckingCountGenerator(4))
 	req.NoError(gen.Generate(
 		0,
 		genesisTime,
@@ -233,7 +231,7 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 	gen = NewBlocksGenerator(&BlocksGeneratorConfig{
 		NumChains:            10,
 		MinBlockTimeInterval: 250 * time.Millisecond,
-	}, MaxAckingCountGenerator(10), stableRandomHash)
+	}, MaxAckingCountGenerator(10))
 	req.NoError(gen.Generate(
 		1,
 		genesisTime.Add(10*time.Second),
@@ -246,7 +244,7 @@ func (s *BlocksGeneratorTestSuite) TestConcateBlocksFromRounds() {
 	gen = NewBlocksGenerator(&BlocksGeneratorConfig{
 		NumChains:            7,
 		MinBlockTimeInterval: 250 * time.Millisecond,
-	}, MaxAckingCountGenerator(7), stableRandomHash)
+	}, MaxAckingCountGenerator(7))
 	req.NoError(gen.Generate(
 		2,
 		genesisTime.Add(20*time.Second),

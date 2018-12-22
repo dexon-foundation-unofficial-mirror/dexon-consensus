@@ -111,7 +111,7 @@ func newNode(
 		dMoment,
 		0,
 		configs[0],
-		core.NewAuthenticator(privateKey),
+		utils.NewSigner(privateKey),
 		app,
 		app,
 		dbInst,

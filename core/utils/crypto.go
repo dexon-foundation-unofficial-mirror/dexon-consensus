@@ -15,7 +15,7 @@
 // along with the dexon-consensus library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package core
+package utils
 
 import (
 	"encoding/binary"
@@ -34,7 +34,8 @@ func hashWitness(witness *types.Witness) (common.Hash, error) {
 		witness.Data), nil
 }
 
-func hashBlock(block *types.Block) (common.Hash, error) {
+// HashBlock generates hash of a types.Block.
+func HashBlock(block *types.Block) (common.Hash, error) {
 	hashPosition := hashPosition(block.Position)
 	// Handling Block.Acks.
 	binaryAcks := make([][]byte, len(block.Acks))
@@ -62,13 +63,31 @@ func hashBlock(block *types.Block) (common.Hash, error) {
 	return hash, nil
 }
 
-func verifyBlockSignature(pubkey crypto.PublicKey,
-	block *types.Block, sig crypto.Signature) (bool, error) {
-	hash, err := hashBlock(block)
-	if err != nil {
-		return false, err
+// VerifyBlockSignature verifies the signature of types.Block.
+func VerifyBlockSignature(b *types.Block) (err error) {
+	payloadHash := crypto.Keccak256Hash(b.Payload)
+	if payloadHash != b.PayloadHash {
+		err = ErrIncorrectHash
+		return
 	}
-	return pubkey.VerifySignature(hash, sig), nil
+	hash, err := HashBlock(b)
+	if err != nil {
+		return
+	}
+	if hash != b.Hash {
+		err = ErrIncorrectHash
+		return
+	}
+	pubKey, err := crypto.SigToPub(b.Hash, b.Signature)
+	if err != nil {
+		return
+	}
+	if !b.ProposerID.Equal(types.NewNodeID(pubKey)) {
+		err = ErrIncorrectSignature
+		return
+	}
+	return
+
 }
 
 func hashVote(vote *types.Vote) common.Hash {
@@ -87,7 +106,8 @@ func hashVote(vote *types.Vote) common.Hash {
 	return hash
 }
 
-func verifyVoteSignature(vote *types.Vote) (bool, error) {
+// VerifyVoteSignature verifies the signature of types.Vote.
+func VerifyVoteSignature(vote *types.Vote) (bool, error) {
 	hash := hashVote(vote)
 	pubKey, err := crypto.SigToPub(hash, vote.Signature)
 	if err != nil {
@@ -104,7 +124,8 @@ func hashCRS(block *types.Block, crs common.Hash) common.Hash {
 	return crypto.Keccak256Hash(crs[:], hashPos[:])
 }
 
-func verifyCRSSignature(block *types.Block, crs common.Hash) (
+// VerifyCRSSignature verifies the CRS signature of types.Block.
+func VerifyCRSSignature(block *types.Block, crs common.Hash) (
 	bool, error) {
 	hash := hashCRS(block, crs)
 	pubKey, err := crypto.SigToPub(hash, block.CRSSignature)
@@ -146,7 +167,9 @@ func hashDKGPrivateShare(prvShare *typesDKG.PrivateShare) common.Hash {
 	)
 }
 
-func verifyDKGPrivateShareSignature(
+// VerifyDKGPrivateShareSignature verifies the signature of
+// typesDKG.PrivateShare.
+func VerifyDKGPrivateShareSignature(
 	prvShare *typesDKG.PrivateShare) (bool, error) {
 	hash := hashDKGPrivateShare(prvShare)
 	pubKey, err := crypto.SigToPub(hash, prvShare.Signature)
@@ -213,7 +236,7 @@ func VerifyDKGComplaintSignature(
 		return false, nil
 	}
 	if !complaint.IsNack() {
-		return verifyDKGPrivateShareSignature(&complaint.PrivateShare)
+		return VerifyDKGPrivateShareSignature(&complaint.PrivateShare)
 	}
 	return true, nil
 }
@@ -230,7 +253,9 @@ func hashDKGPartialSignature(psig *typesDKG.PartialSignature) common.Hash {
 	)
 }
 
-func verifyDKGPartialSignatureSignature(
+// VerifyDKGPartialSignatureSignature verifies the signature of
+// typesDKG.PartialSignature.
+func VerifyDKGPartialSignatureSignature(
 	psig *typesDKG.PartialSignature) (bool, error) {
 	hash := hashDKGPartialSignature(psig)
 	pubKey, err := crypto.SigToPub(hash, psig.Signature)

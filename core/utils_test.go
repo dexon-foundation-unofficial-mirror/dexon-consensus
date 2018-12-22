@@ -21,10 +21,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-
-	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
-	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
 type UtilsTestSuite struct {
@@ -41,24 +37,6 @@ func (s *UtilsTestSuite) TestRemoveFromSortedUint32Slice() {
 	s.Equal(removeFromSortedUint32Slice(xs, 6), xs)
 	// Remove from empty slice, should not panic.
 	s.Equal([]uint32{}, removeFromSortedUint32Slice([]uint32{}, 1))
-}
-
-func (s *UtilsTestSuite) TestVerifyBlock() {
-	prv, err := ecdsa.NewPrivateKey()
-	s.Require().NoError(err)
-	auth := NewAuthenticator(prv)
-	block := &types.Block{}
-	auth.SignBlock(block)
-	s.NoError(VerifyBlock(block))
-
-	hash := block.Hash
-	block.Hash = common.NewRandomHash()
-	s.Equal(ErrIncorrectHash, VerifyBlock(block))
-
-	block.Hash = hash
-	block.Signature, err = prv.Sign(common.NewRandomHash())
-	s.Require().NoError(err)
-	s.Equal(ErrIncorrectSignature, VerifyBlock(block))
 }
 
 func TestUtils(t *testing.T) {

@@ -146,27 +146,6 @@ func HashConfigurationBlock(
 	)
 }
 
-// VerifyBlock verifies the signature of types.Block.
-func VerifyBlock(b *types.Block) (err error) {
-	hash, err := hashBlock(b)
-	if err != nil {
-		return
-	}
-	if hash != b.Hash {
-		err = ErrIncorrectHash
-		return
-	}
-	pubKey, err := crypto.SigToPub(b.Hash, b.Signature)
-	if err != nil {
-		return
-	}
-	if !b.ProposerID.Equal(types.NewNodeID(pubKey)) {
-		err = ErrIncorrectSignature
-		return
-	}
-	return
-}
-
 // VerifyAgreementResult perform sanity check against a types.AgreementResult
 // instance.
 func VerifyAgreementResult(
@@ -201,7 +180,7 @@ func VerifyAgreementResult(
 		if _, exist := notarySet[vote.ProposerID]; !exist {
 			return ErrIncorrectVoteProposer
 		}
-		ok, err := verifyVoteSignature(&vote)
+		ok, err := utils.VerifyVoteSignature(&vote)
 		if err != nil {
 			return err
 		}

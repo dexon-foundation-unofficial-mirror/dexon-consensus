@@ -417,7 +417,7 @@ func (cc *configurationChain) processPrivateShare(
 	}
 	if !cc.mpkReady {
 		// TODO(jimmy-dexon): remove duplicated signature check in dkg module.
-		ok, err := verifyDKGPrivateShareSignature(prvShare)
+		ok, err := utils.VerifyDKGPrivateShareSignature(prvShare)
 		if err != nil {
 			return err
 		}
@@ -435,7 +435,7 @@ func (cc *configurationChain) processPartialSignature(
 	cc.tsigReady.L.Lock()
 	defer cc.tsigReady.L.Unlock()
 	if _, exist := cc.tsig[psig.Hash]; !exist {
-		ok, err := verifyDKGPartialSignatureSignature(psig)
+		ok, err := utils.VerifyDKGPartialSignatureSignature(psig)
 		if err != nil {
 			return err
 		}

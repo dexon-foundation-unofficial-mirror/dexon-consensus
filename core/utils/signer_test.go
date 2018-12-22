@@ -15,7 +15,7 @@
 // along with the dexon-consensus library. If not, see
 // <http://www.gnu.org/licenses/>.
 
-package core
+package utils
 
 import (
 	"testing"
@@ -27,18 +27,18 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type AuthenticatorTestSuite struct {
+type SignerTestSuite struct {
 	suite.Suite
 }
 
-func (s *AuthenticatorTestSuite) setupAuthenticator() *Authenticator {
+func (s *SignerTestSuite) setupSigner() *Signer {
 	k, err := ecdsa.NewPrivateKey()
 	s.NoError(err)
-	return NewAuthenticator(k)
+	return NewSigner(k)
 }
 
-func (s *AuthenticatorTestSuite) TestBlock() {
-	k := s.setupAuthenticator()
+func (s *SignerTestSuite) TestBlock() {
+	k := s.setupSigner()
 	b := &types.Block{
 		ParentHash: common.NewRandomHash(),
 		Position: types.Position{
@@ -48,11 +48,11 @@ func (s *AuthenticatorTestSuite) TestBlock() {
 		Timestamp: time.Now().UTC(),
 	}
 	s.NoError(k.SignBlock(b))
-	s.NoError(k.VerifyBlock(b))
+	s.NoError(VerifyBlockSignature(b))
 }
 
-func (s *AuthenticatorTestSuite) TestVote() {
-	k := s.setupAuthenticator()
+func (s *SignerTestSuite) TestVote() {
+	k := s.setupSigner()
 	v := types.NewVote(types.VoteCom, common.NewRandomHash(), 123)
 	v.Position = types.Position{
 		ChainID: 4,
@@ -60,13 +60,13 @@ func (s *AuthenticatorTestSuite) TestVote() {
 	}
 	v.ProposerID = types.NodeID{Hash: common.NewRandomHash()}
 	s.NoError(k.SignVote(v))
-	ok, err := k.VerifyVote(v)
+	ok, err := VerifyVoteSignature(v)
 	s.True(ok)
 	s.NoError(err)
 }
 
-func (s *AuthenticatorTestSuite) TestCRS() {
-	k := s.setupAuthenticator()
+func (s *SignerTestSuite) TestCRS() {
+	k := s.setupSigner()
 	b := &types.Block{
 		ParentHash: common.NewRandomHash(),
 		Position: types.Position{
@@ -80,11 +80,11 @@ func (s *AuthenticatorTestSuite) TestCRS() {
 	// Hash block before hash CRS.
 	s.NoError(k.SignBlock(b))
 	s.NoError(k.SignCRS(b, crs))
-	ok, err := k.VerifyCRS(b, crs)
+	ok, err := VerifyCRSSignature(b, crs)
 	s.True(ok)
 	s.NoError(err)
 }
 
-func TestAuthenticator(t *testing.T) {
-	suite.Run(t, new(AuthenticatorTestSuite))
+func TestSigner(t *testing.T) {
+	suite.Run(t, new(SignerTestSuite))
 }

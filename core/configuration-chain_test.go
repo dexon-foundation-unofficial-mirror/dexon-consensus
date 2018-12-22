@@ -19,7 +19,6 @@ package core
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -43,186 +42,152 @@ type ConfigurationChainTestSuite struct {
 
 	nIDs    types.NodeIDs
 	dkgIDs  map[types.NodeID]dkg.ID
-	prvKeys map[types.NodeID]crypto.PrivateKey
+	signers map[types.NodeID]*utils.Signer
+	pubKeys []crypto.PublicKey
 }
 
-type testCCReceiver struct {
+type testCCGlobalReceiver struct {
 	s *ConfigurationChainTestSuite
 
 	nodes map[types.NodeID]*configurationChain
 	govs  map[types.NodeID]Governance
 }
 
-func newTestCCReceiver(
-	s *ConfigurationChainTestSuite) *testCCReceiver {
-	return &testCCReceiver{
+func newTestCCGlobalReceiver(
+	s *ConfigurationChainTestSuite) *testCCGlobalReceiver {
+	return &testCCGlobalReceiver{
 		s:     s,
 		nodes: make(map[types.NodeID]*configurationChain),
 		govs:  make(map[types.NodeID]Governance),
 	}
 }
 
-func (r *testCCReceiver) ProposeDKGComplaint(complaint *typesDKG.Complaint) {
-	prvKey, exist := r.s.prvKeys[complaint.ProposerID]
-	if !exist {
-		panic(errors.New("should exist"))
-	}
-	var err error
-	complaint.Signature, err = prvKey.Sign(hashDKGComplaint(complaint))
-	if err != nil {
-		panic(err)
-	}
+func (r *testCCGlobalReceiver) ProposeDKGComplaint(
+	complaint *typesDKG.Complaint) {
 	for _, gov := range r.govs {
-		// Use Marshal/Unmarshal to do deep copy.
-		data, err := json.Marshal(complaint)
-		if err != nil {
-			panic(err)
-		}
-		complaintCopy := &typesDKG.Complaint{}
-		if err := json.Unmarshal(data, complaintCopy); err != nil {
-			panic(err)
-		}
-		gov.AddDKGComplaint(complaintCopy.Round, complaintCopy)
+		gov.AddDKGComplaint(complaint.Round, test.CloneDKGComplaint(complaint))
 	}
 }
 
-func (r *testCCReceiver) ProposeDKGMasterPublicKey(
+func (r *testCCGlobalReceiver) ProposeDKGMasterPublicKey(
 	mpk *typesDKG.MasterPublicKey) {
-	prvKey, exist := r.s.prvKeys[mpk.ProposerID]
-	if !exist {
-		panic(errors.New("should exist"))
-	}
-	var err error
-	mpk.Signature, err = prvKey.Sign(hashDKGMasterPublicKey(mpk))
-	if err != nil {
-		panic(err)
-	}
 	for _, gov := range r.govs {
-		// Use Marshal/Unmarshal to do deep copy.
-		data, err := json.Marshal(mpk)
-		if err != nil {
-			panic(err)
-		}
-		mpkCopy := typesDKG.NewMasterPublicKey()
-		if err := json.Unmarshal(data, mpkCopy); err != nil {
-			panic(err)
-		}
-		gov.AddDKGMasterPublicKey(mpkCopy.Round, mpkCopy)
+		gov.AddDKGMasterPublicKey(mpk.Round, test.CloneDKGMasterPublicKey(mpk))
 	}
 }
 
-func (r *testCCReceiver) ProposeDKGPrivateShare(
+func (r *testCCGlobalReceiver) ProposeDKGPrivateShare(
 	prv *typesDKG.PrivateShare) {
 	go func() {
-		prvKey, exist := r.s.prvKeys[prv.ProposerID]
-		if !exist {
-			panic(errors.New("should exist"))
-		}
-		var err error
-		prv.Signature, err = prvKey.Sign(hashDKGPrivateShare(prv))
-		if err != nil {
-			panic(err)
-		}
 		receiver, exist := r.nodes[prv.ReceiverID]
 		if !exist {
 			panic(errors.New("should exist"))
 		}
-		err = receiver.processPrivateShare(prv)
-		if err != nil {
+		if err := receiver.processPrivateShare(prv); err != nil {
 			panic(err)
 		}
 	}()
+}
+
+func (r *testCCGlobalReceiver) ProposeDKGAntiNackComplaint(
+	prv *typesDKG.PrivateShare) {
+	go func() {
+		for _, cc := range r.nodes {
+			if err := cc.processPrivateShare(
+				test.CloneDKGPrivateShare(prv)); err != nil {
+				panic(err)
+			}
+		}
+	}()
+}
+
+func (r *testCCGlobalReceiver) ProposeDKGMPKReady(ready *typesDKG.MPKReady) {
+	for _, gov := range r.govs {
+		gov.AddDKGMPKReady(ready.Round, test.CloneDKGMPKReady(ready))
+	}
+}
+
+func (r *testCCGlobalReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
+	for _, gov := range r.govs {
+		gov.AddDKGFinalize(final.Round, test.CloneDKGFinalize(final))
+	}
+}
+
+type testCCReceiver struct {
+	signer *utils.Signer
+	recv   *testCCGlobalReceiver
+}
+
+func newTestCCReceiver(nID types.NodeID, recv *testCCGlobalReceiver) *testCCReceiver {
+	return &testCCReceiver{
+		signer: recv.s.signers[nID],
+		recv:   recv,
+	}
+}
+
+func (r *testCCReceiver) ProposeDKGComplaint(
+	complaint *typesDKG.Complaint) {
+	if err := r.signer.SignDKGComplaint(complaint); err != nil {
+		panic(err)
+	}
+	r.recv.ProposeDKGComplaint(complaint)
+}
+
+func (r *testCCReceiver) ProposeDKGMasterPublicKey(
+	mpk *typesDKG.MasterPublicKey) {
+	if err := r.signer.SignDKGMasterPublicKey(mpk); err != nil {
+		panic(err)
+	}
+	r.recv.ProposeDKGMasterPublicKey(mpk)
+}
+
+func (r *testCCReceiver) ProposeDKGPrivateShare(
+	prv *typesDKG.PrivateShare) {
+	if err := r.signer.SignDKGPrivateShare(prv); err != nil {
+		panic(err)
+	}
+	r.recv.ProposeDKGPrivateShare(prv)
 }
 
 func (r *testCCReceiver) ProposeDKGAntiNackComplaint(
 	prv *typesDKG.PrivateShare) {
-	go func() {
-		prvKey, exist := r.s.prvKeys[prv.ProposerID]
-		if !exist {
-			panic(errors.New("should exist"))
-		}
-		var err error
-		prv.Signature, err = prvKey.Sign(hashDKGPrivateShare(prv))
-		if err != nil {
+	// We would need to propose anti nack complaint for private share from
+	// others. Only sign those private shares with zero length signature.
+	if len(prv.Signature.Signature) == 0 {
+		if err := r.signer.SignDKGPrivateShare(prv); err != nil {
 			panic(err)
 		}
-		for _, cc := range r.nodes {
-			// Use Marshal/Unmarshal to do deep copy.
-			data, err := json.Marshal(prv)
-			if err != nil {
-				panic(err)
-			}
-			prvCopy := &typesDKG.PrivateShare{}
-			if err := json.Unmarshal(data, prvCopy); err != nil {
-				panic(err)
-			}
-			err = cc.processPrivateShare(prvCopy)
-			if err != nil {
-				panic(err)
-			}
-		}
-	}()
+	}
+	r.recv.ProposeDKGAntiNackComplaint(prv)
 }
 
 func (r *testCCReceiver) ProposeDKGMPKReady(ready *typesDKG.MPKReady) {
-	prvKey, exist := r.s.prvKeys[ready.ProposerID]
-	if !exist {
-		panic(errors.New("should exist"))
-	}
-	var err error
-	ready.Signature, err = prvKey.Sign(hashDKGMPKReady(ready))
-	if err != nil {
+	if err := r.signer.SignDKGMPKReady(ready); err != nil {
 		panic(err)
 	}
-	for _, gov := range r.govs {
-		// Use Marshal/Unmarshal to do deep copy.
-		data, err := json.Marshal(ready)
-		if err != nil {
-			panic(err)
-		}
-		readyCopy := &typesDKG.MPKReady{}
-		if err := json.Unmarshal(data, readyCopy); err != nil {
-			panic(err)
-		}
-		gov.AddDKGMPKReady(readyCopy.Round, readyCopy)
-	}
+	r.recv.ProposeDKGMPKReady(ready)
 }
 
 func (r *testCCReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
-	prvKey, exist := r.s.prvKeys[final.ProposerID]
-	if !exist {
-		panic(errors.New("should exist"))
-	}
-	var err error
-	final.Signature, err = prvKey.Sign(hashDKGFinalize(final))
-	if err != nil {
+	if err := r.signer.SignDKGFinalize(final); err != nil {
 		panic(err)
 	}
-	for _, gov := range r.govs {
-		// Use Marshal/Unmarshal to do deep copy.
-		data, err := json.Marshal(final)
-		if err != nil {
-			panic(err)
-		}
-		finalCopy := &typesDKG.Finalize{}
-		if err := json.Unmarshal(data, finalCopy); err != nil {
-			panic(err)
-		}
-		gov.AddDKGFinalize(finalCopy.Round, finalCopy)
-	}
+	r.recv.ProposeDKGFinalize(final)
 }
 
 func (s *ConfigurationChainTestSuite) setupNodes(n int) {
 	s.nIDs = make(types.NodeIDs, 0, n)
-	s.prvKeys = make(map[types.NodeID]crypto.PrivateKey, n)
+	s.signers = make(map[types.NodeID]*utils.Signer, n)
 	s.dkgIDs = make(map[types.NodeID]dkg.ID)
+	s.pubKeys = nil
 	ids := make(dkg.IDs, 0, n)
 	for i := 0; i < n; i++ {
 		prvKey, err := ecdsa.NewPrivateKey()
 		s.Require().NoError(err)
 		nID := types.NewNodeID(prvKey.PublicKey())
 		s.nIDs = append(s.nIDs, nID)
-		s.prvKeys[nID] = prvKey
+		s.signers[nID] = utils.NewSigner(prvKey)
+		s.pubKeys = append(s.pubKeys, prvKey.PublicKey())
 		id := dkg.NewID(nID.Hash[:])
 		ids = append(ids, id)
 		s.dkgIDs[nID] = id
@@ -234,22 +199,19 @@ func (s *ConfigurationChainTestSuite) runDKG(
 	s.setupNodes(n)
 
 	cfgChains := make(map[types.NodeID]*configurationChain)
-	recv := newTestCCReceiver(s)
-
-	pks := make([]crypto.PublicKey, 0, len(s.prvKeys))
-	for _, prv := range s.prvKeys {
-		pks = append(pks, prv.PublicKey())
-	}
+	recv := newTestCCGlobalReceiver(s)
 
 	for _, nID := range s.nIDs {
 		gov, err := test.NewGovernance(test.NewState(
-			pks, 100*time.Millisecond, &common.NullLogger{}, true), ConfigRoundShift)
+			s.pubKeys, 100*time.Millisecond, &common.NullLogger{}, true,
+		), ConfigRoundShift)
 		s.Require().NoError(err)
 		cache := utils.NewNodeSetCache(gov)
 		dbInst, err := db.NewMemBackedDB()
 		s.Require().NoError(err)
-		cfgChains[nID] = newConfigurationChain(
-			nID, recv, gov, cache, dbInst, &common.NullLogger{})
+		cfgChains[nID] = newConfigurationChain(nID,
+			newTestCCReceiver(nID, recv), gov, cache, dbInst,
+			&common.NullLogger{})
 		recv.nodes[nID] = cfgChains[nID]
 		recv.govs[nID] = gov
 	}
@@ -293,9 +255,9 @@ func (s *ConfigurationChainTestSuite) preparePartialSignature(
 		}
 		psig, err := cc.preparePartialSignature(round, hash)
 		s.Require().NoError(err)
-		prvKey, exist := s.prvKeys[cc.ID]
+		signer, exist := s.signers[cc.ID]
 		s.Require().True(exist)
-		psig.Signature, err = prvKey.Sign(hashDKGPartialSignature(psig))
+		err = signer.SignDKGPartialSignature(psig)
 		s.Require().NoError(err)
 		psigs = append(psigs, psig)
 	}
@@ -359,18 +321,12 @@ func (s *ConfigurationChainTestSuite) TestDKGMasterPublicKeyDelayAdd() {
 	s.setupNodes(n)
 
 	cfgChains := make(map[types.NodeID]*configurationChain)
-	recv := newTestCCReceiver(s)
-
-	pks := make([]crypto.PublicKey, 0, len(s.prvKeys))
-	for _, prv := range s.prvKeys {
-		pks = append(pks, prv.PublicKey())
-	}
-
+	recv := newTestCCGlobalReceiver(s)
 	delayNode := s.nIDs[0]
 
 	for _, nID := range s.nIDs {
 		state := test.NewState(
-			pks, 100*time.Millisecond, &common.NullLogger{}, true)
+			s.pubKeys, 100*time.Millisecond, &common.NullLogger{}, true)
 		gov, err := test.NewGovernance(state, ConfigRoundShift)
 		s.Require().NoError(err)
 		s.Require().NoError(state.RequestChange(
@@ -379,7 +335,8 @@ func (s *ConfigurationChainTestSuite) TestDKGMasterPublicKeyDelayAdd() {
 		dbInst, err := db.NewMemBackedDB()
 		s.Require().NoError(err)
 		cfgChains[nID] = newConfigurationChain(
-			nID, recv, gov, cache, dbInst, &common.NullLogger{})
+			nID, newTestCCReceiver(nID, recv), gov, cache, dbInst,
+			&common.NullLogger{})
 		recv.nodes[nID] = cfgChains[nID]
 		recv.govs[nID] = gov
 	}
@@ -430,16 +387,11 @@ func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 	s.setupNodes(n)
 
 	cfgChains := make(map[types.NodeID]*configurationChain)
-	recv := newTestCCReceiver(s)
-
-	pks := make([]crypto.PublicKey, 0, len(s.prvKeys))
-	for _, prv := range s.prvKeys {
-		pks = append(pks, prv.PublicKey())
-	}
-
+	recv := newTestCCGlobalReceiver(s)
+	recvs := make(map[types.NodeID]*testCCReceiver)
 	for _, nID := range s.nIDs {
 		state := test.NewState(
-			pks, 100*time.Millisecond, &common.NullLogger{}, true)
+			s.pubKeys, 100*time.Millisecond, &common.NullLogger{}, true)
 		gov, err := test.NewGovernance(state, ConfigRoundShift)
 		s.Require().NoError(err)
 		s.Require().NoError(state.RequestChange(
@@ -447,8 +399,9 @@ func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 		cache := utils.NewNodeSetCache(gov)
 		dbInst, err := db.NewMemBackedDB()
 		s.Require().NoError(err)
-		cfgChains[nID] = newConfigurationChain(
-			nID, recv, gov, cache, dbInst, &common.NullLogger{})
+		recvs[nID] = newTestCCReceiver(nID, recv)
+		cfgChains[nID] = newConfigurationChain(nID, recvs[nID], gov, cache,
+			dbInst, &common.NullLogger{})
 		recv.nodes[nID] = cfgChains[nID]
 		recv.govs[nID] = gov
 	}
@@ -479,9 +432,8 @@ func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 			if targetNode == nID {
 				continue
 			}
-			recv.ProposeDKGComplaint(&typesDKG.Complaint{
-				ProposerID: nID,
-				Round:      round,
+			recvs[nID].ProposeDKGComplaint(&typesDKG.Complaint{
+				Round: round,
 				PrivateShare: typesDKG.PrivateShare{
 					ProposerID: targetNode,
 					Round:      round,

@@ -33,13 +33,6 @@ import (
 	"github.com/dexon-foundation/dexon/rlp"
 )
 
-func stableRandomHash(block *types.Block) (common.Hash, error) {
-	if (block.Hash != common.Hash{}) {
-		return block.Hash, nil
-	}
-	return common.NewRandomHash(), nil
-}
-
 // GenerateRandomNodeIDs generates randomly a slices of types.NodeID.
 func GenerateRandomNodeIDs(nodeCount int) (nIDs types.NodeIDs) {
 	nIDs = types.NodeIDs{}
@@ -121,7 +114,8 @@ func NewKeys(count int) (
 	return
 }
 
-func cloneDKGComplaint(
+// CloneDKGComplaint clones a tpyesDKG.Complaint instance.
+func CloneDKGComplaint(
 	comp *typesDKG.Complaint) (copied *typesDKG.Complaint) {
 	b, err := rlp.EncodeToBytes(comp)
 	if err != nil {
@@ -134,7 +128,8 @@ func cloneDKGComplaint(
 	return
 }
 
-func cloneDKGMasterPublicKey(mpk *typesDKG.MasterPublicKey) (
+// CloneDKGMasterPublicKey clones a typesDKG.MasterPublicKey instance.
+func CloneDKGMasterPublicKey(mpk *typesDKG.MasterPublicKey) (
 	copied *typesDKG.MasterPublicKey) {
 	b, err := rlp.EncodeToBytes(mpk)
 	if err != nil {
@@ -147,7 +142,8 @@ func cloneDKGMasterPublicKey(mpk *typesDKG.MasterPublicKey) (
 	return
 }
 
-func cloneDKGMPKReady(ready *typesDKG.MPKReady) (
+// CloneDKGMPKReady clones a typesDKG.MPKReady instance.
+func CloneDKGMPKReady(ready *typesDKG.MPKReady) (
 	copied *typesDKG.MPKReady) {
 	b, err := rlp.EncodeToBytes(ready)
 	if err != nil {
@@ -160,13 +156,28 @@ func cloneDKGMPKReady(ready *typesDKG.MPKReady) (
 	return
 }
 
-func cloneDKGFinalize(final *typesDKG.Finalize) (
+// CloneDKGFinalize clones a typesDKG.Finalize instance.
+func CloneDKGFinalize(final *typesDKG.Finalize) (
 	copied *typesDKG.Finalize) {
 	b, err := rlp.EncodeToBytes(final)
 	if err != nil {
 		panic(err)
 	}
 	copied = &typesDKG.Finalize{}
+	if err = rlp.DecodeBytes(b, copied); err != nil {
+		panic(err)
+	}
+	return
+}
+
+// CloneDKGPrivateShare clones a typesDKG.PrivateShare instance.
+func CloneDKGPrivateShare(prvShare *typesDKG.PrivateShare) (
+	copied *typesDKG.PrivateShare) {
+	b, err := rlp.EncodeToBytes(prvShare)
+	if err != nil {
+		panic(err)
+	}
+	copied = &typesDKG.PrivateShare{}
 	if err = rlp.DecodeBytes(b, copied); err != nil {
 		panic(err)
 	}

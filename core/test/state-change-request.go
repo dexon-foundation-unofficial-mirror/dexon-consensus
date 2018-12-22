@@ -117,14 +117,14 @@ func (req *StateChangeRequest) Clone() (copied *StateChangeRequest) {
 			CRS:   crsReq.CRS,
 		}
 	case StateAddDKGMPKReady:
-		copied.Payload = cloneDKGMPKReady(req.Payload.(*typesDKG.MPKReady))
+		copied.Payload = CloneDKGMPKReady(req.Payload.(*typesDKG.MPKReady))
 	case StateAddDKGFinal:
-		copied.Payload = cloneDKGFinalize(req.Payload.(*typesDKG.Finalize))
+		copied.Payload = CloneDKGFinalize(req.Payload.(*typesDKG.Finalize))
 	case StateAddDKGMasterPublicKey:
-		copied.Payload = cloneDKGMasterPublicKey(
+		copied.Payload = CloneDKGMasterPublicKey(
 			req.Payload.(*typesDKG.MasterPublicKey))
 	case StateAddDKGComplaint:
-		copied.Payload = cloneDKGComplaint(req.Payload.(*typesDKG.Complaint))
+		copied.Payload = CloneDKGComplaint(req.Payload.(*typesDKG.Complaint))
 	default:
 		copied.Payload = req.Payload
 	}

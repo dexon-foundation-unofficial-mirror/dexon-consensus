@@ -24,10 +24,10 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 // ErrParentNotAcked would be raised when some block doesn't
@@ -39,12 +39,10 @@ var ErrParentNotAcked = errors.New("parent is not acked")
 type nodeStatus struct {
 	blocks          []*types.Block
 	genesisTime     time.Time
-	prvKey          crypto.PrivateKey
+	signer          *utils.Signer
 	tip             *types.Block
 	nextAckingIndex map[types.NodeID]uint64
 }
-
-type hashBlockFn func(*types.Block) (common.Hash, error)
 
 // getAckedBlockHash would randomly pick one block between
 // last acked one to current head.
@@ -85,7 +83,6 @@ type nodeSetStatus struct {
 	nIDs          []types.NodeID
 	randGen       *rand.Rand
 	timePicker    func(time.Time) time.Time
-	hashBlock     hashBlockFn
 }
 
 func newNodeSetStatus(
@@ -93,8 +90,7 @@ func newNodeSetStatus(
 	tips map[uint32]*types.Block,
 	round uint64,
 	genesisTime, endTime time.Time,
-	timePicker func(time.Time) time.Time,
-	hashBlock hashBlockFn) *nodeSetStatus {
+	timePicker func(time.Time) time.Time) *nodeSetStatus {
 	var (
 		status        = make(map[types.NodeID]*nodeStatus)
 		proposerChain = make(map[types.NodeID]uint32)
@@ -110,7 +106,7 @@ func newNodeSetStatus(
 		status[nID] = &nodeStatus{
 			blocks:          []*types.Block{},
 			genesisTime:     genesisTime,
-			prvKey:          prvKey,
+			signer:          utils.NewSigner(prvKey),
 			tip:             tips[i],
 			nextAckingIndex: make(map[types.NodeID]uint64),
 		}
@@ -124,7 +120,6 @@ func newNodeSetStatus(
 		nIDs:          nIDs,
 		randGen:       rand.New(rand.NewSource(time.Now().UnixNano())),
 		timePicker:    timePicker,
-		hashBlock:     hashBlock,
 	}
 }
 
@@ -200,15 +195,8 @@ func (ns *nodeSetStatus) proposeBlock(
 		},
 		Timestamp: status.getNextBlockTime(ns.timePicker),
 	}
-	newBlock.ProposerID = proposerID
 	newBlock.Acks = common.NewSortedHashes(acks)
-	var err error
-	newBlock.Hash, err = ns.hashBlock(newBlock)
-	if err != nil {
-		return nil, err
-	}
-	newBlock.Signature, err = status.prvKey.Sign(newBlock.Hash)
-	if err != nil {
+	if err := status.signer.SignBlock(newBlock); err != nil {
 		return nil, err
 	}
 	status.blocks = append(status.blocks, newBlock)
@@ -276,7 +264,6 @@ type BlocksGenerator struct {
 	nodePicker           func([]types.NodeID) types.NodeID
 	timePicker           func(time.Time) time.Time
 	ackingCountGenerator func() int
-	hashBlock            hashBlockFn
 }
 
 // NewBlocksGenerator constructs BlockGenerator.
@@ -290,8 +277,7 @@ type BlocksGenerator struct {
 // the nodeCount you provided with a normal distribution.
 func NewBlocksGenerator(
 	config *BlocksGeneratorConfig,
-	ackingCountGenerator func() int,
-	hashBlock hashBlockFn) *BlocksGenerator {
+	ackingCountGenerator func() int) *BlocksGenerator {
 	if config.MinBlockTimeInterval == time.Duration(0) {
 		panic(errors.New("min block interval cannot be 0"))
 	}
@@ -307,7 +293,6 @@ func NewBlocksGenerator(
 		nodePicker:           generateNodePicker(),
 		timePicker:           timePicker,
 		ackingCountGenerator: ackingCountGenerator,
-		hashBlock:            hashBlock,
 	}
 }
 
@@ -325,7 +310,7 @@ func (gen *BlocksGenerator) Generate(
 		}
 	}
 	status := newNodeSetStatus(gen.config.NumChains, tips, roundID,
-		roundBegin, roundEnd, gen.timePicker, gen.hashBlock)
+		roundBegin, roundEnd, gen.timePicker)
 	// We would record the smallest height of block that could be acked
 	// from each node's point-of-view.
 	toAck := make(map[types.NodeID]map[types.NodeID]uint64)

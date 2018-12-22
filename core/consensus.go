@@ -260,7 +260,7 @@ func (recv *consensusBAReceiver) PullBlocks(hashes common.Hashes) {
 type consensusDKGReceiver struct {
 	ID           types.NodeID
 	gov          Governance
-	authModule   *Authenticator
+	signer       *utils.Signer
 	nodeSetCache *utils.NodeSetCache
 	cfgModule    *configurationChain
 	network      Network
@@ -270,7 +270,7 @@ type consensusDKGReceiver struct {
 // ProposeDKGComplaint proposes a DKGComplaint.
 func (recv *consensusDKGReceiver) ProposeDKGComplaint(
 	complaint *typesDKG.Complaint) {
-	if err := recv.authModule.SignDKGComplaint(complaint); err != nil {
+	if err := recv.signer.SignDKGComplaint(complaint); err != nil {
 		recv.logger.Error("Failed to sign DKG complaint", "error", err)
 		return
 	}
@@ -282,7 +282,7 @@ func (recv *consensusDKGReceiver) ProposeDKGComplaint(
 // ProposeDKGMasterPublicKey propose a DKGMasterPublicKey.
 func (recv *consensusDKGReceiver) ProposeDKGMasterPublicKey(
 	mpk *typesDKG.MasterPublicKey) {
-	if err := recv.authModule.SignDKGMasterPublicKey(mpk); err != nil {
+	if err := recv.signer.SignDKGMasterPublicKey(mpk); err != nil {
 		recv.logger.Error("Failed to sign DKG master public key", "error", err)
 		return
 	}
@@ -293,7 +293,7 @@ func (recv *consensusDKGReceiver) ProposeDKGMasterPublicKey(
 // ProposeDKGPrivateShare propose a DKGPrivateShare.
 func (recv *consensusDKGReceiver) ProposeDKGPrivateShare(
 	prv *typesDKG.PrivateShare) {
-	if err := recv.authModule.SignDKGPrivateShare(prv); err != nil {
+	if err := recv.signer.SignDKGPrivateShare(prv); err != nil {
 		recv.logger.Error("Failed to sign DKG private share", "error", err)
 		return
 	}
@@ -320,7 +320,7 @@ func (recv *consensusDKGReceiver) ProposeDKGPrivateShare(
 func (recv *consensusDKGReceiver) ProposeDKGAntiNackComplaint(
 	prv *typesDKG.PrivateShare) {
 	if prv.ProposerID == recv.ID {
-		if err := recv.authModule.SignDKGPrivateShare(prv); err != nil {
+		if err := recv.signer.SignDKGPrivateShare(prv); err != nil {
 			recv.logger.Error("Failed sign DKG private share", "error", err)
 			return
 		}
@@ -331,7 +331,7 @@ func (recv *consensusDKGReceiver) ProposeDKGAntiNackComplaint(
 
 // ProposeDKGMPKReady propose a DKGMPKReady message.
 func (recv *consensusDKGReceiver) ProposeDKGMPKReady(ready *typesDKG.MPKReady) {
-	if err := recv.authModule.SignDKGMPKReady(ready); err != nil {
+	if err := recv.signer.SignDKGMPKReady(ready); err != nil {
 		recv.logger.Error("Failed to sign DKG ready", "error", err)
 		return
 	}
@@ -341,7 +341,7 @@ func (recv *consensusDKGReceiver) ProposeDKGMPKReady(ready *typesDKG.MPKReady) {
 
 // ProposeDKGFinalize propose a DKGFinalize message.
 func (recv *consensusDKGReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
-	if err := recv.authModule.SignDKGFinalize(final); err != nil {
+	if err := recv.signer.SignDKGFinalize(final); err != nil {
 		recv.logger.Error("Failed to sign DKG finalize", "error", err)
 		return
 	}
@@ -352,8 +352,8 @@ func (recv *consensusDKGReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
 // Consensus implements DEXON Consensus algorithm.
 type Consensus struct {
 	// Node Info.
-	ID         types.NodeID
-	authModule *Authenticator
+	ID     types.NodeID
+	signer *utils.Signer
 
 	// BA.
 	baMgr            *agreementMgr
@@ -401,8 +401,8 @@ func NewConsensus(
 
 	// TODO(w): load latest blockHeight from DB, and use config at that height.
 	nodeSetCache := utils.NewNodeSetCache(gov)
-	// Setup auth module.
-	authModule := NewAuthenticator(prv)
+	// Setup signer module.
+	signer := utils.NewSigner(prv)
 	// Check if the application implement Debug interface.
 	var debugApp Debug
 	if a, ok := app.(Debug); ok {
@@ -413,13 +413,13 @@ func NewConsensus(
 	config := utils.GetConfigWithPanic(gov, round, logger)
 	// Init lattice.
 	lattice := NewLattice(
-		dMoment, round, config, authModule, app, debugApp, db, logger)
+		dMoment, round, config, signer, app, debugApp, db, logger)
 	// Init configuration chain.
 	ID := types.NewNodeID(prv.PublicKey())
 	recv := &consensusDKGReceiver{
 		ID:           ID,
 		gov:          gov,
-		authModule:   authModule,
+		signer:       signer,
 		nodeSetCache: nodeSetCache,
 		network:      network,
 		logger:       logger,
@@ -447,7 +447,7 @@ func NewConsensus(
 		cfgModule:        cfgModule,
 		dMoment:          dMoment,
 		nodeSetCache:     nodeSetCache,
-		authModule:       authModule,
+		signer:           signer,
 		event:            common.NewEvent(),
 		logger:           logger,
 	}
@@ -479,14 +479,14 @@ func NewConsensusFromSyncer(
 	logger common.Logger) (*Consensus, error) {
 	// Setup the cache for node sets.
 	nodeSetCache := utils.NewNodeSetCache(gov)
-	// Setup auth module.
-	authModule := NewAuthenticator(prv)
+	// Setup signer module.
+	signer := utils.NewSigner(prv)
 	// Init configuration chain.
 	ID := types.NewNodeID(prv.PublicKey())
 	recv := &consensusDKGReceiver{
 		ID:           ID,
 		gov:          gov,
-		authModule:   authModule,
+		signer:       signer,
 		nodeSetCache: nodeSetCache,
 		network:      networkModule,
 		logger:       logger,
@@ -518,7 +518,7 @@ func NewConsensusFromSyncer(
 		cfgModule:        cfgModule,
 		dMoment:          initRoundBeginTime,
 		nodeSetCache:     nodeSetCache,
-		authModule:       authModule,
+		signer:           signer,
 		event:            common.NewEvent(),
 		logger:           logger,
 	}
@@ -655,7 +655,7 @@ func (con *Consensus) runCRS(round uint64) {
 		round, utils.GetCRSWithPanic(con.gov, round, con.logger))
 	if err != nil {
 		con.logger.Error("Failed to prepare partial signature", "error", err)
-	} else if err = con.authModule.SignDKGPartialSignature(psig); err != nil {
+	} else if err = con.signer.SignDKGPartialSignature(psig); err != nil {
 		con.logger.Error("Failed to sign DKG partial signature", "error", err)
 	} else if err = con.cfgModule.processPartialSignature(psig); err != nil {
 		con.logger.Error("Failed to process partial signature", "error", err)
@@ -933,7 +933,7 @@ func (con *Consensus) ProcessAgreementResult(
 	if err != nil {
 		return err
 	}
-	if err = con.authModule.SignDKGPartialSignature(psig); err != nil {
+	if err = con.signer.SignDKGPartialSignature(psig); err != nil {
 		return err
 	}
 	if err = con.cfgModule.processPartialSignature(psig); err != nil {
@@ -1123,7 +1123,7 @@ func (con *Consensus) prepareBlock(b *types.Block,
 		err = ErrCRSNotReady
 		return
 	}
-	if err = con.authModule.SignCRS(b, crs); err != nil {
+	if err = con.signer.SignCRS(b, crs); err != nil {
 		return
 	}
 	return

@@ -26,6 +26,7 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 // Errors for agreement module.
@@ -112,7 +113,7 @@ type agreement struct {
 	pendingVote    []pendingVote
 	candidateBlock map[common.Hash]*types.Block
 	fastForward    chan uint64
-	authModule     *Authenticator
+	signer         *utils.Signer
 }
 
 // newAgreement creates a agreement instance.
@@ -120,7 +121,7 @@ func newAgreement(
 	ID types.NodeID,
 	recv agreementReceiver,
 	leader *leaderSelector,
-	authModule *Authenticator) *agreement {
+	signer *utils.Signer) *agreement {
 	agreement := &agreement{
 		data: &agreementData{
 			recv:   recv,
@@ -130,7 +131,7 @@ func newAgreement(
 		aID:            &atomic.Value{},
 		candidateBlock: make(map[common.Hash]*types.Block),
 		fastForward:    make(chan uint64, 1),
-		authModule:     authModule,
+		signer:         signer,
 	}
 	agreement.stop()
 	return agreement
@@ -268,7 +269,7 @@ func (a *agreement) sanityCheck(vote *types.Vote) error {
 	if _, exist := a.notarySet[vote.ProposerID]; !exist {
 		return ErrNotInNotarySet
 	}
-	ok, err := verifyVoteSignature(vote)
+	ok, err := utils.VerifyVoteSignature(vote)
 	if err != nil {
 		return err
 	}
@@ -299,7 +300,7 @@ func (a *agreement) checkForkVote(vote *types.Vote) error {
 // prepareVote prepares a vote.
 func (a *agreement) prepareVote(vote *types.Vote) (err error) {
 	vote.Position = a.agreementID()
-	err = a.authModule.SignVote(vote)
+	err = a.signer.SignVote(vote)
 	return
 }
 

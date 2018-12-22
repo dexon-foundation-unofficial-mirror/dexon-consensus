@@ -476,7 +476,7 @@ func (s *State) Clone() (copied *State) {
 		for nID, comps := range complaintsForRound {
 			tmpComps := []*typesDKG.Complaint{}
 			for _, comp := range comps {
-				tmpComps = append(tmpComps, cloneDKGComplaint(comp))
+				tmpComps = append(tmpComps, CloneDKGComplaint(comp))
 			}
 			copied.dkgComplaints[round][nID] = tmpComps
 		}
@@ -486,19 +486,19 @@ func (s *State) Clone() (copied *State) {
 			make(map[types.NodeID]*typesDKG.MasterPublicKey)
 		for nID, mKey := range mKeysForRound {
 			copied.dkgMasterPublicKeys[round][nID] =
-				cloneDKGMasterPublicKey(mKey)
+				CloneDKGMasterPublicKey(mKey)
 		}
 	}
 	for round, readysForRound := range s.dkgReadys {
 		copied.dkgReadys[round] = make(map[types.NodeID]*typesDKG.MPKReady)
 		for nID, ready := range readysForRound {
-			copied.dkgReadys[round][nID] = cloneDKGMPKReady(ready)
+			copied.dkgReadys[round][nID] = CloneDKGMPKReady(ready)
 		}
 	}
 	for round, finalsForRound := range s.dkgFinals {
 		copied.dkgFinals[round] = make(map[types.NodeID]*typesDKG.Finalize)
 		for nID, final := range finalsForRound {
-			copied.dkgFinals[round][nID] = cloneDKGFinalize(final)
+			copied.dkgFinals[round][nID] = CloneDKGFinalize(final)
 		}
 	}
 	for _, crs := range s.crs {
@@ -825,7 +825,7 @@ func (s *State) DKGComplaints(round uint64) []*typesDKG.Complaint {
 	tmpComps := make([]*typesDKG.Complaint, 0, len(comps))
 	for _, compProp := range comps {
 		for _, comp := range compProp {
-			tmpComps = append(tmpComps, cloneDKGComplaint(comp))
+			tmpComps = append(tmpComps, CloneDKGComplaint(comp))
 		}
 	}
 	return tmpComps
@@ -843,7 +843,7 @@ func (s *State) DKGMasterPublicKeys(round uint64) []*typesDKG.MasterPublicKey {
 	}
 	mpks := make([]*typesDKG.MasterPublicKey, 0, len(masterPublicKeys))
 	for _, mpk := range masterPublicKeys {
-		mpks = append(mpks, cloneDKGMasterPublicKey(mpk))
+		mpks = append(mpks, CloneDKGMasterPublicKey(mpk))
 	}
 	return mpks
 }

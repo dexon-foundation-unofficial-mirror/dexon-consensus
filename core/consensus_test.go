@@ -31,6 +31,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 // network implements core.Network.
@@ -589,9 +590,9 @@ func (s *ConsensusTestSuite) TestSyncBA() {
 	_, con := s.prepareConsensus(time.Now().UTC(), gov, prvKey, conn)
 	go con.Run()
 	hash := common.NewRandomHash()
-	auths := make([]*Authenticator, 0, len(prvKeys))
+	signers := make([]*utils.Signer, 0, len(prvKeys))
 	for _, prvKey := range prvKeys {
-		auths = append(auths, NewAuthenticator(prvKey))
+		signers = append(signers, utils.NewSigner(prvKey))
 	}
 	pos := types.Position{
 		Round:   0,
@@ -602,10 +603,10 @@ func (s *ConsensusTestSuite) TestSyncBA() {
 		BlockHash: hash,
 		Position:  pos,
 	}
-	for _, auth := range auths {
+	for _, signer := range signers {
 		vote := types.NewVote(types.VoteCom, hash, 0)
 		vote.Position = pos
-		s.Require().NoError(auth.SignVote(vote))
+		s.Require().NoError(signer.SignVote(vote))
 		baResult.Votes = append(baResult.Votes, *vote)
 	}
 	// Make sure each agreement module is running. ProcessAgreementResult only
@@ -637,12 +638,12 @@ func (s *ConsensusTestSuite) TestSyncBA() {
 	baResult.Votes[0].Signature, err = prvKeys[0].Sign(common.NewRandomHash())
 	s.Require().NoError(err)
 	s.Equal(ErrIncorrectVoteSignature, con.ProcessAgreementResult(baResult))
-	s.Require().NoError(auths[0].SignVote(&baResult.Votes[0]))
+	s.Require().NoError(signers[0].SignVote(&baResult.Votes[0]))
 
-	for _, auth := range auths {
+	for _, signer := range signers {
 		vote := types.NewVote(types.VoteCom, hash, 0)
 		vote.Position = pos
-		s.Require().NoError(auth.SignVote(vote))
+		s.Require().NoError(signer.SignVote(vote))
 		baResult.Votes = append(baResult.Votes, *vote)
 	}
 	s.Equal(ErrIncorrectVoteProposer, con.ProcessAgreementResult(baResult))

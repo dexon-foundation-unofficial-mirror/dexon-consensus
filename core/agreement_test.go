@@ -23,6 +23,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -61,7 +62,7 @@ func (s *AgreementTestSuite) proposeBlock(
 		Hash:       common.NewRandomHash(),
 	}
 	s.block[block.Hash] = block
-	s.Require().NoError(s.auths[s.ID].SignCRS(
+	s.Require().NoError(s.signers[s.ID].SignCRS(
 		block, s.agreement[agreementIdx].data.leader.hashCRS))
 	return block
 }
@@ -69,7 +70,7 @@ func (s *AgreementTestSuite) proposeBlock(
 type AgreementTestSuite struct {
 	suite.Suite
 	ID           types.NodeID
-	auths        map[types.NodeID]*Authenticator
+	signers      map[types.NodeID]*utils.Signer
 	voteChan     chan *types.Vote
 	blockChan    chan common.Hash
 	confirmChan  chan common.Hash
@@ -82,8 +83,8 @@ func (s *AgreementTestSuite) SetupTest() {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
 	s.ID = types.NewNodeID(prvKey.PublicKey())
-	s.auths = map[types.NodeID]*Authenticator{
-		s.ID: NewAuthenticator(prvKey),
+	s.signers = map[types.NodeID]*utils.Signer{
+		s.ID: utils.NewSigner(prvKey),
 	}
 	s.voteChan = make(chan *types.Vote, 100)
 	s.blockChan = make(chan common.Hash, 100)
@@ -103,7 +104,7 @@ func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 		s.Require().NoError(err)
 		nID := types.NewNodeID(prvKey.PublicKey())
 		notarySet[nID] = struct{}{}
-		s.auths[nID] = NewAuthenticator(prvKey)
+		s.signers[nID] = utils.NewSigner(prvKey)
 	}
 	notarySet[s.ID] = struct{}{}
 	agreement := newAgreement(
@@ -113,7 +114,7 @@ func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 			agreementIndex: agreementIdx,
 		},
 		leader,
-		s.auths[s.ID],
+		s.signers[s.ID],
 	)
 	agreement.restart(notarySet, types.Position{}, common.NewRandomHash())
 	s.agreement = append(s.agreement, agreement)
@@ -123,7 +124,7 @@ func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 func (s *AgreementTestSuite) copyVote(
 	vote *types.Vote, proposer types.NodeID) *types.Vote {
 	v := vote.Clone()
-	s.auths[proposer].SignVote(v)
+	s.signers[proposer].SignVote(v)
 	return v
 }
 
@@ -132,7 +133,7 @@ func (s *AgreementTestSuite) prepareVote(
 	period uint64) (
 	vote *types.Vote) {
 	vote = types.NewVote(voteType, blockHash, period)
-	s.Require().NoError(s.auths[nID].SignVote(vote))
+	s.Require().NoError(s.signers[nID].SignVote(vote))
 	return
 }
 
@@ -156,7 +157,7 @@ func (s *AgreementTestSuite) TestSimpleConfirm() {
 	vote = <-s.voteChan
 	s.Equal(types.VotePreCom, vote.Type)
 	s.Equal(blockHash, vote.BlockHash)
-	for nID := range s.auths {
+	for nID := range s.signers {
 		v := s.copyVote(vote, nID)
 		s.Require().NoError(a.processVote(v))
 	}
@@ -168,7 +169,7 @@ func (s *AgreementTestSuite) TestSimpleConfirm() {
 	s.Equal(blockHash, vote.BlockHash)
 	s.Equal(blockHash, a.data.lockValue)
 	s.Equal(uint64(1), a.data.lockRound)
-	for nID := range s.auths {
+	for nID := range s.signers {
 		v := s.copyVote(vote, nID)
 		s.Require().NoError(a.processVote(v))
 	}
@@ -198,7 +199,7 @@ func (s *AgreementTestSuite) TestPartitionOnCommitVote() {
 	vote = <-s.voteChan
 	s.Equal(types.VotePreCom, vote.Type)
 	s.Equal(blockHash, vote.BlockHash)
-	for nID := range s.auths {
+	for nID := range s.signers {
 		v := s.copyVote(vote, nID)
 		s.Require().NoError(a.processVote(v))
 	}

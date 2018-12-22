@@ -25,6 +25,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 // Errors for leader module.
@@ -121,7 +122,7 @@ func (l *leaderSelector) leaderBlockHash() common.Hash {
 }
 
 func (l *leaderSelector) processBlock(block *types.Block) error {
-	ok, err := verifyCRSSignature(block, l.hashCRS)
+	ok, err := utils.VerifyCRSSignature(block, l.hashCRS)
 	if err != nil {
 		return err
 	}

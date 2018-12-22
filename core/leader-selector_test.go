@@ -25,6 +25,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 type LeaderSelectorTestSuite struct {
@@ -105,7 +106,7 @@ func (s *LeaderSelectorTestSuite) TestLeaderBlockHash() {
 			Hash:       common.NewRandomHash(),
 		}
 		s.Require().NoError(
-			NewAuthenticator(prv).SignCRS(block, leader.hashCRS))
+			utils.NewSigner(prv).SignCRS(block, leader.hashCRS))
 		s.Require().NoError(leader.processBlock(block))
 		blocks[block.Hash] = block
 	}
@@ -133,7 +134,7 @@ func (s *LeaderSelectorTestSuite) TestValidLeaderFn() {
 			Hash:       common.NewRandomHash(),
 		}
 		s.Require().NoError(
-			NewAuthenticator(prv).SignCRS(block, leader.hashCRS))
+			utils.NewSigner(prv).SignCRS(block, leader.hashCRS))
 		s.Require().NoError(leader.processBlock(block))
 		blocks[block.Hash] = block
 	}
@@ -164,7 +165,7 @@ func (s *LeaderSelectorTestSuite) TestPotentialLeader() {
 			Hash:       common.NewRandomHash(),
 		}
 		s.Require().NoError(
-			NewAuthenticator(prv).SignCRS(block, leader.hashCRS))
+			utils.NewSigner(prv).SignCRS(block, leader.hashCRS))
 		ok, _ := leader.potentialLeader(block)
 		s.Require().NoError(leader.processBlock(block))
 		if i > 0 {

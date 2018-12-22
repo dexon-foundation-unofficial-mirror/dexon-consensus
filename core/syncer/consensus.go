@@ -127,7 +127,7 @@ func (con *Consensus) initConsensusObj(initBlock *types.Block) {
 			con.roundBeginTimes[con.latticeLastRound],
 			con.latticeLastRound,
 			cfg,
-			core.NewAuthenticator(con.prv),
+			utils.NewSigner(con.prv),
 			con.app,
 			debugApp,
 			con.db,

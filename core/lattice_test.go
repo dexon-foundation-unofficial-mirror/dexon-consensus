@@ -27,6 +27,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -126,7 +127,7 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 			dMoment,
 			0,
 			cfg,
-			NewAuthenticator(prvKey),
+			utils.NewSigner(prvKey),
 			app,
 			app,
 			dbInst,
@@ -224,7 +225,7 @@ func (s *LatticeTestSuite) TestSanityCheck() {
 			MinBlockInterval: 0,
 		}
 		lattice = s.newTestLatticeMgr(&cfg, time.Now().UTC()).lattice
-		auth    = lattice.authModule // Steal auth module from lattice, :(
+		signer  = lattice.signer // Steal signer module from lattice, :(
 		req     = s.Require()
 		err     error
 	)
@@ -233,11 +234,12 @@ func (s *LatticeTestSuite) TestSanityCheck() {
 		Position:  types.Position{ChainID: 0},
 		Timestamp: time.Now().UTC(),
 	}
-	req.NoError(auth.SignBlock(b))
+	req.NoError(signer.SignBlock(b))
 	req.NoError(lattice.SanityCheck(b))
 	// A block with incorrect signature should not pass sanity check.
-	b.Signature, err = auth.prvKey.Sign(common.NewRandomHash())
+	otherPrvKey, err := ecdsa.NewPrivateKey()
 	req.NoError(err)
+	b.Signature, err = otherPrvKey.Sign(common.NewRandomHash())
 	req.Equal(lattice.SanityCheck(b), ErrIncorrectSignature)
 	// A block with un-sorted acks should not pass sanity check.
 	b.Acks = common.NewSortedHashes(common.Hashes{
@@ -248,7 +250,7 @@ func (s *LatticeTestSuite) TestSanityCheck() {
 		common.NewRandomHash(),
 	})
 	b.Acks[0], b.Acks[1] = b.Acks[1], b.Acks[0]
-	req.NoError(auth.SignBlock(b))
+	req.NoError(signer.SignBlock(b))
 	req.Equal(lattice.SanityCheck(b), ErrAcksNotSorted)
 	// A block with incorrect hash should not pass sanity check.
 	b.Hash = common.NewRandomHash()

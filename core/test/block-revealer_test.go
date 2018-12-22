@@ -48,7 +48,7 @@ func (s *BlockRevealerTestSuite) SetupSuite() {
 		NumChains:            19,
 		MinBlockTimeInterval: 250 * time.Millisecond,
 	}
-	gen := NewBlocksGenerator(config, nil, stableRandomHash)
+	gen := NewBlocksGenerator(config, nil)
 	s.Require().NoError(gen.Generate(
 		0,
 		genesisTime,

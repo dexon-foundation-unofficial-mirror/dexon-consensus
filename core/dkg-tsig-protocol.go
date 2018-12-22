@@ -155,7 +155,6 @@ func newDKGProtocol(
 	prvShare, pubShare := dkg.NewPrivateKeyShares(threshold)
 
 	recv.ProposeDKGMasterPublicKey(&typesDKG.MasterPublicKey{
-		ProposerID:      ID,
 		Round:           round,
 		DKGID:           newDKGID(ID),
 		PublicKeyShares: *pubShare,
@@ -195,7 +194,6 @@ func (d *dkgProtocol) processMasterPublicKeys(
 			return ErrIDShareNotFound
 		}
 		d.recv.ProposeDKGPrivateShare(&typesDKG.PrivateShare{
-			ProposerID:   d.ID,
 			ReceiverID:   mpk.ProposerID,
 			Round:        d.round,
 			PrivateShare: *share,
@@ -210,8 +208,7 @@ func (d *dkgProtocol) proposeNackComplaints() {
 			continue
 		}
 		d.recv.ProposeDKGComplaint(&typesDKG.Complaint{
-			ProposerID: d.ID,
-			Round:      d.round,
+			Round: d.round,
 			PrivateShare: typesDKG.PrivateShare{
 				ProposerID: nID,
 				Round:      d.round,
@@ -240,7 +237,6 @@ func (d *dkgProtocol) processNackComplaints(complaints []*typesDKG.Complaint) (
 			continue
 		}
 		d.recv.ProposeDKGAntiNackComplaint(&typesDKG.PrivateShare{
-			ProposerID:   d.ID,
 			ReceiverID:   complaint.ProposerID,
 			Round:        d.round,
 			PrivateShare: *share,
@@ -267,8 +263,7 @@ func (d *dkgProtocol) enforceNackComplaints(complaints []*typesDKG.Complaint) {
 		if _, exist :=
 			d.antiComplaintReceived[from][to]; !exist {
 			d.recv.ProposeDKGComplaint(&typesDKG.Complaint{
-				ProposerID: d.ID,
-				Round:      d.round,
+				Round: d.round,
 				PrivateShare: typesDKG.PrivateShare{
 					ProposerID: to,
 					Round:      d.round,
@@ -282,7 +277,7 @@ func (d *dkgProtocol) sanityCheck(prvShare *typesDKG.PrivateShare) error {
 	if _, exist := d.idMap[prvShare.ProposerID]; !exist {
 		return ErrNotDKGParticipant
 	}
-	ok, err := verifyDKGPrivateShareSignature(prvShare)
+	ok, err := utils.VerifyDKGPrivateShareSignature(prvShare)
 	if err != nil {
 		return err
 	}
@@ -318,7 +313,6 @@ func (d *dkgProtocol) processPrivateShare(
 			return nil
 		}
 		complaint := &typesDKG.Complaint{
-			ProposerID:   d.ID,
 			Round:        d.round,
 			PrivateShare: *prvShare,
 		}
@@ -546,7 +540,7 @@ func (tsig *tsigProtocol) sanityCheck(psig *typesDKG.PartialSignature) error {
 	if !exist {
 		return ErrNotQualifyDKGParticipant
 	}
-	ok, err := verifyDKGPartialSignatureSignature(psig)
+	ok, err := utils.VerifyDKGPartialSignatureSignature(psig)
 	if err != nil {
 		return err
 	}
