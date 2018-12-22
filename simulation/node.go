@@ -150,7 +150,7 @@ func (n *node) run(
 	// Setup of governance is ready, can be switched to remote mode.
 	n.gov.SwitchToRemoteMode(n.netModule)
 	// Setup Consensus.
-	n.consensus = core.NewConsensus(
+	n.consensus = core.NewConsensusForSimulation(
 		dMoment,
 		n.app,
 		n.gov,

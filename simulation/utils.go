@@ -19,9 +19,10 @@ package simulation
 
 import (
 	"math"
+	"sort"
 )
 
-func calcMeanAndStdDeviation(a []float64) (float64, float64) {
+func calculateMeanStdDeviationFloat64s(a []float64) (float64, float64) {
 	sum := float64(0)
 	for _, i := range a {
 		sum += i
@@ -33,4 +34,26 @@ func calcMeanAndStdDeviation(a []float64) (float64, float64) {
 	}
 	dev = math.Sqrt(dev / float64(len(a)))
 	return mean, dev
+}
+
+func calculateMeanStdDeviationInts(a []int) (float64, float64) {
+	floats := []float64{}
+	for _, i := range a {
+		floats = append(floats, float64(i))
+	}
+	return calculateMeanStdDeviationFloat64s(floats)
+}
+
+func getMinMedianMaxInts(a []int) (int, int, int) {
+	aCopied := make([]int, len(a))
+	copy(aCopied, a)
+	sort.Ints(aCopied)
+	return aCopied[0], aCopied[len(aCopied)/2], aCopied[len(aCopied)-1]
+}
+
+func getMinMedianMaxFloat64s(a []float64) (float64, float64, float64) {
+	aCopied := make([]float64, len(a))
+	copy(aCopied, a)
+	sort.Float64s(aCopied)
+	return aCopied[0], aCopied[len(aCopied)/2], aCopied[len(aCopied)-1]
 }

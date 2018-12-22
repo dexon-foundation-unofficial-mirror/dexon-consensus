@@ -57,11 +57,6 @@ const (
 	blockEventCount
 )
 
-type blockEventMessage struct {
-	BlockHash  common.Hash `json:"hash"`
-	Timestamps []time.Time `json:"timestamps"`
-}
-
 // simApp is an DEXON app for simulation.
 type simApp struct {
 	NodeID          types.NodeID
@@ -250,11 +245,13 @@ func (a *simApp) updateBlockEvent(hash common.Hash) {
 	defer a.lock.Unlock()
 	a.blockTimestamps[hash] = append(a.blockTimestamps[hash], time.Now().UTC())
 	if len(a.blockTimestamps[hash]) == blockEventCount {
-		msg := &blockEventMessage{
+		msg := &test.BlockEventMessage{
 			BlockHash:  hash,
 			Timestamps: a.blockTimestamps[hash],
 		}
-		a.netModule.Report(msg)
+		if err := a.netModule.Report(msg); err != nil {
+			panic(err)
+		}
 		delete(a.blockTimestamps, hash)
 	}
 }

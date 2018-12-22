@@ -399,6 +399,34 @@ func NewConsensus(
 	prv crypto.PrivateKey,
 	logger common.Logger) *Consensus {
 
+	return newConsensus(dMoment, app, gov, db, network, prv, logger, true)
+}
+
+// NewConsensusForSimulation creates an instance of Consensus for simulation,
+// the only difference with NewConsensus is nonblocking of app.
+func NewConsensusForSimulation(
+	dMoment time.Time,
+	app Application,
+	gov Governance,
+	db db.Database,
+	network Network,
+	prv crypto.PrivateKey,
+	logger common.Logger) *Consensus {
+
+	return newConsensus(dMoment, app, gov, db, network, prv, logger, false)
+}
+
+// newConsensus creates a Consensus instance.
+func newConsensus(
+	dMoment time.Time,
+	app Application,
+	gov Governance,
+	db db.Database,
+	network Network,
+	prv crypto.PrivateKey,
+	logger common.Logger,
+	usingNonBlocking bool) *Consensus {
+
 	// TODO(w): load latest blockHeight from DB, and use config at that height.
 	nodeSetCache := utils.NewNodeSetCache(gov)
 	// Setup signer module.
@@ -432,12 +460,16 @@ func NewConsensus(
 		db,
 		logger)
 	recv.cfgModule = cfgModule
+	appModule := app
+	if usingNonBlocking {
+		appModule = newNonBlocking(app, debugApp)
+	}
 	// Construct Consensus instance.
 	con := &Consensus{
 		ID:               ID,
 		ccModule:         newCompactionChain(gov),
 		lattice:          lattice,
-		app:              newNonBlocking(app, debugApp),
+		app:              appModule,
 		debugApp:         debugApp,
 		gov:              gov,
 		db:               db,
