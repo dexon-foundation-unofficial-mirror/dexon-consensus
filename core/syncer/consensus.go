@@ -446,9 +446,10 @@ func (con *Consensus) SyncBlocks(
 			return false, err
 		}
 		if syncBlock != nil {
-			con.logger.Info("deliver set found", syncBlock)
+			con.logger.Info("deliver set found", "block", syncBlock)
 			// New lattice with the round of syncBlock.
 			con.initConsensusObj(syncBlock)
+			con.setupConfigs(blocks)
 			// Process blocks from syncBlock to blocks' last block.
 			b := blocks[len(blocks)-1]
 			blocksCount := b.Finalization.Height - syncBlock.Finalization.Height + 1
@@ -586,7 +587,7 @@ func (con *Consensus) setupConfigs(blocks []*types.Block) {
 	con.resizeByNumChains(curMaxNumChains)
 	// Notify core.Lattice for new configs.
 	if con.lattice != nil {
-		for con.latticeLastRound+1 <= maxRound {
+		for con.latticeLastRound+1 <= untilRound {
 			con.latticeLastRound++
 			if err := con.lattice.AppendConfig(
 				con.latticeLastRound,
@@ -714,14 +715,12 @@ func (con *Consensus) startCRSMonitor() {
 			select {
 			case <-con.ctx.Done():
 				return
-			case <-time.After(1 * time.Second):
-				// Notify agreement modules for the latest round that CRS is
-				// available if the round is not notified yet.
-				var crsRound = lastNotifiedRound
-				for (con.gov.CRS(crsRound+1) != common.Hash{}) {
-					crsRound++
-				}
-				notifyNewCRS(crsRound)
+			case <-time.After(500 * time.Millisecond):
+			}
+			// Notify agreement modules for the latest round that CRS is
+			// available if the round is not notified yet.
+			if (con.gov.CRS(lastNotifiedRound+1) != common.Hash{}) {
+				notifyNewCRS(lastNotifiedRound + 1)
 			}
 		}
 	}()
@@ -732,7 +731,10 @@ func (con *Consensus) stopAgreement() {
 		con.lock.Lock()
 		defer con.lock.Unlock()
 		for _, a := range con.agreements {
-			close(a.inputChan)
+			if a.inputChan != nil {
+				close(a.inputChan)
+				a.inputChan = nil
+			}
 		}
 	}()
 	con.agreementWaitGroup.Wait()

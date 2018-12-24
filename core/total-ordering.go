@@ -19,6 +19,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"sync"
@@ -1017,7 +1018,7 @@ func (to *totalOrdering) generateDeliverSet() (
 		chainID, otherChainID uint32
 		info, otherInfo       *totalOrderingCandidateInfo
 		precedings            = make(map[uint32]struct{})
-		cfg                   = to.configs[to.curRound-to.configs[0].roundID]
+		cfg                   = to.getCurrentConfig()
 	)
 	mode = TotalOrderingModeNormal
 	to.globalVector.updateCandidateInfo(to.dirtyChainIDs, to.objCache)
@@ -1162,7 +1163,7 @@ func (to *totalOrdering) flushBlocks(
 	b *types.Block) (flushed []*types.Block, mode uint32, err error) {
 
 	mode = TotalOrderingModeFlush
-	cfg := to.configs[to.curRound-to.configs[0].roundID]
+	cfg := to.getCurrentConfig()
 	if cfg.isLastBlock(b) {
 		to.flushReadyChains[b.Position.ChainID] = struct{}{}
 	}
@@ -1216,7 +1217,7 @@ func (to *totalOrdering) flushBlocks(
 	to.globalVector.cachedCandidateInfo = nil
 	to.switchRound()
 	// Force picking new candidates.
-	numChains := to.configs[to.curRound-to.configs[0].roundID].numChains
+	numChains := to.getCurrentConfig().numChains
 	to.output(map[common.Hash]struct{}{}, numChains)
 	return
 }
@@ -1226,7 +1227,7 @@ func (to *totalOrdering) deliverBlocks() (
 	delivered []*types.Block, mode uint32, err error) {
 
 	hashes, mode := to.generateDeliverSet()
-	cfg := to.configs[to.curRound-to.configs[0].roundID]
+	cfg := to.getCurrentConfig()
 	// Output precedings.
 	delivered = to.output(hashes, cfg.numChains)
 	// Check if any block in delivered set is the last block in this round, if
@@ -1271,12 +1272,21 @@ func (to *totalOrdering) deliverBlocks() (
 	return
 }
 
+func (to *totalOrdering) getCurrentConfig() *totalOrderingConfig {
+	cfgIdx := to.curRound - to.configs[0].roundID
+	if cfgIdx >= uint64(len(to.configs)) {
+		panic(fmt.Errorf("total ordering config is not ready: %v, %v, %v",
+			to.curRound, to.configs[0].roundID, len(to.configs)))
+	}
+	return to.configs[cfgIdx]
+}
+
 // processBlock is the entry point of totalOrdering.
 func (to *totalOrdering) processBlock(
 	b *types.Block) ([]*types.Block, uint32, error) {
 	// NOTE: Block b is assumed to be in topologically sorted, i.e., all its
 	// acking blocks are during or after total ordering stage.
-	cfg := to.configs[to.curRound-to.configs[0].roundID]
+	cfg := to.getCurrentConfig()
 	to.pendings[b.Hash] = b
 	to.buildBlockRelation(b)
 	isOldest, err := to.updateVectors(b)

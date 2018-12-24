@@ -601,7 +601,11 @@ func (con *Consensus) prepare(initBlock *types.Block) error {
 	// Setup lattice module.
 	initPlusOneCfg := utils.GetConfigWithPanic(con.gov, initRound+1, con.logger)
 	if err := con.lattice.AppendConfig(initRound+1, initPlusOneCfg); err != nil {
-		return err
+		if err == ErrRoundNotIncreasing {
+			err = nil
+		} else {
+			return err
+		}
 	}
 	// Register events.
 	dkgSet, err := con.nodeSetCache.GetDKGSet(initRound)
@@ -732,23 +736,37 @@ func (con *Consensus) initialRound(
 				}()
 			})
 	}
+	// checkCRS is a generator of checker to check if CRS for that round is
+	// ready or not.
+	checkCRS := func(round uint64) func() bool {
+		return func() bool {
+			nextCRS := con.gov.CRS(round)
+			if (nextCRS != common.Hash{}) {
+				return true
+			}
+			con.logger.Info("CRS is not ready yet. Try again later...",
+				"nodeID", con.ID,
+				"round", round)
+			return false
+		}
+	}
 	// Initiate BA modules.
 	con.event.RegisterTime(
 		startTime.Add(config.RoundInterval/2+config.LambdaDKG),
 		func(time.Time) {
 			go func(nextRound uint64) {
-				for (con.gov.CRS(nextRound) == common.Hash{}) {
-					con.logger.Info("CRS is not ready yet. Try again later...",
-						"nodeID", con.ID,
+				if !checkWithCancel(
+					con.ctx, 500*time.Millisecond, checkCRS(nextRound)) {
+					con.logger.Info("unable to prepare CRS for baMgr",
 						"round", nextRound)
-					time.Sleep(500 * time.Millisecond)
+					return
 				}
 				// Notify BA for new round.
 				nextConfig := utils.GetConfigWithPanic(
 					con.gov, nextRound, con.logger)
-				con.logger.Debug("Calling Governance.CRS",
-					"round", nextRound)
-				nextCRS := utils.GetCRSWithPanic(con.gov, nextRound, con.logger)
+				nextCRS := utils.GetCRSWithPanic(
+					con.gov, nextRound, con.logger)
+				con.logger.Info("appendConfig for baMgr", "round", nextRound)
 				if err := con.baMgr.appendConfig(
 					nextRound, nextConfig, nextCRS); err != nil {
 					panic(err)
@@ -761,11 +779,11 @@ func (con *Consensus) initialRound(
 			go func(nextRound uint64) {
 				// Normally, gov.CRS would return non-nil. Use this for in case of
 				// unexpected network fluctuation and ensure the robustness.
-				for (con.gov.CRS(nextRound) == common.Hash{}) {
-					con.logger.Info("CRS is not ready yet. Try again later...",
-						"nodeID", con.ID,
+				if !checkWithCancel(
+					con.ctx, 500*time.Millisecond, checkCRS(nextRound)) {
+					con.logger.Info("unable to prepare CRS for DKG set",
 						"round", nextRound)
-					time.Sleep(500 * time.Millisecond)
+					return
 				}
 				nextDkgSet, err := con.nodeSetCache.GetDKGSet(nextRound)
 				if err != nil {

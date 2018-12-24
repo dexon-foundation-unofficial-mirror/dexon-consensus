@@ -18,6 +18,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -213,4 +214,23 @@ func isTravisCI() bool {
 
 func getDKGThreshold(config *types.Config) int {
 	return int(config.DKGSetSize/3) + 1
+}
+
+// checkWithCancel is a helper to perform periodic checking with cancel.
+func checkWithCancel(parentCtx context.Context, interval time.Duration,
+	checker func() bool) (ret bool) {
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+Loop:
+	for {
+		select {
+		case <-ctx.Done():
+			break Loop
+		case <-time.After(interval):
+		}
+		if ret = checker(); ret {
+			return
+		}
+	}
+	return
 }
