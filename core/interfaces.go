@@ -67,6 +67,9 @@ type Network interface {
 	// PullVotes tries to pull votes from the DEXON network.
 	PullVotes(position types.Position)
 
+	// PullRandomness tries to pull randomness from the DEXON network.
+	PullRandomness(hashes common.Hashes)
+
 	// BroadcastVote broadcasts vote to all nodes in DEXON network.
 	BroadcastVote(vote *types.Vote)
 

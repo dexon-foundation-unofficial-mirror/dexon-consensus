@@ -201,6 +201,7 @@ func (s *CompactionChainTestSuite) TestMissedRandomness() {
 		cc.registerBlock(blocks[idx])
 		s.Require().True(cc.blockRegistered(blocks[idx].Hash))
 	}
+	noRandBlocks := common.Hashes{}
 	// Block#4, #5, contains randomness.
 	for i := range blocks {
 		s.Require().NoError(cc.processBlock(blocks[i]))
@@ -212,8 +213,11 @@ func (s *CompactionChainTestSuite) TestMissedRandomness() {
 					Position:   blocks[i].Position,
 					Randomness: h[:],
 				}))
+		} else {
+			noRandBlocks = append(noRandBlocks, blocks[i].Hash)
 		}
 	}
+	s.Equal(noRandBlocks, cc.pendingBlocksWithoutRandomness())
 	s.Require().Len(cc.extractBlocks(), 0)
 	// Give compactionChain module randomnessResult via finalized block
 	// #0, #1, #2, #3, #4.
@@ -227,6 +231,9 @@ func (s *CompactionChainTestSuite) TestMissedRandomness() {
 		block.Finalization.Height = uint64(i + 1)
 		cc.processFinalizedBlock(block)
 	}
+	// Block #0-3 has randomness result.
+	noRandBlocks = noRandBlocks[4:]
+	s.Equal(noRandBlocks, cc.pendingBlocksWithoutRandomness())
 	delivered := cc.extractBlocks()
 	s.Require().Len(delivered, 6)
 	// Give compactionChain module randomnessResult#6-9.
@@ -239,6 +246,7 @@ func (s *CompactionChainTestSuite) TestMissedRandomness() {
 				Randomness: h[:],
 			}))
 	}
+	s.Len(cc.pendingBlocksWithoutRandomness(), 0)
 	delivered = append(delivered, cc.extractBlocks()...)
 	s.Require().Len(delivered, 10)
 	// The delivered order should be the same as processing order.

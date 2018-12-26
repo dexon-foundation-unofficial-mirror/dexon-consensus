@@ -387,6 +387,7 @@ type Consensus struct {
 	event                      *common.Event
 	logger                     common.Logger
 	nonFinalizedBlockDelivered bool
+	resetRandomnessTicker      chan struct{}
 }
 
 // NewConsensus construct an Consensus instance.
@@ -466,22 +467,23 @@ func newConsensus(
 	}
 	// Construct Consensus instance.
 	con := &Consensus{
-		ID:               ID,
-		ccModule:         newCompactionChain(gov),
-		lattice:          lattice,
-		app:              appModule,
-		debugApp:         debugApp,
-		gov:              gov,
-		db:               db,
-		network:          network,
-		baConfirmedBlock: make(map[common.Hash]chan<- *types.Block),
-		dkgReady:         sync.NewCond(&sync.Mutex{}),
-		cfgModule:        cfgModule,
-		dMoment:          dMoment,
-		nodeSetCache:     nodeSetCache,
-		signer:           signer,
-		event:            common.NewEvent(),
-		logger:           logger,
+		ID:                    ID,
+		ccModule:              newCompactionChain(gov),
+		lattice:               lattice,
+		app:                   appModule,
+		debugApp:              debugApp,
+		gov:                   gov,
+		db:                    db,
+		network:               network,
+		baConfirmedBlock:      make(map[common.Hash]chan<- *types.Block),
+		dkgReady:              sync.NewCond(&sync.Mutex{}),
+		cfgModule:             cfgModule,
+		dMoment:               dMoment,
+		nodeSetCache:          nodeSetCache,
+		signer:                signer,
+		event:                 common.NewEvent(),
+		logger:                logger,
+		resetRandomnessTicker: make(chan struct{}),
 	}
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
 	con.baMgr = newAgreementMgr(con, round, dMoment)
@@ -634,6 +636,9 @@ func (con *Consensus) Run() {
 	go con.processMsg(con.network.ReceiveChan())
 	// Sleep until dMoment come.
 	time.Sleep(con.dMoment.Sub(time.Now().UTC()))
+	// Take some time to bootstrap.
+	time.Sleep(3 * time.Second)
+	go con.pullRandomness()
 	// Block until done.
 	select {
 	case <-con.ctx.Done():
@@ -1051,8 +1056,27 @@ func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
 	return
 }
 
+func (con *Consensus) pullRandomness() {
+	for {
+		select {
+		case <-con.ctx.Done():
+			return
+		case <-con.resetRandomnessTicker:
+		case <-time.After(1 * time.Second):
+			// TODO(jimmy): pulling period should be related to lambdaBA.
+			hashes := con.ccModule.pendingBlocksWithoutRandomness()
+			con.logger.Debug("Calling Network.PullRandomness", "blocks", hashes)
+			con.network.PullRandomness(hashes)
+		}
+	}
+}
+
 // deliverBlock deliver a block to application layer.
 func (con *Consensus) deliverBlock(b *types.Block) {
+	select {
+	case con.resetRandomnessTicker <- struct{}{}:
+	default:
+	}
 	if err := con.db.UpdateBlock(*b); err != nil {
 		panic(err)
 	}

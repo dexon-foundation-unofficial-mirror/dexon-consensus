@@ -257,3 +257,15 @@ func (cc *compactionChain) lastPendingBlock() *types.Block {
 	}
 	return nil
 }
+
+func (cc *compactionChain) pendingBlocksWithoutRandomness() (
+	hashes common.Hashes) {
+	cc.lock.RLock()
+	defer cc.lock.RUnlock()
+	for _, block := range cc.pendingBlocks {
+		if _, exist := cc.blockRandomness[block.Hash]; !exist {
+			hashes = append(hashes, block.Hash)
+		}
+	}
+	return
+}

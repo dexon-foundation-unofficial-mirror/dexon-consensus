@@ -48,6 +48,10 @@ func (n *network) PullBlocks(common.Hashes) {
 func (n *network) PullVotes(types.Position) {
 }
 
+// PullRandomness tries to pull randomness from the DEXON network.
+func (n *network) PullRandomness(common.Hashes) {
+}
+
 // BroadcastVote broadcasts vote to all nodes in DEXON network.
 func (n *network) BroadcastVote(vote *types.Vote) {
 	n.conn.broadcast(n.nID, vote)
