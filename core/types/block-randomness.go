@@ -18,6 +18,7 @@
 package types
 
 import (
+	"encoding/hex"
 	"fmt"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
@@ -41,4 +42,11 @@ type BlockRandomnessResult struct {
 	BlockHash  common.Hash `json:"block_hash"`
 	Position   Position    `json:"position"`
 	Randomness []byte      `json:"randomness"`
+}
+
+func (r *BlockRandomnessResult) String() string {
+	return fmt.Sprintf("blockRandomness{Block:%s Pos:%s Rand:%s}",
+		r.BlockHash.String()[:6], &r.Position,
+		hex.EncodeToString(r.Randomness)[:6],
+	)
 }

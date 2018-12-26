@@ -988,9 +988,7 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 	}
 	if needBroadcast {
 		con.logger.Debug("Calling Network.BroadcastRandomnessResult",
-			"hash", rand.BlockHash.String()[:6],
-			"position", &rand.Position,
-			"randomness", hex.EncodeToString(rand.Randomness))
+			"randomness", rand)
 		con.network.BroadcastRandomnessResult(rand)
 	}
 	return con.deliverFinalizedBlocks()
@@ -1011,7 +1009,7 @@ func (con *Consensus) pullRandomness() {
 		case <-con.ctx.Done():
 			return
 		case <-con.resetRandomnessTicker:
-		case <-time.After(1 * time.Second):
+		case <-time.After(1500 * time.Millisecond):
 			// TODO(jimmy): pulling period should be related to lambdaBA.
 			hashes := con.ccModule.pendingBlocksWithoutRandomness()
 			con.logger.Debug("Calling Network.PullRandomness", "blocks", hashes)
