@@ -90,7 +90,7 @@ func (p *PeerServer) handleBlockList(id types.NodeID, blocks *BlockList) {
 		}
 		p.verifiedLen += uint64(length)
 		if p.verifiedLen >= p.cfg.Node.MaxBlock {
-			if err := p.trans.Broadcast(statusShutdown); err != nil {
+			if err := p.trans.Broadcast(ntfShutdown); err != nil {
 				panic(err)
 			}
 		}
@@ -201,6 +201,34 @@ func (p *PeerServer) Run() {
 	for _, pubKey := range p.trans.Peers() {
 		p.peers[types.NewNodeID(pubKey)] = struct{}{}
 	}
+	// Pick a mater node to execute pending config changes.
+	for nID := range p.peers {
+		if err := p.trans.Send(nID, ntfSelectedAsMaster); err != nil {
+			panic(err)
+		}
+		break
+	}
+	// Wait for peers to report 'setupOK' message.
+	readyPeers := make(map[types.NodeID]struct{})
+	for {
+		e := <-p.msgChannel
+		if !p.isNode(e.From) {
+			break
+		}
+		msg := e.Msg.(*message)
+		if msg.Type != setupOK {
+			panic(fmt.Errorf("receive an unexpected peer report: %v", msg))
+		}
+		log.Println("receive setupOK message from", e.From)
+		readyPeers[e.From] = struct{}{}
+		if len(readyPeers) == len(p.peers) {
+			break
+		}
+	}
+	if err := p.trans.Broadcast(ntfReady); err != nil {
+		panic(err)
+	}
+	log.Println("Simulation is ready to go with", len(p.peers), "nodes")
 	// Initialize total order result cache.
 	for id := range p.peers {
 		p.peerTotalOrder[id] = NewTotalOrderResult(id)

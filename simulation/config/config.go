@@ -18,24 +18,27 @@
 package config
 
 import (
+	"fmt"
 	"math"
 	"os"
 
+	"github.com/dexon-foundation/dexon-consensus/core"
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/naoina/toml"
 )
 
 // Consensus settings.
 type Consensus struct {
-	PhiRatio      float32
-	K             int
-	ChainNum      uint32
-	GenesisCRS    string `toml:"genesis_crs"`
-	LambdaBA      int    `toml:"lambda_ba"`
-	LambdaDKG     int    `toml:"lambda_dkg"`
-	RoundInterval int
-	NotarySetSize uint32
-	DKGSetSize    uint32 `toml:"dkg_set_size"`
+	PhiRatio         float32
+	K                int
+	NumChains        uint32
+	GenesisCRS       string `toml:"genesis_crs"`
+	LambdaBA         int    `toml:"lambda_ba"`
+	LambdaDKG        int    `toml:"lambda_dkg"`
+	RoundInterval    int
+	NotarySetSize    uint32
+	DKGSetSize       uint32 `toml:"dkg_set_size"`
+	MinBlockInterval int
 }
 
 // Legacy config.
@@ -50,6 +53,7 @@ type Node struct {
 	Legacy    Legacy
 	Num       uint32
 	MaxBlock  uint64
+	Changes   []Change
 }
 
 // Networking config.
@@ -65,6 +69,25 @@ type Networking struct {
 // Scheduler Settings.
 type Scheduler struct {
 	WorkerNum int
+}
+
+// Change represent future configuration changes.
+type Change struct {
+	Round uint64
+	Type  string
+	Value string
+}
+
+// RegisterChange reigster this change to a test.Governance instance.
+func (c Change) RegisterChange(gov *test.Governance) error {
+	if c.Round < core.ConfigRoundShift {
+		panic(fmt.Errorf(
+			"attempt to register config change that never be executed: %v",
+			c.Round))
+	}
+	t := StateChangeTypeFromString(c.Type)
+	return gov.RegisterConfigChange(
+		c.Round, t, StateChangeValueFromString(t, c.Value))
 }
 
 // Config represents the configuration for simulation.
@@ -87,15 +110,16 @@ func GenerateDefault(path string) error {
 		Title: "DEXON Consensus Simulation Config",
 		Node: Node{
 			Consensus: Consensus{
-				PhiRatio:      float32(2) / 3,
-				K:             1,
-				ChainNum:      7,
-				GenesisCRS:    "In DEXON we trust.",
-				LambdaBA:      250,
-				LambdaDKG:     1000,
-				RoundInterval: 30 * 1000,
-				NotarySetSize: 7,
-				DKGSetSize:    7,
+				PhiRatio:         float32(2) / 3,
+				K:                1,
+				NumChains:        7,
+				GenesisCRS:       "In DEXON we trust.",
+				LambdaBA:         250,
+				LambdaDKG:        1000,
+				RoundInterval:    30 * 1000,
+				NotarySetSize:    7,
+				DKGSetSize:       7,
+				MinBlockInterval: 750,
 			},
 			Legacy: Legacy{
 				ProposeIntervalMean:  500,

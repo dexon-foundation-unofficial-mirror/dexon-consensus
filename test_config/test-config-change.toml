@@ -4,17 +4,32 @@ title = "DEXON Consensus Simulation Config"
 num = 7
 max_block = 18446744073709551615
 
+# node.consensus is the genesis configuration.
 [node.consensus]
 phi_ratio = 6.666666865348816e-01
 k = 1
-chain_num = 7
+num_chains = 4
 genesis_crs = "In DEXON we trust."
 lambda_ba = 250
 lambda_dkg = 4000
-round_interval = 200000
+round_interval = 100000
 notary_set_size = 7
 dkg_set_size = 7
 min_block_interval = 750
+
+# node.config_changes describe the changes of configuration for each round.
+[[node.changes]]
+round = 1
+type = "num_chains"
+value = "5"
+[[node.changes]]
+round = 2
+type = "num_chains"
+value = "6"
+[[node.changes]]
+round = 3
+type = "num_chains"
+value = "4"
 
 [node.legacy]
 propose_interval_mean = 5e+02

@@ -31,17 +31,18 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/simulation/config"
 )
 
-type infoStatus string
+type serverNotification string
 
 const (
-	statusInit     infoStatus = "init"
-	statusNormal   infoStatus = "normal"
-	statusShutdown infoStatus = "shutdown"
+	ntfShutdown         serverNotification = "shutdown"
+	ntfSelectedAsMaster serverNotification = "as_master"
+	ntfReady            serverNotification = "ready"
 )
 
 type messageType string
 
 const (
+	setupOK        messageType = "setupOK"
 	shutdownAck    messageType = "shutdownAck"
 	blockTimestamp messageType = "blockTimestamps"
 )
@@ -60,24 +61,25 @@ type node struct {
 	netModule *test.Network
 	ID        types.NodeID
 	prvKey    crypto.PrivateKey
+	logger    common.Logger
 	consensus *core.Consensus
+	cfg       *config.Config
 }
 
 // newNode returns a new empty node.
-func newNode(
-	prvKey crypto.PrivateKey,
-	config config.Config) *node {
+func newNode(prvKey crypto.PrivateKey, logger common.Logger,
+	cfg config.Config) *node {
 	pubKey := prvKey.PublicKey()
 	netModule := test.NewNetwork(
 		pubKey,
 		&test.NormalLatencyModel{
-			Mean:  config.Networking.Mean,
-			Sigma: config.Networking.Sigma,
+			Mean:  cfg.Networking.Mean,
+			Sigma: cfg.Networking.Sigma,
 		},
 		test.NewDefaultMarshaller(&jsonMarshaller{}),
 		test.NetworkConfig{
-			Type:       config.Networking.Type,
-			PeerServer: config.Networking.PeerServer,
+			Type:       cfg.Networking.Type,
+			PeerServer: cfg.Networking.PeerServer,
 			PeerPort:   peerPort,
 		})
 	id := types.NewNodeID(pubKey)
@@ -86,40 +88,22 @@ func newNode(
 		panic(err)
 	}
 	// Sync config to state in governance.
-	cConfig := config.Node.Consensus
 	gov, err := test.NewGovernance(
 		test.NewState(
-			[]crypto.PublicKey{pubKey},
-			time.Millisecond,
-			&common.NullLogger{},
-			true),
+			[]crypto.PublicKey{pubKey}, time.Millisecond, logger, true),
 		core.ConfigRoundShift)
 	if err != nil {
 		panic(err)
 	}
-	gov.State().RequestChange(test.StateChangeK, cConfig.K)
-	gov.State().RequestChange(test.StateChangePhiRatio, cConfig.PhiRatio)
-	gov.State().RequestChange(test.StateChangeNumChains, cConfig.ChainNum)
-	gov.State().RequestChange(
-		test.StateChangeNotarySetSize, cConfig.NotarySetSize)
-	gov.State().RequestChange(test.StateChangeDKGSetSize, cConfig.DKGSetSize)
-	gov.State().RequestChange(test.StateChangeLambdaBA, time.Duration(
-		cConfig.LambdaBA)*time.Millisecond)
-	gov.State().RequestChange(test.StateChangeLambdaDKG, time.Duration(
-		cConfig.LambdaDKG)*time.Millisecond)
-	gov.State().RequestChange(test.StateChangeRoundInterval, time.Duration(
-		cConfig.RoundInterval)*time.Millisecond)
-	gov.State().RequestChange(
-		test.StateChangeMinBlockInterval,
-		3*time.Duration(cConfig.LambdaBA)*time.Millisecond)
-	gov.State().ProposeCRS(0, crypto.Keccak256Hash([]byte(cConfig.GenesisCRS)))
 	return &node{
 		ID:        id,
 		prvKey:    prvKey,
+		logger:    logger,
 		app:       newSimApp(id, netModule, gov.State()),
 		gov:       gov,
 		db:        dbInst,
 		netModule: netModule,
+		cfg:       &cfg,
 	}
 }
 
@@ -130,7 +114,7 @@ func (n *node) GetID() types.NodeID {
 
 // run starts the node.
 func (n *node) run(
-	serverEndpoint interface{}, dMoment time.Time, logger common.Logger) {
+	serverEndpoint interface{}, dMoment time.Time) {
 	// Run network.
 	if err := n.netModule.Setup(serverEndpoint); err != nil {
 		panic(err)
@@ -145,10 +129,32 @@ func (n *node) run(
 		n.gov.State().RequestChange(test.StateAddNode, pubKey)
 		hashes = append(hashes, nID.Hash)
 	}
-	// This notification is implictly called in full node.
-	n.gov.NotifyRoundHeight(0, 0)
-	// Setup of governance is ready, can be switched to remote mode.
-	n.gov.SwitchToRemoteMode(n.netModule)
+	n.prepareConfigs()
+	if err := n.netModule.Report(&message{Type: setupOK}); err != nil {
+		panic(err)
+	}
+	// Wait for a "ready" server notification.
+readyLoop:
+	for {
+		msg := <-msgChannel
+		ntf := msg.(serverNotification)
+		switch ntf {
+		case ntfReady:
+			break readyLoop
+		case ntfSelectedAsMaster:
+			n.logger.Info(
+				"receive 'selected-as-master' notification from server")
+			for _, c := range n.cfg.Node.Changes {
+				if c.Round <= core.ConfigRoundShift+1 {
+					continue
+				}
+				n.logger.Info("register config change", "change", c)
+				c.RegisterChange(n.gov)
+			}
+		default:
+			panic(fmt.Errorf("receive unexpected server notification: %v", ntf))
+		}
+	}
 	// Setup Consensus.
 	n.consensus = core.NewConsensusForSimulation(
 		dMoment,
@@ -157,7 +163,7 @@ func (n *node) run(
 		n.db,
 		n.netModule,
 		n.prvKey,
-		logger)
+		n.logger)
 	go n.consensus.Run()
 
 	// Blocks forever.
@@ -165,8 +171,9 @@ MainLoop:
 	for {
 		msg := <-msgChannel
 		switch val := msg.(type) {
-		case infoStatus:
-			if val == statusShutdown {
+		case serverNotification:
+			if val == ntfShutdown {
+				n.logger.Info("receive shutdown notification from server")
 				break MainLoop
 			}
 		default:
@@ -178,10 +185,40 @@ MainLoop:
 	if err := n.db.Close(); err != nil {
 		fmt.Println(err)
 	}
-	n.netModule.Report(&message{
-		Type: shutdownAck,
-	})
+	if err := n.netModule.Report(&message{Type: shutdownAck}); err != nil {
+		panic(err)
+	}
 	// TODO(mission): once we have a way to know if consensus is stopped, stop
 	//                the network module.
 	return
+}
+
+func (n *node) prepareConfigs() {
+	// Prepare configurations.
+	cConfig := n.cfg.Node.Consensus
+	n.gov.State().RequestChange(test.StateChangeK, cConfig.K)
+	n.gov.State().RequestChange(test.StateChangePhiRatio, cConfig.PhiRatio)
+	n.gov.State().RequestChange(test.StateChangeNumChains, cConfig.NumChains)
+	n.gov.State().RequestChange(
+		test.StateChangeNotarySetSize, cConfig.NotarySetSize)
+	n.gov.State().RequestChange(test.StateChangeDKGSetSize, cConfig.DKGSetSize)
+	n.gov.State().RequestChange(test.StateChangeLambdaBA, time.Duration(
+		cConfig.LambdaBA)*time.Millisecond)
+	n.gov.State().RequestChange(test.StateChangeLambdaDKG, time.Duration(
+		cConfig.LambdaDKG)*time.Millisecond)
+	n.gov.State().RequestChange(test.StateChangeRoundInterval, time.Duration(
+		cConfig.RoundInterval)*time.Millisecond)
+	n.gov.State().RequestChange(test.StateChangeMinBlockInterval, time.Duration(
+		cConfig.MinBlockInterval)*time.Millisecond)
+	n.gov.State().ProposeCRS(0, crypto.Keccak256Hash([]byte(cConfig.GenesisCRS)))
+	// These rounds are not safe to be registered as pending state change
+	// requests.
+	for i := uint64(0); i <= core.ConfigRoundShift+1; i++ {
+		n.logger.Info("prepare config", "round", i)
+		prepareConfigs(i, n.cfg.Node.Changes, n.gov)
+	}
+	// This notification is implictly called in full node.
+	n.gov.NotifyRoundHeight(0, 0)
+	// Setup of configuration is ready, can be switched to remote mode.
+	n.gov.SwitchToRemoteMode(n.netModule)
 }

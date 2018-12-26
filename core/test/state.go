@@ -172,7 +172,7 @@ func (s *State) Snapshot() (*types.Config, []crypto.PublicKey) {
 	for _, key := range s.nodes {
 		nodes = append(nodes, key)
 	}
-	return &types.Config{
+	cfg := &types.Config{
 		NumChains:        s.numChains,
 		LambdaBA:         s.lambdaBA,
 		LambdaDKG:        s.lambdaDKG,
@@ -182,7 +182,9 @@ func (s *State) Snapshot() (*types.Config, []crypto.PublicKey) {
 		DKGSetSize:       s.dkgSetSize,
 		RoundInterval:    s.roundInterval,
 		MinBlockInterval: s.minBlockInterval,
-	}, nodes
+	}
+	s.logger.Info("Snapshot config", "config", cfg)
+	return cfg, nodes
 }
 
 // AttachLogger allows to attach custom logger.
@@ -761,6 +763,7 @@ func (s *State) ProposeCRS(round uint64, crs common.Hash) (err error) {
 // RequestChange submits a state change request.
 func (s *State) RequestChange(
 	t StateChangeType, payload interface{}) (err error) {
+	s.logger.Info("Request Change to State", "type", t, "value", payload)
 	// Patch input parameter's type.
 	switch t {
 	case StateAddNode:

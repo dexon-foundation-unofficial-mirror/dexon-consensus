@@ -30,12 +30,12 @@ type jsonMarshaller struct{}
 func (m *jsonMarshaller) Unmarshal(
 	msgType string, payload []byte) (msg interface{}, err error) {
 	switch msgType {
-	case "info-status":
-		var status infoStatus
-		if err = json.Unmarshal(payload, &status); err != nil {
+	case "server-notif":
+		var notif serverNotification
+		if err = json.Unmarshal(payload, &notif); err != nil {
 			break
 		}
-		msg = status
+		msg = notif
 	case "blocklist":
 		var blocks BlockList
 		if err = json.Unmarshal(payload, &blocks); err != nil {
@@ -61,8 +61,8 @@ func (m *jsonMarshaller) Unmarshal(
 func (m *jsonMarshaller) Marshal(msg interface{}) (
 	msgType string, payload []byte, err error) {
 	switch msg.(type) {
-	case infoStatus:
-		msgType = "info-status"
+	case serverNotification:
+		msgType = "server-notif"
 	case *BlockList:
 		msgType = "blocklist"
 	case *message:

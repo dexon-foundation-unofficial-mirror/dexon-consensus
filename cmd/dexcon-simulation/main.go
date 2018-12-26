@@ -20,7 +20,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -38,7 +37,7 @@ var initialize = flag.Bool("init", false, "initialize config file")
 var configFile = flag.String("config", "", "path to simulation config file")
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to `file`")
 var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
-var logfile = flag.String("log", "", "write log to `file`.log")
+var logfile = flag.String("log", "", "write log to `file`-nodeID.log")
 
 func main() {
 	flag.Parse()
@@ -68,15 +67,6 @@ func main() {
 			log.Fatal("could not start CPU profile: ", err)
 		}
 		defer pprof.StopCPUProfile()
-	}
-
-	if *logfile != "" {
-		f, err := os.Create(*logfile)
-		if err != nil {
-			log.Fatal("could not create log file: ", err)
-		}
-		mw := io.MultiWriter(os.Stdout, f)
-		log.SetOutput(mw)
 	}
 
 	cfg, err := config.Read(*configFile)

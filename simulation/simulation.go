@@ -71,11 +71,11 @@ func Run(cfg *config.Config, logPrefix string) {
 		if err != nil {
 			panic(err)
 		}
-		v := newNode(prv, *cfg)
+		v := newNode(prv, logger, *cfg)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			v.run(serverEndpoint, dMoment, logger)
+			v.run(serverEndpoint, dMoment)
 		}()
 	}
 

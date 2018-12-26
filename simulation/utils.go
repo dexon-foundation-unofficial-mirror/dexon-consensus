@@ -20,6 +20,9 @@ package simulation
 import (
 	"math"
 	"sort"
+
+	"github.com/dexon-foundation/dexon-consensus/core/test"
+	"github.com/dexon-foundation/dexon-consensus/simulation/config"
 )
 
 func calculateMeanStdDeviationFloat64s(a []float64) (float64, float64) {
@@ -56,4 +59,19 @@ func getMinMedianMaxFloat64s(a []float64) (float64, float64, float64) {
 	copy(aCopied, a)
 	sort.Float64s(aCopied)
 	return aCopied[0], aCopied[len(aCopied)/2], aCopied[len(aCopied)-1]
+}
+
+func prepareConfigs(
+	round uint64, cfgs []config.Change, gov *test.Governance) {
+	for _, c := range cfgs {
+		if c.Round != round {
+			continue
+		}
+		t := config.StateChangeTypeFromString(c.Type)
+		if err := gov.State().RequestChange(
+			t, config.StateChangeValueFromString(t, c.Value)); err != nil {
+			panic(err)
+		}
+	}
+	gov.CatchUpWithRound(round)
 }
