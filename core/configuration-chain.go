@@ -135,7 +135,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	}
 	cc.logger.Debug("Calling Governance.IsDKGMPKReady", "round", round)
 	for !cc.gov.IsDKGMPKReady(round) {
-		cc.logger.Info("DKG MPKs are not ready yet. Try again later...",
+		cc.logger.Debug("DKG MPKs are not ready yet. Try again later...",
 			"nodeID", cc.ID)
 		cc.dkgLock.Unlock()
 		time.Sleep(500 * time.Millisecond)
@@ -206,7 +206,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	// unexpected network fluctuation and ensure the robustness of DKG protocol.
 	cc.logger.Debug("Calling Governance.IsDKGFinal", "round", round)
 	for !cc.gov.IsDKGFinal(round) {
-		cc.logger.Info("DKG is not ready yet. Try again later...",
+		cc.logger.Debug("DKG is not ready yet. Try again later...",
 			"nodeID", cc.ID)
 		time.Sleep(500 * time.Millisecond)
 	}

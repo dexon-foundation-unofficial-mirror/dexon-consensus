@@ -153,7 +153,7 @@ func (con *Consensus) checkIfValidated() bool {
 	if validatedChainCount == numChains {
 		return true
 	}
-	con.logger.Info("not validated yet", "validated-chain", validatedChainCount)
+	con.logger.Debug("not validated yet", "validated-chain", validatedChainCount)
 	return false
 }
 
@@ -197,7 +197,7 @@ func (con *Consensus) checkIfSynced(blocks []*types.Block) bool {
 	if overlapCount == numChains {
 		return true
 	}
-	con.logger.Info("not synced yet",
+	con.logger.Debug("not synced yet",
 		"overlap-count", overlapCount,
 		"num-chain", numChains,
 		"last-block", blocks[len(blocks)-1])
@@ -262,7 +262,7 @@ func (con *Consensus) ensureAgreementOverlapRound() bool {
 		}
 		if tipRoundMap[r] == con.configs[r].NumChains {
 			con.agreementRoundCut = r
-			con.logger.Info("agreement round cut found, round", r)
+			con.logger.Debug("agreement round cut found, round", r)
 			return true
 		}
 	}
@@ -411,7 +411,7 @@ func (con *Consensus) SyncBlocks(
 			"expected", tipHeight+1)
 		return false, ErrInvalidSyncingFinalizationHeight
 	}
-	con.logger.Info("syncBlocks",
+	con.logger.Debug("syncBlocks",
 		"position", &blocks[0].Position,
 		"final height", blocks[0].Finalization.Height,
 		"len", len(blocks),
@@ -446,7 +446,7 @@ func (con *Consensus) SyncBlocks(
 			return false, err
 		}
 		if syncBlock != nil {
-			con.logger.Info("deliver set found", "block", syncBlock)
+			con.logger.Debug("deliver set found", "block", syncBlock)
 			// New lattice with the round of syncBlock.
 			con.initConsensusObj(syncBlock)
 			con.setupConfigs(blocks)
@@ -700,7 +700,7 @@ func (con *Consensus) startCRSMonitor() {
 		if round == lastNotifiedRound {
 			return
 		}
-		con.logger.Info("CRS is ready", "round", round)
+		con.logger.Debug("CRS is ready", "round", round)
 		con.lock.RLock()
 		defer con.lock.RUnlock()
 		lastNotifiedRound = round

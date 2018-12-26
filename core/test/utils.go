@@ -18,6 +18,7 @@
 package test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -224,4 +225,22 @@ func VerifyDB(db db.Database) error {
 		return ErrMismatchBlockHash
 	}
 	return nil
+}
+
+// LaunchDummyReceiver launches a go routine to receive and drop messages from
+// a network module. An optional context could be passed to stop the go routine.
+func LaunchDummyReceiver(
+	ctx context.Context, networkModule *Network) context.CancelFunc {
+	dummyCtx, dummyCancel := context.WithCancel(ctx)
+	go func() {
+	loop:
+		for {
+			select {
+			case <-dummyCtx.Done():
+				break loop
+			case <-networkModule.ReceiveChan():
+			}
+		}
+	}()
+	return dummyCancel
 }

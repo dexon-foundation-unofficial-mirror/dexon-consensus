@@ -193,17 +193,28 @@ func (l *Lattice) addBlockToLattice(
 			if err == nil {
 				var output []*types.Block
 				if output, err = l.data.addBlock(tip); err != nil {
-					l.logger.Error("Sanity Check failed", "error", err)
-					continue
+					// We should be able to add this block once sanity check
+					// passed.
+					l.logger.Error("Failed to add sanity-checked block",
+						"block", tip, "error", err)
+					panic(err)
 				}
 				hasOutput = true
 				outputBlocks = append(outputBlocks, output...)
-			}
-			if _, ok := err.(*ErrAckingBlockNotExists); ok {
-				err = nil
+				l.pool.removeTip(i)
 				continue
 			}
-			l.pool.removeTip(i)
+			if _, ok := err.(*ErrAckingBlockNotExists); ok {
+				l.logger.Debug("Pending block for lattice",
+					"pending", tip,
+					"last", l.data.chains[tip.Position.ChainID])
+				err = nil
+				continue
+			} else {
+				l.logger.Error("Unexpected sanity check error",
+					"block", tip, "error", err)
+				panic(err)
+			}
 		}
 		if !hasOutput {
 			break

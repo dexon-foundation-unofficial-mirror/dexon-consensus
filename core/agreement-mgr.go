@@ -313,7 +313,7 @@ func (mgr *agreementMgr) runBA(initRound uint64, chainID uint32) {
 			if config = mgr.getConfig(nextRound); config != nil {
 				break
 			} else {
-				mgr.logger.Info("round is not ready", "round", nextRound)
+				mgr.logger.Debug("round is not ready", "round", nextRound)
 				time.Sleep(1 * time.Second)
 			}
 		}

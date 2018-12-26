@@ -353,52 +353,26 @@ func (s *ConsensusTestSuite) TestSync() {
 	}
 	// Clean syncNode's network receive channel, or it might exceed the limit
 	// and block other go routines.
-	dummyReceiverCtx, dummyReceiverCtxCancel := context.WithCancel(
-		context.Background())
-	go func() {
-	Loop:
-		for {
-			select {
-			case <-syncNode.network.ReceiveChan():
-			case <-dummyReceiverCtx.Done():
-				break Loop
-			}
-		}
-	}()
-	// Print status every 5 seconds so CI won't fail.
-	monitorCtx, monitorCancel := context.WithCancel(
-		context.Background())
-	defer monitorCancel()
-	go func() {
-		for {
-			select {
-			case <-time.After(5 * time.Second):
-				for _, n := range nodes {
-					pos := n.app.GetLatestDeliveredPosition()
-					fmt.Println("latestPos", n.ID, &pos)
-					break
-				}
-			case <-monitorCtx.Done():
-				return
-			}
-		}
-	}()
+	dummyReceiverCtxCancel := test.LaunchDummyReceiver(
+		context.Background(), syncNode.network)
 ReachAlive:
 	for {
+		// Check if any error happened or sleep for a period of time.
+		select {
+		case err := <-errChan:
+			req.NoError(err)
+		case <-time.After(5 * time.Second):
+		}
 		// If all nodes excepts syncNode have reached aliveRound, call syncNode's
 		// Run() and send it all blocks in one of normal node's compaction chain.
 		for id, n := range nodes {
 			if id == syncNode.ID {
 				continue
 			}
-			if n.app.GetLatestDeliveredPosition().Round < aliveRound {
+			pos := n.app.GetLatestDeliveredPosition()
+			if pos.Round < aliveRound {
+				fmt.Println("latestPos", n.ID, &pos)
 				continue ReachAlive
-			}
-			// Check if any error happened or sleep for a period of time.
-			select {
-			case err := <-errChan:
-				req.NoError(err)
-			case <-time.After(5 * time.Second):
 			}
 		}
 		dummyReceiverCtxCancel()
@@ -446,34 +420,28 @@ ReachAlive:
 	}()
 	// Wait until all nodes reach 'untilRound'.
 	go func() {
+		n, pos := stoppedNode, stoppedNode.app.GetLatestDeliveredPosition()
 	ReachFinished:
 		for {
+			fmt.Println("latestPos", n.ID, &pos)
 			time.Sleep(5 * time.Second)
-			for _, n := range nodes {
+			for _, n = range nodes {
+				pos = n.app.GetLatestDeliveredPosition()
 				if n.ID == stoppedNode.ID {
 					if n.con == nil {
 						continue
 					}
-					if n.app.GetLatestDeliveredPosition().Round < stopRound {
-						continue
+					if pos.Round < stopRound {
+						continue ReachFinished
 					}
 					// Stop a node, we should still be able to proceed.
 					stoppedNode.con.Stop()
 					stoppedNode.con = nil
 					fmt.Println("one node stopped", stoppedNode.ID)
-					// Initiate a dummy routine to consume the receive channel.
-					go func() {
-						for {
-							select {
-							case <-runnerCtx.Done():
-								return
-							case <-stoppedNode.network.ReceiveChan():
-							}
-						}
-					}()
+					test.LaunchDummyReceiver(runnerCtx, stoppedNode.network)
 					continue
 				}
-				if n.app.GetLatestDeliveredPosition().Round < untilRound {
+				if pos.Round < untilRound {
 					continue ReachFinished
 				}
 			}
