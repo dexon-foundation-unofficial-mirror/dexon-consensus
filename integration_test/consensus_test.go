@@ -146,6 +146,10 @@ func (s *ConsensusTestSuite) syncBlocksWithSomeNode(
 				}
 				err = nil
 			}
+			// Sync app.
+			syncNode.app.BlockConfirmed(*b)
+			syncNode.app.BlockDelivered(b.Hash, b.Position, b.Finalization)
+			// Sync gov.
 			syncNode.gov.CatchUpWithRound(
 				b.Position.Round + core.ConfigRoundShift)
 		}

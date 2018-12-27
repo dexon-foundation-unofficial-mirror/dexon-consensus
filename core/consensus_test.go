@@ -449,7 +449,7 @@ func (s *ConsensusTestSuite) TestSimpleDeliverBlock() {
 		timestamps[3] = b30.Timestamp
 		t, err := getMedianTime(timestamps)
 		req.NoError(err)
-		req.Equal(t, app.Delivered[b11.Hash].ConsensusTime)
+		req.Equal(t, app.Delivered[b11.Hash].Result.Timestamp)
 	}
 	for _, obj := range objs {
 		if nb, ok := obj.con.app.(*nonBlocking); ok {

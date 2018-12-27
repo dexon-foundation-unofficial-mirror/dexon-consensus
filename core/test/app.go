@@ -57,6 +57,17 @@ var (
 	// ErrAckingBlockNotDelivered means the delivered sequence not forming a
 	// DAG.
 	ErrAckingBlockNotDelivered = fmt.Errorf("acking block not delivered")
+	// ErrLowerPendingHeight raised when lastPendingHeight is lower than the
+	// height to be prepared.
+	ErrLowerPendingHeight = fmt.Errorf(
+		"last pending height < consensus height")
+	// ErrConfirmedHeightNotIncreasing raise when the height of the confirmed
+	// block doesn't follow previous confirmed block on the same chain.
+	ErrConfirmedHeightNotIncreasing = fmt.Errorf(
+		"confirmed height not increasing")
+	// ErrParentBlockNotDelivered raised when the parent block is not seen by
+	// this app.
+	ErrParentBlockNotDelivered = fmt.Errorf("parent block not delivered")
 )
 
 // This definition is copied from core package.
@@ -82,34 +93,37 @@ type AppTotalOrderRecord struct {
 // AppDeliveredRecord caches information when this application received
 // a block delivered notification.
 type AppDeliveredRecord struct {
-	ConsensusTime   time.Time
-	ConsensusHeight uint64
-	When            time.Time
-	Pos             types.Position
+	Result types.FinalizationResult
+	When   time.Time
+	Pos    types.Position
 }
 
 // App implements Application interface for testing purpose.
 type App struct {
-	Confirmed          map[common.Hash]*types.Block
-	confirmedLock      sync.RWMutex
-	TotalOrdered       []*AppTotalOrderRecord
-	TotalOrderedByHash map[common.Hash]*AppTotalOrderRecord
-	totalOrderedLock   sync.RWMutex
-	Delivered          map[common.Hash]*AppDeliveredRecord
-	DeliverSequence    common.Hashes
-	deliveredLock      sync.RWMutex
-	state              *State
+	Confirmed             map[common.Hash]*types.Block
+	LastConfirmedHeights  map[uint32]uint64
+	confirmedLock         sync.RWMutex
+	TotalOrdered          []*AppTotalOrderRecord
+	TotalOrderedByHash    map[common.Hash]*AppTotalOrderRecord
+	totalOrderedLock      sync.RWMutex
+	Delivered             map[common.Hash]*AppDeliveredRecord
+	DeliverSequence       common.Hashes
+	deliveredLock         sync.RWMutex
+	state                 *State
+	lastPendingHeightLock sync.RWMutex
+	LastPendingHeight     uint64
 }
 
 // NewApp constructs a TestApp instance.
 func NewApp(state *State) *App {
 	return &App{
-		Confirmed:          make(map[common.Hash]*types.Block),
-		TotalOrdered:       []*AppTotalOrderRecord{},
-		TotalOrderedByHash: make(map[common.Hash]*AppTotalOrderRecord),
-		Delivered:          make(map[common.Hash]*AppDeliveredRecord),
-		DeliverSequence:    common.Hashes{},
-		state:              state,
+		Confirmed:            make(map[common.Hash]*types.Block),
+		LastConfirmedHeights: make(map[uint32]uint64),
+		TotalOrdered:         []*AppTotalOrderRecord{},
+		TotalOrderedByHash:   make(map[common.Hash]*AppTotalOrderRecord),
+		Delivered:            make(map[common.Hash]*AppDeliveredRecord),
+		DeliverSequence:      common.Hashes{},
+		state:                state,
 	}
 }
 
@@ -123,13 +137,67 @@ func (app *App) PreparePayload(position types.Position) ([]byte, error) {
 
 // PrepareWitness implements Application interface.
 func (app *App) PrepareWitness(height uint64) (types.Witness, error) {
+	pendingHeight := app.getLastPendingWitnessHeight()
+	if pendingHeight < height {
+		return types.Witness{}, ErrLowerPendingHeight
+	}
+	if pendingHeight == 0 {
+		return types.Witness{}, nil
+	}
+	hash := func() common.Hash {
+		app.deliveredLock.RLock()
+		defer app.deliveredLock.RUnlock()
+		// Our witness height starts from 1.
+		h := app.DeliverSequence[pendingHeight-1]
+		// Double confirm if the delivered record matches the pending height.
+		if app.Delivered[h].Result.Height != pendingHeight {
+			app.confirmedLock.RLock()
+			defer app.confirmedLock.RUnlock()
+			panic(fmt.Errorf("unmatched finalization record: %s, %v, %v",
+				app.Confirmed[h], pendingHeight,
+				app.Delivered[h].Result.Height))
+		}
+		return h
+	}()
 	return types.Witness{
-		Height: height,
+		Height: pendingHeight,
+		Data:   hash.Bytes(),
 	}, nil
 }
 
-// VerifyBlock implements Application.
+// VerifyBlock implements Application interface.
 func (app *App) VerifyBlock(block *types.Block) types.BlockVerifyStatus {
+	// Make sure we can handle the witness carried by this block.
+	pendingHeight := app.getLastPendingWitnessHeight()
+	if pendingHeight < block.Witness.Height {
+		return types.VerifyRetryLater
+	}
+	// Confirm if the consensus height matches corresponding block hash.
+	var h common.Hash
+	copy(h[:], block.Witness.Data)
+	app.deliveredLock.RLock()
+	defer app.deliveredLock.RUnlock()
+	// This is the difference between test.App and fullnode, fullnode has the
+	// genesis block at height=0, we don't. Thus our reasonable witness starts
+	// from 1.
+	if block.Witness.Height > 0 {
+		if block.Witness.Height != app.Delivered[h].Result.Height {
+			return types.VerifyInvalidBlock
+		}
+	}
+	if block.Position.Height != 0 {
+		// This check is copied from fullnode, below is quoted from coresponding
+		// comment:
+		//
+		// Check if target block is the next height to be verified, we can only
+		// verify the next block in a given chain.
+		app.confirmedLock.RLock()
+		defer app.confirmedLock.RUnlock()
+		if app.LastConfirmedHeights[block.Position.ChainID]+1 !=
+			block.Position.Height {
+			return types.VerifyRetryLater
+		}
+	}
 	return types.VerifyOK
 }
 
@@ -138,6 +206,14 @@ func (app *App) BlockConfirmed(b types.Block) {
 	app.confirmedLock.Lock()
 	defer app.confirmedLock.Unlock()
 	app.Confirmed[b.Hash] = &b
+	if b.Position.Height != 0 {
+		if h, exists := app.LastConfirmedHeights[b.Position.ChainID]; exists {
+			if h+1 != b.Position.Height {
+				panic(ErrConfirmedHeightNotIncreasing)
+			}
+		}
+	}
+	app.LastConfirmedHeights[b.Position.ChainID] = b.Position.Height
 }
 
 // TotalOrderingDelivered implements Application interface.
@@ -166,12 +242,24 @@ func (app *App) BlockDelivered(
 		app.deliveredLock.Lock()
 		defer app.deliveredLock.Unlock()
 		app.Delivered[blockHash] = &AppDeliveredRecord{
-			ConsensusTime:   result.Timestamp,
-			ConsensusHeight: result.Height,
-			When:            time.Now().UTC(),
-			Pos:             pos,
+			Result: result,
+			When:   time.Now().UTC(),
+			Pos:    pos,
 		}
 		app.DeliverSequence = append(app.DeliverSequence, blockHash)
+		// Make sure parent block also delivered.
+		if !result.ParentHash.Equal(common.Hash{}) {
+			d, exists := app.Delivered[result.ParentHash]
+			if !exists {
+				panic(ErrParentBlockNotDelivered)
+			}
+			if d.Result.Height+1 != result.Height {
+				panic(ErrConsensusHeightOutOfOrder)
+			}
+		}
+		app.lastPendingHeightLock.Lock()
+		defer app.lastPendingHeightLock.Unlock()
+		app.LastPendingHeight = result.Height
 	}()
 	// Apply packed state change requests in payload.
 	func() {
@@ -224,7 +312,8 @@ func (app *App) Compare(other *App) error {
 		if hOther != h {
 			return ErrMismatchBlockHashSequence
 		}
-		if app.Delivered[h].ConsensusTime != other.Delivered[h].ConsensusTime {
+		if app.Delivered[h].Result.Timestamp !=
+			other.Delivered[h].Result.Timestamp {
 			return ErrMismatchConsensusTime
 		}
 	}
@@ -257,14 +346,14 @@ func (app *App) Verify() error {
 			return ErrApplicationIntegrityFailed
 		}
 		// Make sure the consensus time is incremental.
-		ok := prevTime.Before(rec.ConsensusTime) ||
-			prevTime.Equal(rec.ConsensusTime)
+		ok := prevTime.Before(rec.Result.Timestamp) ||
+			prevTime.Equal(rec.Result.Timestamp)
 		if !ok {
 			return ErrConsensusTimestampOutOfOrder
 		}
-		prevTime = rec.ConsensusTime
+		prevTime = rec.Result.Timestamp
 		// Make sure the consensus height is incremental.
-		if expectHeight != rec.ConsensusHeight {
+		if expectHeight != rec.Result.Height {
 			return ErrConsensusHeightOutOfOrder
 		}
 		expectHeight++
@@ -337,6 +426,14 @@ func (app *App) WithLock(function func(*App)) {
 	defer app.totalOrderedLock.RUnlock()
 	app.deliveredLock.RLock()
 	defer app.deliveredLock.RUnlock()
+	app.lastPendingHeightLock.RLock()
+	defer app.lastPendingHeightLock.RUnlock()
 
 	function(app)
+}
+
+func (app *App) getLastPendingWitnessHeight() uint64 {
+	app.lastPendingHeightLock.RLock()
+	defer app.lastPendingHeightLock.RUnlock()
+	return app.LastPendingHeight
 }
