@@ -258,19 +258,24 @@ func (s *ConsensusTestSuite) TestNumChainsChange() {
 			pubKeys, 100*time.Millisecond, &common.NullLogger{}, true),
 		core.ConfigRoundShift)
 	req.NoError(err)
-	// Setup configuration for round 0 and round 1.
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeRoundInterval, 45*time.Second))
+	seedGov.CatchUpWithRound(0)
+	// Setup configuration for round 0 and round 1.
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeNumChains, uint32(5)))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeRoundInterval, 55*time.Second))
 	seedGov.CatchUpWithRound(1)
 	// Setup configuration for round 2.
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeNumChains, uint32(5)))
+		test.StateChangeNumChains, uint32(6)))
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeRoundInterval, 55*time.Second))
 	seedGov.CatchUpWithRound(2)
 	// Setup configuration for round 3.
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeNumChains, uint32(6)))
+		test.StateChangeNumChains, uint32(5)))
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeRoundInterval, 75*time.Second))
 	seedGov.CatchUpWithRound(3)

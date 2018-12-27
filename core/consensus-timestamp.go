@@ -80,6 +80,15 @@ func (ct *consensusTimestamp) appendConfig(
 	if round != uint64(len(ct.numChainsOfRounds))+ct.numChainsBase {
 		return ErrRoundNotIncreasing
 	}
+	// This segment is to handle the corner case for config checking logic in
+	// processBlock method.
+	if len(ct.numChainsOfRounds) == 1 {
+		if ct.numChainsOfRounds[0] > config.NumChains {
+			ct.resizeTimetamps(ct.numChainsOfRounds[0])
+		} else {
+			ct.resizeTimetamps(config.NumChains)
+		}
+	}
 	ct.numChainsOfRounds = append(ct.numChainsOfRounds, config.NumChains)
 	return nil
 }

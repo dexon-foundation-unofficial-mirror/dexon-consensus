@@ -189,6 +189,18 @@ func (s *ConsensusTimestampTest) TestTimestampRoundInterleave() {
 	s.Require().NoError(err)
 }
 
+func (s *ConsensusTimestampTest) TestNumChainsChangeAtSecondAppendedRound() {
+	now := time.Now().UTC()
+	ct := newConsensusTimestamp(now, 1, 4)
+	s.Require().NoError(ct.appendConfig(2, &types.Config{NumChains: 5}))
+	// We should be able to handle a block from the second appended round.
+	s.Require().NoError(ct.processBlocks([]*types.Block{
+		&types.Block{
+			Position:  types.Position{Round: 2},
+			Timestamp: now.Add(1 * time.Second),
+		}}))
+}
+
 func (s *ConsensusTimestampTest) TestTimestampSync() {
 	chainNum := 19
 	sigma := 100 * time.Millisecond
