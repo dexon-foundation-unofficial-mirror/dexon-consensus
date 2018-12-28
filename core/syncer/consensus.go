@@ -18,6 +18,7 @@
 package syncer
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -65,7 +66,7 @@ type Consensus struct {
 	validatedChains      map[uint32]struct{}
 	finalizedBlockHashes common.Hashes
 	latticeLastRound     uint64
-	randomnessResults    []*types.BlockRandomnessResult
+	randomnessResults    map[common.Hash]*types.BlockRandomnessResult
 	blocks               []types.ByPosition
 	agreements           []*agreement
 	configs              []*types.Config
@@ -107,9 +108,10 @@ func NewConsensus(
 		configs: []*types.Config{
 			utils.GetConfigWithPanic(gov, 0, logger),
 		},
-		roundBeginTimes: []time.Time{dMoment},
-		receiveChan:     make(chan *types.Block, 1000),
-		pullChan:        make(chan common.Hash, 1000),
+		roundBeginTimes:   []time.Time{dMoment},
+		receiveChan:       make(chan *types.Block, 1000),
+		pullChan:          make(chan common.Hash, 1000),
+		randomnessResults: make(map[common.Hash]*types.BlockRandomnessResult),
 	}
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
 	return con
@@ -500,11 +502,15 @@ func (con *Consensus) GetSyncedConsensus() (*core.Consensus, error) {
 	// flush all blocks in con.blocks into core.Consensus, and build
 	// core.Consensus from syncer.
 	confirmedBlocks := []*types.Block{}
+	randomnessResults := []*types.BlockRandomnessResult{}
 	func() {
 		con.lock.Lock()
 		defer con.lock.Unlock()
 		for _, bs := range con.blocks {
 			confirmedBlocks = append(confirmedBlocks, bs...)
+		}
+		for _, r := range con.randomnessResults {
+			randomnessResults = append(randomnessResults, r)
 		}
 	}()
 	var err error
@@ -518,7 +524,7 @@ func (con *Consensus) GetSyncedConsensus() (*core.Consensus, error) {
 		con.prv,
 		con.lattice,
 		confirmedBlocks,
-		con.randomnessResults,
+		randomnessResults,
 		con.logger)
 	return con.syncedConsensus, err
 }
@@ -648,6 +654,28 @@ func (con *Consensus) startAgreement(numChains uint32) {
 	}()
 }
 
+func (con *Consensus) cacheRandomnessResult(r *types.BlockRandomnessResult) {
+	// We only have to cache randomness result after cutting round.
+	if r.Position.Round < func() uint64 {
+		con.lock.RLock()
+		defer con.lock.RUnlock()
+		return con.agreementRoundCut
+	}() {
+		return
+	}
+	con.lock.Lock()
+	defer con.lock.Unlock()
+	if old, exists := con.randomnessResults[r.BlockHash]; exists {
+		if bytes.Compare(old.Randomness, r.Randomness) != 0 {
+			panic(fmt.Errorf("receive different randomness result: %s, %s",
+				r.BlockHash.String()[:6], &r.Position))
+		}
+		// We don't have to assign the map again.
+		return
+	}
+	con.randomnessResults[r.BlockHash] = r
+}
+
 // startNetwork starts network for receiving blocks and agreement results.
 func (con *Consensus) startNetwork() {
 	go func() {
@@ -664,13 +692,7 @@ func (con *Consensus) startNetwork() {
 				case *types.AgreementResult:
 					pos = v.Position
 				case *types.BlockRandomnessResult:
-					func() {
-						con.lock.Lock()
-						defer con.lock.Unlock()
-						if v.Position.Round >= con.agreementRoundCut {
-							con.randomnessResults = append(con.randomnessResults, v)
-						}
-					}()
+					con.cacheRandomnessResult(v)
 					continue Loop
 				default:
 					continue Loop

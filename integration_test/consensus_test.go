@@ -340,7 +340,7 @@ func (s *ConsensusTestSuite) TestSync() {
 		core.ConfigRoundShift)
 	req.NoError(err)
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeRoundInterval, 50*time.Second))
+		test.StateChangeRoundInterval, 55*time.Second))
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeNumChains, uint32(5)))
 	seedGov.CatchUpWithRound(0)
