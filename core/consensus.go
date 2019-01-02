@@ -563,14 +563,17 @@ func (con *Consensus) prepare(initBlock *types.Block) error {
 	if err != nil {
 		return err
 	}
-	// TODO(jimmy): registerDKG should be called after dmoment.
 	if _, exist := dkgSet[con.ID]; exist {
 		con.logger.Info("Selected as DKG set", "round", initRound)
-		con.cfgModule.registerDKG(initRound, getDKGThreshold(initConfig))
-		con.event.RegisterTime(con.dMoment.Add(initConfig.RoundInterval/4),
-			func(time.Time) {
-				con.runDKG(initRound, initConfig)
-			})
+		go func() {
+			// Sleep until dMoment come.
+			time.Sleep(con.dMoment.Sub(time.Now().UTC()))
+			con.cfgModule.registerDKG(initRound, getDKGThreshold(initConfig))
+			con.event.RegisterTime(con.dMoment.Add(initConfig.RoundInterval/4),
+				func(time.Time) {
+					con.runDKG(initRound, initConfig)
+				})
+		}()
 	}
 	con.initialRound(con.dMoment, initRound, initConfig)
 	return nil
