@@ -207,7 +207,8 @@ func (l *Lattice) addBlockToLattice(
 			if _, ok := err.(*ErrAckingBlockNotExists); ok {
 				l.logger.Debug("Pending block for lattice",
 					"pending", tip,
-					"last", l.data.chains[tip.Position.ChainID])
+					"err", err,
+					"last", l.data.chains[tip.Position.ChainID].tip)
 				err = nil
 				continue
 			} else {
