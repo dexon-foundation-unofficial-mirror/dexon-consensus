@@ -39,7 +39,6 @@ type FakeTransport struct {
 	recvChannel   chan *TransportEnvelope
 	serverChannel chan<- *TransportEnvelope
 	peers         map[types.NodeID]fakePeerRecord
-	latency       LatencyModel
 }
 
 // NewFakeTransportServer constructs FakeTransport instance for peer server.
@@ -51,31 +50,24 @@ func NewFakeTransportServer() TransportServer {
 }
 
 // NewFakeTransportClient constructs FakeTransport instance for peer.
-func NewFakeTransportClient(
-	pubKey crypto.PublicKey, latency LatencyModel) TransportClient {
-
+func NewFakeTransportClient(pubKey crypto.PublicKey) TransportClient {
 	return &FakeTransport{
 		peerType:    TransportPeer,
 		recvChannel: make(chan *TransportEnvelope, 1000),
 		nID:         types.NewNodeID(pubKey),
 		pubKey:      pubKey,
-		latency:     latency,
 	}
 }
 
 // Send implements Transport.Send method.
 func (t *FakeTransport) Send(
 	endpoint types.NodeID, msg interface{}) (err error) {
-
 	rec, exists := t.peers[endpoint]
 	if !exists {
 		err = fmt.Errorf("the endpoint does not exists: %v", endpoint)
 		return
 	}
 	go func(ch chan<- *TransportEnvelope) {
-		if t.latency != nil {
-			time.Sleep(t.latency.Delay())
-		}
 		ch <- &TransportEnvelope{
 			PeerType: t.peerType,
 			From:     t.nID,
@@ -98,12 +90,16 @@ func (t *FakeTransport) Report(msg interface{}) (err error) {
 }
 
 // Broadcast implements Transport.Broadcast method.
-func (t *FakeTransport) Broadcast(msg interface{}) (err error) {
-	for k := range t.peers {
-		if k == t.nID {
+func (t *FakeTransport) Broadcast(endpoints map[types.NodeID]struct{},
+	latency LatencyModel, msg interface{}) (err error) {
+	for ID := range endpoints {
+		if ID == t.nID {
 			continue
 		}
-		t.Send(k, msg)
+		go func(nID types.NodeID) {
+			time.Sleep(latency.Delay())
+			t.Send(nID, msg)
+		}(ID)
 	}
 	return
 }
@@ -177,7 +173,11 @@ func (t *FakeTransport) WaitForPeers(numPeers uint32) (err error) {
 		}
 	}
 	// The collected peer channels are shared for all peers.
-	if err = t.Broadcast(t.peers); err != nil {
+	peers := make(map[types.NodeID]struct{})
+	for ID := range t.peers {
+		peers[ID] = struct{}{}
+	}
+	if err = t.Broadcast(peers, &FixedLatencyModel{}, t.peers); err != nil {
 		return
 	}
 	return

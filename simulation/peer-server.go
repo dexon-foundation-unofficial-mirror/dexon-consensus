@@ -90,7 +90,8 @@ func (p *PeerServer) handleBlockList(id types.NodeID, blocks *BlockList) {
 		}
 		p.verifiedLen += uint64(length)
 		if p.verifiedLen >= p.cfg.Node.MaxBlock {
-			if err := p.trans.Broadcast(ntfShutdown); err != nil {
+			if err := p.trans.Broadcast(
+				p.peers, &test.FixedLatencyModel{}, ntfShutdown); err != nil {
 				panic(err)
 			}
 		}
@@ -199,7 +200,8 @@ func (p *PeerServer) Run() {
 	}
 	// Cache peers' info.
 	for _, pubKey := range p.trans.Peers() {
-		p.peers[types.NewNodeID(pubKey)] = struct{}{}
+		nID := types.NewNodeID(pubKey)
+		p.peers[nID] = struct{}{}
 	}
 	// Pick a mater node to execute pending config changes.
 	for nID := range p.peers {
@@ -225,7 +227,8 @@ func (p *PeerServer) Run() {
 			break
 		}
 	}
-	if err := p.trans.Broadcast(ntfReady); err != nil {
+	if err := p.trans.Broadcast(
+		p.peers, &test.FixedLatencyModel{}, ntfReady); err != nil {
 		panic(err)
 	}
 	log.Println("Simulation is ready to go with", len(p.peers), "nodes")

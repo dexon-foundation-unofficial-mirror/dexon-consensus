@@ -244,3 +244,15 @@ func LaunchDummyReceiver(
 	}()
 	return dummyCancel
 }
+
+func getComplementSet(
+	all, set map[types.NodeID]struct{}) map[types.NodeID]struct{} {
+	complement := make(map[types.NodeID]struct{})
+	for nID := range all {
+		if _, exists := set[nID]; exists {
+			continue
+		}
+		complement[nID] = struct{}{}
+	}
+	return complement
+}

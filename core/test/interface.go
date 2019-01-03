@@ -91,7 +91,8 @@ type TransportClient interface {
 // Transport defines the interface for basic transportation capabilities.
 type Transport interface {
 	// Broadcast a message to all peers in network.
-	Broadcast(msg interface{}) error
+	Broadcast(endpoints map[types.NodeID]struct{}, latency LatencyModel,
+		msg interface{}) error
 	// Send one message to a peer.
 	Send(endpoint types.NodeID, msg interface{}) error
 	// Close would cleanup allocated resources.

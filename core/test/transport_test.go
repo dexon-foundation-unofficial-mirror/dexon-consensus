@@ -87,13 +87,11 @@ type TransportTestSuite struct {
 }
 
 func (s *TransportTestSuite) baseTest(
-	server *testPeerServer,
-	peers map[types.NodeID]*testPeer,
-	delay time.Duration) {
-
+	server *testPeerServer, peers map[types.NodeID]*testPeer, delay float64) {
 	var (
-		req = s.Require()
-		wg  sync.WaitGroup
+		req           = s.Require()
+		delayDuration = time.Duration(delay) * time.Millisecond
+		wg            sync.WaitGroup
 	)
 
 	// For each peers, do following stuffs:
@@ -150,6 +148,10 @@ func (s *TransportTestSuite) baseTest(
 	}
 	wg.Add(len(peers) + 1)
 	go handleServer(server)
+	peersAsMap := make(map[types.NodeID]struct{})
+	for nID := range peers {
+		peersAsMap[nID] = struct{}{}
+	}
 	for nID, peer := range peers {
 		go handlePeer(peer)
 		// Broadcast a block.
@@ -158,7 +160,8 @@ func (s *TransportTestSuite) baseTest(
 			Hash:       common.NewRandomHash(),
 		}
 		peer.myBlockSentTime = time.Now()
-		peer.trans.Broadcast(peer.myBlock)
+		peer.trans.Broadcast(
+			peersAsMap, &FixedLatencyModel{Latency: delay}, peer.myBlock)
 		// Report a block to server.
 		peer.expectedEchoHash = common.NewRandomHash()
 		peer.trans.Report(&types.Block{
@@ -187,7 +190,7 @@ func (s *TransportTestSuite) baseTest(
 				continue
 			}
 			req.True(otherPeer.blocksReceiveTime[peer.myBlock.Hash].Sub(
-				peer.myBlockSentTime) >= delay)
+				peer.myBlockSentTime) >= delayDuration)
 		}
 	}
 }
@@ -200,7 +203,6 @@ func (s *TransportTestSuite) TestFake() {
 		prvKeys   = GenerateRandomPrivateKeys(peerCount)
 		err       error
 		wg        sync.WaitGroup
-		latency   = &FixedLatencyModel{Latency: 300}
 		server    = &testPeerServer{trans: NewFakeTransportServer()}
 	)
 	// Setup PeerServer
@@ -212,7 +214,7 @@ func (s *TransportTestSuite) TestFake() {
 		nID := types.NewNodeID(key.PublicKey())
 		peer := &testPeer{
 			nID:   nID,
-			trans: NewFakeTransportClient(key.PublicKey(), latency),
+			trans: NewFakeTransportClient(key.PublicKey()),
 		}
 		peers[nID] = peer
 		go func() {
@@ -226,7 +228,7 @@ func (s *TransportTestSuite) TestFake() {
 	server.trans.WaitForPeers(uint32(peerCount))
 	// Make sure all clients are ready.
 	wg.Wait()
-	s.baseTest(server, peers, 300*time.Millisecond)
+	s.baseTest(server, peers, 300)
 	req.Nil(server.trans.Close())
 	for _, peer := range peers {
 		req.Nil(peer.trans.Close())
@@ -242,7 +244,6 @@ func (s *TransportTestSuite) TestTCPLocal() {
 		prvKeys    = GenerateRandomPrivateKeys(peerCount)
 		err        error
 		wg         sync.WaitGroup
-		latency    = &FixedLatencyModel{Latency: 300}
 		serverPort = 8080
 		serverAddr = net.JoinHostPort("127.0.0.1", strconv.Itoa(serverPort))
 		server     = &testPeerServer{
@@ -258,7 +259,7 @@ func (s *TransportTestSuite) TestTCPLocal() {
 		peer := &testPeer{
 			nID: nID,
 			trans: NewTCPTransportClient(
-				prvKey.PublicKey(), latency, &testMarshaller{}, true),
+				prvKey.PublicKey(), &testMarshaller{}, true),
 		}
 		peers[nID] = peer
 		go func() {
@@ -274,7 +275,7 @@ func (s *TransportTestSuite) TestTCPLocal() {
 	// Make sure all clients are ready.
 	wg.Wait()
 
-	s.baseTest(server, peers, 300*time.Millisecond)
+	s.baseTest(server, peers, 300)
 	req.Nil(server.trans.Close())
 	for _, peer := range peers {
 		req.Nil(peer.trans.Close())

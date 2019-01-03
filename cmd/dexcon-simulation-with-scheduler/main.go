@@ -69,8 +69,8 @@ func main() {
 	}
 	// Setup latencies, nodes.
 	networkLatency := &test.NormalLatencyModel{
-		Sigma: cfg.Networking.Sigma,
-		Mean:  cfg.Networking.Mean,
+		Sigma: cfg.Networking.Direct.Sigma,
+		Mean:  cfg.Networking.Direct.Mean,
 	}
 	proposingLatency := &test.NormalLatencyModel{
 		Sigma: cfg.Node.Legacy.ProposeIntervalSigma,
@@ -85,7 +85,7 @@ func main() {
 	gov, err := test.NewGovernance(
 		test.NewState(
 			pubKeys,
-			time.Duration(cfg.Networking.Mean)*time.Millisecond,
+			time.Duration(cfg.Networking.Direct.Mean)*time.Millisecond,
 			&common.NullLogger{},
 			true,
 		), core.ConfigRoundShift)

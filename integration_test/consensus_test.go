@@ -68,11 +68,12 @@ func (s *ConsensusTestSuite) setupNodes(
 		dbInst, err := db.NewMemBackedDB()
 		s.Require().NoError(err)
 		// Prepare essential modules: app, gov, db.
-		networkModule := test.NewNetwork(
-			k.PublicKey(),
-			&test.FixedLatencyModel{},
-			test.NewDefaultMarshaller(nil),
-			test.NetworkConfig{Type: test.NetworkTypeFake})
+		networkModule := test.NewNetwork(k.PublicKey(), test.NetworkConfig{
+			Type:          test.NetworkTypeFake,
+			DirectLatency: &test.FixedLatencyModel{},
+			GossipLatency: &test.FixedLatencyModel{},
+			Marshaller:    test.NewDefaultMarshaller(nil)},
+		)
 		gov := seedGov.Clone()
 		gov.SwitchToRemoteMode(networkModule)
 		gov.NotifyRoundHeight(0, 0)

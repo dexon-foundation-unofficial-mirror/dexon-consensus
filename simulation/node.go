@@ -70,18 +70,19 @@ type node struct {
 func newNode(prvKey crypto.PrivateKey, logger common.Logger,
 	cfg config.Config) *node {
 	pubKey := prvKey.PublicKey()
-	netModule := test.NewNetwork(
-		pubKey,
-		&test.NormalLatencyModel{
-			Mean:  cfg.Networking.Mean,
-			Sigma: cfg.Networking.Sigma,
+	netModule := test.NewNetwork(pubKey, test.NetworkConfig{
+		Type:       cfg.Networking.Type,
+		PeerServer: cfg.Networking.PeerServer,
+		PeerPort:   peerPort,
+		DirectLatency: &test.NormalLatencyModel{
+			Mean:  cfg.Networking.Direct.Mean,
+			Sigma: cfg.Networking.Direct.Sigma,
 		},
-		test.NewDefaultMarshaller(&jsonMarshaller{}),
-		test.NetworkConfig{
-			Type:       cfg.Networking.Type,
-			PeerServer: cfg.Networking.PeerServer,
-			PeerPort:   peerPort,
-		})
+		GossipLatency: &test.NormalLatencyModel{
+			Mean:  cfg.Networking.Gossip.Mean,
+			Sigma: cfg.Networking.Gossip.Sigma,
+		},
+		Marshaller: test.NewDefaultMarshaller(&jsonMarshaller{})})
 	id := types.NewNodeID(pubKey)
 	dbInst, err := db.NewMemBackedDB(id.String() + ".db")
 	if err != nil {

@@ -48,11 +48,11 @@ func (s *NetworkTestSuite) setupNetworks(
 	// Setup several network modules.
 	networks := make(map[types.NodeID]*Network)
 	for _, key := range pubKeys {
-		n := NewNetwork(
-			key,
-			&FixedLatencyModel{},
-			NewDefaultMarshaller(nil),
-			NetworkConfig{Type: NetworkTypeFake})
+		n := NewNetwork(key, NetworkConfig{
+			Type:          NetworkTypeFake,
+			DirectLatency: &FixedLatencyModel{},
+			GossipLatency: &FixedLatencyModel{},
+			Marshaller:    NewDefaultMarshaller(nil)})
 		networks[n.ID] = n
 		wg.Add(1)
 		go func() {
@@ -297,21 +297,13 @@ func (s *NetworkTestSuite) TestBroadcastToSet() {
 	// Try broadcasting with datum from round 0, and make sure only node belongs
 	// to that set receiving the message.
 	nerd.BroadcastVote(&types.Vote{})
-	req.IsType(<-notaryNode.ReceiveChan(), &types.Vote{})
-	nerd.BroadcastBlock(&types.Block{})
-	req.IsType(<-notaryNode.ReceiveChan(), &types.Block{})
+	req.IsType(&types.Vote{}, <-notaryNode.ReceiveChan())
 	nerd.BroadcastDKGPrivateShare(&typesDKG.PrivateShare{})
-	req.IsType(<-dkgNode.ReceiveChan(), &typesDKG.PrivateShare{})
+	req.IsType(&typesDKG.PrivateShare{}, <-dkgNode.ReceiveChan())
 	nerd.BroadcastDKGPartialSignature(&typesDKG.PartialSignature{})
-	req.IsType(<-dkgNode.ReceiveChan(), &typesDKG.PartialSignature{})
-	// There should be no remaining message in each node.
-	for _, n := range networks {
-		select {
-		case <-n.ReceiveChan():
-			req.False(true)
-		default:
-		}
-	}
+	req.IsType(&typesDKG.PartialSignature{}, <-dkgNode.ReceiveChan())
+	nerd.BroadcastBlock(&types.Block{})
+	req.IsType(&types.Block{}, <-notaryNode.ReceiveChan())
 }
 
 func TestNetwork(t *testing.T) {

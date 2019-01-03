@@ -38,9 +38,12 @@ propose_interval_sigma = 5e+01
 [networking]
 type = "fake"
 peer_server = "127.0.0.1"
+[networking.direct]
 mean = 1e+01
 sigma = 1e+01
-loss_rate_value = 0e+00
+[networking.gossip]
+mean = 3e+01
+sigma = 3e+01
 
 [scheduler]
 worker_num = 2

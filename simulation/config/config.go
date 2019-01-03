@@ -56,14 +56,18 @@ type Node struct {
 	Changes   []Change
 }
 
+// LatencyModel for ths simulation.
+type LatencyModel struct {
+	Mean  float64
+	Sigma float64
+}
+
 // Networking config.
 type Networking struct {
 	Type       test.NetworkType
 	PeerServer string
-
-	Mean          float64
-	Sigma         float64
-	LossRateValue float64
+	Direct     LatencyModel
+	Gossip     LatencyModel
 }
 
 // Scheduler Settings.
@@ -129,11 +133,16 @@ func GenerateDefault(path string) error {
 			MaxBlock: math.MaxUint64,
 		},
 		Networking: Networking{
-			Type:          test.NetworkTypeTCPLocal,
-			PeerServer:    "127.0.0.1",
-			Mean:          100,
-			Sigma:         10,
-			LossRateValue: 0,
+			Type:       test.NetworkTypeTCPLocal,
+			PeerServer: "127.0.0.1",
+			Direct: LatencyModel{
+				Mean:  100,
+				Sigma: 10,
+			},
+			Gossip: LatencyModel{
+				Mean:  300,
+				Sigma: 25,
+			},
 		},
 		Scheduler: Scheduler{
 			WorkerNum: 2,
