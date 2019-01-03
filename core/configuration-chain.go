@@ -107,6 +107,7 @@ func (cc *configurationChain) registerDKG(round uint64, threshold int) {
 		threshold)
 	go func() {
 		ticker := newTicker(cc.gov, round, TickerDKG)
+		defer ticker.Stop()
 		<-ticker.Tick()
 		cc.dkgLock.Lock()
 		defer cc.dkgLock.Unlock()
@@ -142,6 +143,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 		cc.dkgLock.Lock()
 	}
 	ticker := newTicker(cc.gov, round, TickerDKG)
+	defer ticker.Stop()
 	cc.dkgLock.Unlock()
 	<-ticker.Tick()
 	cc.dkgLock.Lock()
