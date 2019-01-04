@@ -532,6 +532,9 @@ func (req reqByTime) Less(i, j int) bool {
 // Apply change requests, this function would also
 // be called when we extract these request from delivered blocks.
 func (s *State) Apply(reqsAsBytes []byte) (err error) {
+	if len(reqsAsBytes) == 0 {
+		return
+	}
 	// Try to unmarshal this byte stream into []*StateChangeRequest.
 	reqs, err := s.unpackRequests(reqsAsBytes)
 	if err != nil {
