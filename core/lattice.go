@@ -245,26 +245,27 @@ func (l *Lattice) ProcessBlock(
 		toDelivered   []*types.Block
 		deliveredMode uint32
 	)
-
 	l.lock.Lock()
 	defer l.lock.Unlock()
-
 	if inLattice, err = l.addBlockToLattice(input); err != nil {
 		return
 	}
-
 	if len(inLattice) == 0 {
 		return
 	}
-
 	for _, b = range inLattice {
-		toDelivered, deliveredMode, err = l.toModule.processBlock(b)
-		if err != nil {
+		if err = l.toModule.addBlock(b); err != nil {
 			// All errors from total ordering is serious, should panic.
 			panic(err)
 		}
+	}
+	for {
+		toDelivered, deliveredMode, err = l.toModule.extractBlocks()
+		if err != nil {
+			panic(err)
+		}
 		if len(toDelivered) == 0 {
-			continue
+			break
 		}
 		hashes := make(common.Hashes, len(toDelivered))
 		for idx := range toDelivered {
@@ -275,7 +276,7 @@ func (l *Lattice) ProcessBlock(
 		}
 		// Perform consensus timestamp module.
 		if err = l.ctModule.processBlocks(toDelivered); err != nil {
-			return
+			break
 		}
 		delivered = append(delivered, toDelivered...)
 	}
@@ -317,32 +318,40 @@ func (l *Lattice) AppendConfig(round uint64, config *types.Config) (err error) {
 }
 
 // ProcessFinalizedBlock is used for syncing lattice data.
-func (l *Lattice) ProcessFinalizedBlock(b *types.Block) ([]*types.Block, error) {
+func (l *Lattice) ProcessFinalizedBlock(
+	b *types.Block) (delivered []*types.Block, err error) {
+	var (
+		toDelivered   []*types.Block
+		deliveredMode uint32
+	)
 	l.lock.Lock()
 	defer l.lock.Unlock()
 	// Syncing state for core.latticeData module.
-	if err := l.data.addFinalizedBlock(b); err != nil {
-		return nil, err
+	if err = l.data.addFinalizedBlock(b); err != nil {
+		return
 	}
 	l.pool.purgeBlocks(b.Position.ChainID, b.Position.Height)
 	// Syncing state for core.totalOrdering module.
-	toDelivered, deliveredMode, err := l.toModule.processBlock(b)
-	if err != nil {
-		return nil, err
+	if err = l.toModule.addBlock(b); err != nil {
+		return
 	}
-	if len(toDelivered) == 0 {
-		return nil, nil
+	for {
+		toDelivered, deliveredMode, err = l.toModule.extractBlocks()
+		if err != nil || len(toDelivered) == 0 {
+			break
+		}
+		hashes := make(common.Hashes, len(toDelivered))
+		for idx := range toDelivered {
+			hashes[idx] = toDelivered[idx].Hash
+		}
+		if l.debug != nil {
+			l.debug.TotalOrderingDelivered(hashes, deliveredMode)
+		}
+		// Sync core.consensusTimestamp module.
+		if err = l.ctModule.processBlocks(toDelivered); err != nil {
+			break
+		}
+		delivered = append(delivered, toDelivered...)
 	}
-	hashes := make(common.Hashes, len(toDelivered))
-	for idx := range toDelivered {
-		hashes[idx] = toDelivered[idx].Hash
-	}
-	if l.debug != nil {
-		l.debug.TotalOrderingDelivered(hashes, deliveredMode)
-	}
-	// Sync core.consensusTimestamp module.
-	if err = l.ctModule.processBlocks(toDelivered); err != nil {
-		return nil, err
-	}
-	return toDelivered, nil
+	return
 }

@@ -76,10 +76,16 @@ func (s *TotalOrderingSyncerTestSuite) genDeliverySet(numChains uint32) (
 		}
 		s.Require().NoError(err)
 		// Perform total ordering.
-		blocks, _, err := to.processBlock(&b)
-		s.Require().NoError(err)
-		if len(blocks) > 0 {
-			deliverySet = append(deliverySet, blocks)
+		s.Require().NoError(to.addBlock(&b))
+		for {
+			blocks, _, err := to.extractBlocks()
+			s.Require().NoError(err)
+			if len(blocks) == 0 {
+				break
+			}
+			if len(blocks) > 0 {
+				deliverySet = append(deliverySet, blocks)
+			}
 		}
 	}
 	return

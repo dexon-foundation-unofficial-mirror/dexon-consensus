@@ -1159,14 +1159,11 @@ CheckNextCandidateLoop:
 }
 
 // flushBlocks flushes blocks.
-func (to *totalOrdering) flushBlocks(
-	b *types.Block) (flushed []*types.Block, mode uint32, err error) {
-
+func (to *totalOrdering) flushBlocks() (
+	flushed []*types.Block, mode uint32, err error) {
 	mode = TotalOrderingModeFlush
 	cfg := to.getCurrentConfig()
-	if cfg.isLastBlock(b) {
-		to.flushReadyChains[b.Position.ChainID] = struct{}{}
-	}
+
 	// Flush blocks until last blocks from all chains appeared.
 	if len(to.flushReadyChains) < int(cfg.numChains) {
 		return
@@ -1281,9 +1278,8 @@ func (to *totalOrdering) getCurrentConfig() *totalOrderingConfig {
 	return to.configs[cfgIdx]
 }
 
-// processBlock is the entry point of totalOrdering.
-func (to *totalOrdering) processBlock(
-	b *types.Block) ([]*types.Block, uint32, error) {
+// addBlock adds a block to the working set of total ordering module.
+func (to *totalOrdering) addBlock(b *types.Block) error {
 	// NOTE: Block b is assumed to be in topologically sorted, i.e., all its
 	// acking blocks are during or after total ordering stage.
 	cfg := to.getCurrentConfig()
@@ -1291,7 +1287,7 @@ func (to *totalOrdering) processBlock(
 	to.buildBlockRelation(b)
 	isOldest, err := to.updateVectors(b)
 	if err != nil {
-		return nil, uint32(0), err
+		return err
 	}
 	// Mark the proposer of incoming block as dirty.
 	if b.Position.ChainID < cfg.numChains {
@@ -1310,8 +1306,16 @@ func (to *totalOrdering) processBlock(
 			to.prepareCandidate(b)
 		}
 	}
+	if to.duringFlush && cfg.isLastBlock(b) {
+		to.flushReadyChains[b.Position.ChainID] = struct{}{}
+	}
+	return nil
+}
+
+// extractBlocks check if there is any deliverable set.
+func (to *totalOrdering) extractBlocks() ([]*types.Block, uint32, error) {
 	if to.duringFlush {
-		return to.flushBlocks(b)
+		return to.flushBlocks()
 	}
 	return to.deliverBlocks()
 }

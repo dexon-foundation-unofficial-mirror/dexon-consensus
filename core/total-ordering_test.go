@@ -68,29 +68,35 @@ func (s *TotalOrderingTestSuite) performOneRun(
 		s.Require().NoError(err)
 		revealed += b.Hash.String() + ","
 		// Perform total ordering.
-		blocks, mode, err := to.processBlock(&b)
-		s.Require().NoError(err)
-		for _, b := range blocks {
-			ordered += b.Hash.String() + ","
-			// Make sure the round ID is increasing, and no interleave.
-			s.Require().True(b.Position.Round >= curRound)
-			curRound = b.Position.Round
-			// Make sure all acking blocks are already delivered.
-			for _, ack := range b.Acks {
-				s.Require().Contains(revealedDAG, ack)
+		s.Require().NoError(to.addBlock(&b))
+		for {
+			blocks, mode, err := to.extractBlocks()
+			s.Require().NoError(err)
+			if len(blocks) == 0 {
+				break
 			}
-			if mode == TotalOrderingModeFlush {
-				// For blocks delivered by flushing, the acking relations would
-				// exist in one deliver set, however, only later block would
-				// ack previous block, not backward.
-				revealedDAG[b.Hash] = struct{}{}
-			}
-		}
-		// For blocks not delivered by flushing, the acking relations only exist
-		// between deliver sets.
-		if mode != TotalOrderingModeFlush {
 			for _, b := range blocks {
-				revealedDAG[b.Hash] = struct{}{}
+				ordered += b.Hash.String() + ","
+				// Make sure the round ID is increasing, and no interleave.
+				s.Require().True(b.Position.Round >= curRound)
+				curRound = b.Position.Round
+				// Make sure all acking blocks are already delivered.
+				for _, ack := range b.Acks {
+					s.Require().Contains(revealedDAG, ack)
+				}
+				if mode == TotalOrderingModeFlush {
+					// For blocks delivered by flushing, the acking relations
+					// would exist in one deliver set, however, only later block
+					// would ack previous block, not backward.
+					revealedDAG[b.Hash] = struct{}{}
+				}
+			}
+			// For blocks not delivered by flushing, the acking relations only
+			// exist between deliver sets.
+			if mode != TotalOrderingModeFlush {
+				for _, b := range blocks {
+					revealedDAG[b.Hash] = struct{}{}
+				}
 			}
 		}
 	}
@@ -118,7 +124,9 @@ func (s *TotalOrderingTestSuite) checkRandomResult(
 }
 
 func (s *TotalOrderingTestSuite) checkNotDeliver(to *totalOrdering, b *types.Block) {
-	blocks, mode, err := to.processBlock(b)
+	err := to.addBlock(b)
+	s.NoError(err)
+	blocks, mode, err := to.extractBlocks()
 	s.Empty(blocks)
 	s.Equal(mode, TotalOrderingModeNormal)
 	s.Nil(err)
@@ -458,7 +466,8 @@ func (s *TotalOrderingTestSuite) TestEarlyDeliver() {
 	s.Equal(candidate.ackedStatus[3].minHeight, b30.Position.Height)
 	s.Equal(candidate.ackedStatus[3].count, uint64(2))
 
-	blocks, mode, err := to.processBlock(b32)
+	s.Require().NoError(to.addBlock(b32))
+	blocks, mode, err := to.extractBlocks()
 	s.Require().Len(blocks, 1)
 	s.Equal(mode, TotalOrderingModeEarly)
 	s.Nil(err)
@@ -720,7 +729,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	s.Equal(candidate.ackedStatus[4].count, uint64(0))
 
 	// Check the first deliver.
-	blocks, mode, err := to.processBlock(b02)
+	s.NoError(to.addBlock(b02))
+	blocks, mode, err := to.extractBlocks()
 	s.Equal(mode, TotalOrderingModeEarly)
 	s.Nil(err)
 	s.checkHashSequence(blocks, common.Hashes{b00.Hash, b10.Hash})
@@ -761,7 +771,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 	s.checkNotDeliver(to, b13)
 
 	// Check the second deliver.
-	blocks, mode, err = to.processBlock(b03)
+	s.NoError(to.addBlock(b03))
+	blocks, mode, err = to.extractBlocks()
 	s.Equal(mode, TotalOrderingModeEarly)
 	s.Nil(err)
 	s.checkHashSequence(blocks, common.Hashes{b11.Hash, b20.Hash})
@@ -813,7 +824,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK2() {
 
 	// Make 'Acking Node Set' contains blocks from all chains,
 	// this should trigger not-early deliver.
-	blocks, mode, err = to.processBlock(b23)
+	s.NoError(to.addBlock(b23))
+	blocks, mode, err = to.extractBlocks()
 	s.Equal(mode, TotalOrderingModeNormal)
 	s.Nil(err)
 	s.checkHashSequence(blocks, common.Hashes{b01.Hash, b30.Hash})
@@ -929,7 +941,8 @@ func (s *TotalOrderingTestSuite) TestBasicCaseForK0() {
 	req.Equal(candidate.ackedStatus[3].count, uint64(2))
 
 	// This new block should trigger non-early deliver.
-	blocks, mode, err := to.processBlock(b40)
+	req.NoError(to.addBlock(b40))
+	blocks, mode, err := to.extractBlocks()
 	req.Equal(mode, TotalOrderingModeNormal)
 	req.Nil(err)
 	s.checkHashSequence(blocks, common.Hashes{b20.Hash})
@@ -1246,7 +1259,8 @@ func (s *TotalOrderingTestSuite) TestSync() {
 			}
 		}
 		s.Require().NoError(err)
-		bs, _, err := to1.processBlock(&b)
+		s.Require().NoError(to1.addBlock(&b))
+		bs, _, err := to1.extractBlocks()
 		s.Require().Nil(err)
 		if len(bs) > 0 {
 			deliveredBlockSets1 = append(deliveredBlockSets1, bs)
@@ -1263,7 +1277,8 @@ func (s *TotalOrderingTestSuite) TestSync() {
 	deliveredBlockSets2 := [][]*types.Block{}
 	for i := offset; i < len(deliveredBlockSets1); i++ {
 		for _, b := range deliveredBlockSets1[i] {
-			bs, _, err := to2.processBlock(b)
+			req.NoError(to2.addBlock(b))
+			bs, _, err := to2.extractBlocks()
 			req.NoError(err)
 			if len(bs) > 0 {
 				deliveredBlockSets2 = append(deliveredBlockSets2, bs)
@@ -1373,7 +1388,8 @@ func (s *TotalOrderingTestSuite) TestSyncWithConfigChange() {
 	deliveredBlockSets1 := [][]*types.Block{}
 	deliveredBlockModes := []uint32{}
 	for _, b := range blocks {
-		bs, mode, err := to1.processBlock(b)
+		req.NoError(to1.addBlock(b))
+		bs, mode, err := to1.extractBlocks()
 		req.NoError(err)
 		if len(bs) > 0 {
 			deliveredBlockSets1 = append(deliveredBlockSets1, bs)
@@ -1405,7 +1421,8 @@ func (s *TotalOrderingTestSuite) TestSyncWithConfigChange() {
 		deliveredBlockSets2 := [][]*types.Block{}
 		for i := offset; i < len(deliveredBlockSets1); i++ {
 			for _, b := range deliveredBlockSets1[i] {
-				bs, _, err := to2.processBlock(b)
+				req.NoError(to2.addBlock(b))
+				bs, _, err := to2.extractBlocks()
 				req.NoError(err)
 				if len(bs) > 0 {
 					deliveredBlockSets2 = append(deliveredBlockSets2, bs)
