@@ -18,8 +18,6 @@
 package syncer
 
 import (
-	"sync"
-
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
@@ -29,7 +27,6 @@ import (
 // Struct agreement implements struct of BA (Byzantine Agreement) protocol
 // needed in syncer, which only receives agreement results.
 type agreement struct {
-	wg               *sync.WaitGroup
 	cache            *utils.NodeSetCache
 	inputChan        chan interface{}
 	outputChan       chan<- *types.Block
@@ -47,12 +44,10 @@ func newAgreement(
 	ch chan<- *types.Block,
 	pullChan chan<- common.Hash,
 	cache *utils.NodeSetCache,
-	wg *sync.WaitGroup,
 	logger common.Logger) *agreement {
 
 	return &agreement{
 		cache:            cache,
-		wg:               wg,
 		inputChan:        make(chan interface{}, 1000),
 		outputChan:       ch,
 		pullChan:         pullChan,
@@ -68,8 +63,6 @@ func newAgreement(
 // run starts the agreement, this does not start a new routine, go a new
 // routine explicitly in the caller.
 func (a *agreement) run() {
-	a.wg.Add(1)
-	defer a.wg.Done()
 	for {
 		select {
 		case val, ok := <-a.inputChan:

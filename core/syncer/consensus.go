@@ -623,10 +623,13 @@ func (con *Consensus) resizeByNumChains(numChains uint32) {
 			// Resize the pool of blocks.
 			con.blocks = append(con.blocks, types.ByPosition{})
 			// Resize agreement modules.
-			a := newAgreement(con.receiveChan, con.pullChan, con.nodeSetCache,
-				&con.agreementWaitGroup, con.logger)
+			a := newAgreement(con.receiveChan, con.pullChan, con.nodeSetCache, con.logger)
 			con.agreements = append(con.agreements, a)
-			go a.run()
+			con.agreementWaitGroup.Add(1)
+			go func() {
+				defer con.agreementWaitGroup.Done()
+				a.run()
+			}()
 		}
 	}
 }
