@@ -66,7 +66,7 @@ func (s *Signer) SignBlock(b *types.Block) (err error) {
 // SignVote signs a types.Vote.
 func (s *Signer) SignVote(v *types.Vote) (err error) {
 	v.ProposerID = s.proposerID
-	v.Signature, err = s.prvKey.Sign(hashVote(v))
+	v.Signature, err = s.prvKey.Sign(HashVote(v))
 	return
 }
 

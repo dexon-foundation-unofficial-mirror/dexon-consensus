@@ -122,9 +122,9 @@ func (s *PenaltyHelperTestSuite) TestForkVote() {
 	for vote2.BlockHash == vote1.BlockHash {
 		vote2.BlockHash = common.NewRandomHash()
 	}
-	vote1.Signature, err = prv1.Sign(hashVote(vote1))
+	vote1.Signature, err = prv1.Sign(HashVote(vote1))
 	s.Require().NoError(err)
-	vote2.Signature, err = prv1.Sign(hashVote(vote2))
+	vote2.Signature, err = prv1.Sign(HashVote(vote2))
 	s.Require().NoError(err)
 
 	ok, err := NeedPenaltyForkVote(vote1, vote2)
@@ -138,7 +138,7 @@ func (s *PenaltyHelperTestSuite) TestForkVote() {
 	s.False(ok)
 
 	// Period not matched.
-	vote2.Signature, err = prv1.Sign(hashVote(vote2))
+	vote2.Signature, err = prv1.Sign(HashVote(vote2))
 	s.Require().NoError(err)
 	ok, err = NeedPenaltyForkVote(vote1, vote2)
 	s.Require().NoError(err)
@@ -152,7 +152,7 @@ func (s *PenaltyHelperTestSuite) TestForkVote() {
 	prv2, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
 	vote2.ProposerID = types.NewNodeID(prv2.PublicKey())
-	vote2.Signature, err = prv2.Sign(hashVote(vote2))
+	vote2.Signature, err = prv2.Sign(HashVote(vote2))
 	s.Require().NoError(err)
 	ok, err = NeedPenaltyForkVote(vote1, vote2)
 	s.Require().NoError(err)

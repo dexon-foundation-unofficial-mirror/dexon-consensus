@@ -90,7 +90,8 @@ func VerifyBlockSignature(b *types.Block) (err error) {
 
 }
 
-func hashVote(vote *types.Vote) common.Hash {
+// HashVote generates hash of a types.Vote.
+func HashVote(vote *types.Vote) common.Hash {
 	binaryPeriod := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryPeriod, vote.Period)
 
@@ -108,7 +109,7 @@ func hashVote(vote *types.Vote) common.Hash {
 
 // VerifyVoteSignature verifies the signature of types.Vote.
 func VerifyVoteSignature(vote *types.Vote) (bool, error) {
-	hash := hashVote(vote)
+	hash := HashVote(vote)
 	pubKey, err := crypto.SigToPub(hash, vote.Signature)
 	if err != nil {
 		return false, err

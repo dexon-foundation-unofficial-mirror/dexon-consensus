@@ -130,7 +130,7 @@ func (s *CryptoTestSuite) TestVoteSignature() {
 	nID := types.NewNodeID(pub)
 	vote := types.NewVote(types.VoteInit, common.NewRandomHash(), 1)
 	vote.ProposerID = nID
-	vote.Signature, err = prv.Sign(hashVote(vote))
+	vote.Signature, err = prv.Sign(HashVote(vote))
 	s.Require().NoError(err)
 	ok, err := VerifyVoteSignature(vote)
 	s.Require().NoError(err)
