@@ -148,7 +148,11 @@ func (mgr *agreementMgr) run() {
 	}
 	mgr.isRunning = true
 	for i := uint32(0); i < uint32(len(mgr.baModules)); i++ {
-		go mgr.runBA(mgr.initRound, i)
+		mgr.waitGroup.Add(1)
+		go func(idx uint32) {
+			defer mgr.waitGroup.Done()
+			mgr.runBA(mgr.initRound, idx)
+		}(i)
 	}
 }
 
@@ -186,7 +190,11 @@ func (mgr *agreementMgr) appendConfig(
 		recv.agreementModule = agrModule
 		mgr.baModules = append(mgr.baModules, agrModule)
 		if mgr.isRunning {
-			go mgr.runBA(round, i)
+			mgr.waitGroup.Add(1)
+			go func(idx uint32) {
+				defer mgr.waitGroup.Done()
+				mgr.runBA(round, idx)
+			}(i)
 		}
 	}
 	return nil
@@ -277,8 +285,6 @@ func (mgr *agreementMgr) stop() {
 }
 
 func (mgr *agreementMgr) runBA(initRound uint64, chainID uint32) {
-	mgr.waitGroup.Add(1)
-	defer mgr.waitGroup.Done()
 	// Acquire agreement module.
 	agr, recv := func() (*agreement, *consensusBAReceiver) {
 		mgr.lock.RLock()
