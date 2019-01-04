@@ -29,6 +29,7 @@ import "log"
 //           })
 type Logger interface {
 	// Info logs info level logs.
+	Trace(msg string, ctx ...interface{})
 	Debug(msg string, ctx ...interface{})
 	Info(msg string, ctx ...interface{})
 	Warn(msg string, ctx ...interface{})
@@ -37,6 +38,10 @@ type Logger interface {
 
 // NullLogger logs nothing.
 type NullLogger struct{}
+
+// Trace implements Logger interface.
+func (logger *NullLogger) Trace(msg string, ctx ...interface{}) {
+}
 
 // Debug implements Logger interface.
 func (logger *NullLogger) Debug(msg string, ctx ...interface{}) {
@@ -64,6 +69,11 @@ func composeVargs(msg string, ctxs []interface{}) []interface{} {
 		args = append(args, c)
 	}
 	return args
+}
+
+// Trace implements Logger interface.
+func (logger *SimpleLogger) Trace(msg string, ctx ...interface{}) {
+	log.Println(composeVargs(msg, ctx)...)
 }
 
 // Debug implements Logger interface.
@@ -96,6 +106,11 @@ func NewCustomLogger(logger *log.Logger) *CustomLogger {
 	return &CustomLogger{
 		logger: logger,
 	}
+}
+
+// Trace implements Logger interface.
+func (logger *CustomLogger) Trace(msg string, ctx ...interface{}) {
+	logger.logger.Println(composeVargs(msg, ctx)...)
 }
 
 // Debug implements Logger interface.

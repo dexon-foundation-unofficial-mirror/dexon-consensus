@@ -29,8 +29,8 @@ type blockPool []types.ByPosition
 
 func newBlockPool(chainNum uint32) (pool blockPool) {
 	pool = make(blockPool, chainNum)
-	for _, p := range pool {
-		heap.Init(&p)
+	for i := range pool {
+		heap.Init(&pool[i])
 	}
 	return
 }

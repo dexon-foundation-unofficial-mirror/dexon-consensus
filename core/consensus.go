@@ -1015,8 +1015,11 @@ func (con *Consensus) pullRandomness() {
 		case <-time.After(1500 * time.Millisecond):
 			// TODO(jimmy): pulling period should be related to lambdaBA.
 			hashes := con.ccModule.pendingBlocksWithoutRandomness()
-			con.logger.Debug("Calling Network.PullRandomness", "blocks", hashes)
-			con.network.PullRandomness(hashes)
+			if len(hashes) > 0 {
+				con.logger.Debug(
+					"Calling Network.PullRandomness", "blocks", hashes)
+				con.network.PullRandomness(hashes)
+			}
 		}
 	}
 }

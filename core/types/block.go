@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/dexon-foundation/dexon/rlp"
@@ -45,15 +44,6 @@ const (
 	VerifyRetryLater
 	// VerifyInvalidBlock: Block is an invalid one.
 	VerifyInvalidBlock
-)
-
-var (
-	// blockPool is the blocks cache to reuse allocated blocks.
-	blockPool = sync.Pool{
-		New: func() interface{} {
-			return &Block{}
-		},
-	}
 )
 
 type rlpTimestamp struct {
@@ -131,19 +121,6 @@ func (f *FinalizationResult) DecodeRLP(s *rlp.Stream) error {
 type Witness struct {
 	Height uint64 `json:"height"`
 	Data   []byte `json:"data"`
-}
-
-// RecycleBlock put unused block into cache, which might be reused if
-// not garbage collected.
-func RecycleBlock(b *Block) {
-	blockPool.Put(b)
-}
-
-// NewBlock initiate a block.
-func NewBlock() (b *Block) {
-	b = blockPool.Get().(*Block)
-	b.Acks = b.Acks[:0]
-	return
 }
 
 // Block represents a single event broadcasted on the network.
@@ -226,7 +203,7 @@ func (b *Block) String() string {
 
 // Clone returns a deep copy of a block.
 func (b *Block) Clone() (bcopy *Block) {
-	bcopy = NewBlock()
+	bcopy = &Block{}
 	bcopy.ProposerID = b.ProposerID
 	bcopy.ParentHash = b.ParentHash
 	bcopy.Hash = b.Hash

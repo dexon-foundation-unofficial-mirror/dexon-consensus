@@ -262,12 +262,12 @@ func (con *Consensus) ensureAgreementOverlapRound() bool {
 		for r = range tipRoundMap {
 			break
 		}
-		con.logger.Info("check agreement round cut",
+		con.logger.Debug("check agreement round cut",
 			"tip-round", r,
 			"configs", len(con.configs))
 		if tipRoundMap[r] == con.configs[r].NumChains {
 			con.agreementRoundCut = r
-			con.logger.Debug("agreement round cut found, round", r)
+			con.logger.Info("agreement round cut found, round", r)
 			return true
 		}
 	}
@@ -416,7 +416,7 @@ func (con *Consensus) SyncBlocks(
 			"expected", tipHeight+1)
 		return false, ErrInvalidSyncingFinalizationHeight
 	}
-	con.logger.Debug("syncBlocks",
+	con.logger.Trace("syncBlocks",
 		"position", &blocks[0].Position,
 		"final height", blocks[0].Finalization.Height,
 		"len", len(blocks),
@@ -601,7 +601,7 @@ func (con *Consensus) setupConfigs(blocks []*types.Block) {
 			maxRound = b.Position.Round
 		}
 	}
-	con.logger.Info("syncer setupConfigs",
+	con.logger.Debug("syncer setupConfigs",
 		"max", maxRound,
 		"lattice", con.latticeLastRound)
 	// Get configs from governance.
@@ -737,7 +737,7 @@ func (con *Consensus) startCRSMonitor() {
 		if round == lastNotifiedRound {
 			return
 		}
-		con.logger.Info("CRS is ready", "round", round)
+		con.logger.Debug("CRS is ready", "round", round)
 		lastNotifiedRound = round
 		for _, a := range con.agreements {
 			a.inputChan <- round
