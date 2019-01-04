@@ -31,6 +31,11 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
+// NewID creates a DKGID from NodeID.
+func NewID(ID types.NodeID) cryptoDKG.ID {
+	return cryptoDKG.NewID(ID.Hash[:])
+}
+
 // PrivateShare describe a secret share in DKG protocol.
 type PrivateShare struct {
 	ProposerID   types.NodeID         `json:"proposer_id"`

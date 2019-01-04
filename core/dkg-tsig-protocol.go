@@ -142,10 +142,6 @@ type tsigProtocol struct {
 	threshold      int
 }
 
-func newDKGID(ID types.NodeID) dkg.ID {
-	return dkg.NewID(ID.Hash[:])
-}
-
 func newDKGProtocol(
 	ID types.NodeID,
 	recv dkgReceiver,
@@ -156,7 +152,7 @@ func newDKGProtocol(
 
 	recv.ProposeDKGMasterPublicKey(&typesDKG.MasterPublicKey{
 		Round:           round,
-		DKGID:           newDKGID(ID),
+		DKGID:           typesDKG.NewID(ID),
 		PublicKeyShares: *pubShare,
 	})
 
