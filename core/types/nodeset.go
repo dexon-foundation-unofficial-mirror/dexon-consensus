@@ -32,7 +32,9 @@ type NodeSet struct {
 }
 
 // SubSetTarget is the sub set target for GetSubSet().
-type SubSetTarget *big.Int
+type SubSetTarget struct {
+	data [][]byte
+}
 
 type subSetTargetType byte
 
@@ -71,7 +73,7 @@ func NewNodeSet() *NodeSet {
 }
 
 // NewNotarySetTarget is the target for getting Notary Set.
-func NewNotarySetTarget(crs common.Hash, chainID uint32) SubSetTarget {
+func NewNotarySetTarget(crs common.Hash, chainID uint32) *SubSetTarget {
 	binaryChainID := make([]byte, 4)
 	binary.LittleEndian.PutUint32(binaryChainID, chainID)
 
@@ -79,7 +81,7 @@ func NewNotarySetTarget(crs common.Hash, chainID uint32) SubSetTarget {
 }
 
 // NewDKGSetTarget  is the target for getting DKG Set.
-func NewDKGSetTarget(crs common.Hash) SubSetTarget {
+func NewDKGSetTarget(crs common.Hash) *SubSetTarget {
 	return newTarget(targetDKGSet, crs[:])
 }
 
@@ -99,7 +101,7 @@ func (ns *NodeSet) Clone() *NodeSet {
 
 // GetSubSet returns the subset of given target.
 func (ns *NodeSet) GetSubSet(
-	size int, target SubSetTarget) map[NodeID]struct{} {
+	size int, target *SubSetTarget) map[NodeID]struct{} {
 	if size == 0 {
 		return make(map[NodeID]struct{})
 	}
@@ -129,18 +131,20 @@ func (ns *NodeSet) GetSubSet(
 	return nIDs
 }
 
-func newTarget(targetType subSetTargetType, data ...[]byte) SubSetTarget {
+func newTarget(targetType subSetTargetType, data ...[]byte) *SubSetTarget {
 	data = append(data, []byte{byte(targetType)})
-	h := crypto.Keccak256Hash(data...)
-	num := big.NewInt(0)
-	num.SetBytes(h[:])
-	return SubSetTarget(num)
+	return &SubSetTarget{
+		data: data,
+	}
 }
 
-func newNodeRank(ID NodeID, target SubSetTarget) *nodeRank {
-	num := big.NewInt(0)
-	num.SetBytes(ID.Hash[:])
-	num.Abs(num.Sub((*big.Int)(target), num))
+func newNodeRank(ID NodeID, target *SubSetTarget) *nodeRank {
+	data := make([][]byte, 1, len(target.data)+1)
+	data[0] = make([]byte, len(ID.Hash))
+	copy(data[0], ID.Hash[:])
+	data = append(data, target.data...)
+	h := crypto.Keccak256Hash(data...)
+	num := new(big.Int).SetBytes(h[:])
 	return &nodeRank{
 		ID:   ID,
 		rank: num,
