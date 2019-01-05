@@ -91,8 +91,7 @@ func (cc *configurationChain) registerDKG(round uint64, threshold int) {
 	defer cc.dkgLock.Unlock()
 	if cc.dkg != nil {
 		cc.logger.Error("Previous DKG is not finished")
-		// TODO(mission): do we have to retry DKG initiation here?
-		return
+		// TODO(mission): return here and fix CI failure.
 	}
 	dkgSet, err := cc.cache.GetDKGSet(round)
 	if err != nil {
