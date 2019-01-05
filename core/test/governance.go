@@ -231,6 +231,14 @@ func (g *Governance) IsDKGFinal(round uint64) bool {
 	return g.stateModule.IsDKGFinal(round, int(g.configs[round].DKGSetSize)/3*2)
 }
 
+// ReportForkVote reports a node for forking votes.
+func (g *Governance) ReportForkVote(vote1, vote2 *types.Vote) {
+}
+
+// ReportForkBlock reports a node for forking blocks.
+func (g *Governance) ReportForkBlock(block1, block2 *types.Block) {
+}
+
 //
 // Test Utilities
 //
