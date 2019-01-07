@@ -31,6 +31,7 @@ import (
 
 // Errors for agreement module.
 var (
+	ErrInvalidVote            = fmt.Errorf("invalid vote")
 	ErrNotInNotarySet         = fmt.Errorf("not in notary set")
 	ErrIncorrectVoteSignature = fmt.Errorf("incorrect vote signature")
 )
@@ -266,6 +267,9 @@ func (a *agreement) nextState() (err error) {
 }
 
 func (a *agreement) sanityCheck(vote *types.Vote) error {
+	if vote.Type >= types.MaxVoteType {
+		return ErrInvalidVote
+	}
 	if _, exist := a.notarySet[vote.ProposerID]; !exist {
 		return ErrNotInNotarySet
 	}
