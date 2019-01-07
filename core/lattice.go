@@ -90,9 +90,7 @@ func (l *Lattice) PrepareBlock(
 	if b.Witness, err = l.app.PrepareWitness(b.Witness.Height); err != nil {
 		return
 	}
-	if err = l.signer.SignBlock(b); err != nil {
-		return
-	}
+	err = l.signer.SignBlock(b)
 	return
 }
 
@@ -103,9 +101,7 @@ func (l *Lattice) PrepareEmptyBlock(b *types.Block) (err error) {
 	if err = l.data.prepareEmptyBlock(b); err != nil {
 		return
 	}
-	if b.Hash, err = utils.HashBlock(b); err != nil {
-		return
-	}
+	b.Hash, err = utils.HashBlock(b)
 	return
 }
 
@@ -139,17 +135,12 @@ func (l *Lattice) SanityCheck(b *types.Block) (err error) {
 			return
 		}
 	}
-	if err = func() (err error) {
-		l.lock.RLock()
-		defer l.lock.RUnlock()
-		if err = l.data.sanityCheck(b); err != nil {
-			if _, ok := err.(*ErrAckingBlockNotExists); ok {
-				err = ErrRetrySanityCheckLater
-			}
-			return
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+	if err = l.data.sanityCheck(b); err != nil {
+		if _, ok := err.(*ErrAckingBlockNotExists); ok {
+			err = ErrRetrySanityCheckLater
 		}
-		return
-	}(); err != nil {
 		return
 	}
 	return
@@ -159,10 +150,8 @@ func (l *Lattice) SanityCheck(b *types.Block) (err error) {
 func (l *Lattice) Exist(hash common.Hash) bool {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
-	if _, err := l.data.findBlock(hash); err != nil {
-		return false
-	}
-	return true
+	_, err := l.data.findBlock(hash)
+	return err == nil
 }
 
 // addBlockToLattice adds a block into lattice, and delivers blocks with the

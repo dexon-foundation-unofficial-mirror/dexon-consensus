@@ -150,10 +150,7 @@ func (l *leaderSelector) processBlock(block *types.Block) error {
 func (l *leaderSelector) potentialLeader(block *types.Block) (bool, *big.Int) {
 	dist := l.distance(block.CRSSignature)
 	cmp := l.minCRSBlock.Cmp(dist)
-	if cmp > 0 || (cmp == 0 && block.Hash.Less(l.minBlockHash)) {
-		return true, dist
-	}
-	return false, dist
+	return (cmp > 0 || (cmp == 0 && block.Hash.Less(l.minBlockHash))), dist
 }
 
 func (l *leaderSelector) updateLeader(block *types.Block, dist *big.Int) {

@@ -280,19 +280,14 @@ func (a *agreement) sanityCheck(vote *types.Vote) error {
 }
 
 func (a *agreement) checkForkVote(vote *types.Vote) error {
-	if err := func() error {
-		a.data.lock.RLock()
-		defer a.data.lock.RUnlock()
-		if votes, exist := a.data.votes[vote.Period]; exist {
-			if oldVote, exist := votes[vote.Type][vote.ProposerID]; exist {
-				if vote.BlockHash != oldVote.BlockHash {
-					return &ErrForkVote{vote.ProposerID, oldVote, vote}
-				}
+	a.data.lock.RLock()
+	defer a.data.lock.RUnlock()
+	if votes, exist := a.data.votes[vote.Period]; exist {
+		if oldVote, exist := votes[vote.Type][vote.ProposerID]; exist {
+			if vote.BlockHash != oldVote.BlockHash {
+				return &ErrForkVote{vote.ProposerID, oldVote, vote}
 			}
 		}
-		return nil
-	}(); err != nil {
-		return err
 	}
 	return nil
 }

@@ -43,7 +43,7 @@ const (
 	stateSleep
 )
 
-var nullBlockHash = common.Hash{}
+var nullBlockHash common.Hash
 var skipBlockHash common.Hash
 
 func init() {

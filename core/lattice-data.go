@@ -257,10 +257,7 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 			return ErrNotAckParent
 		}
 	}
-	if err := data.checkAckingRelations(b); err != nil {
-		return err
-	}
-	return nil
+	return data.checkAckingRelations(b)
 }
 
 // addBlock processes blocks. It does sanity check, inserts block into lattice

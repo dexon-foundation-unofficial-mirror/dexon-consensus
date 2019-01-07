@@ -72,11 +72,7 @@ func (lvl *LevelDBBackedDB) HasBlock(hash common.Hash) bool {
 }
 
 func (lvl *LevelDBBackedDB) internalHasBlock(key []byte) (bool, error) {
-	exists, err := lvl.db.Has(key, nil)
-	if err != nil {
-		return false, err
-	}
-	return exists, nil
+	return lvl.db.Has(key, nil)
 }
 
 // GetBlock implements the Reader.GetBlock method.
@@ -90,9 +86,6 @@ func (lvl *LevelDBBackedDB) GetBlock(
 		return
 	}
 	err = rlp.DecodeBytes(queried, &block)
-	if err != nil {
-		return
-	}
 	return
 }
 
@@ -113,9 +106,7 @@ func (lvl *LevelDBBackedDB) UpdateBlock(block types.Block) (err error) {
 		err = ErrBlockDoesNotExist
 		return
 	}
-	if err = lvl.db.Put(blockKey, marshaled, nil); err != nil {
-		return
-	}
+	err = lvl.db.Put(blockKey, marshaled, nil)
 	return
 }
 
@@ -134,9 +125,7 @@ func (lvl *LevelDBBackedDB) PutBlock(block types.Block) (err error) {
 		err = ErrBlockExists
 		return
 	}
-	if err = lvl.db.Put(blockKey, marshaled, nil); err != nil {
-		return
-	}
+	err = lvl.db.Put(blockKey, marshaled, nil)
 	return
 }
 
@@ -166,10 +155,7 @@ func (lvl *LevelDBBackedDB) PutCompactionChainTipInfo(
 	if info.Height+1 != height {
 		return ErrInvalidCompactionChainTipHeight
 	}
-	if err = lvl.db.Put(compactionChainTipInfoKey, marshaled, nil); err != nil {
-		return err
-	}
-	return nil
+	return lvl.db.Put(compactionChainTipInfoKey, marshaled, nil)
 }
 
 func (lvl *LevelDBBackedDB) internalGetCompactionChainTipInfo() (
@@ -181,9 +167,7 @@ func (lvl *LevelDBBackedDB) internalGetCompactionChainTipInfo() (
 		}
 		return
 	}
-	if err = rlp.DecodeBytes(queried, &info); err != nil {
-		return
-	}
+	err = rlp.DecodeBytes(queried, &info)
 	return
 }
 
@@ -201,11 +185,7 @@ func (lvl *LevelDBBackedDB) GetCompactionChainTipInfo() (
 
 // HasDKGPrivateKey check existence of DKG private key of one round.
 func (lvl *LevelDBBackedDB) HasDKGPrivateKey(round uint64) (bool, error) {
-	exists, err := lvl.db.Has(lvl.getDKGPrivateKeyKey(round), nil)
-	if err != nil {
-		return false, err
-	}
-	return exists, nil
+	return lvl.db.Has(lvl.getDKGPrivateKeyKey(round), nil)
 }
 
 // GetDKGPrivateKey get DKG private key of one round.
@@ -218,9 +198,7 @@ func (lvl *LevelDBBackedDB) GetDKGPrivateKey(round uint64) (
 		}
 		return
 	}
-	if err = rlp.DecodeBytes(queried, &prv); err != nil {
-		return
-	}
+	err = rlp.DecodeBytes(queried, &prv)
 	return
 }
 
@@ -239,11 +217,8 @@ func (lvl *LevelDBBackedDB) PutDKGPrivateKey(
 	if err != nil {
 		return err
 	}
-	if err := lvl.db.Put(
-		lvl.getDKGPrivateKeyKey(round), marshaled, nil); err != nil {
-		return err
-	}
-	return nil
+	return lvl.db.Put(
+		lvl.getDKGPrivateKeyKey(round), marshaled, nil)
 }
 
 func (lvl *LevelDBBackedDB) getBlockKey(hash common.Hash) (ret []byte) {
