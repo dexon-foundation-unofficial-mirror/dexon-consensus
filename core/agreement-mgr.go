@@ -266,7 +266,11 @@ func (mgr *agreementMgr) processAgreementResult(
 				return err
 			}
 		}
-		agreement.restart(nIDs, result.Position, crs)
+		leader, err := mgr.cache.GetLeaderNode(result.Position)
+		if err != nil {
+			return err
+		}
+		agreement.restart(nIDs, result.Position, leader, crs)
 	}
 	return nil
 }
@@ -332,14 +336,12 @@ func (mgr *agreementMgr) runBA(initRound uint64, chainID uint32) {
 			return
 		}
 		// Check if this node in notary set of this chain in this round.
-		nodeSet, err := mgr.cache.GetNodeSet(nextRound)
+		notarySet, err := mgr.cache.GetNotarySet(nextRound, chainID)
 		if err != nil {
 			panic(err)
 		}
 		setting.crs = config.crs
-		setting.notarySet = nodeSet.GetSubSet(
-			int(config.notarySetSize),
-			types.NewNotarySetTarget(config.crs, chainID))
+		setting.notarySet = notarySet
 		_, isNotary = setting.notarySet[mgr.ID]
 		if isNotary {
 			mgr.logger.Info("selected as notary set",
@@ -461,7 +463,11 @@ Loop:
 				Height:  nextHeight,
 			}
 			oldPos = nextPos
-			agr.restart(setting.notarySet, nextPos, setting.crs)
+			leader, err := mgr.cache.GetLeaderNode(nextPos)
+			if err != nil {
+				return err
+			}
+			agr.restart(setting.notarySet, nextPos, leader, setting.crs)
 		default:
 		}
 		if agr.pullVotes() {

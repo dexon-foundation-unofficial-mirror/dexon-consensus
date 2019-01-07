@@ -19,6 +19,7 @@ package core
 
 import (
 	"testing"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
@@ -38,7 +39,9 @@ func (r *agreementTestReceiver) ProposeVote(vote *types.Vote) {
 }
 
 func (r *agreementTestReceiver) ProposeBlock() common.Hash {
-	block := r.s.proposeBlock(r.agreementIndex)
+	block := r.s.proposeBlock(
+		r.s.agreement[r.agreementIndex].data.ID,
+		r.s.agreement[r.agreementIndex].data.leader.hashCRS)
 	r.s.blockChan <- block.Hash
 	return block.Hash
 }
@@ -56,14 +59,16 @@ func (r *agreementTestReceiver) PullBlocks(hashes common.Hashes) {
 }
 
 func (s *AgreementTestSuite) proposeBlock(
-	agreementIdx int) *types.Block {
+	nID types.NodeID, crs common.Hash) *types.Block {
 	block := &types.Block{
-		ProposerID: s.ID,
+		ProposerID: nID,
 		Hash:       common.NewRandomHash(),
 	}
 	s.block[block.Hash] = block
-	s.Require().NoError(s.signers[s.ID].SignCRS(
-		block, s.agreement[agreementIdx].data.leader.hashCRS))
+	signer, exist := s.signers[block.ProposerID]
+	s.Require().True(exist)
+	s.Require().NoError(signer.SignCRS(
+		block, crs))
 	return block
 }
 
@@ -93,11 +98,14 @@ func (s *AgreementTestSuite) SetupTest() {
 	s.pulledBlocks = make(map[common.Hash]struct{})
 }
 
-func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
+func (s *AgreementTestSuite) newAgreement(
+	numNotarySet, leaderIdx int) (*agreement, types.NodeID) {
+	s.Require().True(leaderIdx < numNotarySet)
 	leader := newLeaderSelector(func(*types.Block) (bool, error) {
 		return true, nil
 	}, &common.NullLogger{})
 	agreementIdx := len(s.agreement)
+	var leaderNode types.NodeID
 	notarySet := make(map[types.NodeID]struct{})
 	for i := 0; i < numNotarySet-1; i++ {
 		prvKey, err := ecdsa.NewPrivateKey()
@@ -105,6 +113,12 @@ func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 		nID := types.NewNodeID(prvKey.PublicKey())
 		notarySet[nID] = struct{}{}
 		s.signers[nID] = utils.NewSigner(prvKey)
+		if i == leaderIdx-1 {
+			leaderNode = nID
+		}
+	}
+	if leaderIdx == 0 {
+		leaderNode = s.ID
 	}
 	notarySet[s.ID] = struct{}{}
 	agreement := newAgreement(
@@ -116,9 +130,10 @@ func (s *AgreementTestSuite) newAgreement(numNotarySet int) *agreement {
 		leader,
 		s.signers[s.ID],
 	)
-	agreement.restart(notarySet, types.Position{}, common.NewRandomHash())
+	agreement.restart(notarySet, types.Position{},
+		leaderNode, common.NewRandomHash())
 	s.agreement = append(s.agreement, agreement)
-	return agreement
+	return agreement, leaderNode
 }
 
 func (s *AgreementTestSuite) copyVote(
@@ -138,7 +153,13 @@ func (s *AgreementTestSuite) prepareVote(
 }
 
 func (s *AgreementTestSuite) TestSimpleConfirm() {
-	a := s.newAgreement(4)
+	a, _ := s.newAgreement(4, -1)
+	// FastState
+	a.nextState()
+	// FastVoteState
+	a.nextState()
+	// FastRollbackState
+	a.nextState()
 	// InitialState
 	a.nextState()
 	// PreCommitState
@@ -180,7 +201,13 @@ func (s *AgreementTestSuite) TestSimpleConfirm() {
 }
 
 func (s *AgreementTestSuite) TestPartitionOnCommitVote() {
-	a := s.newAgreement(4)
+	a, _ := s.newAgreement(4, -1)
+	// FastState
+	a.nextState()
+	// FastVoteState
+	a.nextState()
+	// FastRollbackState
+	a.nextState()
 	// InitialState
 	a.nextState()
 	// PreCommitState
@@ -217,9 +244,63 @@ func (s *AgreementTestSuite) TestPartitionOnCommitVote() {
 	s.Require().Len(s.voteChan, 0)
 }
 
+func (s *AgreementTestSuite) TestFastConfirmLeader() {
+	a, leaderNode := s.newAgreement(4, 0)
+	s.Require().Equal(s.ID, leaderNode)
+	// FastState
+	a.nextState()
+	// FastVoteState
+	s.Require().Len(s.blockChan, 1)
+	blockHash := <-s.blockChan
+	block, exist := s.block[blockHash]
+	s.Require().True(exist)
+	s.Require().Equal(s.ID, block.ProposerID)
+	s.Require().NoError(a.processBlock(block))
+	s.Require().Len(s.voteChan, 1)
+	vote := <-s.voteChan
+	s.Equal(types.VoteFast, vote.Type)
+	s.Equal(blockHash, vote.BlockHash)
+	for nID := range s.signers {
+		v := s.copyVote(vote, nID)
+		s.Require().NoError(a.processVote(v))
+	}
+	// We have enough of Fast-Votes.
+	s.Require().Len(s.confirmChan, 1)
+	confirmBlock := <-s.confirmChan
+	s.Equal(blockHash, confirmBlock)
+}
+
+func (s *AgreementTestSuite) TestFastConfirmNonLeader() {
+	a, leaderNode := s.newAgreement(4, 1)
+	s.Require().NotEqual(s.ID, leaderNode)
+	// FastState
+	a.nextState()
+	// FastVoteState
+	s.Require().Len(s.blockChan, 0)
+	block := s.proposeBlock(leaderNode, a.data.leader.hashCRS)
+	s.Require().Equal(leaderNode, block.ProposerID)
+	s.Require().NoError(a.processBlock(block))
+	var vote *types.Vote
+	select {
+	case vote = <-s.voteChan:
+	case <-time.After(500 * time.Millisecond):
+		s.FailNow("Should propose vote")
+	}
+	s.Equal(types.VoteFast, vote.Type)
+	s.Equal(block.Hash, vote.BlockHash)
+	for nID := range s.signers {
+		v := s.copyVote(vote, nID)
+		s.Require().NoError(a.processVote(v))
+	}
+	// We have enough of Fast-Votes.
+	s.Require().Len(s.confirmChan, 1)
+	confirmBlock := <-s.confirmChan
+	s.Equal(block.Hash, confirmBlock)
+}
+
 func (s *AgreementTestSuite) TestFastForwardCond1() {
 	votes := 0
-	a := s.newAgreement(4)
+	a, _ := s.newAgreement(4, -1)
 	a.data.lockRound = 1
 	a.data.period = 3
 	hash := common.NewRandomHash()
@@ -273,7 +354,7 @@ func (s *AgreementTestSuite) TestFastForwardCond1() {
 
 func (s *AgreementTestSuite) TestFastForwardCond2() {
 	votes := 0
-	a := s.newAgreement(4)
+	a, _ := s.newAgreement(4, -1)
 	a.data.period = 1
 	hash := common.NewRandomHash()
 	for nID := range a.notarySet {
@@ -310,7 +391,7 @@ func (s *AgreementTestSuite) TestFastForwardCond2() {
 func (s *AgreementTestSuite) TestFastForwardCond3() {
 	numVotes := 0
 	votes := []*types.Vote{}
-	a := s.newAgreement(4)
+	a, _ := s.newAgreement(4, -1)
 	a.data.period = 1
 	for nID := range a.notarySet {
 		vote := s.prepareVote(nID, types.VoteCom, common.NewRandomHash(), uint64(2))
@@ -337,7 +418,7 @@ func (s *AgreementTestSuite) TestFastForwardCond3() {
 
 func (s *AgreementTestSuite) TestDecide() {
 	votes := 0
-	a := s.newAgreement(4)
+	a, _ := s.newAgreement(4, -1)
 	a.data.period = 5
 
 	// No decide if com-vote on SKIP.

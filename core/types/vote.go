@@ -32,6 +32,7 @@ const (
 	VoteInit VoteType = iota
 	VotePreCom
 	VoteCom
+	VoteFast
 	// Do not add any type below MaxVoteType.
 	MaxVoteType
 )

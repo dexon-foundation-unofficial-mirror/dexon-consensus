@@ -19,6 +19,7 @@ package utils
 
 import (
 	"testing"
+	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
@@ -38,6 +39,8 @@ func (g *nsIntf) Configuration(round uint64) (cfg *types.Config) {
 		NotarySetSize: 7,
 		DKGSetSize:    7,
 		NumChains:     4,
+		LambdaBA:      250 * time.Millisecond,
+		RoundInterval: 60 * time.Second,
 	}
 }
 func (g *nsIntf) CRS(round uint64) (b common.Hash) { return g.crs }
@@ -91,6 +94,15 @@ func (s *NodeSetCacheTestSuite) TestBasicUsage() {
 	dkgSet, err := cache.GetDKGSet(0)
 	req.NoError(err)
 	chk(cache, 0, dkgSet)
+	leaderNode, err := cache.GetLeaderNode(types.Position{
+		Round:   uint64(0),
+		ChainID: uint32(3),
+		Height:  uint64(10),
+	})
+	req.NoError(err)
+	chk(cache, 0, map[types.NodeID]struct{}{
+		leaderNode: struct{}{},
+	})
 	// Try to get round 1.
 	nodeSet1, err := cache.GetNodeSet(1)
 	req.NoError(err)

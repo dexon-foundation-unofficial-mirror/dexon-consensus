@@ -38,9 +38,11 @@ var (
 )
 
 type sets struct {
-	nodeSet   *types.NodeSet
-	notarySet []map[types.NodeID]struct{}
-	dkgSet    map[types.NodeID]struct{}
+	crs        common.Hash
+	nodeSet    *types.NodeSet
+	notarySet  []map[types.NodeID]struct{}
+	dkgSet     map[types.NodeID]struct{}
+	leaderNode []map[uint64]types.NodeID
 }
 
 // NodeSetCacheInterface interface specifies interface used by NodeSetCache.
@@ -146,6 +148,33 @@ func (cache *NodeSetCache) GetDKGSet(
 	return cache.cloneMap(IDs.dkgSet), nil
 }
 
+// GetLeaderNode returns the BA leader of the position.
+func (cache *NodeSetCache) GetLeaderNode(pos types.Position) (
+	types.NodeID, error) {
+	IDs, err := cache.getOrUpdate(pos.Round)
+	if err != nil {
+		return types.NodeID{}, err
+	}
+	if pos.ChainID >= uint32(len(IDs.leaderNode)) {
+		return types.NodeID{}, ErrInvalidChainID
+	}
+	cache.lock.Lock()
+	defer cache.lock.Unlock()
+	if _, exist := IDs.leaderNode[pos.ChainID][pos.Height]; !exist {
+		notarySet := types.NewNodeSetFromMap(IDs.notarySet[pos.ChainID])
+		leader :=
+			notarySet.GetSubSet(1, types.NewNodeLeaderTarget(IDs.crs, pos))
+		if len(leader) != 1 {
+			panic(errors.New("length of leader is not one"))
+		}
+		for nID := range leader {
+			IDs.leaderNode[pos.ChainID][pos.Height] = nID
+			break
+		}
+	}
+	return IDs.leaderNode[pos.ChainID][pos.Height], nil
+}
+
 func (cache *NodeSetCache) cloneMap(
 	nIDs map[types.NodeID]struct{}) map[types.NodeID]struct{} {
 	nIDsCopy := make(map[types.NodeID]struct{}, len(nIDs))
@@ -207,14 +236,20 @@ func (cache *NodeSetCache) update(
 		return
 	}
 	nIDs = &sets{
+		crs:       crs,
 		nodeSet:   nodeSet,
 		notarySet: make([]map[types.NodeID]struct{}, cfg.NumChains),
 		dkgSet: nodeSet.GetSubSet(
 			int(cfg.DKGSetSize), types.NewDKGSetTarget(crs)),
+		leaderNode: make([]map[uint64]types.NodeID, cfg.NumChains),
 	}
 	for i := range nIDs.notarySet {
 		nIDs.notarySet[i] = nodeSet.GetSubSet(
 			int(cfg.NotarySetSize), types.NewNotarySetTarget(crs, uint32(i)))
+	}
+	nodesPerChain := cfg.RoundInterval / (cfg.LambdaBA * 4)
+	for i := range nIDs.leaderNode {
+		nIDs.leaderNode[i] = make(map[uint64]types.NodeID, nodesPerChain)
 	}
 
 	cache.rounds[round] = nIDs

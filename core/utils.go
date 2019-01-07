@@ -159,8 +159,10 @@ func VerifyAgreementResult(
 	if len(res.Votes) < len(notarySet)/3*2+1 {
 		return ErrNotEnoughVotes
 	}
-	if len(res.Votes) > len(notarySet) {
-		return ErrIncorrectVoteProposer
+	voted := make(map[types.NodeID]struct{}, len(notarySet))
+	voteType := res.Votes[0].Type
+	if voteType != types.VoteFast && voteType != types.VoteCom {
+		return ErrIncorrectVoteType
 	}
 	for _, vote := range res.Votes {
 		if res.IsEmptyBlock {
@@ -172,7 +174,7 @@ func VerifyAgreementResult(
 				return ErrIncorrectVoteBlockHash
 			}
 		}
-		if vote.Type != types.VoteCom {
+		if vote.Type != voteType {
 			return ErrIncorrectVoteType
 		}
 		if vote.Position != res.Position {
@@ -188,6 +190,10 @@ func VerifyAgreementResult(
 		if !ok {
 			return ErrIncorrectVoteSignature
 		}
+		voted[vote.ProposerID] = struct{}{}
+	}
+	if len(voted) < len(notarySet)/3*2+1 {
+		return ErrNotEnoughVotes
 	}
 	return nil
 }

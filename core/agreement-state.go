@@ -35,7 +35,10 @@ type agreementStateType int
 
 // agreementStateType enum.
 const (
-	stateInitial agreementStateType = iota
+	stateFast agreementStateType = iota
+	stateFastVote
+	stateFastRollback
+	stateInitial
 	statePreCommit
 	stateCommit
 	stateForward
@@ -58,6 +61,63 @@ type agreementState interface {
 	clocks() int
 }
 
+//----- FastState -----
+type fastState struct {
+	a *agreementData
+}
+
+func newFastState(a *agreementData) *fastState {
+	return &fastState{a: a}
+}
+
+func (s *fastState) state() agreementStateType { return stateFast }
+func (s *fastState) clocks() int               { return 0 }
+func (s *fastState) nextState() (agreementState, error) {
+	if func() bool {
+		s.a.lock.Lock()
+		defer s.a.lock.Unlock()
+		return s.a.isLeader
+	}() {
+		hash := s.a.recv.ProposeBlock()
+		if hash != nullBlockHash {
+			s.a.lock.Lock()
+			defer s.a.lock.Unlock()
+			s.a.recv.ProposeVote(types.NewVote(types.VoteFast, hash, s.a.period))
+		}
+	}
+	return newFastVoteState(s.a), nil
+}
+
+//----- FastVoteState -----
+type fastVoteState struct {
+	a *agreementData
+}
+
+func newFastVoteState(a *agreementData) *fastVoteState {
+	return &fastVoteState{a: a}
+}
+
+func (s *fastVoteState) state() agreementStateType { return stateFastVote }
+func (s *fastVoteState) clocks() int               { return 2 }
+func (s *fastVoteState) nextState() (agreementState, error) {
+	return newFastRollbackState(s.a), nil
+}
+
+//----- FastRollbackState -----
+type fastRollbackState struct {
+	a *agreementData
+}
+
+func newFastRollbackState(a *agreementData) *fastRollbackState {
+	return &fastRollbackState{a: a}
+}
+
+func (s *fastRollbackState) state() agreementStateType { return stateFastRollback }
+func (s *fastRollbackState) clocks() int               { return 1 }
+func (s *fastRollbackState) nextState() (agreementState, error) {
+	return newInitialState(s.a), nil
+}
+
 //----- InitialState -----
 type initialState struct {
 	a *agreementData
@@ -70,10 +130,17 @@ func newInitialState(a *agreementData) *initialState {
 func (s *initialState) state() agreementStateType { return stateInitial }
 func (s *initialState) clocks() int               { return 0 }
 func (s *initialState) nextState() (agreementState, error) {
-	hash := s.a.recv.ProposeBlock()
-	s.a.lock.Lock()
-	defer s.a.lock.Unlock()
-	s.a.recv.ProposeVote(types.NewVote(types.VoteInit, hash, s.a.period))
+	if func() bool {
+		s.a.lock.Lock()
+		defer s.a.lock.Unlock()
+		return !s.a.isLeader
+	}() {
+		// Leader already proposed block in fastState.
+		hash := s.a.recv.ProposeBlock()
+		s.a.lock.Lock()
+		defer s.a.lock.Unlock()
+		s.a.recv.ProposeVote(types.NewVote(types.VoteInit, hash, s.a.period))
+	}
 	return newPreCommitState(s.a), nil
 }
 

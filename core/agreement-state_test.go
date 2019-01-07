@@ -115,8 +115,71 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 		leader,
 		s.signers[s.ID],
 	)
-	agreement.restart(notarySet, types.Position{}, common.NewRandomHash())
+	agreement.restart(notarySet, types.Position{}, types.NodeID{}, common.NewRandomHash())
 	return agreement
+}
+
+func (s *AgreementStateTestSuite) TestFastStateLeader() {
+	a := s.newAgreement(4)
+	state := newFastState(a.data)
+	s.Equal(stateFast, state.state())
+	s.Equal(0, state.clocks())
+
+	// Proposing a new block if it's leader.
+	a.data.period = 1
+	a.data.isLeader = true
+	newState, err := state.nextState()
+	s.Require().NoError(err)
+	s.Require().Len(s.blockChan, 1)
+	proposedBlock := <-s.blockChan
+	s.NotEqual(common.Hash{}, proposedBlock)
+	s.Require().NoError(a.processBlock(s.block[proposedBlock]))
+	s.Require().Len(s.voteChan, 1)
+	proposedVote := <-s.voteChan
+	s.Equal(proposedBlock, proposedVote.BlockHash)
+	s.Equal(types.VoteFast, proposedVote.Type)
+	s.Equal(stateFastVote, newState.state())
+}
+
+func (s *AgreementStateTestSuite) TestFastStateNotLeader() {
+	a := s.newAgreement(4)
+	state := newFastState(a.data)
+	s.Equal(stateFast, state.state())
+	s.Equal(0, state.clocks())
+
+	// Not proposing any block if it's not leader.
+	a.data.period = 1
+	a.data.isLeader = false
+	newState, err := state.nextState()
+	s.Require().NoError(err)
+	s.Require().Len(s.blockChan, 0)
+	s.Equal(stateFastVote, newState.state())
+}
+
+func (s *AgreementStateTestSuite) TestFastVoteState() {
+	a := s.newAgreement(4)
+	state := newFastVoteState(a.data)
+	s.Equal(stateFastVote, state.state())
+	s.Equal(2, state.clocks())
+
+	// The vote proposed is not implemented inside state.
+	a.data.period = 1
+	newState, err := state.nextState()
+	s.Require().NoError(err)
+	s.Require().Len(s.voteChan, 0)
+	s.Equal(stateFastRollback, newState.state())
+}
+
+func (s *AgreementStateTestSuite) TestFastRollbackState() {
+	a := s.newAgreement(4)
+	state := newFastRollbackState(a.data)
+	s.Equal(stateFastRollback, state.state())
+	s.Equal(1, state.clocks())
+
+	a.data.period = 1
+	newState, err := state.nextState()
+	s.Require().NoError(err)
+	s.Equal(stateInitial, newState.state())
 }
 
 func (s *AgreementStateTestSuite) TestInitialState() {

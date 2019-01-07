@@ -91,6 +91,7 @@ type agreementData struct {
 	recv agreementReceiver
 
 	ID           types.NodeID
+	isLeader     bool
 	leader       *leaderSelector
 	lockValue    common.Hash
 	lockRound    uint64
@@ -140,8 +141,8 @@ func newAgreement(
 
 // restart the agreement
 func (a *agreement) restart(
-	notarySet map[types.NodeID]struct{}, aID types.Position, crs common.Hash) {
-
+	notarySet map[types.NodeID]struct{}, aID types.Position, leader types.NodeID,
+	crs common.Hash) {
 	if !func() bool {
 		a.lock.Lock()
 		defer a.lock.Unlock()
@@ -163,12 +164,16 @@ func (a *agreement) restart(
 		a.data.leader.restart(crs)
 		a.data.lockValue = nullBlockHash
 		a.data.lockRound = 0
+		a.data.isLeader = a.data.ID == leader
 		a.fastForward = make(chan uint64, 1)
 		a.hasOutput = false
-		a.state = newInitialState(a.data)
+		a.state = newFastState(a.data)
 		a.notarySet = notarySet
 		a.candidateBlock = make(map[common.Hash]*types.Block)
-		a.aID.Store(aID)
+		a.aID.Store(struct {
+			pos    types.Position
+			leader types.NodeID
+		}{aID, leader})
 		return true
 	}() {
 		return
@@ -225,7 +230,7 @@ func (a *agreement) restart(
 func (a *agreement) stop() {
 	a.restart(make(map[types.NodeID]struct{}), types.Position{
 		ChainID: math.MaxUint32,
-	}, common.Hash{})
+	}, types.NodeID{}, common.Hash{})
 }
 
 func isStop(aID types.Position) bool {
@@ -249,7 +254,18 @@ func (a *agreement) pullVotes() bool {
 
 // agreementID returns the current agreementID.
 func (a *agreement) agreementID() types.Position {
-	return a.aID.Load().(types.Position)
+	return a.aID.Load().(struct {
+		pos    types.Position
+		leader types.NodeID
+	}).pos
+}
+
+// leader returns the current leader.
+func (a *agreement) leader() types.NodeID {
+	return a.aID.Load().(struct {
+		pos    types.Position
+		leader types.NodeID
+	}).leader
 }
 
 // nextState is called at the specific clock time.
@@ -262,6 +278,8 @@ func (a *agreement) nextState() (err error) {
 		a.state = newSleepState(a.data)
 		return
 	}
+	a.lock.Lock()
+	defer a.lock.Unlock()
 	a.state, err = a.state.nextState()
 	return
 }
@@ -335,12 +353,13 @@ func (a *agreement) processVote(vote *types.Vote) error {
 		a.data.votes[vote.Period] = newVoteListMap()
 	}
 	a.data.votes[vote.Period][vote.Type][vote.ProposerID] = vote
-	if !a.hasOutput && vote.Type == types.VoteCom {
+	if !a.hasOutput &&
+		(vote.Type == types.VoteCom || vote.Type == types.VoteFast) {
 		if hash, ok := a.data.countVoteNoLock(vote.Period, vote.Type); ok &&
 			hash != skipBlockHash {
 			a.hasOutput = true
 			a.data.recv.ConfirmBlock(hash,
-				a.data.votes[vote.Period][types.VoteCom])
+				a.data.votes[vote.Period][vote.Type])
 			return nil
 		}
 	} else if a.hasOutput {
@@ -451,6 +470,39 @@ func (a *agreement) processBlock(block *types.Block) error {
 	}
 	a.data.blocks[block.ProposerID] = block
 	a.addCandidateBlockNoLock(block)
+	if (a.state.state() == stateFast || a.state.state() == stateFastVote) &&
+		block.ProposerID == a.leader() {
+		go func() {
+			for func() bool {
+				a.lock.RLock()
+				defer a.lock.RUnlock()
+				if a.state.state() != stateFast && a.state.state() != stateFastVote {
+					return false
+				}
+				block, exist := a.data.blocks[a.leader()]
+				if !exist {
+					return true
+				}
+				a.data.lock.RLock()
+				defer a.data.lock.RUnlock()
+				ok, err := a.data.leader.validLeader(block)
+				if err != nil {
+					fmt.Println("Error checking validLeader for Fast BA",
+						"error", err, "block", block)
+					return false
+				}
+				if ok {
+					a.data.recv.ProposeVote(
+						types.NewVote(types.VoteFast, block.Hash, a.data.period))
+					return false
+				}
+				return true
+			}() {
+				// TODO(jimmy): retry interval should be related to configurations.
+				time.Sleep(250 * time.Millisecond)
+			}
+		}()
+	}
 	return nil
 }
 

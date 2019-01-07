@@ -41,6 +41,7 @@ type subSetTargetType byte
 const (
 	targetNotarySet subSetTargetType = iota
 	targetDKGSet
+	targetNodeLeader
 )
 
 type nodeRank struct {
@@ -72,6 +73,17 @@ func NewNodeSet() *NodeSet {
 	}
 }
 
+// NewNodeSetFromMap creates a new NodeSet from NodeID map.
+func NewNodeSetFromMap(nodes map[NodeID]struct{}) *NodeSet {
+	nIDs := make(map[NodeID]struct{}, len(nodes))
+	for nID := range nodes {
+		nIDs[nID] = struct{}{}
+	}
+	return &NodeSet{
+		IDs: nIDs,
+	}
+}
+
 // NewNotarySetTarget is the target for getting Notary Set.
 func NewNotarySetTarget(crs common.Hash, chainID uint32) *SubSetTarget {
 	binaryChainID := make([]byte, 4)
@@ -80,9 +92,21 @@ func NewNotarySetTarget(crs common.Hash, chainID uint32) *SubSetTarget {
 	return newTarget(targetNotarySet, crs[:], binaryChainID)
 }
 
-// NewDKGSetTarget  is the target for getting DKG Set.
+// NewDKGSetTarget is the target for getting DKG Set.
 func NewDKGSetTarget(crs common.Hash) *SubSetTarget {
 	return newTarget(targetDKGSet, crs[:])
+}
+
+// NewNodeLeaderTarget is the target for getting leader of fast BA.
+func NewNodeLeaderTarget(crs common.Hash, pos Position) *SubSetTarget {
+	binaryRoundID := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryRoundID, pos.Round)
+	binaryChainID := make([]byte, 4)
+	binary.LittleEndian.PutUint32(binaryChainID, pos.ChainID)
+	binaryHeight := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryHeight, pos.Height)
+	return newTarget(targetNodeLeader, crs[:],
+		binaryRoundID, binaryChainID, binaryHeight)
 }
 
 // Add a NodeID to the set.

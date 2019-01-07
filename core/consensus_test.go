@@ -644,15 +644,11 @@ func (s *ConsensusTestSuite) TestSyncBA() {
 	s.Equal(ErrIncorrectVoteSignature, con.ProcessAgreementResult(baResult))
 	s.Require().NoError(signers[0].SignVote(&baResult.Votes[0]))
 
-	for _, signer := range signers {
-		vote := types.NewVote(types.VoteCom, hash, 0)
-		vote.Position = pos
-		s.Require().NoError(signer.SignVote(vote))
-		baResult.Votes = append(baResult.Votes, *vote)
-	}
-	s.Equal(ErrIncorrectVoteProposer, con.ProcessAgreementResult(baResult))
-
 	baResult.Votes = baResult.Votes[:1]
+	s.Equal(ErrNotEnoughVotes, con.ProcessAgreementResult(baResult))
+	for range signers {
+		baResult.Votes = append(baResult.Votes, baResult.Votes[0])
+	}
 	s.Equal(ErrNotEnoughVotes, con.ProcessAgreementResult(baResult))
 }
 
