@@ -51,8 +51,10 @@ const (
 	blockEventConfirmed
 	// Block delivered by lattice.
 	blockEventDelivered
-	// block is ready (Randomness calculated)
+	// Block is ready (Randomness calculated)
 	blockEventReady
+	// Block is witness
+	blockEventWitnessed
 
 	blockEventCount
 )
@@ -158,7 +160,7 @@ func (a *simApp) TotalOrderingDelivered(
 		a.lock.RLock()
 		defer a.lock.RUnlock()
 		for _, h := range blockHashes {
-			latencies = append(latencies, time.Since(a.blockTimestamps[h][blockEventConfirmed]))
+			latencies = append(latencies, time.Since(a.blockTimestamps[h][blockEventReceived]))
 		}
 	}()
 	blockList := &BlockList{
@@ -186,6 +188,11 @@ func (a *simApp) BlockDelivered(
 					panic(err)
 				}
 			}
+			var witnessBlockHash common.Hash
+			if err := witnessBlockHash.UnmarshalText(block.Witness.Data); err != nil {
+				panic(err)
+			}
+			a.updateBlockEvent(witnessBlockHash)
 		} else {
 			panic(fmt.Errorf("Block is not confirmed yet: %s", blockHash))
 		}
@@ -193,8 +200,13 @@ func (a *simApp) BlockDelivered(
 	func() {
 		a.latestWitnessReady.L.Lock()
 		defer a.latestWitnessReady.L.Unlock()
+		data, err := blockHash.MarshalText()
+		if err != nil {
+			panic(err)
+		}
 		a.latestWitness = types.Witness{
 			Height: result.Height,
+			Data:   data,
 		}
 		a.latestWitnessReady.Broadcast()
 	}()

@@ -75,6 +75,8 @@ func (req *PullRequest) MarshalJSON() (b []byte, err error) {
 		idAsBytes, err = json.Marshal(req.Identity.(common.Hashes))
 	case "vote":
 		idAsBytes, err = json.Marshal(req.Identity.(types.Position))
+	case "randomness":
+		idAsBytes, err = json.Marshal(req.Identity.(common.Hashes))
 	default:
 		err = fmt.Errorf("unknown ID type for pull request: %v", req.Type)
 	}
@@ -113,6 +115,12 @@ func (req *PullRequest) UnmarshalJSON(data []byte) (err error) {
 			break
 		}
 		ID = pos
+	case "randomness":
+		hashes := common.Hashes{}
+		if err = json.Unmarshal(rawReq.Identity, &hashes); err != nil {
+			break
+		}
+		ID = hashes
 	default:
 		err = fmt.Errorf("unknown pull request type: %v", rawReq.Type)
 	}
