@@ -1,6 +1,6 @@
 #!/bin/bash
 
-IMAGE_TAG=asia.gcr.io/cobinhood/dexcon-simulation:latest
+IMAGE_TAG=asia.gcr.io/dexon-dev/dexcon-simulation:latest
 
 
 build_binary() {

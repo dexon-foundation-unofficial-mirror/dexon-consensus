@@ -115,7 +115,7 @@ func GenerateDefault(path string) error {
 		Node: Node{
 			Consensus: Consensus{
 				PhiRatio:         float32(2) / 3,
-				K:                1,
+				K:                0,
 				NumChains:        7,
 				GenesisCRS:       "In DEXON we trust.",
 				LambdaBA:         250,

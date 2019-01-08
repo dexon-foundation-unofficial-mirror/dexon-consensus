@@ -22,7 +22,7 @@ spec:
             path: /etc/ssl/certs
       containers:
         - name: dexcon-simulation
-          image: asia.gcr.io/cobinhood/dexcon-simulation:latest
+          image: asia.gcr.io/dexon-dev/dexcon-simulation:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

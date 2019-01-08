@@ -1,6 +1,8 @@
 FROM golang:alpine
 MAINTAINER Wei-Ning Huang <w@dexon.org>
 
+RUN apk add --no-cache libstdc++
+
 # Cobinhood vendor base directory.
 RUN mkdir -p /opt/dexon/
 

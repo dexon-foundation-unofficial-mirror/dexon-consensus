@@ -61,7 +61,7 @@ func Run(cfg *config.Config, logPrefix string) {
 			mw = io.MultiWriter(os.Stderr, f)
 		}
 		logger := log.New()
-		logger.SetHandler(log.StreamHandler(mw, log.LogfmtFormat()))
+		logger.SetHandler(log.StreamHandler(mw, log.TerminalFormat(false)))
 		return logger
 	}
 

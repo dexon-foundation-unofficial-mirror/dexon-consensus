@@ -1,19 +1,21 @@
 title = "DEXON Consensus Simulation Config"
 
 [node]
-num = {{numNode}}
+num = {{numNodes}}
 max_block = 18446744073709551615
+changes = []
 
 [node.consensus]
 phi_ratio = 6.666666865348816e-01
-k = 1
-chain_num = 7
+k = 0
+num_chains = 7
 genesis_crs = "In DEXON we trust."
-lambda_ba = 250
-lambda_dkg = 4000
-round_interval = 31536000000
-notary_set_size = 7
-dkg_set_size = 7
+lambda_ba = 400
+lambda_dkg = 15000
+round_interval = 360000
+notary_set_size = 4
+dkg_set_size = 4
+min_block_interval = 900
 
 [node.legacy]
 propose_interval_mean = 5e+02
@@ -22,9 +24,14 @@ propose_interval_sigma = 5e+01
 [networking]
 type = "tcp"
 peer_server = "peer-server-svc.default.svc.cluster.local"
-mean = 1e+02
-sigma = 1e+01
-loss_rate_value = 0e+00
+
+[networking.direct]
+mean = 3e+02
+sigma = 5e+01
+
+[networking.gossip]
+mean = 3e+02
+sigma = 2.5e+01
 
 [scheduler]
 worker_num = 2

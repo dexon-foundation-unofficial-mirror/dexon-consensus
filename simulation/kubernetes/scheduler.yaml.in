@@ -21,7 +21,7 @@ spec:
             path: /etc/ssh/certs
       containers:
         - name: dexcon-simulation-with-scheduler
-          image: asia.gcr.io/cobinhood/dexcon-simulation:latest
+          image: asia.gcr.io/dexon-dev/dexcon-simulation:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
