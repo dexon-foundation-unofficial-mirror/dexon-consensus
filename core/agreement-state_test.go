@@ -60,6 +60,9 @@ func (r *agreementStateTestReceiver) ConfirmBlock(block common.Hash,
 
 func (r *agreementStateTestReceiver) PullBlocks(common.Hashes) {}
 
+func (r *agreementStateTestReceiver) ReportForkVote(v1, v2 *types.Vote)   {}
+func (r *agreementStateTestReceiver) ReportForkBlock(b1, b2 *types.Block) {}
+
 func (s *AgreementStateTestSuite) proposeBlock(
 	leader *leaderSelector) *types.Block {
 	block := &types.Block{
@@ -94,9 +97,10 @@ func (s *AgreementStateTestSuite) SetupTest() {
 }
 
 func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
+	logger := &common.NullLogger{}
 	leader := newLeaderSelector(func(*types.Block) (bool, error) {
 		return true, nil
-	}, &common.NullLogger{})
+	}, logger)
 	notarySet := make(map[types.NodeID]struct{})
 	for i := 0; i < numNode-1; i++ {
 		prvKey, err := ecdsa.NewPrivateKey()
@@ -114,6 +118,7 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 		},
 		leader,
 		s.signers[s.ID],
+		logger,
 	)
 	agreement.restart(notarySet, types.Position{}, types.NodeID{}, common.NewRandomHash())
 	return agreement

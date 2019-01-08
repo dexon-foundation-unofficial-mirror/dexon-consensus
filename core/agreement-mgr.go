@@ -185,7 +185,8 @@ func (mgr *agreementMgr) appendConfig(
 			mgr.con.ID,
 			recv,
 			newLeaderSelector(genValidLeader(mgr), mgr.logger),
-			mgr.signer)
+			mgr.signer,
+			mgr.logger)
 		// Hacky way to make agreement module self contained.
 		recv.agreementModule = agrModule
 		mgr.baModules = append(mgr.baModules, agrModule)

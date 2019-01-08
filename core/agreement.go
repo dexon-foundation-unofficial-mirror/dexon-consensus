@@ -74,6 +74,8 @@ type agreementReceiver interface {
 	// agreement module.
 	ConfirmBlock(common.Hash, map[types.NodeID]*types.Vote)
 	PullBlocks(common.Hashes)
+	ReportForkVote(v1, v2 *types.Vote)
+	ReportForkBlock(b1, b2 *types.Block)
 }
 
 type pendingBlock struct {
@@ -116,6 +118,7 @@ type agreement struct {
 	candidateBlock map[common.Hash]*types.Block
 	fastForward    chan uint64
 	signer         *utils.Signer
+	logger         common.Logger
 }
 
 // newAgreement creates a agreement instance.
@@ -123,7 +126,8 @@ func newAgreement(
 	ID types.NodeID,
 	recv agreementReceiver,
 	leader *leaderSelector,
-	signer *utils.Signer) *agreement {
+	signer *utils.Signer,
+	logger common.Logger) *agreement {
 	agreement := &agreement{
 		data: &agreementData{
 			recv:   recv,
@@ -134,6 +138,7 @@ func newAgreement(
 		candidateBlock: make(map[common.Hash]*types.Block),
 		fastForward:    make(chan uint64, 1),
 		signer:         signer,
+		logger:         logger,
 	}
 	agreement.stop()
 	return agreement
@@ -219,11 +224,17 @@ func (a *agreement) restart(
 	}()
 
 	for _, block := range replayBlock {
-		a.processBlock(block)
+		if err := a.processBlock(block); err != nil {
+			a.logger.Error("failed to process block when restarting agreement",
+				"block", block)
+		}
 	}
 
 	for _, vote := range replayVote {
-		a.processVote(vote)
+		if err := a.processVote(vote); err != nil {
+			a.logger.Error("failed to process vote when restarting agreement",
+				"vote", vote)
+		}
 	}
 }
 
@@ -307,6 +318,7 @@ func (a *agreement) checkForkVote(vote *types.Vote) error {
 	if votes, exist := a.data.votes[vote.Period]; exist {
 		if oldVote, exist := votes[vote.Type][vote.ProposerID]; exist {
 			if vote.BlockHash != oldVote.BlockHash {
+				a.data.recv.ReportForkVote(oldVote, vote)
 				return &ErrForkVote{vote.ProposerID, oldVote, vote}
 			}
 		}
@@ -461,6 +473,7 @@ func (a *agreement) processBlock(block *types.Block) error {
 	}
 	if b, exist := a.data.blocks[block.ProposerID]; exist {
 		if b.Hash != block.Hash {
+			a.data.recv.ReportForkBlock(b, block)
 			return &ErrFork{block.ProposerID, b.Hash, block.Hash}
 		}
 		return nil

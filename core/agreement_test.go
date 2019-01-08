@@ -28,7 +28,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-// agreementTestReceiver implements core.agreementReceiveer
+// agreementTestReceiver implements core.agreementReceiver.
 type agreementTestReceiver struct {
 	s              *AgreementTestSuite
 	agreementIndex int
@@ -58,6 +58,21 @@ func (r *agreementTestReceiver) PullBlocks(hashes common.Hashes) {
 
 }
 
+// agreementTestForkReporter implement core.forkReporter.
+type agreementTestForkReporter struct {
+	s *AgreementTestSuite
+}
+
+func (r *agreementTestReceiver) ReportForkVote(v1, v2 *types.Vote) {
+	r.s.forkVoteChan <- v1.BlockHash
+	r.s.forkVoteChan <- v2.BlockHash
+}
+
+func (r *agreementTestReceiver) ReportForkBlock(b1, b2 *types.Block) {
+	r.s.forkBlockChan <- b1.Hash
+	r.s.forkBlockChan <- b2.Hash
+}
+
 func (s *AgreementTestSuite) proposeBlock(
 	nID types.NodeID, crs common.Hash) *types.Block {
 	block := &types.Block{
@@ -74,14 +89,16 @@ func (s *AgreementTestSuite) proposeBlock(
 
 type AgreementTestSuite struct {
 	suite.Suite
-	ID           types.NodeID
-	signers      map[types.NodeID]*utils.Signer
-	voteChan     chan *types.Vote
-	blockChan    chan common.Hash
-	confirmChan  chan common.Hash
-	block        map[common.Hash]*types.Block
-	pulledBlocks map[common.Hash]struct{}
-	agreement    []*agreement
+	ID            types.NodeID
+	signers       map[types.NodeID]*utils.Signer
+	voteChan      chan *types.Vote
+	blockChan     chan common.Hash
+	confirmChan   chan common.Hash
+	forkVoteChan  chan common.Hash
+	forkBlockChan chan common.Hash
+	block         map[common.Hash]*types.Block
+	pulledBlocks  map[common.Hash]struct{}
+	agreement     []*agreement
 }
 
 func (s *AgreementTestSuite) SetupTest() {
@@ -94,6 +111,8 @@ func (s *AgreementTestSuite) SetupTest() {
 	s.voteChan = make(chan *types.Vote, 100)
 	s.blockChan = make(chan common.Hash, 100)
 	s.confirmChan = make(chan common.Hash, 100)
+	s.forkVoteChan = make(chan common.Hash, 100)
+	s.forkBlockChan = make(chan common.Hash, 100)
 	s.block = make(map[common.Hash]*types.Block)
 	s.pulledBlocks = make(map[common.Hash]struct{})
 }
@@ -101,9 +120,10 @@ func (s *AgreementTestSuite) SetupTest() {
 func (s *AgreementTestSuite) newAgreement(
 	numNotarySet, leaderIdx int) (*agreement, types.NodeID) {
 	s.Require().True(leaderIdx < numNotarySet)
+	logger := &common.NullLogger{}
 	leader := newLeaderSelector(func(*types.Block) (bool, error) {
 		return true, nil
-	}, &common.NullLogger{})
+	}, logger)
 	agreementIdx := len(s.agreement)
 	var leaderNode types.NodeID
 	notarySet := make(map[types.NodeID]struct{})
@@ -129,6 +149,7 @@ func (s *AgreementTestSuite) newAgreement(
 		},
 		leader,
 		s.signers[s.ID],
+		logger,
 	)
 	agreement.restart(notarySet, types.Position{},
 		leaderNode, common.NewRandomHash())
@@ -443,6 +464,32 @@ func (s *AgreementTestSuite) TestDecide() {
 	s.Require().Len(s.confirmChan, 1)
 	confirmBlock := <-s.confirmChan
 	s.Equal(hash, confirmBlock)
+}
+
+func (s *AgreementTestSuite) TestForkVote() {
+	a, _ := s.newAgreement(4, -1)
+	a.data.period = 2
+	for nID := range a.notarySet {
+		v01 := s.prepareVote(nID, types.VotePreCom, common.NewRandomHash(), 2)
+		v02 := s.prepareVote(nID, types.VotePreCom, common.NewRandomHash(), 2)
+		s.Require().NoError(a.processVote(v01))
+		s.Require().IsType(&ErrForkVote{}, a.processVote(v02))
+		s.Require().Equal(v01.BlockHash, <-s.forkVoteChan)
+		s.Require().Equal(v02.BlockHash, <-s.forkVoteChan)
+		break
+	}
+}
+
+func (s AgreementTestSuite) TestForkBlock() {
+	a, _ := s.newAgreement(4, -1)
+	for nID := range a.notarySet {
+		b01 := s.proposeBlock(nID, a.data.leader.hashCRS)
+		b02 := s.proposeBlock(nID, a.data.leader.hashCRS)
+		s.Require().NoError(a.processBlock(b01))
+		s.Require().IsType(&ErrFork{}, a.processBlock(b02))
+		s.Require().Equal(b01.Hash, <-s.forkBlockChan)
+		s.Require().Equal(b02.Hash, <-s.forkBlockChan)
+	}
 }
 
 func TestAgreement(t *testing.T) {

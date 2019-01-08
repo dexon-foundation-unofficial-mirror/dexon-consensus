@@ -259,6 +259,14 @@ func (recv *consensusBAReceiver) PullBlocks(hashes common.Hashes) {
 	recv.consensus.network.PullBlocks(hashes)
 }
 
+func (recv *consensusBAReceiver) ReportForkVote(v1, v2 *types.Vote) {
+	recv.consensus.gov.ReportForkVote(v1, v2)
+}
+
+func (recv *consensusBAReceiver) ReportForkBlock(b1, b2 *types.Block) {
+	recv.consensus.gov.ReportForkBlock(b1, b2)
+}
+
 // consensusDKGReceiver implements dkgReceiver.
 type consensusDKGReceiver struct {
 	ID           types.NodeID
