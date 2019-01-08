@@ -652,12 +652,14 @@ func (global *totalOrderingGlobalVector) addBlock(
 				return
 			}
 			// Add breakpoint.
-			global.breakpoints[chainID] = append(
-				global.breakpoints[chainID],
-				&totalOrderingBreakpoint{
-					roundID:    b.Position.Round,
-					lastHeight: tip.Position.Height,
-				})
+			if b.Position.Round > global.curRound {
+				global.breakpoints[chainID] = append(
+					global.breakpoints[chainID],
+					&totalOrderingBreakpoint{
+						roundID:    b.Position.Round,
+						lastHeight: tip.Position.Height,
+					})
+			}
 		} else {
 			if b.Position.Height != tip.Position.Height+1 {
 				err = ErrInvalidDAG
@@ -1052,7 +1054,6 @@ func (to *totalOrdering) generateDeliverSet() (
 	wg.Wait()
 	// Reset dirty chains.
 	to.dirtyChainIDs = to.dirtyChainIDs[:0]
-	// TODO(mission): ANS should be bounded by current numChains.
 	globalAnsLength := globalInfo.getAckingNodeSetLength(
 		globalInfo, cfg.k, cfg.numChains)
 CheckNextCandidateLoop:
@@ -1126,7 +1127,6 @@ CheckNextCandidateLoop:
 	checkANS := func() bool {
 		var chainAnsLength uint64
 		for p := range precedings {
-			// TODO(mission): ANS should be bound by current numChains.
 			chainAnsLength = to.candidates[p].getAckingNodeSetLength(
 				globalInfo, cfg.k, cfg.numChains)
 			if uint64(chainAnsLength) < uint64(cfg.numChains)-cfg.phi {

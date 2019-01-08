@@ -256,11 +256,11 @@ func (l *Lattice) ProcessBlock(
 		if len(toDelivered) == 0 {
 			break
 		}
-		hashes := make(common.Hashes, len(toDelivered))
-		for idx := range toDelivered {
-			hashes[idx] = toDelivered[idx].Hash
-		}
 		if l.debug != nil {
+			hashes := make(common.Hashes, len(toDelivered))
+			for idx := range toDelivered {
+				hashes[idx] = toDelivered[idx].Hash
+			}
 			l.debug.TotalOrderingDelivered(hashes, deliveredMode)
 		}
 		// Perform consensus timestamp module.
