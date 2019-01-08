@@ -469,6 +469,10 @@ func (con *Consensus) SyncBlocks(
 		var syncBlock *types.Block
 		syncBlock, err = con.findLatticeSyncBlock(blocks)
 		if err != nil {
+			if err == ErrGenesisBlockReached {
+				con.logger.Debug("SyncBlocks skip error", "error", err)
+				err = nil
+			}
 			return
 		}
 		if syncBlock != nil {
