@@ -18,7 +18,6 @@
 package syncer
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -61,6 +60,7 @@ type Consensus struct {
 	prv          crypto.PrivateKey
 	network      core.Network
 	nodeSetCache *utils.NodeSetCache
+	tsigVerifier *core.TSigVerifierCache
 
 	lattice              *core.Lattice
 	validatedChains      map[uint32]struct{}
@@ -102,6 +102,7 @@ func NewConsensus(
 		db:              db,
 		network:         network,
 		nodeSetCache:    utils.NewNodeSetCache(gov),
+		tsigVerifier:    core.NewTSigVerifierCache(gov, 7),
 		prv:             prv,
 		logger:          logger,
 		validatedChains: make(map[uint32]struct{}),
@@ -693,6 +694,10 @@ func (con *Consensus) startAgreement() {
 }
 
 func (con *Consensus) cacheRandomnessResult(r *types.BlockRandomnessResult) {
+	// There is no block randomness at round-0.
+	if r.Position.Round == 0 {
+		return
+	}
 	// We only have to cache randomness result after cutting round.
 	if r.Position.Round < func() uint64 {
 		con.lock.RLock()
@@ -701,16 +706,36 @@ func (con *Consensus) cacheRandomnessResult(r *types.BlockRandomnessResult) {
 	}() {
 		return
 	}
-	con.lock.Lock()
-	defer con.lock.Unlock()
-	if old, exists := con.randomnessResults[r.BlockHash]; exists {
-		if bytes.Compare(old.Randomness, r.Randomness) != 0 {
-			panic(fmt.Errorf("receive different randomness result: %s, %s",
-				r.BlockHash.String()[:6], &r.Position))
-		}
-		// We don't have to assign the map again.
+	if func() (exists bool) {
+		con.lock.RLock()
+		defer con.lock.RUnlock()
+		_, exists = con.randomnessResults[r.BlockHash]
+		return
+	}() {
 		return
 	}
+	v, ok, err := con.tsigVerifier.UpdateAndGet(r.Position.Round)
+	if err != nil {
+		con.logger.Error("Unable to get tsig verifier",
+			"hash", r.BlockHash.String()[:6],
+			"position", &r.Position,
+			"error", err)
+		return
+	}
+	if !ok {
+		con.logger.Error("Tsig is not ready", "position", &r.Position)
+		return
+	}
+	if !v.VerifySignature(r.BlockHash, crypto.Signature{
+		Type:      "bls",
+		Signature: r.Randomness}) {
+		con.logger.Info("Block randomness is not valid",
+			"position", &r.Position,
+			"hash", r.BlockHash.String()[:6])
+		return
+	}
+	con.lock.Lock()
+	defer con.lock.Unlock()
 	con.randomnessResults[r.BlockHash] = r
 }
 
