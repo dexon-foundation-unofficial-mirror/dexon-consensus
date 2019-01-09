@@ -30,6 +30,11 @@ type fakePeerRecord struct {
 	pubKey      crypto.PublicKey
 }
 
+type fakeHandshake struct {
+	dMoment time.Time
+	peers   map[types.NodeID]fakePeerRecord
+}
+
 // FakeTransport implement TransportServer and TransportClient interface
 // by using golang channel.
 type FakeTransport struct {
@@ -39,6 +44,7 @@ type FakeTransport struct {
 	recvChannel   chan *TransportEnvelope
 	serverChannel chan<- *TransportEnvelope
 	peers         map[types.NodeID]fakePeerRecord
+	dMoment       time.Time
 }
 
 // NewFakeTransportServer constructs FakeTransport instance for peer server.
@@ -137,9 +143,10 @@ func (t *FakeTransport) Join(
 			envelopes = append(envelopes, envelope)
 			continue
 		}
-		if t.peers, ok =
-			envelope.Msg.(map[types.NodeID]fakePeerRecord); !ok {
-
+		if handShake, ok := envelope.Msg.(fakeHandshake); ok {
+			t.dMoment = handShake.dMoment
+			t.peers = handShake.peers
+		} else {
 			envelopes = append(envelopes, envelope)
 			continue
 		}
@@ -151,9 +158,19 @@ func (t *FakeTransport) Join(
 	return t.recvChannel, nil
 }
 
+// DMoment implments TrnansportClient.DMoment method.
+func (t *FakeTransport) DMoment() time.Time {
+	return t.dMoment
+}
+
 // Host implements TransportServer.Host method.
 func (t *FakeTransport) Host() (chan *TransportEnvelope, error) {
 	return t.recvChannel, nil
+}
+
+// SetDMoment implements TransportServer.SetDMoment method.
+func (t *FakeTransport) SetDMoment(dMoment time.Time) {
+	t.dMoment = dMoment
 }
 
 // WaitForPeers implements TransportServer.WaitForPeers method.
@@ -177,7 +194,11 @@ func (t *FakeTransport) WaitForPeers(numPeers uint32) (err error) {
 	for ID := range t.peers {
 		peers[ID] = struct{}{}
 	}
-	if err = t.Broadcast(peers, &FixedLatencyModel{}, t.peers); err != nil {
+	handShake := fakeHandshake{
+		dMoment: t.dMoment,
+		peers:   t.peers,
+	}
+	if err = t.Broadcast(peers, &FixedLatencyModel{}, handShake); err != nil {
 		return
 	}
 	return

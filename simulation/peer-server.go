@@ -175,15 +175,18 @@ func (p *PeerServer) mainLoop() {
 // Setup prepares simualtion.
 func (p *PeerServer) Setup(
 	cfg *config.Config) (serverEndpoint interface{}, err error) {
+	dMoment := time.Now().UTC()
 	// Setup transport layer.
 	switch cfg.Networking.Type {
 	case "tcp", "tcp-local":
 		p.trans = test.NewTCPTransportServer(&jsonMarshaller{}, peerPort)
+		dMoment = dMoment.Add(5 * time.Second)
 	case "fake":
 		p.trans = test.NewFakeTransportServer()
 	default:
 		panic(fmt.Errorf("unknown network type: %v", cfg.Networking.Type))
 	}
+	p.trans.SetDMoment(dMoment)
 	p.msgChannel, err = p.trans.Host()
 	if err != nil {
 		return

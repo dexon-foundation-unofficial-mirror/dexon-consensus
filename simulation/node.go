@@ -115,13 +115,15 @@ func (n *node) GetID() types.NodeID {
 
 // run starts the node.
 func (n *node) run(
-	serverEndpoint interface{}, dMoment time.Time) {
+	serverEndpoint interface{}) {
 	// Run network.
 	if err := n.netModule.Setup(serverEndpoint); err != nil {
 		panic(err)
 	}
 	msgChannel := n.netModule.ReceiveChanForNode()
 	peers := n.netModule.Peers()
+	dMoment := n.netModule.DMoment()
+	n.logger.Info("Simulation DMoment", "dMoment", dMoment)
 	go n.netModule.Run()
 	// Run consensus.
 	hashes := make(common.Hashes, 0, len(peers))

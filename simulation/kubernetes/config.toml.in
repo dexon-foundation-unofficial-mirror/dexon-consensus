@@ -30,8 +30,8 @@ mean = 3e+02
 sigma = 5e+01
 
 [networking.gossip]
-mean = 3e+02
-sigma = 2.5e+01
+mean = 6e+02
+sigma = 1e+02
 
 [scheduler]
 worker_num = 2

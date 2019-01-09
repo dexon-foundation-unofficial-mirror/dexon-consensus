@@ -22,7 +22,6 @@ import (
 	"io"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/dexon-foundation/dexon/log"
 
@@ -49,8 +48,6 @@ func Run(cfg *config.Config, logPrefix string) {
 		panic(fmt.Errorf("DKGSetSze should not be larger the node num"))
 	}
 
-	dMoment := time.Now().UTC()
-
 	newLogger := func(logPrefix string) common.Logger {
 		mw := io.Writer(os.Stderr)
 		if logPrefix != "" {
@@ -75,7 +72,7 @@ func Run(cfg *config.Config, logPrefix string) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			v.run(serverEndpoint, dMoment)
+			v.run(serverEndpoint)
 		}()
 	}
 

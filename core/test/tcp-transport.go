@@ -45,6 +45,11 @@ const (
 	tcpThroughputReportNum = 10
 )
 
+type tcpHandshake struct {
+	DMoment time.Time
+	Peers   map[types.NodeID]string
+}
+
 type tcpPeerRecord struct {
 	conn        string
 	sendChannel chan<- []byte
@@ -112,6 +117,7 @@ type TCPTransport struct {
 	marshaller        Marshaller
 	throughputRecords []ThroughputRecord
 	throughputLock    sync.Mutex
+	dMoment           time.Time
 }
 
 // NewTCPTransport constructs an TCPTransport instance.
@@ -297,8 +303,8 @@ func (t *TCPTransport) marshalMessage(
 		Payload:  msg,
 	}
 	switch msg.(type) {
-	case map[types.NodeID]string:
-		msgCarrier.Type = "peerlist"
+	case *tcpHandshake:
+		msgCarrier.Type = "tcp-handshake"
 	case *tcpMessage:
 		msgCarrier.Type = "trans-msg"
 	case []ThroughputRecord:
@@ -344,12 +350,12 @@ func (t *TCPTransport) unmarshalMessage(
 	peerType = msgCarrier.PeerType
 	from = msgCarrier.From
 	switch msgCarrier.Type {
-	case "peerlist":
-		var peers map[types.NodeID]string
-		if err = json.Unmarshal(msgCarrier.Payload, &peers); err != nil {
+	case "tcp-handshake":
+		handshake := &tcpHandshake{}
+		if err = json.Unmarshal(msgCarrier.Payload, &handshake); err != nil {
 			return
 		}
-		msg = peers
+		msg = handshake
 	case "trans-msg":
 		m := &tcpMessage{}
 		if err = json.Unmarshal(msgCarrier.Payload, m); err != nil {
@@ -653,6 +659,7 @@ func (t *TCPTransportClient) Join(
 		t.localPort = 1024 + rand.Int()%1024
 	}
 
+	fmt.Println("Connecting to server", "endpoint", serverEndpoint)
 	serverConn, err := net.Dial("tcp", serverEndpoint.(string))
 	if err != nil {
 		return
@@ -681,12 +688,13 @@ func (t *TCPTransportClient) Join(
 	}
 	// Wait for peers list sent by server.
 	e := <-t.recvChannel
-	peersInfo, ok := e.Msg.(map[types.NodeID]string)
+	handshake, ok := e.Msg.(*tcpHandshake)
 	if !ok {
-		panic(fmt.Errorf("expect peer list, not %v", e))
+		panic(fmt.Errorf("expect handshake, not %v", e))
 	}
+	t.dMoment = handshake.DMoment
 	// Setup peers information.
-	for nID, info := range peersInfo {
+	for nID, info := range handshake.Peers {
 		pubKey, conn := parsePeerInfo(info)
 		t.peers[nID] = &tcpPeerRecord{
 			conn:   conn,
@@ -744,6 +752,11 @@ func (t *TCPTransportClient) Send(
 	return
 }
 
+// DMoment implments TransportClient.
+func (t *TCPTransportClient) DMoment() time.Time {
+	return t.dMoment
+}
+
 // TCPTransportServer implements TransportServer via TCP connections.
 type TCPTransportServer struct {
 	TCPTransport
@@ -780,6 +793,11 @@ func (t *TCPTransportServer) Host() (chan *TransportEnvelope, error) {
 	return t.recvChannel, nil
 }
 
+// SetDMoment implements TransportServer.SetDMoment method.
+func (t *TCPTransportServer) SetDMoment(dMoment time.Time) {
+	t.dMoment = dMoment
+}
+
 // WaitForPeers implements TransportServer.WaitForPeers method.
 func (t *TCPTransportServer) WaitForPeers(numPeers uint32) (err error) {
 	// Collect peers info. Packets other than peer info is
@@ -796,6 +814,7 @@ func (t *TCPTransportServer) WaitForPeers(numPeers uint32) (err error) {
 			panic(fmt.Errorf("expect connection report, not %v", e))
 		}
 		pubKey, conn := parsePeerInfo(msg.Info)
+		fmt.Println("Peer connected", "peer", conn)
 		t.peers[msg.NodeID] = &tcpPeerRecord{
 			conn:   conn,
 			pubKey: pubKey,
@@ -814,7 +833,11 @@ func (t *TCPTransportServer) WaitForPeers(numPeers uint32) (err error) {
 	for ID := range t.peers {
 		peers[ID] = struct{}{}
 	}
-	if err = t.Broadcast(peers, &FixedLatencyModel{}, peersInfo); err != nil {
+	handshake := &tcpHandshake{
+		DMoment: t.dMoment,
+		Peers:   peersInfo,
+	}
+	if err = t.Broadcast(peers, &FixedLatencyModel{}, handshake); err != nil {
 		return
 	}
 	// Wait for peers to send 'ready' report.

@@ -140,6 +140,7 @@ type Network struct {
 	ctx                      context.Context
 	ctxCancel                context.CancelFunc
 	trans                    TransportClient
+	dMoment                  time.Time
 	fromTransport            <-chan *TransportEnvelope
 	toConsensus              chan interface{}
 	toNode                   chan interface{}
@@ -479,6 +480,11 @@ func (n *Network) Broadcast(msg interface{}) error {
 // Peers exports 'Peers' method of Transport.
 func (n *Network) Peers() []crypto.PublicKey {
 	return n.trans.Peers()
+}
+
+// DMoment exports 'DMoment' method of Transport.
+func (n *Network) DMoment() time.Time {
+	return n.trans.DMoment()
 }
 
 // ReceiveChanForNode returns a channel for messages not handled by

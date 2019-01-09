@@ -18,6 +18,8 @@
 package test
 
 import (
+	"time"
+
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
@@ -77,6 +79,9 @@ type TransportServer interface {
 	Host() (chan *TransportEnvelope, error)
 	// WaitForPeers waits for all peers to join the network.
 	WaitForPeers(numPeers uint32) error
+
+	// SetDMoment
+	SetDMoment(time.Time)
 }
 
 // TransportClient defines those peers in the network.
@@ -86,6 +91,9 @@ type TransportClient interface {
 	Report(msg interface{}) error
 	// Join the network, should block until joined.
 	Join(serverEndpoint interface{}) (<-chan *TransportEnvelope, error)
+
+	// DMoment returns the DMoment of the network.
+	DMoment() time.Time
 }
 
 // Transport defines the interface for basic transportation capabilities.
