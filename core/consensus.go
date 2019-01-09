@@ -399,6 +399,7 @@ type Consensus struct {
 	logger                     common.Logger
 	nonFinalizedBlockDelivered bool
 	resetRandomnessTicker      chan struct{}
+	resetDeliveryGuardTicker   chan struct{}
 }
 
 // NewConsensus construct an Consensus instance.
@@ -515,22 +516,24 @@ func newConsensusForRound(
 	}
 	// Construct Consensus instance.
 	con := &Consensus{
-		ID:               ID,
-		ccModule:         newCompactionChain(gov),
-		lattice:          latticeModule,
-		app:              appModule,
-		debugApp:         debugApp,
-		gov:              gov,
-		db:               db,
-		network:          network,
-		baConfirmedBlock: make(map[common.Hash]chan<- *types.Block),
-		dkgReady:         sync.NewCond(&sync.Mutex{}),
-		cfgModule:        cfgModule,
-		dMoment:          initRoundBeginTime,
-		nodeSetCache:     nodeSetCache,
-		signer:           signer,
-		event:            common.NewEvent(),
-		logger:           logger,
+		ID:                       ID,
+		ccModule:                 newCompactionChain(gov),
+		lattice:                  latticeModule,
+		app:                      appModule,
+		debugApp:                 debugApp,
+		gov:                      gov,
+		db:                       db,
+		network:                  network,
+		baConfirmedBlock:         make(map[common.Hash]chan<- *types.Block),
+		dkgReady:                 sync.NewCond(&sync.Mutex{}),
+		cfgModule:                cfgModule,
+		dMoment:                  initRoundBeginTime,
+		nodeSetCache:             nodeSetCache,
+		signer:                   signer,
+		event:                    common.NewEvent(),
+		logger:                   logger,
+		resetRandomnessTicker:    make(chan struct{}),
+		resetDeliveryGuardTicker: make(chan struct{}),
 	}
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
 	con.baMgr = newAgreementMgr(con, initRound, initRoundBeginTime)
@@ -602,6 +605,7 @@ func (con *Consensus) Run() {
 	// Take some time to bootstrap.
 	time.Sleep(3 * time.Second)
 	go con.pullRandomness()
+	go con.deliveryGuard()
 	// Block until done.
 	select {
 	case <-con.ctx.Done():
@@ -1035,10 +1039,30 @@ func (con *Consensus) pullRandomness() {
 	}
 }
 
+func (con *Consensus) deliveryGuard() {
+	time.Sleep(con.dMoment.Sub(time.Now()))
+	// Node takes time to start.
+	time.Sleep(60 * time.Second)
+	for {
+		select {
+		case <-con.ctx.Done():
+			return
+		case <-con.resetDeliveryGuardTicker:
+		case <-time.After(60 * time.Second):
+			con.logger.Error("no blocks delivered for too long", "ID", con.ID)
+			panic(fmt.Errorf("no blocks delivered for too long"))
+		}
+	}
+}
+
 // deliverBlock deliver a block to application layer.
 func (con *Consensus) deliverBlock(b *types.Block) {
 	select {
 	case con.resetRandomnessTicker <- struct{}{}:
+	default:
+	}
+	select {
+	case con.resetDeliveryGuardTicker <- struct{}{}:
 	default:
 	}
 	if err := con.db.UpdateBlock(*b); err != nil {
