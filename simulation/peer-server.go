@@ -180,7 +180,7 @@ func (p *PeerServer) Setup(
 	switch cfg.Networking.Type {
 	case "tcp", "tcp-local":
 		p.trans = test.NewTCPTransportServer(&jsonMarshaller{}, peerPort)
-		dMoment = dMoment.Add(5 * time.Second)
+		dMoment = dMoment.Add(10 * time.Second)
 	case "fake":
 		p.trans = test.NewFakeTransportServer()
 	default:
