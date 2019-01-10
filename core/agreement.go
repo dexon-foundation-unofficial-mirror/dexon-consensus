@@ -281,16 +281,12 @@ func (a *agreement) leader() types.NodeID {
 
 // nextState is called at the specific clock time.
 func (a *agreement) nextState() (err error) {
-	if func() bool {
-		a.lock.RLock()
-		defer a.lock.RUnlock()
-		return a.hasOutput
-	}() {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	if a.hasOutput {
 		a.state = newSleepState(a.data)
 		return
 	}
-	a.lock.Lock()
-	defer a.lock.Unlock()
 	a.state, err = a.state.nextState()
 	return
 }

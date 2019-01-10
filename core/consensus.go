@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
@@ -69,9 +70,13 @@ type consensusBAReceiver struct {
 	agreementModule  *agreement
 	chainID          uint32
 	changeNotaryTime time.Time
-	round            uint64
+	roundValue       *atomic.Value
 	isNotary         bool
 	restartNotary    chan types.Position
+}
+
+func (recv *consensusBAReceiver) round() uint64 {
+	return recv.roundValue.Load().(uint64)
 }
 
 func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {
@@ -99,7 +104,7 @@ func (recv *consensusBAReceiver) ProposeBlock() common.Hash {
 	if !recv.isNotary {
 		return common.Hash{}
 	}
-	block := recv.consensus.proposeBlock(recv.chainID, recv.round)
+	block := recv.consensus.proposeBlock(recv.chainID, recv.round())
 	if block == nil {
 		recv.consensus.logger.Error("unable to propose block")
 		return nullBlockHash
@@ -125,7 +130,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 		recv.consensus.logger.Info("Empty block is confirmed",
 			"position", &aID)
 		var err error
-		block, err = recv.consensus.proposeEmptyBlock(recv.round, recv.chainID)
+		block, err = recv.consensus.proposeEmptyBlock(recv.round(), recv.chainID)
 		if err != nil {
 			recv.consensus.logger.Error("Propose empty block failed", "error", err)
 			return
@@ -143,9 +148,19 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 				defer recv.consensus.lock.Unlock()
 				recv.consensus.baConfirmedBlock[hash] = ch
 			}()
-			recv.consensus.network.PullBlocks(common.Hashes{hash})
 			go func() {
-				block = <-ch
+				hashes := common.Hashes{hash}
+			PullBlockLoop:
+				for {
+					recv.consensus.logger.Debug("Calling Network.PullBlock for BA block",
+						"hash", hash)
+					recv.consensus.network.PullBlocks(hashes)
+					select {
+					case block = <-ch:
+						break PullBlockLoop
+					case <-time.After(1 * time.Second):
+					}
+				}
 				recv.consensus.logger.Info("Receive unknown block",
 					"hash", hash.String()[:6],
 					"position", &block.Position,
@@ -245,7 +260,7 @@ CleanChannelLoop:
 	}
 	newPos := block.Position
 	if block.Timestamp.After(recv.changeNotaryTime) {
-		recv.round++
+		recv.roundValue.Store(recv.round() + 1)
 		newPos.Round++
 	}
 	recv.restartNotary <- newPos

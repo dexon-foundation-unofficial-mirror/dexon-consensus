@@ -220,6 +220,7 @@ func (s *ConsensusTestSuite) TestSimple() {
 	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
 	for _, n := range nodes {
 		go n.con.Run()
+		defer n.con.Stop()
 	}
 Loop:
 	for {
@@ -236,7 +237,6 @@ Loop:
 		break
 	}
 	s.verifyNodes(nodes)
-	// TODO(haoping) stop consensus.
 }
 
 func (s *ConsensusTestSuite) TestNumChainsChange() {
@@ -300,6 +300,7 @@ func (s *ConsensusTestSuite) TestNumChainsChange() {
 	// Run test.
 	for _, n := range nodes {
 		go n.con.Run()
+		defer n.con.Stop()
 	}
 Loop:
 	for {
@@ -359,6 +360,9 @@ func (s *ConsensusTestSuite) TestSync() {
 	for _, n := range nodes {
 		if n.ID != syncNode.ID {
 			go n.con.Run()
+			if n.ID != stoppedNode.ID {
+				defer n.con.Stop()
+			}
 		}
 	}
 	// Clean syncNode's network receive channel, or it might exceed the limit
@@ -415,6 +419,10 @@ ReachAlive:
 			if syncedCon != nil {
 				syncNode.con = syncedCon
 				go syncNode.con.Run()
+				go func() {
+					<-runnerCtx.Done()
+					syncNode.con.Stop()
+				}()
 				break SyncLoop
 			}
 			if err != nil {
@@ -465,7 +473,6 @@ ReachAlive:
 		req.NoError(err)
 	case <-runnerCtx.Done():
 		// This test passed.
-		// TODO(haoping) stop consensus.
 	}
 }
 

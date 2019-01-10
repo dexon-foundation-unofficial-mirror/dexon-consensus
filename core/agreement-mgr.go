@@ -22,6 +22,7 @@ import (
 	"errors"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
@@ -180,7 +181,9 @@ func (mgr *agreementMgr) appendConfig(
 			consensus:     mgr.con,
 			chainID:       i,
 			restartNotary: make(chan types.Position, 1),
+			roundValue:    &atomic.Value{},
 		}
+		recv.roundValue.Store(uint64(0))
 		agrModule := newAgreement(
 			mgr.con.ID,
 			recv,
@@ -399,7 +402,7 @@ Loop:
 			<-setting.ticker.Tick()
 		}
 		// Run BA for this round.
-		recv.round = currentRound
+		recv.roundValue.Store(currentRound)
 		recv.changeNotaryTime = roundEndTime
 		recv.restartNotary <- types.Position{ChainID: math.MaxUint32}
 		if err := mgr.baRoutineForOneRound(&setting); err != nil {
@@ -439,11 +442,11 @@ Loop:
 			}
 			var nextHeight uint64
 			for {
-				nextHeight, err = mgr.lattice.NextHeight(recv.round, setting.chainID)
+				nextHeight, err = mgr.lattice.NextHeight(recv.round(), setting.chainID)
 				if err != nil {
 					mgr.logger.Debug("Error getting next height",
 						"error", err,
-						"round", recv.round,
+						"round", recv.round(),
 						"chainID", setting.chainID)
 					err = nil
 					nextHeight = oldPos.Height
@@ -459,7 +462,7 @@ Loop:
 				time.Sleep(100 * time.Millisecond)
 			}
 			nextPos := types.Position{
-				Round:   recv.round,
+				Round:   recv.round(),
 				ChainID: setting.chainID,
 				Height:  nextHeight,
 			}
