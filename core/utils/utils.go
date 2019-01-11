@@ -18,6 +18,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
@@ -91,4 +92,37 @@ func VerifyDKGComplaint(
 		return false, err
 	}
 	return ok, nil
+}
+
+// LaunchDummyReceiver launches a go routine to receive from the receive
+// channel of a network module. An context is required to stop the go routine
+// automatically. An optinal message handler could be provided.
+func LaunchDummyReceiver(
+	ctx context.Context, recv <-chan interface{}, handler func(interface{})) (
+	context.CancelFunc, <-chan struct{}) {
+	var (
+		dummyCtx, dummyCancel = context.WithCancel(ctx)
+		finishedChan          = make(chan struct{}, 1)
+	)
+	go func() {
+		defer func() {
+			finishedChan <- struct{}{}
+		}()
+	loop:
+		for {
+			select {
+			case <-dummyCtx.Done():
+				break loop
+			case v, ok := <-recv:
+				if !ok {
+					panic(fmt.Errorf(
+						"receive channel is closed before dummy receiver"))
+				}
+				if handler != nil {
+					handler(v)
+				}
+			}
+		}
+	}()
+	return dummyCancel, finishedChan
 }

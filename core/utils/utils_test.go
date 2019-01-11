@@ -18,7 +18,9 @@
 package utils
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 
@@ -109,6 +111,64 @@ func (s *UtilsTestSuite) TestVerifyDKGComplaint() {
 	ok, err = VerifyDKGComplaint(complaint, mpk)
 	s.Require().NoError(err)
 	s.False(ok)
+}
+
+func (s *UtilsTestSuite) TestDummyReceiver() {
+	var (
+		msgCount = 1000
+		fakeMsgs = make([]int, 0, msgCount)
+	)
+	for i := 0; i < msgCount; i++ {
+		fakeMsgs = append(fakeMsgs, i)
+	}
+	launchDummySender := func(msgs []int, inputChan chan<- interface{}) {
+		finished := make(chan struct{}, 1)
+		go func() {
+			defer func() {
+				finished <- struct{}{}
+			}()
+			for _, v := range msgs {
+				inputChan <- v
+			}
+		}()
+		select {
+		case <-finished:
+		case <-time.After(1 * time.Second):
+			s.Require().FailNow("unable to deliver all messages in time")
+		}
+	}
+	checkBuffer := func(sent []int, buff []interface{}) {
+		s.Require().Len(buff, len(sent))
+		for i := range sent {
+			s.Require().Equal(sent[i], buff[i].(int))
+		}
+	}
+	// Basic scenario: a dummy receiver with caching enabled.
+	recv := make(chan interface{})
+	buff := []interface{}{}
+	cancel, finished := LaunchDummyReceiver(
+		context.Background(), recv, func(msg interface{}) {
+			buff = append(buff, msg)
+		})
+	launchDummySender(fakeMsgs, recv)
+	cancel()
+	select {
+	case <-finished:
+	case <-time.After(1 * time.Second):
+		s.Require().FailNow("should finished after cancel is called")
+	}
+	checkBuffer(fakeMsgs, buff)
+	// Dummy receiver can be shutdown along with parent context, and caching
+	// is not enabled.
+	ctx, cancel := context.WithCancel(context.Background())
+	_, finished = LaunchDummyReceiver(ctx, recv, nil)
+	launchDummySender(fakeMsgs, recv)
+	cancel()
+	select {
+	case <-finished:
+	case <-time.After(1 * time.Second):
+		s.Require().FailNow("should finished after cancel is called")
+	}
 }
 
 func TestUtils(t *testing.T) {

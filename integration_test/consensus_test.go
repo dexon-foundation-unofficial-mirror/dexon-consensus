@@ -367,8 +367,8 @@ func (s *ConsensusTestSuite) TestSync() {
 	}
 	// Clean syncNode's network receive channel, or it might exceed the limit
 	// and block other go routines.
-	dummyReceiverCtxCancel := test.LaunchDummyReceiver(
-		context.Background(), syncNode.network)
+	dummyReceiverCtxCancel, dummyFinished := utils.LaunchDummyReceiver(
+		context.Background(), syncNode.network.ReceiveChan(), nil)
 ReachAlive:
 	for {
 		// Check if any error happened or sleep for a period of time.
@@ -390,6 +390,7 @@ ReachAlive:
 			}
 		}
 		dummyReceiverCtxCancel()
+		<-dummyFinished
 		break
 	}
 	// Initiate Syncer.
@@ -456,7 +457,8 @@ ReachAlive:
 					stoppedNode.con.Stop()
 					stoppedNode.con = nil
 					fmt.Println("one node stopped", stoppedNode.ID)
-					test.LaunchDummyReceiver(runnerCtx, stoppedNode.network)
+					utils.LaunchDummyReceiver(
+						runnerCtx, stoppedNode.network.ReceiveChan(), nil)
 					continue
 				}
 				if pos.Round < untilRound {

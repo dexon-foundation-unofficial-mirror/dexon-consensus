@@ -1,4 +1,4 @@
-// Copyright 2018 The dexon-consensus-core Authors
+// Copyright 2018 The dexon-consensus Authors
 // This file is part of the dexon-consensus-core library.
 //
 // The dexon-consensus-core library is free software: you can redistribute it

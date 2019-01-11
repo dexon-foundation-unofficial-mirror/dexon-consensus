@@ -55,7 +55,7 @@ type ErrAckingBlockNotExists struct {
 }
 
 func (e ErrAckingBlockNotExists) Error() string {
-	return fmt.Sprintf("acking block %s not exists", e.hash)
+	return fmt.Sprintf("acking block %s not exists", e.hash.String()[:6])
 }
 
 // Errors for method usage
