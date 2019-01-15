@@ -193,7 +193,7 @@ func (s *LatticeDataTestSuite) TestSanityCheck() {
 	)
 	check := func(expectedErr error, b *types.Block) {
 		s.hashBlock(b)
-		err := data.sanityCheck(b)
+		err := data.sanityCheck(b, false)
 		req.NotNil(err)
 		req.IsType(expectedErr, err)
 	}
@@ -323,7 +323,7 @@ func (s *LatticeDataTestSuite) TestSanityCheck() {
 		Timestamp: time.Now().UTC().Add(500 * time.Second),
 	}
 	s.hashBlock(b11)
-	req.NoError(data.sanityCheck(b11))
+	req.NoError(data.sanityCheck(b11, false))
 	_, err := data.addBlock(b11)
 	req.NoError(err)
 	// A block didn't perform round switching.
@@ -340,7 +340,7 @@ func (s *LatticeDataTestSuite) TestSanityCheck() {
 	// A block with expected new round ID should be OK.
 	b12.Position.Round = 1
 	s.hashBlock(b12)
-	req.NoError(data.sanityCheck(b12))
+	req.NoError(data.sanityCheck(b12, false))
 }
 
 func (s *LatticeDataTestSuite) TestRandomlyGeneratedBlocks() {
@@ -404,7 +404,7 @@ func (s *LatticeDataTestSuite) TestRandomlyGeneratedBlocks() {
 			req.NoError(err)
 			revealedHashes = append(revealedHashes, b.Hash)
 			// Pass blocks to lattice.
-			req.NoError(data.sanityCheck(&b))
+			req.NoError(data.sanityCheck(&b, false))
 			delivered, err = data.addBlock(&b)
 			req.NoError(err)
 			for _, b := range delivered {
@@ -550,12 +550,14 @@ func (s *LatticeDataTestSuite) TestPrepareBlock() {
 	req.Equal(b01.Position.Height, uint64(1))
 }
 
-func (s *LatticeDataTestSuite) TestNextHeight() {
-	// Test 'NextHeight' method when lattice is ready.
-	data, _ := s.genTestCase1()
-	h, err := data.nextHeight(0, 0)
+func (s *LatticeDataTestSuite) TestNextBlock() {
+	// Test 'NextBlock' method when lattice is ready.
+	data, blocks := s.genTestCase1()
+	h, ts, err := data.nextBlock(0, 0)
 	s.Require().NoError(err)
-	s.Require().Equal(h, uint64(4))
+	s.Require().Equal(uint64(4), h)
+	// 2ns of minBlockTime is defined in genTestCase1().
+	s.Require().Equal(blocks[0][3].Timestamp.Add(2*time.Nanosecond), ts)
 	// Test 'NextHeight' method when lattice is empty.
 	// Setup a configuration that no restriction on block interval and
 	// round cutting.
@@ -564,10 +566,12 @@ func (s *LatticeDataTestSuite) TestNextHeight() {
 		NumChains:        4,
 		MinBlockInterval: 1 * time.Second,
 	}
-	data = newLatticeData(nil, time.Now().UTC(), 0, genesisConfig)
-	h, err = data.nextHeight(0, 0)
+	now := time.Now().UTC()
+	data = newLatticeData(nil, now, 0, genesisConfig)
+	h, ts, err = data.nextBlock(0, 0)
 	s.Require().NoError(err)
-	s.Require().Equal(h, uint64(0))
+	s.Require().Equal(now, ts)
+	s.Require().Equal(uint64(0), h)
 }
 
 func (s *LatticeDataTestSuite) TestPrepareEmptyBlock() {
@@ -666,7 +670,7 @@ func (s *LatticeDataTestSuite) TestNumChainsChange() {
 		req.NoError(err)
 		s.hashBlock(b)
 		// Do the actual lattice usage.
-		req.NoError(lattice.sanityCheck(b))
+		req.NoError(lattice.sanityCheck(b, false))
 		d, err := lattice.addBlock(b)
 		req.NoError(err)
 		delivered = append(delivered, d...)

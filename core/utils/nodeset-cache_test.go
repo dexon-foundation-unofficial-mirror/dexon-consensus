@@ -36,11 +36,12 @@ type nsIntf struct {
 
 func (g *nsIntf) Configuration(round uint64) (cfg *types.Config) {
 	return &types.Config{
-		NotarySetSize: 7,
-		DKGSetSize:    7,
-		NumChains:     4,
-		LambdaBA:      250 * time.Millisecond,
-		RoundInterval: 60 * time.Second,
+		NotarySetSize:    7,
+		DKGSetSize:       7,
+		NumChains:        4,
+		LambdaBA:         250 * time.Millisecond,
+		RoundInterval:    60 * time.Second,
+		MinBlockInterval: 1 * time.Second,
 	}
 }
 func (g *nsIntf) CRS(round uint64) (b common.Hash) { return g.crs }

@@ -42,7 +42,7 @@ func genValidLeader(
 		if block.Timestamp.After(time.Now()) {
 			return false, nil
 		}
-		if err := mgr.lattice.SanityCheck(block); err != nil {
+		if err := mgr.lattice.SanityCheck(block, true); err != nil {
 			if err == ErrRetrySanityCheckLater {
 				return false, nil
 			}
@@ -190,6 +190,14 @@ func (mgr *agreementMgr) appendConfig(
 			newLeaderSelector(genValidLeader(mgr), mgr.logger),
 			mgr.signer,
 			mgr.logger)
+		// Hacky way to initialize first notarySet.
+		nodes, err := mgr.cache.GetNodeSet(round)
+		if err != nil {
+			return err
+		}
+		agrModule.notarySet = nodes.GetSubSet(
+			int(config.NotarySetSize),
+			types.NewNotarySetTarget(crs, i))
 		// Hacky way to make agreement module self contained.
 		recv.agreementModule = agrModule
 		mgr.baModules = append(mgr.baModules, agrModule)
@@ -441,8 +449,10 @@ Loop:
 				}
 			}
 			var nextHeight uint64
+			var nextTime time.Time
 			for {
-				nextHeight, err = mgr.lattice.NextHeight(recv.round(), setting.chainID)
+				nextHeight, nextTime, err =
+					mgr.lattice.NextBlock(recv.round(), setting.chainID)
 				if err != nil {
 					mgr.logger.Debug("Error getting next height",
 						"error", err,
@@ -471,6 +481,8 @@ Loop:
 			if err != nil {
 				return err
 			}
+			time.Sleep(nextTime.Sub(time.Now()))
+			setting.ticker.Restart()
 			agr.restart(setting.notarySet, nextPos, leader, setting.crs)
 		default:
 		}

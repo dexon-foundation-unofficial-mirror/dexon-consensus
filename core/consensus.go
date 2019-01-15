@@ -932,7 +932,7 @@ MessageLoop:
 				ch, e := con.baConfirmedBlock[val.Hash]
 				return ch, e
 			}(); exist {
-				if err := con.lattice.SanityCheck(val); err != nil {
+				if err := con.lattice.SanityCheck(val, false); err != nil {
 					if err == ErrRetrySanityCheckLater {
 						err = nil
 					} else {
@@ -1040,6 +1040,7 @@ func (con *Consensus) ProcessAgreementResult(
 	if err := VerifyAgreementResult(rand, con.nodeSetCache); err != nil {
 		return err
 	}
+	con.lattice.AddShallowBlock(rand.BlockHash, rand.Position)
 	// Syncing BA Module.
 	if err := con.baMgr.processAgreementResult(rand); err != nil {
 		return err

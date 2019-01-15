@@ -252,7 +252,12 @@ func isStop(aID types.Position) bool {
 func (a *agreement) clocks() int {
 	a.data.lock.RLock()
 	defer a.data.lock.RUnlock()
-	return a.state.clocks()
+	scale := int(a.data.period)
+	// 10 is a magic number derived from many years of experience.
+	if scale > 10 {
+		scale = 10
+	}
+	return a.state.clocks() * scale
 }
 
 // pullVotes returns if current agreement requires more votes to continue.
@@ -260,6 +265,7 @@ func (a *agreement) pullVotes() bool {
 	a.data.lock.RLock()
 	defer a.data.lock.RUnlock()
 	return a.state.state() == statePullVote ||
+		a.state.state() == stateFastRollback ||
 		(a.state.state() == statePreCommit && (a.data.period%3) == 0)
 }
 
@@ -308,18 +314,21 @@ func (a *agreement) sanityCheck(vote *types.Vote) error {
 	return nil
 }
 
-func (a *agreement) checkForkVote(vote *types.Vote) error {
+func (a *agreement) checkForkVote(vote *types.Vote) (
+	alreadyExist bool, err error) {
 	a.data.lock.RLock()
 	defer a.data.lock.RUnlock()
 	if votes, exist := a.data.votes[vote.Period]; exist {
 		if oldVote, exist := votes[vote.Type][vote.ProposerID]; exist {
+			alreadyExist = true
 			if vote.BlockHash != oldVote.BlockHash {
 				a.data.recv.ReportForkVote(oldVote, vote)
-				return &ErrForkVote{vote.ProposerID, oldVote, vote}
+				err = &ErrForkVote{vote.ProposerID, oldVote, vote}
+				return
 			}
 		}
 	}
-	return nil
+	return
 }
 
 // prepareVote prepares a vote.
@@ -339,6 +348,13 @@ func (a *agreement) processVote(vote *types.Vote) error {
 	aID := a.agreementID()
 	// Agreement module has stopped.
 	if isStop(aID) {
+		// Hacky way to not drop first votes for height 0.
+		if vote.Position.Height == uint64(0) {
+			a.pendingVote = append(a.pendingVote, pendingVote{
+				vote:         vote,
+				receivedTime: time.Now().UTC(),
+			})
+		}
 		return nil
 	}
 	if vote.Position != aID {
@@ -351,8 +367,12 @@ func (a *agreement) processVote(vote *types.Vote) error {
 		})
 		return nil
 	}
-	if err := a.checkForkVote(vote); err != nil {
+	exist, err := a.checkForkVote(vote)
+	if err != nil {
 		return err
+	}
+	if exist {
+		return nil
 	}
 
 	a.data.lock.Lock()

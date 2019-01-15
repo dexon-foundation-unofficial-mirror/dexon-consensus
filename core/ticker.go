@@ -36,12 +36,16 @@ const (
 // defaultTicker is a wrapper to implement ticker interface based on
 // time.Ticker.
 type defaultTicker struct {
-	ticker *time.Ticker
+	ticker   *time.Ticker
+	duration time.Duration
 }
 
 // newDefaultTicker constructs an defaultTicker instance by giving an interval.
 func newDefaultTicker(lambda time.Duration) *defaultTicker {
-	return &defaultTicker{ticker: time.NewTicker(lambda)}
+	return &defaultTicker{
+		ticker:   time.NewTicker(lambda),
+		duration: lambda,
+	}
 }
 
 // Tick implements Tick method of ticker interface.
@@ -52,6 +56,12 @@ func (t *defaultTicker) Tick() <-chan time.Time {
 // Stop implements Stop method of ticker interface.
 func (t *defaultTicker) Stop() {
 	t.ticker.Stop()
+}
+
+// Restart implements Stop method of ticker interface.
+func (t *defaultTicker) Restart() {
+	t.ticker.Stop()
+	t.ticker = time.NewTicker(t.duration)
 }
 
 // newTicker is a helper to setup a ticker by giving an Governance. If

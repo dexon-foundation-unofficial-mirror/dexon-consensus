@@ -113,6 +113,8 @@ type latticeData struct {
 	blockByHash map[common.Hash]*types.Block
 	// This stores configuration for each round.
 	configs []*latticeDataConfig
+	// shallowBlocks stores the hash of blocks that their body is not receive yet.
+	shallowBlocks map[common.Hash]types.Position
 }
 
 // newLatticeData creates a new latticeData instance.
@@ -126,10 +128,11 @@ func newLatticeData(
 	genesisConfig.fromConfig(round, config)
 	genesisConfig.setRoundBeginTime(dMoment)
 	data = &latticeData{
-		db:          db,
-		chains:      make([]*chainStatus, genesisConfig.numChains),
-		blockByHash: make(map[common.Hash]*types.Block),
-		configs:     []*latticeDataConfig{genesisConfig},
+		db:            db,
+		chains:        make([]*chainStatus, genesisConfig.numChains),
+		blockByHash:   make(map[common.Hash]*types.Block),
+		configs:       []*latticeDataConfig{genesisConfig},
+		shallowBlocks: make(map[common.Hash]types.Position),
 	}
 	for i := range data.chains {
 		data.chains[i] = &chainStatus{
@@ -141,15 +144,35 @@ func newLatticeData(
 	return
 }
 
-func (data *latticeData) checkAckingRelations(b *types.Block) error {
+func (data *latticeData) addShallowBlock(hash common.Hash, pos types.Position) {
+	// We don't care other errors here. This `if` is to prevent being spammed by
+	// very old blocks.
+	if _, err := data.findBlock(hash); err != db.ErrBlockDoesNotExist {
+		return
+	}
+	data.shallowBlocks[hash] = pos
+}
+
+func (data *latticeData) checkAckingRelations(
+	b *types.Block, allowShallow bool) error {
 	acksByChainID := make(map[uint32]struct{}, len(data.chains))
 	for _, hash := range b.Acks {
 		bAck, err := data.findBlock(hash)
 		if err != nil {
 			if err == db.ErrBlockDoesNotExist {
-				return &ErrAckingBlockNotExists{hash}
+				err = &ErrAckingBlockNotExists{hash}
+				if allowShallow {
+					if pos, exist := data.shallowBlocks[hash]; exist {
+						bAck = &types.Block{
+							Position: pos,
+						}
+						err = nil
+					}
+				}
 			}
-			return err
+			if err != nil {
+				return err
+			}
 		}
 		// Check if it acks blocks from old rounds, the allowed round difference
 		// is 1.
@@ -172,7 +195,7 @@ func (data *latticeData) checkAckingRelations(b *types.Block) error {
 	return nil
 }
 
-func (data *latticeData) sanityCheck(b *types.Block) error {
+func (data *latticeData) sanityCheck(b *types.Block, allowShallow bool) error {
 	// TODO(mission): Check if its proposer is in validator set, lattice has no
 	// knowledge about node set.
 	config := data.getConfig(b.Position.Round)
@@ -196,7 +219,7 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 		if !config.isValidGenesisBlockTime(b) {
 			return ErrIncorrectBlockTime
 		}
-		return data.checkAckingRelations(b)
+		return data.checkAckingRelations(b, allowShallow)
 	}
 	// Check parent block if parent hash is specified.
 	if !b.ParentHash.Equal(common.Hash{}) {
@@ -257,7 +280,7 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 			return ErrNotAckParent
 		}
 	}
-	return data.checkAckingRelations(b)
+	return data.checkAckingRelations(b, allowShallow)
 }
 
 // addBlock processes blocks. It does sanity check, inserts block into lattice
@@ -501,19 +524,21 @@ func (data *latticeData) prepareEmptyBlock(b *types.Block) (err error) {
 }
 
 // TODO(mission): make more abstraction for this method.
-// nextHeight returns the next height of a chain.
-func (data *latticeData) nextHeight(
-	round uint64, chainID uint32) (uint64, error) {
+// nextBlock returns the next height and timestamp of a chain.
+func (data *latticeData) nextBlock(
+	round uint64, chainID uint32) (uint64, time.Time, error) {
 	chainTip := data.chains[chainID].tip
 	bindTip, err := data.isBindTip(
 		types.Position{Round: round, ChainID: chainID}, chainTip)
 	if err != nil {
-		return 0, err
+		return 0, time.Time{}, err
 	}
+	config := data.getConfig(round)
 	if bindTip {
-		return chainTip.Position.Height + 1, nil
+		return chainTip.Position.Height + 1,
+			chainTip.Timestamp.Add(config.minBlockTimeInterval), nil
 	}
-	return 0, nil
+	return 0, config.roundBeginTime, nil
 }
 
 // findBlock seeks blocks in memory or db.

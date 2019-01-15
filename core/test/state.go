@@ -133,7 +133,7 @@ func NewState(
 		lambdaBA:         lambda,
 		lambdaDKG:        lambda * 10,
 		roundInterval:    lambda * 10000,
-		minBlockInterval: time.Millisecond * 1,
+		minBlockInterval: 4 * lambda,
 		crs:              []common.Hash{genesisCRS},
 		nodes:            nodes,
 		phiRatio:         0.667,

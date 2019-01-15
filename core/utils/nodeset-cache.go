@@ -247,7 +247,7 @@ func (cache *NodeSetCache) update(
 		nIDs.notarySet[i] = nodeSet.GetSubSet(
 			int(cfg.NotarySetSize), types.NewNotarySetTarget(crs, uint32(i)))
 	}
-	nodesPerChain := cfg.RoundInterval / (cfg.LambdaBA * 4)
+	nodesPerChain := cfg.RoundInterval / cfg.MinBlockInterval
 	for i := range nIDs.leaderNode {
 		nIDs.leaderNode[i] = make(map[uint64]types.NodeID, nodesPerChain)
 	}

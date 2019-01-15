@@ -159,4 +159,7 @@ type Ticker interface {
 
 	// Stop the ticker.
 	Stop()
+
+	// Retart the ticker and clear all internal data.
+	Restart()
 }

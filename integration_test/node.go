@@ -228,7 +228,7 @@ func (n *Node) processBlock(b *types.Block) (events []*test.Event, err error) {
 		)
 		updated := false
 		for _, p := range n.pendings {
-			if tmpErr = n.lattice.SanityCheck(p); tmpErr != nil {
+			if tmpErr = n.lattice.SanityCheck(p, false); tmpErr != nil {
 				if tmpErr == core.ErrRetrySanityCheckLater {
 					newPendings = append(newPendings, p)
 				} else {

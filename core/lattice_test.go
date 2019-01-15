@@ -55,7 +55,7 @@ func (mgr *testLatticeMgr) processBlock(b *types.Block) (err error) {
 	var (
 		delivered []*types.Block
 	)
-	if err = mgr.lattice.SanityCheck(b); err != nil {
+	if err = mgr.lattice.SanityCheck(b, false); err != nil {
 		if err == ErrRetrySanityCheckLater {
 			err = nil
 		} else {
@@ -235,12 +235,12 @@ func (s *LatticeTestSuite) TestSanityCheck() {
 		Timestamp: time.Now().UTC(),
 	}
 	req.NoError(signer.SignBlock(b))
-	req.NoError(lattice.SanityCheck(b))
+	req.NoError(lattice.SanityCheck(b, false))
 	// A block with incorrect signature should not pass sanity check.
 	otherPrvKey, err := ecdsa.NewPrivateKey()
 	req.NoError(err)
 	b.Signature, err = otherPrvKey.Sign(common.NewRandomHash())
-	req.Equal(lattice.SanityCheck(b), ErrIncorrectSignature)
+	req.Equal(lattice.SanityCheck(b, false), ErrIncorrectSignature)
 	// A block with un-sorted acks should not pass sanity check.
 	b.Acks = common.NewSortedHashes(common.Hashes{
 		common.NewRandomHash(),
@@ -251,10 +251,10 @@ func (s *LatticeTestSuite) TestSanityCheck() {
 	})
 	b.Acks[0], b.Acks[1] = b.Acks[1], b.Acks[0]
 	req.NoError(signer.SignBlock(b))
-	req.Equal(lattice.SanityCheck(b), ErrAcksNotSorted)
+	req.Equal(lattice.SanityCheck(b, false), ErrAcksNotSorted)
 	// A block with incorrect hash should not pass sanity check.
 	b.Hash = common.NewRandomHash()
-	req.Equal(lattice.SanityCheck(b), ErrIncorrectHash)
+	req.Equal(lattice.SanityCheck(b, false), ErrIncorrectHash)
 }
 
 func TestLattice(t *testing.T) {
