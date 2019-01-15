@@ -27,6 +27,7 @@ import (
 // SignalType is the type of agreemnt signal.
 type SignalType byte
 
+// SignalType enum.
 const (
 	// SignalInvalid is just a type guard, not intend to be used.
 	SignalInvalid SignalType = iota
@@ -41,6 +42,8 @@ const (
 	SignalDecide
 	// SignalFork is triggered when detecting a fork vote.
 	SignalFork
+	// Do not add any type below MaxSignalType.
+	maxSignalType
 )
 
 func (t SignalType) String() string {
