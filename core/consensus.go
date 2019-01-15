@@ -80,7 +80,7 @@ func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {
 		return
 	}
 	go func() {
-		if err := recv.agreementModule.processVote(vote); err != nil {
+		if err := recv.consensus.baMgr.processVote(vote); err != nil {
 			recv.consensus.logger.Error("Failed to process self vote",
 				"error", err,
 				"vote", vote)

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
+	agrPkg "github.com/dexon-foundation/dexon-consensus/core/agreement"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
@@ -72,12 +73,11 @@ type agreementMgrConfig struct {
 }
 
 type baRoundSetting struct {
-	chainID   uint32
-	notarySet map[types.NodeID]struct{}
-	agr       *agreement
-	recv      *consensusBAReceiver
-	ticker    Ticker
-	crs       common.Hash
+	chainID uint32
+	agr     *agreement
+	recv    *consensusBAReceiver
+	ticker  Ticker
+	crs     common.Hash
 }
 
 type agreementMgr struct {
@@ -102,6 +102,7 @@ type agreementMgr struct {
 	pendingVotes      map[uint64][]*types.Vote
 	pendingBlocks     map[uint64][]*types.Block
 	isRunning         bool
+	vCache            *agrPkg.VoteCache
 
 	// This lock should be used when attempting to:
 	//  - add a new baModule.
@@ -130,6 +131,7 @@ func newAgreementMgr(con *Consensus, initRound uint64,
 		initRound:         initRound,
 		lastEndTime:       initRoundBeginTime,
 		processedBAResult: make(map[types.Position]struct{}, maxResultCache),
+		vCache:            agrPkg.NewVoteCache(initRound),
 	}
 }
 
@@ -160,6 +162,20 @@ func (mgr *agreementMgr) run() {
 			mgr.runBA(mgr.initRound, idx)
 		}(i)
 	}
+}
+
+func (mgr *agreementMgr) getAllNotarySets(round uint64, config *types.Config,
+	crs common.Hash) []map[types.NodeID]struct{} {
+	notarySets := []map[types.NodeID]struct{}{}
+	nodes, err := mgr.cache.GetNodeSet(round)
+	if err != nil {
+		panic(err)
+	}
+	for i := uint32(0); i < config.NumChains; i++ {
+		notarySets = append(notarySets, nodes.GetSubSet(
+			int(config.NotarySetSize), types.NewNotarySetTarget(crs, i)))
+	}
+	return notarySets
 }
 
 func (mgr *agreementMgr) appendConfig(
@@ -195,14 +211,6 @@ func (mgr *agreementMgr) appendConfig(
 			newLeaderSelector(genValidLeader(mgr), mgr.logger),
 			mgr.signer,
 			mgr.logger)
-		// Hacky way to initialize first notarySet.
-		nodes, err := mgr.cache.GetNodeSet(round)
-		if err != nil {
-			return err
-		}
-		agrModule.notarySet = nodes.GetSubSet(
-			int(config.NotarySetSize),
-			types.NewNotarySetTarget(crs, i))
 		// Hacky way to make agreement module self contained.
 		recv.agreementModule = agrModule
 		mgr.baModules = append(mgr.baModules, agrModule)
@@ -215,30 +223,33 @@ func (mgr *agreementMgr) appendConfig(
 			}(i)
 		}
 	}
-	return nil
+	return mgr.vCache.AppendNotarySets(
+		round, mgr.getAllNotarySets(round, config, crs))
 }
 
 func (mgr *agreementMgr) processVote(v *types.Vote) error {
 	mgr.chainLock.RLock()
 	defer mgr.chainLock.RUnlock()
+	signals, err := mgr.vCache.ProcessVote(v)
+	if err != nil || len(signals) == 0 {
+		return err
+	}
 	if v.Position.ChainID >= uint32(len(mgr.baModules)) {
-		mgr.logger.Error("Process vote for unknown chain to BA",
+		mgr.logger.Error("Process signal for unknown chain to BA",
 			"position", &v.Position,
 			"baChain", len(mgr.baModules),
 			"baRound", len(mgr.configs),
 			"initRound", mgr.initRound)
 		return utils.ErrInvalidChainID
 	}
-	filter := mgr.voteFilters[v.Position.ChainID]
-	if filter.Filter(v) {
-		return nil
+	agreement := mgr.baModules[v.Position.ChainID]
+	for _, s := range signals {
+		if err := agreement.processSignal(s); err != nil {
+			// All agreement signals should be ok for BA modules to process.
+			panic(err)
+		}
 	}
-	v = v.Clone()
-	err := mgr.baModules[v.Position.ChainID].processVote(v)
-	if err == nil {
-		mgr.baModules[v.Position.ChainID].updateFilter(filter)
-	}
-	return err
+	return nil
 }
 
 func (mgr *agreementMgr) processBlock(b *types.Block) error {
@@ -282,6 +293,10 @@ func (mgr *agreementMgr) processAgreementResult(
 	result *types.AgreementResult) error {
 	mgr.chainLock.RLock()
 	defer mgr.chainLock.RUnlock()
+	signals, err := mgr.vCache.ProcessResult(result)
+	if err != nil || len(signals) == 0 {
+		return err
+	}
 	if result.Position.ChainID >= uint32(len(mgr.baModules)) {
 		mgr.logger.Error("Process unknown result for unknown chain to BA",
 			"position", &result.Position,
@@ -292,41 +307,24 @@ func (mgr *agreementMgr) processAgreementResult(
 	}
 	agreement := mgr.baModules[result.Position.ChainID]
 	aID := agreement.agreementID()
-	if isStop(aID) {
-		return nil
-	}
-	if result.Position == aID && !agreement.confirmed() {
+	if !isStop(aID) && result.Position.Newer(&aID) {
 		mgr.logger.Info("Syncing BA", "position", &result.Position)
-		for key := range result.Votes {
-			if err := agreement.processVote(&result.Votes[key]); err != nil {
-				return err
-			}
-		}
-	} else if result.Position.Newer(&aID) {
-		mgr.logger.Info("Fast syncing BA", "position", &result.Position)
-		nodes, err := mgr.cache.GetNodeSet(result.Position.Round)
-		if err != nil {
-			return err
-		}
-		mgr.logger.Debug("Calling Network.PullBlocks for fast syncing BA",
+		mgr.logger.Debug("Calling Network.PullBlocks for syncing BA",
 			"hash", result.BlockHash)
 		mgr.network.PullBlocks(common.Hashes{result.BlockHash})
 		mgr.logger.Debug("Calling Governance.CRS", "round", result.Position.Round)
 		crs := utils.GetCRSWithPanic(mgr.gov, result.Position.Round, mgr.logger)
-		nIDs := nodes.GetSubSet(
-			int(utils.GetConfigWithPanic(
-				mgr.gov, result.Position.Round, mgr.logger).NotarySetSize),
-			types.NewNotarySetTarget(crs, result.Position.ChainID))
-		for key := range result.Votes {
-			if err := agreement.processVote(&result.Votes[key]); err != nil {
-				return err
-			}
-		}
 		leader, err := mgr.cache.GetLeaderNode(result.Position)
 		if err != nil {
 			return err
 		}
-		agreement.restart(nIDs, result.Position, leader, crs)
+		agreement.restart(result.Position, leader, crs)
+	}
+	for _, s := range signals {
+		if err := agreement.processSignal(s); err != nil {
+			// All agreement signals should be ok for BA modules to process.
+			panic(err)
+		}
 	}
 	return nil
 }
@@ -396,10 +394,7 @@ func (mgr *agreementMgr) runBA(initRound uint64, chainID uint32) {
 		if err != nil {
 			panic(err)
 		}
-		setting.crs = config.crs
-		setting.notarySet = notarySet
-		_, isNotary = setting.notarySet[mgr.ID]
-		if isNotary {
+		if _, isNotary = notarySet[mgr.ID]; isNotary {
 			mgr.logger.Info("selected as notary set",
 				"ID", mgr.ID,
 				"round", nextRound,
@@ -410,6 +405,7 @@ func (mgr *agreementMgr) runBA(initRound uint64, chainID uint32) {
 				"round", nextRound,
 				"chainID", chainID)
 		}
+		setting.crs = config.crs
 		// Setup ticker
 		if tickDuration != config.lambdaBA {
 			if setting.ticker != nil {
@@ -546,7 +542,7 @@ func (mgr *agreementMgr) baRoutineForOneRound(
 		}
 		time.Sleep(nextTime.Sub(time.Now()))
 		setting.ticker.Restart()
-		agr.restart(setting.notarySet, nextPos, leader, setting.crs)
+		agr.restart(nextPos, leader, setting.crs)
 		return
 	}
 Loop:

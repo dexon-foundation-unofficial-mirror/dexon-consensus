@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
+	agrPkg "github.com/dexon-foundation/dexon-consensus/core/agreement"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
@@ -99,17 +100,15 @@ type pendingVote struct {
 type agreementData struct {
 	recv agreementReceiver
 
-	ID           types.NodeID
-	isLeader     bool
-	leader       *leaderSelector
-	lockValue    common.Hash
-	lockIter     uint64
-	period       uint64
-	requiredVote int
-	votes        map[uint64][]map[types.NodeID]*types.Vote
-	lock         sync.RWMutex
-	blocks       map[types.NodeID]*types.Block
-	blocksLock   sync.Mutex
+	ID         types.NodeID
+	isLeader   bool
+	leader     *leaderSelector
+	lockValue  common.Hash
+	lockIter   uint64
+	period     uint64
+	lock       sync.RWMutex
+	blocks     map[types.NodeID]*types.Block
+	blocksLock sync.Mutex
 }
 
 // agreement is the agreement protocal describe in the Crypto Shuffle Algorithm.
@@ -118,12 +117,11 @@ type agreement struct {
 	data           *agreementData
 	aID            *atomic.Value
 	doneChan       chan struct{}
-	notarySet      map[types.NodeID]struct{}
 	hasVoteFast    bool
 	hasOutput      bool
 	lock           sync.RWMutex
 	pendingBlock   []pendingBlock
-	pendingVote    []pendingVote
+	pendingSignal  []*agrPkg.Signal
 	candidateBlock map[common.Hash]*types.Block
 	fastForward    chan uint64
 	signer         *utils.Signer
@@ -155,8 +153,7 @@ func newAgreement(
 
 // restart the agreement
 func (a *agreement) restart(
-	notarySet map[types.NodeID]struct{}, aID types.Position, leader types.NodeID,
-	crs common.Hash) {
+	aID types.Position, leader types.NodeID, crs common.Hash) {
 	if !func() bool {
 		a.lock.Lock()
 		defer a.lock.Unlock()
@@ -170,11 +167,8 @@ func (a *agreement) restart(
 		defer a.data.lock.Unlock()
 		a.data.blocksLock.Lock()
 		defer a.data.blocksLock.Unlock()
-		a.data.votes = make(map[uint64][]map[types.NodeID]*types.Vote)
-		a.data.votes[1] = newVoteListMap()
 		a.data.period = 2
 		a.data.blocks = make(map[types.NodeID]*types.Block)
-		a.data.requiredVote = len(notarySet)/3*2 + 1
 		a.data.leader.restart(crs)
 		a.data.lockValue = types.NullBlockHash
 		a.data.lockIter = 0
@@ -187,7 +181,6 @@ func (a *agreement) restart(
 		a.hasVoteFast = false
 		a.hasOutput = false
 		a.state = newFastState(a.data)
-		a.notarySet = notarySet
 		a.candidateBlock = make(map[common.Hash]*types.Block)
 		a.aID.Store(struct {
 			pos    types.Position
@@ -219,43 +212,39 @@ func (a *agreement) restart(
 		}
 		a.pendingBlock = newPendingBlock
 	}()
-
-	replayVote := make([]*types.Vote, 0)
+	replaySignal := make([]*agrPkg.Signal, 0)
 	func() {
 		a.lock.Lock()
 		defer a.lock.Unlock()
-		newPendingVote := make([]pendingVote, 0)
-		for _, pending := range a.pendingVote {
-			if aID.Newer(&pending.vote.Position) {
+		newPendingSignal := make([]*agrPkg.Signal, 0)
+		for _, pending := range a.pendingSignal {
+			if aID.Newer(&pending.Position) {
 				continue
-			} else if pending.vote.Position == aID {
-				replayVote = append(replayVote, pending.vote)
-			} else if pending.receivedTime.After(expireTime) {
-				newPendingVote = append(newPendingVote, pending)
+			} else if pending.Position == aID {
+				replaySignal = append(replaySignal, pending)
+			} else {
+				newPendingSignal = append(newPendingSignal, pending)
 			}
 		}
-		a.pendingVote = newPendingVote
+		a.pendingSignal = newPendingSignal
 	}()
-
 	for _, block := range replayBlock {
 		if err := a.processBlock(block); err != nil {
 			a.logger.Error("failed to process block when restarting agreement",
 				"block", block)
 		}
 	}
-
-	for _, vote := range replayVote {
-		if err := a.processVote(vote); err != nil {
-			a.logger.Error("failed to process vote when restarting agreement",
-				"vote", vote)
+	for _, signal := range replaySignal {
+		if err := a.processSignal(signal); err != nil {
+			a.logger.Error("failed to process signal when restarting agreement",
+				"signal", signal)
 		}
 	}
 }
 
 func (a *agreement) stop() {
-	a.restart(make(map[types.NodeID]struct{}), types.Position{
-		ChainID: math.MaxUint32,
-	}, types.NodeID{}, common.Hash{})
+	a.restart(types.Position{ChainID: math.MaxUint32}, types.NodeID{},
+		common.Hash{})
 }
 
 func isStop(aID types.Position) bool {
@@ -315,40 +304,6 @@ func (a *agreement) nextState() (err error) {
 	return
 }
 
-func (a *agreement) sanityCheck(vote *types.Vote) error {
-	if vote.Type >= types.MaxVoteType {
-		return ErrInvalidVote
-	}
-	if _, exist := a.notarySet[vote.ProposerID]; !exist {
-		return ErrNotInNotarySet
-	}
-	ok, err := utils.VerifyVoteSignature(vote)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return ErrIncorrectVoteSignature
-	}
-	return nil
-}
-
-func (a *agreement) checkForkVote(vote *types.Vote) (
-	alreadyExist bool, err error) {
-	a.data.lock.RLock()
-	defer a.data.lock.RUnlock()
-	if votes, exist := a.data.votes[vote.Period]; exist {
-		if oldVote, exist := votes[vote.Type][vote.ProposerID]; exist {
-			alreadyExist = true
-			if vote.BlockHash != oldVote.BlockHash {
-				a.data.recv.ReportForkVote(oldVote, vote)
-				err = &ErrForkVote{vote.ProposerID, oldVote, vote}
-				return
-			}
-		}
-	}
-	return
-}
-
 // prepareVote prepares a vote.
 func (a *agreement) prepareVote(vote *types.Vote) (err error) {
 	vote.Position = a.agreementID()
@@ -367,137 +322,118 @@ func (a *agreement) updateFilter(filter *utils.VoteFilter) {
 	filter.Height = a.agreementID().Height
 }
 
-// processVote is the entry point for processing Vote.
-func (a *agreement) processVote(vote *types.Vote) error {
+// processSignal is the entry point for processing agreement.Signal.
+func (a *agreement) processSignal(signal *agrPkg.Signal) error {
+	addPullBlocks := func(votes []types.Vote) map[common.Hash]struct{} {
+		set := make(map[common.Hash]struct{})
+		for _, vote := range votes {
+			if vote.BlockHash == types.NullBlockHash ||
+				vote.BlockHash == types.SkipBlockHash {
+				continue
+			}
+			if _, found := a.findCandidateBlockNoLock(vote.BlockHash); !found {
+				set[vote.BlockHash] = struct{}{}
+			}
+		}
+		return set
+	}
 	a.lock.Lock()
 	defer a.lock.Unlock()
-	if err := a.sanityCheck(vote); err != nil {
-		return err
-	}
 	aID := a.agreementID()
-	// Agreement module has stopped.
 	if isStop(aID) {
-		// Hacky way to not drop first votes for height 0.
-		if vote.Position.Height == uint64(0) {
-			a.pendingVote = append(a.pendingVote, pendingVote{
-				vote:         vote,
-				receivedTime: time.Now().UTC(),
-			})
+		// Hacky way to not drop the first signal for height 0.
+		if signal.Position.Height == 0 {
+			a.pendingSignal = append(a.pendingSignal, signal)
 		}
+		a.logger.Trace("Dropping signal when stopped", "signal", signal)
 		return nil
 	}
-	if vote.Position != aID {
-		if aID.Newer(&vote.Position) {
+	if signal.Position != aID {
+		if aID.Newer(&signal.Position) {
+			a.logger.Trace("Dropping older stopped", "signal", signal)
 			return nil
 		}
-		a.pendingVote = append(a.pendingVote, pendingVote{
-			vote:         vote,
-			receivedTime: time.Now().UTC(),
-		})
+		a.pendingSignal = append(a.pendingSignal, signal)
 		return nil
 	}
-	exist, err := a.checkForkVote(vote)
-	if err != nil {
-		return err
-	}
-	if exist {
+	a.logger.Trace("ProcessSignal", "signal", signal)
+	if a.hasOutput {
 		return nil
 	}
-
-	a.data.lock.Lock()
-	defer a.data.lock.Unlock()
-	if _, exist := a.data.votes[vote.Period]; !exist {
-		a.data.votes[vote.Period] = newVoteListMap()
-	}
-	if _, exist := a.data.votes[vote.Period][vote.Type][vote.ProposerID]; exist {
-		return nil
-	}
-	a.data.votes[vote.Period][vote.Type][vote.ProposerID] = vote
-	if !a.hasOutput &&
-		(vote.Type == types.VoteCom ||
-			vote.Type == types.VoteFast ||
-			vote.Type == types.VoteFastCom) {
-		if hash, ok := a.data.countVoteNoLock(vote.Period, vote.Type); ok &&
-			hash != types.SkipBlockHash {
-			if vote.Type == types.VoteFast {
-				if !a.hasVoteFast {
-					a.data.recv.ProposeVote(
-						types.NewVote(types.VoteFastCom, hash, vote.Period))
-					a.data.lockValue = hash
-					a.data.lockIter = 1
-					a.hasVoteFast = true
-				}
-			} else {
-				a.hasOutput = true
-				votes := a.data.votes[vote.Period][vote.Type]
-				votesList := make([]types.Vote, 0, len(votes))
-				for _, v := range votes {
-					if v.BlockHash != hash {
-						continue
-					}
-					votesList = append(votesList, *v)
-				}
-				a.data.recv.ConfirmBlock(hash, votesList)
-				close(a.doneChan)
-				a.doneChan = nil
+	refVote := &signal.Votes[0]
+	switch signal.Type {
+	case agrPkg.SignalFork:
+		a.data.recv.ReportForkVote(refVote, &signal.Votes[1])
+	case agrPkg.SignalDecide:
+		if a.hasOutput {
+			break
+		}
+		a.hasOutput = true
+		a.data.recv.ConfirmBlock(refVote.BlockHash, signal.Votes)
+		close(a.doneChan)
+		a.doneChan = nil
+	case agrPkg.SignalLock:
+		switch signal.VType {
+		case types.VotePreCom:
+			if len(a.fastForward) > 0 {
+				break
 			}
-			return nil
-		}
-	} else if a.hasOutput {
-		return nil
-	}
-
-	// Check if the agreement requires fast-forwarding.
-	if len(a.fastForward) > 0 {
-		return nil
-	}
-	if vote.Type == types.VotePreCom {
-		if vote.Period < a.data.lockIter {
-			// This PreCom is useless for us.
-			return nil
-		}
-		if hash, ok := a.data.countVoteNoLock(vote.Period, vote.Type); ok &&
-			hash != types.SkipBlockHash {
 			// Condition 1.
-			if a.data.period >= vote.Period && vote.Period > a.data.lockIter &&
-				vote.BlockHash != a.data.lockValue {
-				a.data.lockValue = hash
-				a.data.lockIter = vote.Period
-				return nil
+			if a.data.period >= signal.Period &&
+				signal.Period > a.data.lockIter &&
+				refVote.BlockHash != a.data.lockValue {
+				a.data.lockValue = refVote.BlockHash
+				a.data.lockIter = signal.Period
+				break
 			}
 			// Condition 2.
-			if vote.Period > a.data.period {
-				if vote.Period > a.data.lockIter {
-					a.data.lockValue = hash
-					a.data.lockIter = vote.Period
+			if signal.Period > a.data.period {
+				if signal.Period > a.data.lockIter {
+					a.data.lockValue = refVote.BlockHash
+					a.data.lockIter = signal.Period
 				}
-				a.fastForward <- vote.Period
-				return nil
+				a.fastForward <- signal.Period
+				break
 			}
-		}
-	}
-	// Condition 3.
-	if vote.Type == types.VoteCom && vote.Period >= a.data.period &&
-		len(a.data.votes[vote.Period][types.VoteCom]) >= a.data.requiredVote {
-		hashes := common.Hashes{}
-		addPullBlocks := func(voteType types.VoteType) {
-			for _, vote := range a.data.votes[vote.Period][voteType] {
-				if vote.BlockHash == types.NullBlockHash ||
-					vote.BlockHash == types.SkipBlockHash {
-					continue
-				}
-				if _, found := a.findCandidateBlockNoLock(vote.BlockHash); !found {
-					hashes = append(hashes, vote.BlockHash)
-				}
+		case types.VoteFast:
+			if a.hasOutput {
+				break
 			}
+			if a.hasVoteFast {
+				break
+			}
+			a.data.recv.ProposeVote(types.NewVote(
+				types.VoteFastCom, refVote.BlockHash, signal.Period))
+			a.data.lockValue = refVote.BlockHash
+			a.data.lockIter = 1
+			a.hasVoteFast = true
+		default:
+			panic(fmt.Errorf("unknwon vote type for signal: %s, %s", refVote,
+				signal))
 		}
-		addPullBlocks(types.VotePreCom)
-		addPullBlocks(types.VoteCom)
-		if len(hashes) > 0 {
-			a.data.recv.PullBlocks(hashes)
+	case agrPkg.SignalForward:
+		switch signal.VType {
+		case types.VoteCom:
+			// Condition 3.
+			if len(a.fastForward) > 0 {
+				break
+			}
+			if signal.Period >= a.data.period {
+				hashes := common.Hashes{}
+				for h := range addPullBlocks(signal.Votes) {
+					hashes = append(hashes, h)
+				}
+				if len(hashes) > 0 {
+					a.data.recv.PullBlocks(hashes)
+				}
+				a.fastForward <- signal.Period + 1
+			}
+		default:
+			panic(fmt.Errorf("unknwon vote type for signal: %s, %s", refVote,
+				signal))
 		}
-		a.fastForward <- vote.Period + 1
-		return nil
+	default:
+		panic(fmt.Errorf("unknown signal type: %v", signal.Type))
 	}
 	return nil
 }
@@ -515,7 +451,7 @@ func (a *agreement) done() <-chan struct{} {
 		if period <= a.data.period {
 			break
 		}
-		a.data.setPeriod(period)
+		a.data.period = period
 		a.state = newPreCommitState(a.data)
 		close(a.doneChan)
 		a.doneChan = make(chan struct{})
@@ -625,43 +561,4 @@ func (a *agreement) findBlockNoLock(hash common.Hash) (*types.Block, bool) {
 		b, e = a.data.leader.findPendingBlock(hash)
 	}
 	return b, e
-}
-
-func (a *agreementData) countVote(period uint64, voteType types.VoteType) (
-	blockHash common.Hash, ok bool) {
-	a.lock.RLock()
-	defer a.lock.RUnlock()
-	return a.countVoteNoLock(period, voteType)
-}
-
-func (a *agreementData) countVoteNoLock(
-	period uint64, voteType types.VoteType) (blockHash common.Hash, ok bool) {
-	votes, exist := a.votes[period]
-	if !exist {
-		return
-	}
-	candidate := make(map[common.Hash]int)
-	for _, vote := range votes[voteType] {
-		if _, exist := candidate[vote.BlockHash]; !exist {
-			candidate[vote.BlockHash] = 0
-		}
-		candidate[vote.BlockHash]++
-	}
-	for candidateHash, votes := range candidate {
-		if votes >= a.requiredVote {
-			blockHash = candidateHash
-			ok = true
-			return
-		}
-	}
-	return
-}
-
-func (a *agreementData) setPeriod(period uint64) {
-	for i := a.period + 1; i <= period; i++ {
-		if _, exist := a.votes[i]; !exist {
-			a.votes[i] = newVoteListMap()
-		}
-	}
-	a.period = period
 }

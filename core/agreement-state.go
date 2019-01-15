@@ -157,7 +157,7 @@ func (s *commitState) nextState() (agreementState, error) {
 	hash := types.SkipBlockHash
 	// Once we received 2t+1 PreCom votes at current period, we should be
 	// able to receive that signal and update locked value/period.
-	if s.a.lockRound == s.a.period {
+	if s.a.lockIter == s.a.period {
 		hash = s.a.lockValue
 	}
 	s.a.recv.ProposeVote(types.NewVote(types.VoteCom, hash, s.a.period))
