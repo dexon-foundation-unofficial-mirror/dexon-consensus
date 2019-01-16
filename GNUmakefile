@@ -48,7 +48,7 @@ GO_TEST_TIMEOUT := 20m
 
 TEST_TARGET := go list ./... | grep -v 'vendor'
 ifeq ($(NO_INTEGRATION_TEST), true)
-	GO_TEST_TIMEOUT := 10m
+	GO_TEST_TIMEOUT := 15m
 	TEST_TARGET := $(TEST_TARGET) | grep -v 'integration_test'
 else ifeq ($(ONLY_INTEGRATION_TEST), true)
 	TEST_TARGET := $(TEST_TARGET) | grep 'integration_test'
