@@ -152,16 +152,13 @@ func newCommitState(a *agreementData) *commitState {
 func (s *commitState) state() agreementStateType { return stateCommit }
 func (s *commitState) clocks() int               { return 2 }
 func (s *commitState) nextState() (agreementState, error) {
-	s.a.lock.Lock()
-	defer s.a.lock.Unlock()
-	hash, ok := s.a.countVoteNoLock(s.a.period, types.VotePreCom)
-	if ok && hash != types.SkipBlockHash {
-		if s.a.period > s.a.lockIter {
-			s.a.lockValue = hash
-			s.a.lockIter = s.a.period
-		}
-	} else {
-		hash = types.SkipBlockHash
+	s.a.lock.RLock()
+	defer s.a.lock.RUnlock()
+	hash := types.SkipBlockHash
+	// Once we received 2t+1 PreCom votes at current period, we should be
+	// able to receive that signal and update locked value/period.
+	if s.a.lockRound == s.a.period {
+		hash = s.a.lockValue
 	}
 	s.a.recv.ProposeVote(types.NewVote(types.VoteCom, hash, s.a.period))
 	return newForwardState(s.a), nil
