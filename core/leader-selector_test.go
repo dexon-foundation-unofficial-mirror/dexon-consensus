@@ -170,9 +170,9 @@ func (s *LeaderSelectorTestSuite) TestPotentialLeader() {
 		s.Require().NoError(leader.processBlock(block))
 		if i > 0 {
 			if ok {
-				s.Contains(leader.pendingBlocks, block)
+				s.Contains(leader.pendingBlocks, block.Hash)
 			} else {
-				s.NotContains(leader.pendingBlocks, block)
+				s.NotContains(leader.pendingBlocks, block.Hash)
 			}
 			blocks[block.Hash] = block
 		}

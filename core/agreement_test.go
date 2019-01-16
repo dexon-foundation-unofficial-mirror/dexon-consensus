@@ -118,12 +118,10 @@ func (s *AgreementTestSuite) SetupTest() {
 }
 
 func (s *AgreementTestSuite) newAgreement(
-	numNotarySet, leaderIdx int) (*agreement, types.NodeID) {
+	numNotarySet, leaderIdx int, validLeader validLeaderFn) (*agreement, types.NodeID) {
 	s.Require().True(leaderIdx < numNotarySet)
 	logger := &common.NullLogger{}
-	leader := newLeaderSelector(func(*types.Block) (bool, error) {
-		return true, nil
-	}, logger)
+	leader := newLeaderSelector(validLeader, logger)
 	agreementIdx := len(s.agreement)
 	var leaderNode types.NodeID
 	notarySet := make(map[types.NodeID]struct{})
@@ -174,7 +172,9 @@ func (s *AgreementTestSuite) prepareVote(
 }
 
 func (s *AgreementTestSuite) TestSimpleConfirm() {
-	a, _ := s.newAgreement(4, -1)
+	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
+		return true, nil
+	})
 	// FastState
 	a.nextState()
 	// FastVoteState
@@ -222,7 +222,9 @@ func (s *AgreementTestSuite) TestSimpleConfirm() {
 }
 
 func (s *AgreementTestSuite) TestPartitionOnCommitVote() {
-	a, _ := s.newAgreement(4, -1)
+	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
+		return true, nil
+	})
 	// FastState
 	a.nextState()
 	// FastVoteState
@@ -266,7 +268,9 @@ func (s *AgreementTestSuite) TestPartitionOnCommitVote() {
 }
 
 func (s *AgreementTestSuite) TestFastConfirmLeader() {
-	a, leaderNode := s.newAgreement(4, 0)
+	a, leaderNode := s.newAgreement(4, 0, func(*types.Block) (bool, error) {
+		return true, nil
+	})
 	s.Require().Equal(s.ID, leaderNode)
 	// FastState
 	a.nextState()
@@ -292,7 +296,9 @@ func (s *AgreementTestSuite) TestFastConfirmLeader() {
 }
 
 func (s *AgreementTestSuite) TestFastConfirmNonLeader() {
-	a, leaderNode := s.newAgreement(4, 1)
+	a, leaderNode := s.newAgreement(4, 1, func(*types.Block) (bool, error) {
+		return true, nil
+	})
 	s.Require().NotEqual(s.ID, leaderNode)
 	// FastState
 	a.nextState()
@@ -321,7 +327,9 @@ func (s *AgreementTestSuite) TestFastConfirmNonLeader() {
 
 func (s *AgreementTestSuite) TestFastForwardCond1() {
 	votes := 0
-	a, _ := s.newAgreement(4, -1)
+	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
+		return true, nil
+	})
 	a.data.lockRound = 1
 	a.data.period = 3
 	hash := common.NewRandomHash()
@@ -375,7 +383,9 @@ func (s *AgreementTestSuite) TestFastForwardCond1() {
 
 func (s *AgreementTestSuite) TestFastForwardCond2() {
 	votes := 0
-	a, _ := s.newAgreement(4, -1)
+	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
+		return true, nil
+	})
 	a.data.period = 1
 	hash := common.NewRandomHash()
 	for nID := range a.notarySet {
@@ -412,7 +422,9 @@ func (s *AgreementTestSuite) TestFastForwardCond2() {
 func (s *AgreementTestSuite) TestFastForwardCond3() {
 	numVotes := 0
 	votes := []*types.Vote{}
-	a, _ := s.newAgreement(4, -1)
+	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
+		return true, nil
+	})
 	a.data.period = 1
 	for nID := range a.notarySet {
 		vote := s.prepareVote(nID, types.VoteCom, common.NewRandomHash(), uint64(2))
@@ -439,7 +451,9 @@ func (s *AgreementTestSuite) TestFastForwardCond3() {
 
 func (s *AgreementTestSuite) TestDecide() {
 	votes := 0
-	a, _ := s.newAgreement(4, -1)
+	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
+		return true, nil
+	})
 	a.data.period = 5
 
 	// No decide if com-vote on SKIP.
@@ -467,7 +481,9 @@ func (s *AgreementTestSuite) TestDecide() {
 }
 
 func (s *AgreementTestSuite) TestForkVote() {
-	a, _ := s.newAgreement(4, -1)
+	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
+		return true, nil
+	})
 	a.data.period = 2
 	for nID := range a.notarySet {
 		v01 := s.prepareVote(nID, types.VotePreCom, common.NewRandomHash(), 2)
@@ -480,8 +496,10 @@ func (s *AgreementTestSuite) TestForkVote() {
 	}
 }
 
-func (s AgreementTestSuite) TestForkBlock() {
-	a, _ := s.newAgreement(4, -1)
+func (s *AgreementTestSuite) TestForkBlock() {
+	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
+		return true, nil
+	})
 	for nID := range a.notarySet {
 		b01 := s.proposeBlock(nID, a.data.leader.hashCRS)
 		b02 := s.proposeBlock(nID, a.data.leader.hashCRS)
@@ -490,6 +508,22 @@ func (s AgreementTestSuite) TestForkBlock() {
 		s.Require().Equal(b01.Hash, <-s.forkBlockChan)
 		s.Require().Equal(b02.Hash, <-s.forkBlockChan)
 	}
+}
+
+func (s *AgreementTestSuite) TestFindBlockInPendingSet() {
+	a, leaderNode := s.newAgreement(4, 0, func(*types.Block) (bool, error) {
+		return false, nil
+	})
+	block := s.proposeBlock(leaderNode, a.data.leader.hashCRS)
+	s.Require().NoError(a.processBlock(block))
+	// Make sure the block goes to pending pool in leader selector.
+	block, exist := a.data.leader.findPendingBlock(block.Hash)
+	s.Require().True(exist)
+	s.Require().NotNil(block)
+	// This block is allowed to be found by findBlockNoLock.
+	block, exist = a.findBlockNoLock(block.Hash)
+	s.Require().True(exist)
+	s.Require().NotNil(block)
 }
 
 func TestAgreement(t *testing.T) {

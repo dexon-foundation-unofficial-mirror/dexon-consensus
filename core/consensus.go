@@ -137,7 +137,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 		}
 	} else {
 		var exist bool
-		block, exist = recv.agreementModule.findCandidateBlockNoLock(hash)
+		block, exist = recv.agreementModule.findBlockNoLock(hash)
 		if !exist {
 			recv.consensus.logger.Error("Unknown block confirmed",
 				"hash", hash.String()[:6],

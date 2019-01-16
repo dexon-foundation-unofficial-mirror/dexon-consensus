@@ -55,7 +55,7 @@ type leaderSelector struct {
 	numCRS        *big.Int
 	minCRSBlock   *big.Int
 	minBlockHash  common.Hash
-	pendingBlocks []*types.Block
+	pendingBlocks map[common.Hash]*types.Block
 	validLeader   validLeaderFn
 	lock          sync.Mutex
 	logger        common.Logger
@@ -94,13 +94,12 @@ func (l *leaderSelector) restart(crs common.Hash) {
 	l.hashCRS = crs
 	l.minCRSBlock = maxHash
 	l.minBlockHash = common.Hash{}
-	l.pendingBlocks = []*types.Block{}
+	l.pendingBlocks = make(map[common.Hash]*types.Block)
 }
 
 func (l *leaderSelector) leaderBlockHash() common.Hash {
 	l.lock.Lock()
 	defer l.lock.Unlock()
-	newPendingBlocks := []*types.Block{}
 	for _, b := range l.pendingBlocks {
 		ok, dist := l.potentialLeader(b)
 		if !ok {
@@ -109,15 +108,14 @@ func (l *leaderSelector) leaderBlockHash() common.Hash {
 		ok, err := l.validLeader(b)
 		if err != nil {
 			l.logger.Error("Error checking validLeader", "error", err, "block", b)
+			delete(l.pendingBlocks, b.Hash)
 			continue
 		}
 		if ok {
 			l.updateLeader(b, dist)
-		} else {
-			newPendingBlocks = append(newPendingBlocks, b)
+			delete(l.pendingBlocks, b.Hash)
 		}
 	}
-	l.pendingBlocks = newPendingBlocks
 	return l.minBlockHash
 }
 
@@ -140,7 +138,7 @@ func (l *leaderSelector) processBlock(block *types.Block) error {
 		return err
 	}
 	if !ok {
-		l.pendingBlocks = append(l.pendingBlocks, block)
+		l.pendingBlocks[block.Hash] = block
 		return nil
 	}
 	l.updateLeader(block, dist)
@@ -156,4 +154,10 @@ func (l *leaderSelector) potentialLeader(block *types.Block) (bool, *big.Int) {
 func (l *leaderSelector) updateLeader(block *types.Block, dist *big.Int) {
 	l.minCRSBlock = dist
 	l.minBlockHash = block.Hash
+}
+
+func (l *leaderSelector) findPendingBlock(
+	hash common.Hash) (*types.Block, bool) {
+	b, e := l.pendingBlocks[hash]
+	return b, e
 }

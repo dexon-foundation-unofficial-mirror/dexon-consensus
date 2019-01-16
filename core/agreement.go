@@ -545,17 +545,22 @@ func (a *agreement) addCandidateBlockNoLock(block *types.Block) {
 	a.candidateBlock[block.Hash] = block
 }
 
-func (a *agreement) findCandidateBlock(hash common.Hash) (*types.Block, bool) {
-	a.lock.RLock()
-	defer a.lock.RUnlock()
-	return a.findCandidateBlockNoLock(hash)
-}
-
 func (a *agreement) findCandidateBlockNoLock(
 	hash common.Hash) (*types.Block, bool) {
 	b, e := a.candidateBlock[hash]
 	return b, e
 }
+
+// find a block in both candidate blocks and pending blocks in leader-selector.
+// A block might be confirmed by others while we can't verify its validity.
+func (a *agreement) findBlockNoLock(hash common.Hash) (*types.Block, bool) {
+	b, e := a.findCandidateBlockNoLock(hash)
+	if !e {
+		b, e = a.data.leader.findPendingBlock(hash)
+	}
+	return b, e
+}
+
 func (a *agreementData) countVote(period uint64, voteType types.VoteType) (
 	blockHash common.Hash, ok bool) {
 	a.lock.RLock()
