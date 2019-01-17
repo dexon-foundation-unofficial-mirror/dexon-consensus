@@ -258,13 +258,20 @@ func (mgr *agreementMgr) processAgreementResult(
 	if isStop(aID) {
 		return nil
 	}
-	if result.Position.Newer(&aID) {
+	if result.Position == aID {
 		mgr.logger.Info("Syncing BA", "position", &result.Position)
+		for key := range result.Votes {
+			if err := agreement.processVote(&result.Votes[key]); err != nil {
+				return err
+			}
+		}
+	} else if result.Position.Newer(&aID) {
+		mgr.logger.Info("Fast syncing BA", "position", &result.Position)
 		nodes, err := mgr.cache.GetNodeSet(result.Position.Round)
 		if err != nil {
 			return err
 		}
-		mgr.logger.Debug("Calling Network.PullBlocks for syncing BA",
+		mgr.logger.Debug("Calling Network.PullBlocks for fast syncing BA",
 			"hash", result.BlockHash)
 		mgr.network.PullBlocks(common.Hashes{result.BlockHash})
 		mgr.logger.Debug("Calling Governance.CRS", "round", result.Position.Round)
@@ -459,16 +466,16 @@ Loop:
 						"round", recv.round(),
 						"chainID", setting.chainID)
 					err = nil
-					nextHeight = oldPos.Height
+					nextHeight = restartPos.Height
 				}
-				if isStop(oldPos) || nextHeight == 0 {
+				if isStop(restartPos) || nextHeight == 0 {
 					break
 				}
-				if nextHeight > oldPos.Height {
+				if nextHeight > restartPos.Height {
 					break
 				}
 				mgr.logger.Debug("Lattice not ready!!!",
-					"old", &oldPos, "next", nextHeight)
+					"old", &restartPos, "next", nextHeight)
 				time.Sleep(100 * time.Millisecond)
 			}
 			nextPos := types.Position{
