@@ -66,6 +66,12 @@ jobs:
       - run: make lint
       - run: make vet
 
+  security:
+    executor: go1_11
+    steps:
+      - init_workspace
+      - run: make check-security
+
   unit_test:
     executor: go1_11
     environment: 
@@ -99,11 +105,16 @@ workflows:
       - lint:
           requires:
             - dep
+      - security:
+          requires:
+            - dep
       - unit_test:
           requires:
+            - security
             - lint
       - integration_test:
           requires:
+            - security
             - lint
       - build:
           requires:

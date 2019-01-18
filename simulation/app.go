@@ -168,6 +168,7 @@ func (a *simApp) TotalOrderingDelivered(
 		BlockHash:      blockHashes,
 		ConfirmLatency: latencies,
 	}
+	// #nosec G104
 	a.netModule.Report(blockList)
 	a.DeliverID++
 }
@@ -239,6 +240,7 @@ func (a *simApp) BlockDelivered(
 		Type:    blockTimestamp,
 		Payload: jsonPayload,
 	}
+	// #nosec G104
 	a.netModule.Report(msg)
 }
 

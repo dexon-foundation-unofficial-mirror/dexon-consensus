@@ -129,7 +129,10 @@ func (n *node) run(
 	hashes := make(common.Hashes, 0, len(peers))
 	for _, pubKey := range peers {
 		nID := types.NewNodeID(pubKey)
-		n.gov.State().RequestChange(test.StateAddNode, pubKey)
+		if err :=
+			n.gov.State().RequestChange(test.StateAddNode, pubKey); err != nil {
+			panic(err)
+		}
 		hashes = append(hashes, nID.Hash)
 	}
 	n.prepareConfigs()
@@ -152,7 +155,9 @@ readyLoop:
 					continue
 				}
 				n.logger.Info("register config change", "change", c)
-				c.RegisterChange(n.gov)
+				if err := c.RegisterChange(n.gov); err != nil {
+					panic(err)
+				}
 			}
 		default:
 			panic(fmt.Errorf("receive unexpected server notification: %v", ntf))
@@ -199,21 +204,21 @@ MainLoop:
 func (n *node) prepareConfigs() {
 	// Prepare configurations.
 	cConfig := n.cfg.Node.Consensus
-	n.gov.State().RequestChange(test.StateChangeK, cConfig.K)
-	n.gov.State().RequestChange(test.StateChangePhiRatio, cConfig.PhiRatio)
-	n.gov.State().RequestChange(test.StateChangeNumChains, cConfig.NumChains)
+	n.gov.State().RequestChange(test.StateChangeK, cConfig.K)                 // #nosec G104
+	n.gov.State().RequestChange(test.StateChangePhiRatio, cConfig.PhiRatio)   // #nosec G104
+	n.gov.State().RequestChange(test.StateChangeNumChains, cConfig.NumChains) // #nosec G104
 	n.gov.State().RequestChange(
-		test.StateChangeNotarySetSize, cConfig.NotarySetSize)
-	n.gov.State().RequestChange(test.StateChangeDKGSetSize, cConfig.DKGSetSize)
+		test.StateChangeNotarySetSize, cConfig.NotarySetSize) // #nosec G104
+	n.gov.State().RequestChange(test.StateChangeDKGSetSize, cConfig.DKGSetSize) // #nosec G104
 	n.gov.State().RequestChange(test.StateChangeLambdaBA, time.Duration(
-		cConfig.LambdaBA)*time.Millisecond)
+		cConfig.LambdaBA)*time.Millisecond) // #nosec G104
 	n.gov.State().RequestChange(test.StateChangeLambdaDKG, time.Duration(
-		cConfig.LambdaDKG)*time.Millisecond)
+		cConfig.LambdaDKG)*time.Millisecond) // #nosec G104
 	n.gov.State().RequestChange(test.StateChangeRoundInterval, time.Duration(
-		cConfig.RoundInterval)*time.Millisecond)
+		cConfig.RoundInterval)*time.Millisecond) // #nosec G104
 	n.gov.State().RequestChange(test.StateChangeMinBlockInterval, time.Duration(
-		cConfig.MinBlockInterval)*time.Millisecond)
-	n.gov.State().ProposeCRS(0, crypto.Keccak256Hash([]byte(cConfig.GenesisCRS)))
+		cConfig.MinBlockInterval)*time.Millisecond) // #nosec G104
+	n.gov.State().ProposeCRS(0, crypto.Keccak256Hash([]byte(cConfig.GenesisCRS))) // #nosec G104
 	// These rounds are not safe to be registered as pending state change
 	// requests.
 	for i := uint64(0); i <= core.ConfigRoundShift+1; i++ {

@@ -77,7 +77,7 @@ $(foreach component, $(COMPONENTS), $(eval $(call BUILD_RULE,$(component))))
 
 pre-build: dep docker-dep
 
-pre-submit: dep check-format lint test vet
+pre-submit: dep check-format lint vet check-security test
 
 dep:
 	@bin/install_eth_dep.sh
@@ -97,6 +97,15 @@ lint:
 
 vet:
 	@go vet `go list ./... | grep -v 'vendor'`
+
+check-security:
+	@rm -f gosec.log
+	@gosec -quiet -out gosec.log ./... || true
+	@if [ -a gosec.log ]; then \
+		cat gosec.log; \
+		echo 'Error: security issue found'; \
+		exit 1; \
+	fi
 
 
 test-short:

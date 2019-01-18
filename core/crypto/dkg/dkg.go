@@ -45,7 +45,9 @@ const cryptoType = "bls"
 var publicKeyLength int
 
 func init() {
-	bls.Init(curve)
+	if err := bls.Init(curve); err != nil {
+		panic(err)
+	}
 
 	pubKey := &bls.PublicKey{}
 	publicKeyLength = len(pubKey.Serialize())
@@ -276,6 +278,7 @@ func (pubs *PublicKeyShares) Clone() *PublicKeyShares {
 // NewID creates a ew ID structure.
 func NewID(id []byte) ID {
 	var blsID bls.ID
+	// #nosec G104
 	blsID.SetLittleEndian(id)
 	return blsID
 }
@@ -284,6 +287,7 @@ func NewID(id []byte) ID {
 // It returns err if the byte slice is not valid.
 func BytesID(id []byte) (ID, error) {
 	var blsID bls.ID
+	// #nosec G104
 	err := blsID.SetLittleEndian(id)
 	return blsID, err
 }
@@ -325,6 +329,7 @@ func (prvs *PrivateKeyShares) SetParticipants(IDs IDs) {
 	prvs.shares = make([]PrivateKey, len(IDs))
 	prvs.shareIndex = make(map[ID]int, len(IDs))
 	for idx, ID := range IDs {
+		// #nosec G104
 		prvs.shares[idx].privateKey.Set(prvs.masterPrivateKey, &ID)
 		prvs.shareIndex[ID] = idx
 	}
@@ -411,7 +416,9 @@ func (pubs *PublicKeyShares) Share(ID ID) (*PublicKey, error) {
 	if err := pk.publicKey.Set(pubs.masterPublicKey, &ID); err != nil {
 		return nil, err
 	}
-	pubs.AddShare(ID, &pk)
+	if err := pubs.AddShare(ID, &pk); err != nil {
+		return nil, err
+	}
 	return &pk, nil
 }
 

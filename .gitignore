@@ -24,4 +24,5 @@ simulation/kubernetes/*.log
 simulation/kubernetes/config.toml
 simulation/kubernetes/validator.yaml
 .dep
+gosec.log
 

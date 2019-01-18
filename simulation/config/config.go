@@ -157,7 +157,7 @@ func GenerateDefault(path string) error {
 
 // Read reads the config from a file.
 func Read(path string) (*Config, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304
 	if err != nil {
 		return nil, err
 	}

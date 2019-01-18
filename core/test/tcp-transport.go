@@ -142,7 +142,9 @@ const handshakeMsg = "Welcome to DEXON network for test."
 
 func (t *TCPTransport) serverHandshake(conn net.Conn) (
 	nID types.NodeID, err error) {
-	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	if err := conn.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		panic(err)
+	}
 	msg := &tcpMessage{
 		NodeID: t.nID,
 		Type:   "handshake",
@@ -172,7 +174,9 @@ func (t *TCPTransport) serverHandshake(conn net.Conn) (
 
 func (t *TCPTransport) clientHandshake(conn net.Conn) (
 	nID types.NodeID, err error) {
-	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	if err := conn.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+		panic(err)
+	}
 	var payload []byte
 	if payload, err = t.read(conn); err != nil {
 		return
@@ -497,7 +501,9 @@ func (t *TCPTransport) listenerRoutine(listener *net.TCPListener) {
 		default:
 		}
 
-		listener.SetDeadline(time.Now().Add(5 * time.Second))
+		if err := listener.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			panic(err)
+		}
 		conn, err := listener.Accept()
 		if err != nil {
 			// Check if the connection is closed.
@@ -632,6 +638,7 @@ func (t *TCPTransportClient) Join(
 			if nID == t.nID {
 				break
 			}
+			// #nosec G104
 			ln.Close()
 		}
 		if err != nil {
@@ -656,7 +663,7 @@ func (t *TCPTransportClient) Join(
 			}
 		}
 		// The port is used, generate another port randomly.
-		t.localPort = 1024 + rand.Int()%1024
+		t.localPort = 1024 + rand.Int()%1024 // #nosec G404
 	}
 
 	fmt.Println("Connecting to server", "endpoint", serverEndpoint)

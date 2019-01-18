@@ -104,6 +104,7 @@ func (t *FakeTransport) Broadcast(endpoints map[types.NodeID]struct{},
 		}
 		go func(nID types.NodeID) {
 			time.Sleep(latency.Delay())
+			// #nosec G104
 			t.Send(nID, msg)
 		}(ID)
 	}
@@ -135,7 +136,9 @@ func (t *FakeTransport) Join(
 	if t.serverChannel, ok = serverEndpoint.(chan *TransportEnvelope); !ok {
 		return nil, fmt.Errorf("accept channel of *TransportEnvelope when join")
 	}
-	t.Report(t)
+	if err := t.Report(t); err != nil {
+		panic(err)
+	}
 	// Wait for peers info.
 	for {
 		envelope := <-t.recvChannel

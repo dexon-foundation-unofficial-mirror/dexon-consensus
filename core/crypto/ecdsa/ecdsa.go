@@ -29,7 +29,9 @@ import (
 const cryptoType = "ecdsa"
 
 func init() {
-	crypto.RegisterSigToPub(cryptoType, SigToPub)
+	if err := crypto.RegisterSigToPub(cryptoType, SigToPub); err != nil {
+		panic(err)
+	}
 }
 
 // PrivateKey represents a private key structure used in geth and implments

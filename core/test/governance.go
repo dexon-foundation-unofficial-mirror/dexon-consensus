@@ -255,7 +255,9 @@ func (g *Governance) broadcastPendingStateChanges() {
 	if err != nil {
 		panic(err)
 	}
-	g.networkModule.Broadcast(packedStateChanges(packed))
+	if err := g.networkModule.Broadcast(packedStateChanges(packed)); err != nil {
+		panic(err)
+	}
 }
 
 // State allows to access embed State instance.

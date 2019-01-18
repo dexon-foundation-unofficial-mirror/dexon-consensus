@@ -172,7 +172,7 @@ func newDKGProtocol(
 }
 
 func (d *dkgProtocol) processMasterPublicKeys(
-	mpks []*typesDKG.MasterPublicKey) error {
+	mpks []*typesDKG.MasterPublicKey) (err error) {
 	d.idMap = make(map[types.NodeID]dkg.ID, len(mpks))
 	d.mpkMap = make(map[types.NodeID]*dkg.PublicKeyShares, len(mpks))
 	d.prvSharesReceived = make(map[types.NodeID]struct{}, len(mpks))
@@ -187,7 +187,8 @@ func (d *dkgProtocol) processMasterPublicKeys(
 	for _, mpk := range mpks {
 		share, ok := d.masterPrivateShare.Share(mpk.DKGID)
 		if !ok {
-			return ErrIDShareNotFound
+			err = ErrIDShareNotFound
+			continue
 		}
 		d.recv.ProposeDKGPrivateShare(&typesDKG.PrivateShare{
 			ReceiverID:   mpk.ProposerID,
@@ -195,7 +196,7 @@ func (d *dkgProtocol) processMasterPublicKeys(
 			PrivateShare: *share,
 		})
 	}
-	return nil
+	return
 }
 
 func (d *dkgProtocol) proposeNackComplaints() {

@@ -163,7 +163,10 @@ func (cc *configurationChain) runDKG(round uint64) error {
 		return nil
 	}
 	// Phase 2(T = 0): Exchange DKG secret key share.
-	cc.dkg.processMasterPublicKeys(mpks)
+	if err := cc.dkg.processMasterPublicKeys(mpks); err != nil {
+		cc.logger.Error("Failed to process master public key",
+			"error", err)
+	}
 	cc.mpkReady = true
 	for _, prvShare := range cc.pendingPrvShare {
 		if err := cc.dkg.processPrivateShare(prvShare); err != nil {
@@ -184,7 +187,10 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	// Phase 5(T = 2λ): Propose Anti nack complaint.
 	cc.logger.Debug("Calling Governance.DKGComplaints", "round", round)
 	complaints := cc.gov.DKGComplaints(round)
-	cc.dkg.processNackComplaints(complaints)
+	if err := cc.dkg.processNackComplaints(complaints); err != nil {
+		cc.logger.Error("Failed to process NackComplaint",
+			"error", err)
+	}
 	cc.dkgLock.Unlock()
 	<-ticker.Tick()
 	cc.dkgLock.Lock()

@@ -84,6 +84,7 @@ func main() {
 		if err := pprof.WriteHeapProfile(f); err != nil {
 			log.Fatal("could not write memory profile: ", err)
 		}
+		// #nosec G104
 		f.Close()
 	}
 }

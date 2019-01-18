@@ -105,7 +105,9 @@ func main() {
 		test.NewStopByConfirmedBlocks(blockPerNode, apps, dbs))
 	now := time.Now().UTC()
 	for _, v := range nodes {
-		v.Bootstrap(sch, now)
+		if err := v.Bootstrap(sch, now); err != nil {
+			panic(err)
+		}
 	}
 	// Run the simulation.
 	sch.Run(cfg.Scheduler.WorkerNum)
@@ -126,6 +128,7 @@ func main() {
 		if err := pprof.WriteHeapProfile(f); err != nil {
 			log.Fatal("could not write memory profile: ", err)
 		}
+		// #nosec G104
 		f.Close()
 	}
 
