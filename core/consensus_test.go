@@ -623,34 +623,7 @@ func (s *ConsensusTestSuite) TestSyncBA() {
 	aID := con.baMgr.baModules[0].agreementID()
 	s.Equal(pos, aID)
 
-	// Test negative case.
-	baResult.BlockHash = common.NewRandomHash()
-	s.Equal(ErrIncorrectVoteBlockHash, con.ProcessAgreementResult(baResult))
-	baResult.BlockHash = hash
-
-	baResult.Position.Height++
-	s.Equal(ErrIncorrectVotePosition, con.ProcessAgreementResult(baResult))
-	baResult.Position = pos
-
-	baResult.Votes[0].Type = types.VotePreCom
-	s.Equal(ErrIncorrectVoteType, con.ProcessAgreementResult(baResult))
-	baResult.Votes[0].Type = types.VoteCom
-
-	baResult.Votes[0].ProposerID = types.NodeID{Hash: common.NewRandomHash()}
-	s.Equal(ErrIncorrectVoteProposer, con.ProcessAgreementResult(baResult))
-	baResult.Votes[0].ProposerID = types.NewNodeID(pubKeys[0])
-
-	baResult.Votes[0].Signature, err = prvKeys[0].Sign(common.NewRandomHash())
-	s.Require().NoError(err)
-	s.Equal(ErrIncorrectVoteSignature, con.ProcessAgreementResult(baResult))
-	s.Require().NoError(signers[0].SignVote(&baResult.Votes[0]))
-
-	baResult.Votes = baResult.Votes[:1]
-	s.Equal(ErrNotEnoughVotes, con.ProcessAgreementResult(baResult))
-	for range signers {
-		baResult.Votes = append(baResult.Votes, baResult.Votes[0])
-	}
-	s.Equal(ErrNotEnoughVotes, con.ProcessAgreementResult(baResult))
+	// Negative cases are moved to TestVerifyAgreementResult in utils_test.go.
 }
 
 func TestConsensus(t *testing.T) {

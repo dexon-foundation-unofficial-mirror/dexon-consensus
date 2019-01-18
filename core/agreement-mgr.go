@@ -258,7 +258,7 @@ func (mgr *agreementMgr) processAgreementResult(
 	if isStop(aID) {
 		return nil
 	}
-	if result.Position == aID {
+	if result.Position == aID && !agreement.confirmed() {
 		mgr.logger.Info("Syncing BA", "position", &result.Position)
 		for key := range result.Votes {
 			if err := agreement.processVote(&result.Votes[key]); err != nil {

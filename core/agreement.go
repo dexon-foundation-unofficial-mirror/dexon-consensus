@@ -466,6 +466,12 @@ func (a *agreement) done() <-chan struct{} {
 	return ch
 }
 
+func (a *agreement) confirmed() bool {
+	a.lock.RLock()
+	defer a.lock.RUnlock()
+	return a.hasOutput
+}
+
 // processBlock is the entry point for processing Block.
 func (a *agreement) processBlock(block *types.Block) error {
 	a.lock.Lock()

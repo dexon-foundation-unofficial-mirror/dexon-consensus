@@ -49,14 +49,6 @@ var (
 		"incorrect agreement result position")
 	ErrNotEnoughVotes = fmt.Errorf(
 		"not enought votes")
-	ErrIncorrectVoteBlockHash = fmt.Errorf(
-		"incorrect vote block hash")
-	ErrIncorrectVoteType = fmt.Errorf(
-		"incorrect vote type")
-	ErrIncorrectVotePosition = fmt.Errorf(
-		"incorrect vote position")
-	ErrIncorrectVoteProposer = fmt.Errorf(
-		"incorrect vote proposer")
 	ErrCRSNotReady = fmt.Errorf(
 		"CRS not ready")
 	ErrConfigurationNotReady = fmt.Errorf(

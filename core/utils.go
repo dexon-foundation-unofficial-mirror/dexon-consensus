@@ -32,6 +32,20 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
+// Errors for utils.
+var (
+	ErrIncorrectVoteBlockHash = fmt.Errorf(
+		"incorrect vote block hash")
+	ErrIncorrectVoteType = fmt.Errorf(
+		"incorrect vote type")
+	ErrIncorrectVotePosition = fmt.Errorf(
+		"incorrect vote position")
+	ErrIncorrectVoteProposer = fmt.Errorf(
+		"incorrect vote proposer")
+	ErrIncorrectVotePeriod = fmt.Errorf(
+		"incorrect vote period")
+)
+
 // NodeSetCache is type alias to avoid fullnode compile error when moving
 // it to core/utils package.
 type NodeSetCache = utils.NodeSetCache
@@ -161,10 +175,14 @@ func VerifyAgreementResult(
 	}
 	voted := make(map[types.NodeID]struct{}, len(notarySet))
 	voteType := res.Votes[0].Type
+	votePeriod := res.Votes[0].Period
 	if voteType != types.VoteFast && voteType != types.VoteCom {
 		return ErrIncorrectVoteType
 	}
 	for _, vote := range res.Votes {
+		if vote.Period != votePeriod {
+			return ErrIncorrectVotePeriod
+		}
 		if res.IsEmptyBlock {
 			if (vote.BlockHash != common.Hash{}) {
 				return ErrIncorrectVoteBlockHash
