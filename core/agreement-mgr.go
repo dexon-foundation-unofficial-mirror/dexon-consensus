@@ -111,7 +111,7 @@ type agreementMgr struct {
 	//  - append a config from new round.
 	// The routine running corresponding baModule, however, doesn't have to
 	// acquire this lock.
-	lock sync.RWMutex
+	chainLock sync.RWMutex
 }
 
 func newAgreementMgr(con *Consensus, initRound uint64,
@@ -134,8 +134,8 @@ func newAgreementMgr(con *Consensus, initRound uint64,
 }
 
 func (mgr *agreementMgr) getConfig(round uint64) *agreementMgrConfig {
-	mgr.lock.RLock()
-	defer mgr.lock.RUnlock()
+	mgr.chainLock.RLock()
+	defer mgr.chainLock.RUnlock()
 	if round < mgr.initRound {
 		panic(ErrRoundOutOfRange)
 	}
@@ -147,8 +147,8 @@ func (mgr *agreementMgr) getConfig(round uint64) *agreementMgrConfig {
 }
 
 func (mgr *agreementMgr) run() {
-	mgr.lock.Lock()
-	defer mgr.lock.Unlock()
+	mgr.chainLock.Lock()
+	defer mgr.chainLock.Unlock()
 	if mgr.isRunning {
 		return
 	}
@@ -164,8 +164,8 @@ func (mgr *agreementMgr) run() {
 
 func (mgr *agreementMgr) appendConfig(
 	round uint64, config *types.Config, crs common.Hash) (err error) {
-	mgr.lock.Lock()
-	defer mgr.lock.Unlock()
+	mgr.chainLock.Lock()
+	defer mgr.chainLock.Unlock()
 	if round != uint64(len(mgr.configs))+mgr.initRound {
 		return ErrRoundNotIncreasing
 	}
@@ -219,8 +219,8 @@ func (mgr *agreementMgr) appendConfig(
 }
 
 func (mgr *agreementMgr) processVote(v *types.Vote) error {
-	mgr.lock.RLock()
-	defer mgr.lock.RUnlock()
+	mgr.chainLock.RLock()
+	defer mgr.chainLock.RUnlock()
 	if v.Position.ChainID >= uint32(len(mgr.baModules)) {
 		mgr.logger.Error("Process vote for unknown chain to BA",
 			"position", &v.Position,
@@ -242,8 +242,8 @@ func (mgr *agreementMgr) processVote(v *types.Vote) error {
 }
 
 func (mgr *agreementMgr) processBlock(b *types.Block) error {
-	mgr.lock.RLock()
-	defer mgr.lock.RUnlock()
+	mgr.chainLock.RLock()
+	defer mgr.chainLock.RUnlock()
 	if b.Position.ChainID >= uint32(len(mgr.baModules)) {
 		mgr.logger.Error("Process block for unknown chain to BA",
 			"position", &b.Position,
@@ -280,8 +280,8 @@ func (mgr *agreementMgr) untouchAgreementResult(
 
 func (mgr *agreementMgr) processAgreementResult(
 	result *types.AgreementResult) error {
-	mgr.lock.RLock()
-	defer mgr.lock.RUnlock()
+	mgr.chainLock.RLock()
+	defer mgr.chainLock.RUnlock()
 	if result.Position.ChainID >= uint32(len(mgr.baModules)) {
 		mgr.logger.Error("Process unknown result for unknown chain to BA",
 			"position", &result.Position,
@@ -334,8 +334,8 @@ func (mgr *agreementMgr) processAgreementResult(
 func (mgr *agreementMgr) stop() {
 	// Stop all running agreement modules.
 	func() {
-		mgr.lock.Lock()
-		defer mgr.lock.Unlock()
+		mgr.chainLock.Lock()
+		defer mgr.chainLock.Unlock()
 		for _, agr := range mgr.baModules {
 			agr.stop()
 		}
@@ -347,8 +347,8 @@ func (mgr *agreementMgr) stop() {
 func (mgr *agreementMgr) runBA(initRound uint64, chainID uint32) {
 	// Acquire agreement module.
 	agr, recv := func() (*agreement, *consensusBAReceiver) {
-		mgr.lock.RLock()
-		defer mgr.lock.RUnlock()
+		mgr.chainLock.RLock()
+		defer mgr.chainLock.RUnlock()
 		agr := mgr.baModules[chainID]
 		return agr, agr.data.recv.(*consensusBAReceiver)
 	}()
