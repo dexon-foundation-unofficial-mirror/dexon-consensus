@@ -113,8 +113,8 @@ func (recv *consensusBAReceiver) ProposeBlock() common.Hash {
 	return block.Hash
 }
 
-func (recv *consensusBAReceiver) ConfirmBlock(
-	hash common.Hash, votes map[types.NodeID]*types.Vote) {
+func (recv *consensusBAReceiver) ConfirmBlock(hash common.Hash,
+	votes []types.Vote) {
 	var block *types.Block
 	isEmptyBlockConfirmed := hash == common.Hash{}
 	if isEmptyBlockConfirmed {
@@ -213,17 +213,10 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 		}(block.ParentHash)
 	}
 	if recv.isNotary {
-		voteList := make([]types.Vote, 0, len(votes))
-		for _, vote := range votes {
-			if vote.BlockHash != hash {
-				continue
-			}
-			voteList = append(voteList, *vote)
-		}
 		result := &types.AgreementResult{
 			BlockHash:    block.Hash,
 			Position:     block.Position,
-			Votes:        voteList,
+			Votes:        votes,
 			IsEmptyBlock: isEmptyBlockConfirmed,
 		}
 		recv.consensus.logger.Debug("Propose AgreementResult",

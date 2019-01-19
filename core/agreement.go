@@ -79,7 +79,7 @@ type agreementReceiver interface {
 	ProposeBlock() common.Hash
 	// ConfirmBlock is called with lock hold. User can safely use all data within
 	// agreement module.
-	ConfirmBlock(common.Hash, map[types.NodeID]*types.Vote)
+	ConfirmBlock(common.Hash, []types.Vote)
 	PullBlocks(common.Hashes)
 	ReportForkVote(v1, v2 *types.Vote)
 	ReportForkBlock(b1, b2 *types.Block)
@@ -429,8 +429,15 @@ func (a *agreement) processVote(vote *types.Vote) error {
 				}
 			} else {
 				a.hasOutput = true
-				a.data.recv.ConfirmBlock(hash,
-					a.data.votes[vote.Period][vote.Type])
+				votes := a.data.votes[vote.Period][vote.Type]
+				votesList := make([]types.Vote, 0, len(votes))
+				for _, v := range votes {
+					if v.BlockHash != hash {
+						continue
+					}
+					votesList = append(votesList, *v)
+				}
+				a.data.recv.ConfirmBlock(hash, votesList)
 				close(a.doneChan)
 				a.doneChan = nil
 			}

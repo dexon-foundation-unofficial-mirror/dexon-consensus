@@ -54,7 +54,7 @@ func (r *agreementStateTestReceiver) ProposeBlock() common.Hash {
 }
 
 func (r *agreementStateTestReceiver) ConfirmBlock(block common.Hash,
-	_ map[types.NodeID]*types.Vote) {
+	_ []types.Vote) {
 	r.s.confirmChan <- block
 }
 
