@@ -23,6 +23,13 @@ commands:
             else
               make test-short
             fi
+  install_npm:
+    steps:
+      - run:
+          name: Install npm
+          command: |
+            curl -sL https://deb.nodesource.com/setup_11.x | sudo bash -
+            sudo apt-get install -y nodejs
 
 executors:
   go1_11:
@@ -96,8 +103,31 @@ jobs:
       - init_workspace
       - run: make
 
+  snyk:
+    executor: go1_11
+    steps:
+      - init_workspace
+      - install_npm
+      - run: sudo npm install -g snyk
+      - run: snyk auth $SNYK_APIKEY_JHU
+      - run: snyk monitor --org=dexon-foundation --project=dexon-consensus
+
 workflows:
   version: 2.1
+
+  nightly:
+    jobs:
+      - dep
+      - snyk:
+          requires:
+            - dep
+    triggers:
+      - schedule:
+          cron: "0 8 * * *"
+          filters:
+            branches:
+              only:
+                - master
 
   test_and_build:
     jobs:
