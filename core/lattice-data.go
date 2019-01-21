@@ -106,7 +106,7 @@ func newLatticeDataConfig(
 // latticeData is a module for storing lattice.
 type latticeData struct {
 	// DB for getting blocks purged in memory.
-	db db.Reader
+	db db.Database
 	// chains stores chains' blocks and other info.
 	chains []*chainStatus
 	// blockByHash stores blocks, indexed by block hash.
@@ -119,7 +119,7 @@ type latticeData struct {
 
 // newLatticeData creates a new latticeData instance.
 func newLatticeData(
-	db db.Reader,
+	db db.Database,
 	dMoment time.Time,
 	round uint64,
 	config *types.Config) (data *latticeData) {
@@ -291,21 +291,26 @@ func (data *latticeData) addBlock(
 		bAck    *types.Block
 		updated bool
 	)
+	if err = data.db.PutBlock(*block); err != nil {
+		if err == db.ErrBlockExists {
+			// If a node is crashed and restarted, we might encounter some
+			// blocks that already confirmed but not delivered yet. Then
+			// syncer might still try to add that block in this way.
+			err = nil
+		} else {
+			return
+		}
+	}
 	data.chains[block.Position.ChainID].addBlock(block)
 	data.blockByHash[block.Hash] = block
 	// Update lastAckPos.
 	for _, ack := range block.Acks {
 		if bAck, err = data.findBlock(ack); err != nil {
-			if err == db.ErrBlockDoesNotExist {
-				err = nil
-				continue
-			}
 			return
 		}
 		data.chains[bAck.Position.ChainID].lastAckPos[block.Position.ChainID] =
 			bAck.Position.Clone()
 	}
-
 	// Extract deliverable blocks to total ordering. A block is deliverable to
 	// total ordering iff all its ackings blocks were delivered to total ordering.
 	for {

@@ -254,9 +254,6 @@ func (n *Node) processBlock(b *types.Block) (events []*test.Event, err error) {
 	}
 	// Deliver blocks.
 	for _, b = range delivered {
-		if err = n.dbModule.PutBlock(*b); err != nil {
-			panic(err)
-		}
 		b.Finalization.Height = n.prevFinalHeight + 1
 		b.Finalization.ParentHash = n.prevHash
 		n.appModule.BlockDelivered(b.Hash, b.Position, b.Finalization)

@@ -1244,9 +1244,6 @@ func (con *Consensus) deliverFinalizedBlocksWithoutLock() (err error) {
 
 // processBlock is the entry point to submit one block to a Consensus instance.
 func (con *Consensus) processBlock(block *types.Block) (err error) {
-	if err = con.db.PutBlock(*block); err != nil && err != db.ErrBlockExists {
-		return
-	}
 	con.lock.Lock()
 	defer con.lock.Unlock()
 	// Block processed by lattice can be out-of-order. But the output of lattice
