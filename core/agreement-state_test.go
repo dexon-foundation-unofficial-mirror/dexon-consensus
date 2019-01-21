@@ -165,25 +165,13 @@ func (s *AgreementStateTestSuite) TestFastVoteState() {
 	a := s.newAgreement(4)
 	state := newFastVoteState(a.data)
 	s.Equal(stateFastVote, state.state())
-	s.Equal(2, state.clocks())
+	s.Equal(3, state.clocks())
 
 	// The vote proposed is not implemented inside state.
 	a.data.period = 1
 	newState, err := state.nextState()
 	s.Require().NoError(err)
 	s.Require().Len(s.voteChan, 0)
-	s.Equal(stateFastRollback, newState.state())
-}
-
-func (s *AgreementStateTestSuite) TestFastRollbackState() {
-	a := s.newAgreement(4)
-	state := newFastRollbackState(a.data)
-	s.Equal(stateFastRollback, state.state())
-	s.Equal(1, state.clocks())
-
-	a.data.period = 1
-	newState, err := state.nextState()
-	s.Require().NoError(err)
 	s.Equal(stateInitial, newState.state())
 }
 
@@ -264,7 +252,7 @@ func (s *AgreementStateTestSuite) TestCommitState() {
 	s.Require().NoError(err)
 	s.Require().Len(s.voteChan, 1)
 	s.Equal(block.Hash, a.data.lockValue)
-	s.Equal(uint64(1), a.data.lockRound)
+	s.Equal(uint64(1), a.data.lockIter)
 	vote := <-s.voteChan
 	s.Equal(types.VoteCom, vote.Type)
 	s.Equal(block.Hash, vote.BlockHash)

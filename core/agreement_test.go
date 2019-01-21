@@ -179,8 +179,6 @@ func (s *AgreementTestSuite) TestSimpleConfirm() {
 	a.nextState()
 	// FastVoteState
 	a.nextState()
-	// FastRollbackState
-	a.nextState()
 	// InitialState
 	a.nextState()
 	// PreCommitState
@@ -210,7 +208,7 @@ func (s *AgreementTestSuite) TestSimpleConfirm() {
 	s.Equal(types.VoteCom, vote.Type)
 	s.Equal(blockHash, vote.BlockHash)
 	s.Equal(blockHash, a.data.lockValue)
-	s.Equal(uint64(1), a.data.lockRound)
+	s.Equal(uint64(1), a.data.lockIter)
 	for nID := range s.signers {
 		v := s.copyVote(vote, nID)
 		s.Require().NoError(a.processVote(v))
@@ -229,8 +227,6 @@ func (s *AgreementTestSuite) TestPartitionOnCommitVote() {
 	a.nextState()
 	// FastVoteState
 	a.nextState()
-	// FastRollbackState
-	a.nextState()
 	// InitialState
 	a.nextState()
 	// PreCommitState
@@ -260,7 +256,7 @@ func (s *AgreementTestSuite) TestPartitionOnCommitVote() {
 	s.Equal(types.VoteCom, vote.Type)
 	s.Equal(blockHash, vote.BlockHash)
 	s.Equal(blockHash, a.data.lockValue)
-	s.Equal(uint64(1), a.data.lockRound)
+	s.Equal(uint64(1), a.data.lockIter)
 	// RepeateVoteState
 	a.nextState()
 	s.True(a.pullVotes())
@@ -281,15 +277,27 @@ func (s *AgreementTestSuite) TestFastConfirmLeader() {
 	s.Require().True(exist)
 	s.Require().Equal(s.ID, block.ProposerID)
 	s.Require().NoError(a.processBlock(block))
+	// Wait some time for go routine in processBlock to finish.
+	time.Sleep(500 * time.Millisecond)
 	s.Require().Len(s.voteChan, 1)
 	vote := <-s.voteChan
 	s.Equal(types.VoteFast, vote.Type)
 	s.Equal(blockHash, vote.BlockHash)
+	s.Require().Len(s.voteChan, 0)
 	for nID := range s.signers {
 		v := s.copyVote(vote, nID)
 		s.Require().NoError(a.processVote(v))
 	}
 	// We have enough of Fast-Votes.
+	s.Require().Len(s.voteChan, 1)
+	vote = <-s.voteChan
+	s.Equal(types.VoteFastCom, vote.Type)
+	s.Equal(blockHash, vote.BlockHash)
+	for nID := range s.signers {
+		v := s.copyVote(vote, nID)
+		s.Require().NoError(a.processVote(v))
+	}
+	// We have enough of Fast-ConfirmVotes.
 	s.Require().Len(s.confirmChan, 1)
 	confirmBlock := <-s.confirmChan
 	s.Equal(blockHash, confirmBlock)
@@ -307,6 +315,8 @@ func (s *AgreementTestSuite) TestFastConfirmNonLeader() {
 	block := s.proposeBlock(leaderNode, a.data.leader.hashCRS)
 	s.Require().Equal(leaderNode, block.ProposerID)
 	s.Require().NoError(a.processBlock(block))
+	// Wait some time for go routine in processBlock to finish.
+	time.Sleep(500 * time.Millisecond)
 	var vote *types.Vote
 	select {
 	case vote = <-s.voteChan:
@@ -320,6 +330,13 @@ func (s *AgreementTestSuite) TestFastConfirmNonLeader() {
 		s.Require().NoError(a.processVote(v))
 	}
 	// We have enough of Fast-Votes.
+	s.Require().Len(s.voteChan, 1)
+	vote = <-s.voteChan
+	for nID := range s.signers {
+		v := s.copyVote(vote, nID)
+		s.Require().NoError(a.processVote(v))
+	}
+	// We have enough of Fast-ConfirmVotes.
 	s.Require().Len(s.confirmChan, 1)
 	confirmBlock := <-s.confirmChan
 	s.Equal(block.Hash, confirmBlock)
@@ -330,7 +347,7 @@ func (s *AgreementTestSuite) TestFastForwardCond1() {
 	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
 		return true, nil
 	})
-	a.data.lockRound = 1
+	a.data.lockIter = 1
 	a.data.period = 3
 	hash := common.NewRandomHash()
 	for nID := range a.notarySet {
@@ -347,11 +364,11 @@ func (s *AgreementTestSuite) TestFastForwardCond1() {
 	default:
 	}
 	s.Equal(hash, a.data.lockValue)
-	s.Equal(uint64(2), a.data.lockRound)
+	s.Equal(uint64(2), a.data.lockIter)
 	s.Equal(uint64(3), a.data.period)
 
 	// No fast forward if vote.BlockHash == SKIP
-	a.data.lockRound = 6
+	a.data.lockIter = 6
 	a.data.period = 8
 	a.data.lockValue = nullBlockHash
 	for nID := range a.notarySet {
@@ -366,7 +383,7 @@ func (s *AgreementTestSuite) TestFastForwardCond1() {
 	}
 
 	// No fast forward if lockValue == vote.BlockHash.
-	a.data.lockRound = 11
+	a.data.lockIter = 11
 	a.data.period = 13
 	a.data.lockValue = hash
 	for nID := range a.notarySet {
@@ -402,7 +419,7 @@ func (s *AgreementTestSuite) TestFastForwardCond2() {
 		s.FailNow("Expecting fast forward.")
 	}
 	s.Equal(hash, a.data.lockValue)
-	s.Equal(uint64(2), a.data.lockRound)
+	s.Equal(uint64(2), a.data.lockIter)
 	s.Equal(uint64(2), a.data.period)
 
 	// No fast forward if vote.BlockHash == SKIP

@@ -96,7 +96,7 @@ func (s *UtilsTestSuite) TestVerifyAgreementResult() {
 	baResult.Votes[0].Type = types.VoteCom
 
 	// Vote type should be the same.
-	baResult.Votes[1].Type = types.VoteFast
+	baResult.Votes[1].Type = types.VoteFastCom
 	s.Equal(ErrIncorrectVoteType, VerifyAgreementResult(baResult, cache))
 	baResult.Votes[1].Type = types.VoteCom
 

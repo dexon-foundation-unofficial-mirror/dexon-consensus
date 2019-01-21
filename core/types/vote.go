@@ -33,6 +33,7 @@ const (
 	VotePreCom
 	VoteCom
 	VoteFast
+	VoteFastCom
 	// Do not add any type below MaxVoteType.
 	MaxVoteType
 )

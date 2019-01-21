@@ -176,7 +176,7 @@ func VerifyAgreementResult(
 	voted := make(map[types.NodeID]struct{}, len(notarySet))
 	voteType := res.Votes[0].Type
 	votePeriod := res.Votes[0].Period
-	if voteType != types.VoteFast && voteType != types.VoteCom {
+	if voteType != types.VoteFastCom && voteType != types.VoteCom {
 		return ErrIncorrectVoteType
 	}
 	for _, vote := range res.Votes {

@@ -37,7 +37,6 @@ type agreementStateType int
 const (
 	stateFast agreementStateType = iota
 	stateFastVote
-	stateFastRollback
 	stateInitial
 	statePreCommit
 	stateCommit
@@ -98,23 +97,8 @@ func newFastVoteState(a *agreementData) *fastVoteState {
 }
 
 func (s *fastVoteState) state() agreementStateType { return stateFastVote }
-func (s *fastVoteState) clocks() int               { return 2 }
+func (s *fastVoteState) clocks() int               { return 3 }
 func (s *fastVoteState) nextState() (agreementState, error) {
-	return newFastRollbackState(s.a), nil
-}
-
-//----- FastRollbackState -----
-type fastRollbackState struct {
-	a *agreementData
-}
-
-func newFastRollbackState(a *agreementData) *fastRollbackState {
-	return &fastRollbackState{a: a}
-}
-
-func (s *fastRollbackState) state() agreementStateType { return stateFastRollback }
-func (s *fastRollbackState) clocks() int               { return 1 }
-func (s *fastRollbackState) nextState() (agreementState, error) {
 	return newInitialState(s.a), nil
 }
 
@@ -182,8 +166,10 @@ func (s *commitState) nextState() (agreementState, error) {
 	defer s.a.lock.Unlock()
 	hash, ok := s.a.countVoteNoLock(s.a.period, types.VotePreCom)
 	if ok && hash != skipBlockHash {
-		s.a.lockValue = hash
-		s.a.lockRound = s.a.period
+		if s.a.period > s.a.lockIter {
+			s.a.lockValue = hash
+			s.a.lockIter = s.a.period
+		}
 	} else {
 		hash = skipBlockHash
 	}
