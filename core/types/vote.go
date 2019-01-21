@@ -38,6 +38,22 @@ const (
 	MaxVoteType
 )
 
+func (t VoteType) String() string {
+	switch t {
+	case VoteInit:
+		return "Init"
+	case VotePreCom:
+		return "PreCom"
+	case VoteCom:
+		return "Com"
+	case VoteFast:
+		return "Fast"
+	case VoteFastCom:
+		return "FastCom"
+	}
+	panic(fmt.Errorf("attempting to dump unknown vote type: %d", t))
+}
+
 // NullBlockHash is the blockHash for ⊥ value.
 var NullBlockHash common.Hash
 
