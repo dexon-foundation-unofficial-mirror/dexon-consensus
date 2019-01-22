@@ -405,6 +405,7 @@ func (con *Consensus) processFinalizedBlock(block *types.Block) error {
 		}
 		con.validatedChains[b.Position.ChainID] = struct{}{}
 	}
+	// TODO(mission): check consensus timestamp.
 	con.finalizedBlockHashes = con.finalizedBlockHashes[len(delivered):]
 	return nil
 }
