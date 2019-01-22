@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
+	agrPkg "github.com/dexon-foundation/dexon-consensus/core/agreement"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
@@ -124,12 +125,10 @@ func (s *AgreementTestSuite) newAgreement(
 	leader := newLeaderSelector(validLeader, logger)
 	agreementIdx := len(s.agreement)
 	var leaderNode types.NodeID
-	notarySet := make(map[types.NodeID]struct{})
 	for i := 0; i < numNotarySet-1; i++ {
 		prvKey, err := ecdsa.NewPrivateKey()
 		s.Require().NoError(err)
 		nID := types.NewNodeID(prvKey.PublicKey())
-		notarySet[nID] = struct{}{}
 		s.signers[nID] = utils.NewSigner(prvKey)
 		if i == leaderIdx-1 {
 			leaderNode = nID
@@ -138,7 +137,6 @@ func (s *AgreementTestSuite) newAgreement(
 	if leaderIdx == 0 {
 		leaderNode = s.ID
 	}
-	notarySet[s.ID] = struct{}{}
 	agreement := newAgreement(
 		s.ID,
 		&agreementTestReceiver{
@@ -149,26 +147,41 @@ func (s *AgreementTestSuite) newAgreement(
 		s.signers[s.ID],
 		logger,
 	)
-	agreement.restart(notarySet, types.Position{},
-		leaderNode, common.NewRandomHash())
+	agreement.restart(types.Position{}, leaderNode, common.NewRandomHash())
 	s.agreement = append(s.agreement, agreement)
 	return agreement, leaderNode
 }
 
-func (s *AgreementTestSuite) copyVote(
-	vote *types.Vote, proposer types.NodeID) *types.Vote {
-	v := vote.Clone()
-	s.signers[proposer].SignVote(v)
-	return v
+func (s *AgreementTestSuite) prepareSignalByCopyingVote(
+	signalType agrPkg.SignalType, vote *types.Vote) *agrPkg.Signal {
+	votes := make([]types.Vote, 0, len(s.signers))
+	for nID := range s.signers {
+		v := vote.Clone()
+		s.Require().NoError(s.signers[nID].SignVote(v))
+		votes = append(votes, *v)
+	}
+	return agrPkg.NewSignal(signalType, votes)
 }
 
-func (s *AgreementTestSuite) prepareVote(
-	nID types.NodeID, voteType types.VoteType, blockHash common.Hash,
-	period uint64) (
-	vote *types.Vote) {
-	vote = types.NewVote(voteType, blockHash, period)
+func (s *AgreementTestSuite) prepareVote(nID types.NodeID,
+	voteType types.VoteType, hash common.Hash, period uint64) *types.Vote {
+	vote := types.NewVote(voteType, hash, period)
 	s.Require().NoError(s.signers[nID].SignVote(vote))
-	return
+	return vote
+}
+
+func (s *AgreementTestSuite) prepareSignal(signalType agrPkg.SignalType,
+	voteType types.VoteType, hash common.Hash, period uint64) *agrPkg.Signal {
+	cnt := 0
+	requiredVotes := len(s.signers)/3*2 + 1
+	votes := make([]types.Vote, 0, requiredVotes)
+	for nID := range s.signers {
+		votes = append(votes, *s.prepareVote(nID, voteType, hash, period))
+		if cnt++; cnt == requiredVotes {
+			break
+		}
+	}
+	return agrPkg.NewSignal(signalType, votes)
 }
 
 func (s *AgreementTestSuite) TestSimpleConfirm() {
@@ -197,10 +210,8 @@ func (s *AgreementTestSuite) TestSimpleConfirm() {
 	vote = <-s.voteChan
 	s.Equal(types.VotePreCom, vote.Type)
 	s.Equal(blockHash, vote.BlockHash)
-	for nID := range s.signers {
-		v := s.copyVote(vote, nID)
-		s.Require().NoError(a.processVote(v))
-	}
+	s.Require().NoError(a.processSignal(
+		s.prepareSignalByCopyingVote(agrPkg.SignalLock, vote)))
 	a.nextState()
 	// ForwardState
 	s.Require().Len(s.voteChan, 1)
@@ -209,10 +220,8 @@ func (s *AgreementTestSuite) TestSimpleConfirm() {
 	s.Equal(blockHash, vote.BlockHash)
 	s.Equal(blockHash, a.data.lockValue)
 	s.Equal(uint64(2), a.data.lockIter)
-	for nID := range s.signers {
-		v := s.copyVote(vote, nID)
-		s.Require().NoError(a.processVote(v))
-	}
+	s.Require().NoError(a.processSignal(
+		s.prepareSignalByCopyingVote(agrPkg.SignalDecide, vote)))
 	// We have enough of Com-Votes.
 	s.Require().Len(s.confirmChan, 1)
 	confirmBlock := <-s.confirmChan
@@ -245,10 +254,8 @@ func (s *AgreementTestSuite) TestPartitionOnCommitVote() {
 	vote = <-s.voteChan
 	s.Equal(types.VotePreCom, vote.Type)
 	s.Equal(blockHash, vote.BlockHash)
-	for nID := range s.signers {
-		v := s.copyVote(vote, nID)
-		s.Require().NoError(a.processVote(v))
-	}
+	s.Require().NoError(a.processSignal(
+		s.prepareSignalByCopyingVote(agrPkg.SignalLock, vote)))
 	a.nextState()
 	// ForwardState
 	s.Require().Len(s.voteChan, 1)
@@ -284,19 +291,15 @@ func (s *AgreementTestSuite) TestFastConfirmLeader() {
 	s.Equal(types.VoteFast, vote.Type)
 	s.Equal(blockHash, vote.BlockHash)
 	s.Require().Len(s.voteChan, 0)
-	for nID := range s.signers {
-		v := s.copyVote(vote, nID)
-		s.Require().NoError(a.processVote(v))
-	}
+	s.Require().NoError(a.processSignal(
+		s.prepareSignalByCopyingVote(agrPkg.SignalLock, vote)))
 	// We have enough of Fast-Votes.
 	s.Require().Len(s.voteChan, 1)
 	vote = <-s.voteChan
 	s.Equal(types.VoteFastCom, vote.Type)
 	s.Equal(blockHash, vote.BlockHash)
-	for nID := range s.signers {
-		v := s.copyVote(vote, nID)
-		s.Require().NoError(a.processVote(v))
-	}
+	s.Require().NoError(a.processSignal(
+		s.prepareSignalByCopyingVote(agrPkg.SignalDecide, vote)))
 	// We have enough of Fast-ConfirmVotes.
 	s.Require().Len(s.confirmChan, 1)
 	confirmBlock := <-s.confirmChan
@@ -325,17 +328,13 @@ func (s *AgreementTestSuite) TestFastConfirmNonLeader() {
 	}
 	s.Equal(types.VoteFast, vote.Type)
 	s.Equal(block.Hash, vote.BlockHash)
-	for nID := range s.signers {
-		v := s.copyVote(vote, nID)
-		s.Require().NoError(a.processVote(v))
-	}
+	s.Require().NoError(a.processSignal(
+		s.prepareSignalByCopyingVote(agrPkg.SignalLock, vote)))
 	// We have enough of Fast-Votes.
 	s.Require().Len(s.voteChan, 1)
 	vote = <-s.voteChan
-	for nID := range s.signers {
-		v := s.copyVote(vote, nID)
-		s.Require().NoError(a.processVote(v))
-	}
+	s.Require().NoError(a.processSignal(
+		s.prepareSignalByCopyingVote(agrPkg.SignalDecide, vote)))
 	// We have enough of Fast-ConfirmVotes.
 	s.Require().Len(s.confirmChan, 1)
 	confirmBlock := <-s.confirmChan
@@ -343,21 +342,15 @@ func (s *AgreementTestSuite) TestFastConfirmNonLeader() {
 }
 
 func (s *AgreementTestSuite) TestFastForwardCond1() {
-	votes := 0
 	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
 		return true, nil
 	})
+	// No fast forward if those votes are from older period.
 	a.data.lockIter = 1
 	a.data.period = 3
 	hash := common.NewRandomHash()
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePreCom, hash, uint64(2))
-		s.Require().NoError(a.processVote(vote))
-		if votes++; votes == 3 {
-			break
-		}
-	}
-
+	s.Require().NoError(a.processSignal(s.prepareSignal(
+		agrPkg.SignalLock, types.VotePreCom, hash, 2)))
 	select {
 	case <-a.done():
 		s.FailNow("Unexpected fast forward.")
@@ -371,11 +364,8 @@ func (s *AgreementTestSuite) TestFastForwardCond1() {
 	a.data.lockIter = 6
 	a.data.period = 8
 	a.data.lockValue = types.NullBlockHash
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePreCom, types.SkipBlockHash, uint64(7))
-		s.Require().NoError(a.processVote(vote))
-	}
-
+	s.Require().NoError(a.processSignal(s.prepareSignal(
+		agrPkg.SignalForward, types.VotePreCom, types.SkipBlockHash, 7)))
 	select {
 	case <-a.done():
 		s.FailNow("Unexpected fast forward.")
@@ -386,11 +376,8 @@ func (s *AgreementTestSuite) TestFastForwardCond1() {
 	a.data.lockIter = 11
 	a.data.period = 13
 	a.data.lockValue = hash
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePreCom, hash, uint64(12))
-		s.Require().NoError(a.processVote(vote))
-	}
-
+	s.Require().NoError(a.processSignal(s.prepareSignal(
+		agrPkg.SignalLock, types.VotePreCom, hash, 12)))
 	select {
 	case <-a.done():
 		s.FailNow("Unexpected fast forward.")
@@ -399,20 +386,13 @@ func (s *AgreementTestSuite) TestFastForwardCond1() {
 }
 
 func (s *AgreementTestSuite) TestFastForwardCond2() {
-	votes := 0
 	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
 		return true, nil
 	})
 	a.data.period = 1
 	hash := common.NewRandomHash()
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePreCom, hash, uint64(2))
-		s.Require().NoError(a.processVote(vote))
-		if votes++; votes == 3 {
-			break
-		}
-	}
-
+	s.Require().NoError(a.processSignal(s.prepareSignal(
+		agrPkg.SignalLock, types.VotePreCom, hash, 2)))
 	select {
 	case <-a.done():
 	default:
@@ -424,11 +404,8 @@ func (s *AgreementTestSuite) TestFastForwardCond2() {
 
 	// No fast forward if vote.BlockHash == SKIP
 	a.data.period = 6
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePreCom, types.SkipBlockHash, uint64(7))
-		s.Require().NoError(a.processVote(vote))
-	}
-
+	s.Require().NoError(a.processSignal(s.prepareSignal(
+		agrPkg.SignalForward, types.VotePreCom, types.SkipBlockHash, 7)))
 	select {
 	case <-a.done():
 		s.FailNow("Unexpected fast forward.")
@@ -438,20 +415,21 @@ func (s *AgreementTestSuite) TestFastForwardCond2() {
 
 func (s *AgreementTestSuite) TestFastForwardCond3() {
 	numVotes := 0
-	votes := []*types.Vote{}
 	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
 		return true, nil
 	})
 	a.data.period = 1
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VoteCom, common.NewRandomHash(), uint64(2))
-		votes = append(votes, vote)
-		s.Require().NoError(a.processVote(vote))
-		if numVotes++; numVotes == 3 {
+	requiredVotes := len(s.signers)/3*2 + 1
+	votes := make([]types.Vote, 0, requiredVotes)
+	for nID := range s.signers {
+		votes = append(votes, *s.prepareVote(
+			nID, types.VoteCom, common.NewRandomHash(), uint64(2)))
+		if numVotes++; numVotes == requiredVotes {
 			break
 		}
 	}
-
+	s.Require().NoError(a.processSignal(
+		agrPkg.NewSignal(agrPkg.SignalForward, votes)))
 	select {
 	case <-a.done():
 	default:
@@ -459,7 +437,7 @@ func (s *AgreementTestSuite) TestFastForwardCond3() {
 	}
 	s.Equal(uint64(3), a.data.period)
 
-	s.Len(s.pulledBlocks, 3)
+	s.Len(s.pulledBlocks, requiredVotes)
 	for _, vote := range votes {
 		_, exist := s.pulledBlocks[vote.BlockHash]
 		s.True(exist)
@@ -467,57 +445,30 @@ func (s *AgreementTestSuite) TestFastForwardCond3() {
 }
 
 func (s *AgreementTestSuite) TestDecide() {
-	votes := 0
 	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
 		return true, nil
 	})
 	a.data.period = 5
 
 	// No decide if com-vote on SKIP.
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VoteCom, types.SkipBlockHash, uint64(2))
-		s.Require().NoError(a.processVote(vote))
-		if votes++; votes == 3 {
-			break
-		}
-	}
+	s.Require().NoError(a.processSignal(s.prepareSignal(
+		agrPkg.SignalForward, types.VoteCom, types.SkipBlockHash, 2)))
 	s.Require().Len(s.confirmChan, 0)
 
 	// Normal decide.
 	hash := common.NewRandomHash()
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VoteCom, hash, uint64(3))
-		s.Require().NoError(a.processVote(vote))
-		if votes++; votes == 3 {
-			break
-		}
-	}
+	s.Require().NoError(a.processSignal(s.prepareSignal(
+		agrPkg.SignalDecide, types.VoteCom, hash, 3)))
 	s.Require().Len(s.confirmChan, 1)
 	confirmBlock := <-s.confirmChan
 	s.Equal(hash, confirmBlock)
-}
-
-func (s *AgreementTestSuite) TestForkVote() {
-	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
-		return true, nil
-	})
-	a.data.period = 2
-	for nID := range a.notarySet {
-		v01 := s.prepareVote(nID, types.VotePreCom, common.NewRandomHash(), 2)
-		v02 := s.prepareVote(nID, types.VotePreCom, common.NewRandomHash(), 2)
-		s.Require().NoError(a.processVote(v01))
-		s.Require().IsType(&ErrForkVote{}, a.processVote(v02))
-		s.Require().Equal(v01.BlockHash, <-s.forkVoteChan)
-		s.Require().Equal(v02.BlockHash, <-s.forkVoteChan)
-		break
-	}
 }
 
 func (s *AgreementTestSuite) TestForkBlock() {
 	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
 		return true, nil
 	})
-	for nID := range a.notarySet {
+	for nID := range s.signers {
 		b01 := s.proposeBlock(nID, a.data.leader.hashCRS)
 		b02 := s.proposeBlock(nID, a.data.leader.hashCRS)
 		s.Require().NoError(a.processBlock(b01))
