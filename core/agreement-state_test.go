@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
+	agrPkg "github.com/dexon-foundation/dexon-consensus/core/agreement"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
@@ -74,13 +75,15 @@ func (s *AgreementStateTestSuite) proposeBlock(
 	return block
 }
 
-func (s *AgreementStateTestSuite) prepareVote(
-	nID types.NodeID, voteType types.VoteType, blockHash common.Hash,
-	period uint64) (
-	vote *types.Vote) {
-	vote = types.NewVote(voteType, blockHash, period)
-	s.Require().NoError(s.signers[nID].SignVote(vote))
-	return
+func (s *AgreementStateTestSuite) prepareForwardSignal(
+	blockHash common.Hash, period uint64) *agrPkg.Signal {
+	votes := make([]types.Vote, 0, len(s.signers))
+	for nID := range s.signers {
+		vote := types.NewVote(types.VotePreCom, blockHash, period)
+		s.Require().NoError(s.signers[nID].SignVote(vote))
+		votes = append(votes, *vote)
+	}
+	return agrPkg.NewSignal(agrPkg.SignalLock, votes)
 }
 
 func (s *AgreementStateTestSuite) SetupTest() {
@@ -101,15 +104,12 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 	leader := newLeaderSelector(func(*types.Block) (bool, error) {
 		return true, nil
 	}, logger)
-	notarySet := make(map[types.NodeID]struct{})
 	for i := 0; i < numNode-1; i++ {
 		prvKey, err := ecdsa.NewPrivateKey()
 		s.Require().NoError(err)
 		nID := types.NewNodeID(prvKey.PublicKey())
-		notarySet[nID] = struct{}{}
 		s.signers[nID] = utils.NewSigner(prvKey)
 	}
-	notarySet[s.ID] = struct{}{}
 	agreement := newAgreement(
 		s.ID,
 		&agreementStateTestReceiver{
@@ -120,7 +120,7 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 		s.signers[s.ID],
 		logger,
 	)
-	agreement.restart(notarySet, types.Position{}, types.NodeID{}, common.NewRandomHash())
+	agreement.restart(types.Position{}, types.NodeID{}, common.NewRandomHash())
 	return agreement
 }
 
@@ -244,10 +244,7 @@ func (s *AgreementStateTestSuite) TestCommitState() {
 	a.data.period = 1
 	block := s.proposeBlock(a.data.leader)
 	s.Require().NoError(a.processBlock(block))
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePreCom, block.Hash, 1)
-		s.Require().NoError(a.processVote(vote))
-	}
+	s.Require().NoError(a.processSignal(s.prepareForwardSignal(block.Hash, 1)))
 	newState, err := state.nextState()
 	s.Require().NoError(err)
 	s.Require().Len(s.voteChan, 1)
@@ -270,10 +267,7 @@ func (s *AgreementStateTestSuite) TestCommitState() {
 
 	// If there are 2f+1 preCom-votes for SKIP, it's same as the 'else' condition.
 	a.data.period = 3
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePreCom, types.SkipBlockHash, 3)
-		s.Require().NoError(a.processVote(vote))
-	}
+	s.Require().NoError(a.processSignal(s.prepareForwardSignal(block.Hash, 1)))
 	newState, err = state.nextState()
 	s.Require().NoError(err)
 	s.Require().Len(s.voteChan, 1)
