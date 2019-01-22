@@ -360,18 +360,6 @@ func (s *AgreementTestSuite) TestFastForwardCond1() {
 	s.Equal(uint64(2), a.data.lockIter)
 	s.Equal(uint64(3), a.data.period)
 
-	// No fast forward if vote.BlockHash == SKIP
-	a.data.lockIter = 6
-	a.data.period = 8
-	a.data.lockValue = types.NullBlockHash
-	s.Require().NoError(a.processSignal(s.prepareSignal(
-		agrPkg.SignalForward, types.VotePreCom, types.SkipBlockHash, 7)))
-	select {
-	case <-a.done():
-		s.FailNow("Unexpected fast forward.")
-	default:
-	}
-
 	// No fast forward if lockValue == vote.BlockHash.
 	a.data.lockIter = 11
 	a.data.period = 13
@@ -401,16 +389,6 @@ func (s *AgreementTestSuite) TestFastForwardCond2() {
 	s.Equal(hash, a.data.lockValue)
 	s.Equal(uint64(2), a.data.lockIter)
 	s.Equal(uint64(2), a.data.period)
-
-	// No fast forward if vote.BlockHash == SKIP
-	a.data.period = 6
-	s.Require().NoError(a.processSignal(s.prepareSignal(
-		agrPkg.SignalForward, types.VotePreCom, types.SkipBlockHash, 7)))
-	select {
-	case <-a.done():
-		s.FailNow("Unexpected fast forward.")
-	default:
-	}
 }
 
 func (s *AgreementTestSuite) TestFastForwardCond3() {
