@@ -29,6 +29,13 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
+// closedchan is a reusable closed channel.
+var closedchan = make(chan struct{})
+
+func init() {
+	close(closedchan)
+}
+
 // Errors for agreement module.
 var (
 	ErrInvalidVote            = fmt.Errorf("invalid vote")
@@ -110,6 +117,7 @@ type agreement struct {
 	state          agreementState
 	data           *agreementData
 	aID            *atomic.Value
+	doneChan       chan struct{}
 	notarySet      map[types.NodeID]struct{}
 	hasVoteFast    bool
 	hasOutput      bool
@@ -171,6 +179,10 @@ func (a *agreement) restart(
 		a.data.lockValue = nullBlockHash
 		a.data.lockIter = 0
 		a.data.isLeader = a.data.ID == leader
+		if a.doneChan != nil {
+			close(a.doneChan)
+		}
+		a.doneChan = make(chan struct{})
 		a.fastForward = make(chan uint64, 1)
 		a.hasVoteFast = false
 		a.hasOutput = false
@@ -401,6 +413,8 @@ func (a *agreement) processVote(vote *types.Vote) error {
 				a.hasOutput = true
 				a.data.recv.ConfirmBlock(hash,
 					a.data.votes[vote.Period][vote.Type])
+				close(a.doneChan)
+				a.doneChan = nil
 			}
 			return nil
 		}
@@ -462,24 +476,24 @@ func (a *agreement) processVote(vote *types.Vote) error {
 func (a *agreement) done() <-chan struct{} {
 	a.lock.Lock()
 	defer a.lock.Unlock()
+	if a.doneChan == nil {
+		return closedchan
+	}
 	a.data.lock.Lock()
 	defer a.data.lock.Unlock()
-	ch := make(chan struct{}, 1)
-	if a.hasOutput {
-		ch <- struct{}{}
-	} else {
-		select {
-		case period := <-a.fastForward:
-			if period <= a.data.period {
-				break
-			}
-			a.data.setPeriod(period)
-			a.state = newPreCommitState(a.data)
-			ch <- struct{}{}
-		default:
+	select {
+	case period := <-a.fastForward:
+		if period <= a.data.period {
+			break
 		}
+		a.data.setPeriod(period)
+		a.state = newPreCommitState(a.data)
+		close(a.doneChan)
+		a.doneChan = make(chan struct{})
+		return closedchan
+	default:
 	}
-	return ch
+	return a.doneChan
 }
 
 func (a *agreement) confirmed() bool {

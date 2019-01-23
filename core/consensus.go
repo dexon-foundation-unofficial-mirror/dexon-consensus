@@ -203,12 +203,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 					"cur-position", &block.Position,
 					"chainID", recv.chainID)
 				recv.consensus.ccModule.registerBlock(block)
-				if err := recv.consensus.processBlock(block); err != nil {
-					recv.consensus.logger.Error("Failed to process block",
-						"block", block,
-						"error", err)
-					return
-				}
+				recv.consensus.processBlockChan <- block
 				parentHash = block.ParentHash
 				if block.Position.Height == 0 ||
 					recv.consensus.lattice.Exist(parentHash) {
@@ -235,12 +230,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 			"result", result)
 		recv.consensus.network.BroadcastAgreementResult(result)
 	}
-	if err := recv.consensus.processBlock(block); err != nil {
-		recv.consensus.logger.Error("Failed to process block",
-			"block", block,
-			"error", err)
-		return
-	}
+	recv.consensus.processBlockChan <- block
 	// Clean the restartNotary channel so BA will not stuck by deadlock.
 CleanChannelLoop:
 	for {
@@ -252,8 +242,8 @@ CleanChannelLoop:
 	}
 	newPos := block.Position
 	if block.Timestamp.After(recv.changeNotaryTime) {
-		recv.roundValue.Store(recv.round() + 1)
 		newPos.Round++
+		recv.roundValue.Store(newPos.Round)
 	}
 	recv.restartNotary <- newPos
 }
@@ -409,6 +399,7 @@ type Consensus struct {
 	resetDeliveryGuardTicker   chan struct{}
 	msgChan                    chan interface{}
 	waitGroup                  sync.WaitGroup
+	processBlockChan           chan *types.Block
 
 	// Context of Dummy receiver during switching from syncer.
 	dummyCancel    context.CancelFunc
@@ -578,6 +569,7 @@ func newConsensusForRound(
 		resetRandomnessTicker:    make(chan struct{}),
 		resetDeliveryGuardTicker: make(chan struct{}),
 		msgChan:                  make(chan interface{}, 1024),
+		processBlockChan:         make(chan *types.Block, 1024),
 	}
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
 	con.baMgr = newAgreementMgr(con, initRound, initRoundBeginTime)
@@ -647,6 +639,7 @@ func (con *Consensus) Run() {
 	go con.deliverNetworkMsg()
 	con.waitGroup.Add(1)
 	go con.processMsg()
+	go con.processBlockLoop()
 	// Sleep until dMoment come.
 	time.Sleep(con.dMoment.Sub(time.Now().UTC()))
 	// Take some time to bootstrap.
@@ -1240,6 +1233,26 @@ func (con *Consensus) deliverFinalizedBlocksWithoutLock() (err error) {
 	}
 	err = con.lattice.PurgeBlocks(deliveredBlocks)
 	return
+}
+
+func (con *Consensus) processBlockLoop() {
+	for {
+		select {
+		case <-con.ctx.Done():
+			return
+		default:
+		}
+		select {
+		case <-con.ctx.Done():
+			return
+		case block := <-con.processBlockChan:
+			if err := con.processBlock(block); err != nil {
+				con.logger.Error("Error processing block",
+					"block", block,
+					"error", err)
+			}
+		}
+	}
 }
 
 // processBlock is the entry point to submit one block to a Consensus instance.

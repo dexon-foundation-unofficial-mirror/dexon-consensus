@@ -387,6 +387,19 @@ func (data *latticeData) addFinalizedBlock(block *types.Block) (err error) {
 	return
 }
 
+func (data *latticeData) tipRound(chainID uint32) uint64 {
+	if tip := data.chains[chainID].tip; tip != nil {
+		tipConfig := data.getConfig(tip.Position.Round)
+		offset := uint64(0)
+		if tip.Timestamp.After(tipConfig.roundEndTime) {
+			offset++
+		}
+		return tip.Position.Round + offset
+	}
+	return uint64(0)
+
+}
+
 // isBindTip checks if a block's fields should follow up its parent block.
 func (data *latticeData) isBindTip(
 	pos types.Position, tip *types.Block) (bindTip bool, err error) {

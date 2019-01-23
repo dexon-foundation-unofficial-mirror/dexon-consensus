@@ -290,6 +290,13 @@ func (l *Lattice) NextBlock(round uint64, chainID uint32) (
 	return l.data.nextBlock(round, chainID)
 }
 
+// TipRound returns the round of the tip of given chain.
+func (l *Lattice) TipRound(chainID uint32) uint64 {
+	l.lock.RLock()
+	defer l.lock.RUnlock()
+	return l.data.tipRound(chainID)
+}
+
 // PurgeBlocks purges blocks' cache in memory, this is called when the caller
 // makes sure those blocks are already saved in db.
 func (l *Lattice) PurgeBlocks(blocks []*types.Block) error {
