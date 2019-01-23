@@ -867,11 +867,19 @@ func (con *Consensus) stopAgreement() {
 		for _, a := range con.agreements {
 			if a.inputChan != nil {
 				close(a.inputChan)
-				a.inputChan = nil
 			}
 		}
 	}()
 	con.agreementWaitGroup.Wait()
+	func() {
+		con.lock.Lock()
+		defer con.lock.Unlock()
+		for _, a := range con.agreements {
+			if a.inputChan != nil {
+				a.inputChan = nil
+			}
+		}
+	}()
 	close(con.receiveChan)
 	close(con.pullChan)
 }
