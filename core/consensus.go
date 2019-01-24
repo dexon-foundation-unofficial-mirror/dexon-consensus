@@ -1095,6 +1095,11 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 	if rand.Position.Round == 0 {
 		return nil
 	}
+	if needBroadcast {
+		if !con.ccModule.firstBlockRandomnessResult(rand) {
+			needBroadcast = false
+		}
+	}
 	if err := con.ccModule.processBlockRandomnessResult(rand); err != nil {
 		if err == ErrBlockNotRegistered {
 			err = nil

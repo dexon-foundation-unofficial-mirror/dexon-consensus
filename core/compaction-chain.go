@@ -207,6 +207,19 @@ func (cc *compactionChain) processFinalizedBlock(block *types.Block) error {
 	return nil
 }
 
+func (cc *compactionChain) firstBlockRandomnessResult(
+	rand *types.BlockRandomnessResult) bool {
+	cc.lock.RLock()
+	defer cc.lock.RUnlock()
+	if _, exist := cc.pendingRandomness[rand.BlockHash]; exist {
+		return false
+	}
+	if _, exist := cc.blockRandomness[rand.BlockHash]; exist {
+		return false
+	}
+	return true
+}
+
 func (cc *compactionChain) processBlockRandomnessResult(
 	rand *types.BlockRandomnessResult) error {
 	ok, err := cc.verifyRandomness(
