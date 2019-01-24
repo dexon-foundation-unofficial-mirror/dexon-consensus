@@ -99,7 +99,7 @@ func (recv *consensusBAReceiver) ProposeBlock() common.Hash {
 	block := recv.consensus.proposeBlock(recv.chainID, recv.round())
 	if block == nil {
 		recv.consensus.logger.Error("unable to propose block")
-		return nullBlockHash
+		return types.NullBlockHash
 	}
 	go func() {
 		if err := recv.consensus.preProcessBlock(block); err != nil {

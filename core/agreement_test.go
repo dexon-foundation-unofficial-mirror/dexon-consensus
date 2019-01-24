@@ -370,9 +370,9 @@ func (s *AgreementTestSuite) TestFastForwardCond1() {
 	// No fast forward if vote.BlockHash == SKIP
 	a.data.lockIter = 6
 	a.data.period = 8
-	a.data.lockValue = nullBlockHash
+	a.data.lockValue = types.NullBlockHash
 	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePreCom, skipBlockHash, uint64(7))
+		vote := s.prepareVote(nID, types.VotePreCom, types.SkipBlockHash, uint64(7))
 		s.Require().NoError(a.processVote(vote))
 	}
 
@@ -425,7 +425,7 @@ func (s *AgreementTestSuite) TestFastForwardCond2() {
 	// No fast forward if vote.BlockHash == SKIP
 	a.data.period = 6
 	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePreCom, skipBlockHash, uint64(7))
+		vote := s.prepareVote(nID, types.VotePreCom, types.SkipBlockHash, uint64(7))
 		s.Require().NoError(a.processVote(vote))
 	}
 
@@ -475,7 +475,7 @@ func (s *AgreementTestSuite) TestDecide() {
 
 	// No decide if com-vote on SKIP.
 	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VoteCom, skipBlockHash, uint64(2))
+		vote := s.prepareVote(nID, types.VoteCom, types.SkipBlockHash, uint64(2))
 		s.Require().NoError(a.processVote(vote))
 		if votes++; votes == 3 {
 			break

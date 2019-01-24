@@ -94,6 +94,7 @@ type agreementMgr struct {
 	initRound     uint64
 	configs       []*agreementMgrConfig
 	baModules     []*agreement
+	voteFilters   []*utils.VoteFilter
 	waitGroup     sync.WaitGroup
 	pendingVotes  map[uint64][]*types.Vote
 	pendingBlocks map[uint64][]*types.Block
@@ -201,6 +202,7 @@ func (mgr *agreementMgr) appendConfig(
 		// Hacky way to make agreement module self contained.
 		recv.agreementModule = agrModule
 		mgr.baModules = append(mgr.baModules, agrModule)
+		mgr.voteFilters = append(mgr.voteFilters, utils.NewVoteFilter())
 		if mgr.isRunning {
 			mgr.waitGroup.Add(1)
 			go func(idx uint32) {
@@ -213,7 +215,6 @@ func (mgr *agreementMgr) appendConfig(
 }
 
 func (mgr *agreementMgr) processVote(v *types.Vote) error {
-	v = v.Clone()
 	mgr.lock.RLock()
 	defer mgr.lock.RUnlock()
 	if v.Position.ChainID >= uint32(len(mgr.baModules)) {
@@ -224,7 +225,16 @@ func (mgr *agreementMgr) processVote(v *types.Vote) error {
 			"initRound", mgr.initRound)
 		return utils.ErrInvalidChainID
 	}
-	return mgr.baModules[v.Position.ChainID].processVote(v)
+	filter := mgr.voteFilters[v.Position.ChainID]
+	if filter.Filter(v) {
+		return nil
+	}
+	v = v.Clone()
+	err := mgr.baModules[v.Position.ChainID].processVote(v)
+	if err == nil {
+		mgr.baModules[v.Position.ChainID].updateFilter(filter)
+	}
+	return err
 }
 
 func (mgr *agreementMgr) processBlock(b *types.Block) error {
@@ -423,6 +433,7 @@ Loop:
 			Round:   setting.recv.round(),
 			ChainID: math.MaxUint32,
 		}
+		mgr.voteFilters[chainID] = utils.NewVoteFilter()
 		if err := mgr.baRoutineForOneRound(&setting); err != nil {
 			mgr.logger.Error("BA routine failed",
 				"error", err,

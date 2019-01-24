@@ -176,7 +176,7 @@ func (a *agreement) restart(
 		a.data.blocks = make(map[types.NodeID]*types.Block)
 		a.data.requiredVote = len(notarySet)/3*2 + 1
 		a.data.leader.restart(crs)
-		a.data.lockValue = nullBlockHash
+		a.data.lockValue = types.NullBlockHash
 		a.data.lockIter = 0
 		a.data.isLeader = a.data.ID == leader
 		if a.doneChan != nil {
@@ -352,6 +352,17 @@ func (a *agreement) prepareVote(vote *types.Vote) (err error) {
 	return
 }
 
+func (a *agreement) updateFilter(filter *utils.VoteFilter) {
+	a.lock.RLock()
+	defer a.lock.RUnlock()
+	a.data.lock.RLock()
+	defer a.data.lock.RUnlock()
+	filter.Confirm = a.hasOutput
+	filter.LockIter = a.data.lockIter
+	filter.Period = a.data.period
+	filter.Height = a.agreementID().Height
+}
+
 // processVote is the entry point for processing Vote.
 func (a *agreement) processVote(vote *types.Vote) error {
 	a.lock.Lock()
@@ -394,13 +405,16 @@ func (a *agreement) processVote(vote *types.Vote) error {
 	if _, exist := a.data.votes[vote.Period]; !exist {
 		a.data.votes[vote.Period] = newVoteListMap()
 	}
+	if _, exist := a.data.votes[vote.Period][vote.Type][vote.ProposerID]; exist {
+		return nil
+	}
 	a.data.votes[vote.Period][vote.Type][vote.ProposerID] = vote
 	if !a.hasOutput &&
 		(vote.Type == types.VoteCom ||
 			vote.Type == types.VoteFast ||
 			vote.Type == types.VoteFastCom) {
 		if hash, ok := a.data.countVoteNoLock(vote.Period, vote.Type); ok &&
-			hash != skipBlockHash {
+			hash != types.SkipBlockHash {
 			if vote.Type == types.VoteFast {
 				if !a.hasVoteFast {
 					a.data.recv.ProposeVote(
@@ -427,8 +441,12 @@ func (a *agreement) processVote(vote *types.Vote) error {
 		return nil
 	}
 	if vote.Type == types.VotePreCom {
+		if vote.Period < a.data.lockIter {
+			// This PreCom is useless for us.
+			return nil
+		}
 		if hash, ok := a.data.countVoteNoLock(vote.Period, vote.Type); ok &&
-			hash != skipBlockHash {
+			hash != types.SkipBlockHash {
 			// Condition 1.
 			if a.data.period >= vote.Period && vote.Period > a.data.lockIter &&
 				vote.BlockHash != a.data.lockValue {
@@ -453,7 +471,8 @@ func (a *agreement) processVote(vote *types.Vote) error {
 		hashes := common.Hashes{}
 		addPullBlocks := func(voteType types.VoteType) {
 			for _, vote := range a.data.votes[vote.Period][voteType] {
-				if vote.BlockHash == nullBlockHash || vote.BlockHash == skipBlockHash {
+				if vote.BlockHash == types.NullBlockHash ||
+					vote.BlockHash == types.SkipBlockHash {
 					continue
 				}
 				if _, found := a.findCandidateBlockNoLock(vote.BlockHash); !found {
@@ -461,7 +480,6 @@ func (a *agreement) processVote(vote *types.Vote) error {
 				}
 			}
 		}
-		addPullBlocks(types.VoteInit)
 		addPullBlocks(types.VotePreCom)
 		addPullBlocks(types.VoteCom)
 		if len(hashes) > 0 {

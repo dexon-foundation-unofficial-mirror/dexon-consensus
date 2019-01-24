@@ -210,7 +210,7 @@ func (s *AgreementStateTestSuite) TestPreCommitState() {
 	}
 
 	// If lockvalue == null, propose preCom-vote for the leader block.
-	a.data.lockValue = nullBlockHash
+	a.data.lockValue = types.NullBlockHash
 	a.data.period = 1
 	newState, err := state.nextState()
 	s.Require().NoError(err)
@@ -265,13 +265,13 @@ func (s *AgreementStateTestSuite) TestCommitState() {
 	s.Require().Len(s.voteChan, 1)
 	vote = <-s.voteChan
 	s.Equal(types.VoteCom, vote.Type)
-	s.Equal(skipBlockHash, vote.BlockHash)
+	s.Equal(types.SkipBlockHash, vote.BlockHash)
 	s.Equal(stateForward, newState.state())
 
 	// If there are 2f+1 preCom-votes for SKIP, it's same as the 'else' condition.
 	a.data.period = 3
 	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePreCom, skipBlockHash, 3)
+		vote := s.prepareVote(nID, types.VotePreCom, types.SkipBlockHash, 3)
 		s.Require().NoError(a.processVote(vote))
 	}
 	newState, err = state.nextState()
@@ -279,7 +279,7 @@ func (s *AgreementStateTestSuite) TestCommitState() {
 	s.Require().Len(s.voteChan, 1)
 	vote = <-s.voteChan
 	s.Equal(types.VoteCom, vote.Type)
-	s.Equal(skipBlockHash, vote.BlockHash)
+	s.Equal(types.SkipBlockHash, vote.BlockHash)
 	s.Equal(stateForward, newState.state())
 }
 

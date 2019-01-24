@@ -38,6 +38,18 @@ const (
 	MaxVoteType
 )
 
+// NullBlockHash is the blockHash for ⊥ value.
+var NullBlockHash common.Hash
+
+// SkipBlockHash is the blockHash for SKIP value.
+var SkipBlockHash common.Hash
+
+func init() {
+	for idx := range SkipBlockHash {
+		SkipBlockHash[idx] = 0xff
+	}
+}
+
 // VoteHeader is the header for vote, which can be used as map keys.
 type VoteHeader struct {
 	ProposerID NodeID      `json:"proposer_id"`

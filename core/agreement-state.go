@@ -20,7 +20,6 @@ package core
 import (
 	"fmt"
 
-	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
@@ -44,15 +43,6 @@ const (
 	statePullVote
 	stateSleep
 )
-
-var nullBlockHash common.Hash
-var skipBlockHash common.Hash
-
-func init() {
-	for idx := range skipBlockHash {
-		skipBlockHash[idx] = 0xff
-	}
-}
 
 type agreementState interface {
 	state() agreementStateType
@@ -78,7 +68,7 @@ func (s *fastState) nextState() (agreementState, error) {
 		return s.a.isLeader
 	}() {
 		hash := s.a.recv.ProposeBlock()
-		if hash != nullBlockHash {
+		if hash != types.NullBlockHash {
 			s.a.lock.Lock()
 			defer s.a.lock.Unlock()
 			s.a.recv.ProposeVote(types.NewVote(types.VoteFast, hash, s.a.period))
@@ -143,7 +133,7 @@ func (s *preCommitState) nextState() (agreementState, error) {
 	s.a.lock.RLock()
 	defer s.a.lock.RUnlock()
 	hash := s.a.lockValue
-	if hash == nullBlockHash {
+	if hash == types.NullBlockHash {
 		hash = s.a.leader.leaderBlockHash()
 	}
 	s.a.recv.ProposeVote(types.NewVote(types.VotePreCom, hash, s.a.period))
@@ -165,13 +155,13 @@ func (s *commitState) nextState() (agreementState, error) {
 	s.a.lock.Lock()
 	defer s.a.lock.Unlock()
 	hash, ok := s.a.countVoteNoLock(s.a.period, types.VotePreCom)
-	if ok && hash != skipBlockHash {
+	if ok && hash != types.SkipBlockHash {
 		if s.a.period > s.a.lockIter {
 			s.a.lockValue = hash
 			s.a.lockIter = s.a.period
 		}
 	} else {
-		hash = skipBlockHash
+		hash = types.SkipBlockHash
 	}
 	s.a.recv.ProposeVote(types.NewVote(types.VoteCom, hash, s.a.period))
 	return newForwardState(s.a), nil
