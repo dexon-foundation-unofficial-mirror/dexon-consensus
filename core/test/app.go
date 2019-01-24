@@ -110,21 +110,28 @@ type App struct {
 	DeliverSequence       common.Hashes
 	deliveredLock         sync.RWMutex
 	state                 *State
+	gov                   *Governance
 	lastPendingHeightLock sync.RWMutex
 	LastPendingHeight     uint64
+	roundToNotify         uint64
 }
 
 // NewApp constructs a TestApp instance.
-func NewApp(state *State) *App {
-	return &App{
+func NewApp(initRound uint64, gov *Governance) (app *App) {
+	app = &App{
 		Confirmed:            make(map[common.Hash]*types.Block),
 		LastConfirmedHeights: make(map[uint32]uint64),
 		TotalOrdered:         []*AppTotalOrderRecord{},
 		TotalOrderedByHash:   make(map[common.Hash]*AppTotalOrderRecord),
 		Delivered:            make(map[common.Hash]*AppDeliveredRecord),
 		DeliverSequence:      common.Hashes{},
-		state:                state,
+		gov:                  gov,
+		roundToNotify:        initRound,
 	}
+	if gov != nil {
+		app.state = gov.State()
+	}
+	return app
 }
 
 // PreparePayload implements Application interface.
@@ -272,6 +279,12 @@ func (app *App) BlockDelivered(
 		if err := app.state.Apply(b.Payload); err != nil {
 			if err != ErrDuplicatedChange {
 				panic(err)
+			}
+		}
+		if app.roundToNotify == pos.Round {
+			if app.gov != nil {
+				app.gov.NotifyRound(app.roundToNotify)
+				app.roundToNotify++
 			}
 		}
 	}()

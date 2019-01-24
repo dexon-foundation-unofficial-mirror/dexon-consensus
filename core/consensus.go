@@ -388,7 +388,7 @@ type Consensus struct {
 	dMoment                    time.Time
 	nodeSetCache               *utils.NodeSetCache
 	round                      uint64
-	roundToNotify              uint64
+	roundForNewConfig          uint64
 	lock                       sync.RWMutex
 	ctx                        context.Context
 	ctxCancel                  context.CancelFunc
@@ -586,7 +586,7 @@ func newConsensusForRound(
 func (con *Consensus) prepare(initBlock *types.Block) error {
 	// The block past from full node should be delivered already or known by
 	// full node. We don't have to notify it.
-	con.roundToNotify = initBlock.Position.Round + 1
+	con.roundForNewConfig = initBlock.Position.Round + 1
 	initRound := initBlock.Position.Round
 	initConfig := utils.GetConfigWithPanic(con.gov, initRound, con.logger)
 	// Setup context.
@@ -1185,13 +1185,13 @@ func (con *Consensus) deliverBlock(b *types.Block) {
 	con.cfgModule.untouchTSigHash(b.Hash)
 	con.logger.Debug("Calling Application.BlockDelivered", "block", b)
 	con.app.BlockDelivered(b.Hash, b.Position, b.Finalization.Clone())
-	if b.Position.Round == con.roundToNotify {
+	if b.Position.Round == con.roundForNewConfig {
 		// Get configuration for the round next to next round. Configuration
 		// for that round should be ready at this moment and is required for
 		// lattice module. This logic is related to:
 		//  - roundShift
 		//  - notifyGenesisRound
-		futureRound := con.roundToNotify + 1
+		futureRound := con.roundForNewConfig + 1
 		futureConfig := utils.GetConfigWithPanic(con.gov, futureRound, con.logger)
 		con.logger.Debug("Append Config", "round", futureRound)
 		if err := con.lattice.AppendConfig(
@@ -1201,14 +1201,7 @@ func (con *Consensus) deliverBlock(b *types.Block) {
 				"error", err)
 			panic(err)
 		}
-		// Only the first block delivered of that round would
-		// trigger this noitification.
-		con.logger.Debug("Calling Governance.NotifyRoundHeight",
-			"round", con.roundToNotify,
-			"height", b.Finalization.Height)
-		con.gov.NotifyRoundHeight(
-			con.roundToNotify, b.Finalization.Height)
-		con.roundToNotify++
+		con.roundForNewConfig++
 	}
 	if con.debugApp != nil {
 		con.debugApp.BlockReady(b.Hash)

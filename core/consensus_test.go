@@ -207,7 +207,7 @@ func (s *ConsensusTestSuite) prepareConsensus(
 	conn *networkConnection) (
 	*test.App, *Consensus) {
 
-	app := test.NewApp(nil)
+	app := test.NewApp(0, nil)
 	dbInst, err := db.NewMemBackedDB()
 	s.Require().NoError(err)
 	nID := types.NewNodeID(prvKey.PublicKey())

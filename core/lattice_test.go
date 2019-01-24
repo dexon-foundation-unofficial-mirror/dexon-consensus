@@ -110,7 +110,7 @@ func (s *LatticeTestSuite) newTestLatticeMgr(
 		pubKeys, cfg.LambdaBA, logger, true), ConfigRoundShift)
 	req.NoError(err)
 	// Setup application.
-	app := test.NewApp(gov.State())
+	app := test.NewApp(0, gov)
 	// Setup compaction chain.
 	cc := newCompactionChain(gov)
 	cc.init(&types.Block{})

@@ -76,9 +76,9 @@ func (s *ConsensusTestSuite) setupNodes(
 		)
 		gov := seedGov.Clone()
 		gov.SwitchToRemoteMode(networkModule)
-		gov.NotifyRoundHeight(0, 0)
+		gov.NotifyRound(0)
 		networkModule.AddNodeSetCache(utils.NewNodeSetCache(gov))
-		app := test.NewApp(gov.State())
+		app := test.NewApp(1, gov)
 		nID := types.NewNodeID(k.PublicKey())
 		nodes[nID] = &node{nID, nil, app, gov, dbInst, networkModule}
 		go func() {

@@ -226,7 +226,7 @@ func (n *node) prepareConfigs() {
 		prepareConfigs(i, n.cfg.Node.Changes, n.gov)
 	}
 	// This notification is implictly called in full node.
-	n.gov.NotifyRoundHeight(0, 0)
+	n.gov.NotifyRound(0)
 	// Setup of configuration is ready, can be switched to remote mode.
 	n.gov.SwitchToRemoteMode(n.netModule)
 }

@@ -91,12 +91,12 @@ func (s *AppTestSuite) deliverBlock(
 func (s *AppTestSuite) TestCompare() {
 	req := s.Require()
 
-	app1 := NewApp(nil)
+	app1 := NewApp(0, nil)
 	s.setupAppByTotalOrderDeliver(app1, s.to1)
 	s.setupAppByTotalOrderDeliver(app1, s.to2)
 	s.setupAppByTotalOrderDeliver(app1, s.to3)
 	// An App with different deliver sequence.
-	app2 := NewApp(nil)
+	app2 := NewApp(0, nil)
 	s.setupAppByTotalOrderDeliver(app2, s.to1)
 	s.setupAppByTotalOrderDeliver(app2, s.to2)
 	hash := common.NewRandomHash()
@@ -105,7 +105,7 @@ func (s *AppTestSuite) TestCompare() {
 	s.deliverBlockWithTimeFromSequenceLength(app2, hash)
 	req.Equal(ErrMismatchBlockHashSequence, app1.Compare(app2))
 	// An App with different consensus time for the same block.
-	app3 := NewApp(nil)
+	app3 := NewApp(0, nil)
 	s.setupAppByTotalOrderDeliver(app3, s.to1)
 	s.setupAppByTotalOrderDeliver(app3, s.to2)
 	for _, h := range s.to3.BlockHashes {
@@ -120,7 +120,7 @@ func (s *AppTestSuite) TestCompare() {
 	req.Equal(ErrMismatchConsensusTime, app1.Compare(app3))
 	req.Equal(ErrMismatchConsensusTime, app3.Compare(app1))
 	// An App without any delivered blocks.
-	app4 := NewApp(nil)
+	app4 := NewApp(0, nil)
 	req.Equal(ErrEmptyDeliverSequence, app4.Compare(app1))
 	req.Equal(ErrEmptyDeliverSequence, app1.Compare(app4))
 }
@@ -129,7 +129,7 @@ func (s *AppTestSuite) TestVerify() {
 	req := s.Require()
 
 	// An OK App instance.
-	app1 := NewApp(nil)
+	app1 := NewApp(0, nil)
 	s.setupAppByTotalOrderDeliver(app1, s.to1)
 	s.setupAppByTotalOrderDeliver(app1, s.to2)
 	s.setupAppByTotalOrderDeliver(app1, s.to3)
@@ -139,7 +139,7 @@ func (s *AppTestSuite) TestVerify() {
 		uint64(len(app1.DeliverSequence)))
 	req.Equal(ErrDeliveredBlockNotConfirmed, app1.Verify())
 	// The consensus time is out of order.
-	app2 := NewApp(nil)
+	app2 := NewApp(0, nil)
 	s.setupAppByTotalOrderDeliver(app2, s.to1)
 	for _, h := range s.to2.BlockHashes {
 		app2.BlockConfirmed(types.Block{Hash: h})
@@ -149,14 +149,14 @@ func (s *AppTestSuite) TestVerify() {
 		uint64(len(app2.DeliverSequence)+1))
 	req.Equal(ErrConsensusTimestampOutOfOrder, app2.Verify())
 	// A delivered block is not found in total ordering delivers.
-	app3 := NewApp(nil)
+	app3 := NewApp(0, nil)
 	s.setupAppByTotalOrderDeliver(app3, s.to1)
 	hash := common.NewRandomHash()
 	app3.BlockConfirmed(types.Block{Hash: hash})
 	s.deliverBlockWithTimeFromSequenceLength(app3, hash)
 	req.Equal(ErrMismatchTotalOrderingAndDelivered, app3.Verify())
 	// A delivered block is not found in total ordering delivers.
-	app4 := NewApp(nil)
+	app4 := NewApp(0, nil)
 	s.setupAppByTotalOrderDeliver(app4, s.to1)
 	for _, h := range s.to2.BlockHashes {
 		app4.BlockConfirmed(types.Block{Hash: h})
@@ -167,10 +167,10 @@ func (s *AppTestSuite) TestVerify() {
 	app4.TotalOrderingDelivered(common.Hashes{hash}, core.TotalOrderingModeNormal)
 	s.deliverBlockWithTimeFromSequenceLength(app4, hash)
 	// Witness ack on unknown block.
-	app5 := NewApp(nil)
+	app5 := NewApp(0, nil)
 	s.setupAppByTotalOrderDeliver(app5, s.to1)
 	// The conensus height is out of order.
-	app6 := NewApp(nil)
+	app6 := NewApp(0, nil)
 	s.setupAppByTotalOrderDeliver(app6, s.to1)
 	for _, h := range s.to2.BlockHashes {
 		app6.BlockConfirmed(types.Block{Hash: h})
@@ -181,7 +181,7 @@ func (s *AppTestSuite) TestVerify() {
 		uint64(len(app6.DeliverSequence)+2))
 	req.Equal(ErrConsensusHeightOutOfOrder, app6.Verify())
 	// Test the acking block doesn't delivered.
-	app7 := NewApp(nil)
+	app7 := NewApp(0, nil)
 	// Patch a block's acks.
 	b7 := &types.Block{
 		Hash: common.NewRandomHash(),
@@ -199,7 +199,7 @@ func (s *AppTestSuite) TestVerify() {
 
 func (s *AppTestSuite) TestWitness() {
 	// Deliver several blocks, there is only one chain only.
-	app := NewApp(nil)
+	app := NewApp(0, nil)
 	deliver := func(b *types.Block) {
 		app.BlockConfirmed(*b)
 		app.BlockDelivered(b.Hash, b.Position, b.Finalization)

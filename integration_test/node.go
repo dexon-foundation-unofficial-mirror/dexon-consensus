@@ -105,7 +105,7 @@ func newNode(
 		return nil, err
 	}
 	// Setup test.App
-	app := test.NewApp(copiedGov.State())
+	app := test.NewApp(0, copiedGov)
 	// Setup lattice instance.
 	lattice := core.NewLattice(
 		dMoment,
@@ -275,7 +275,7 @@ func (n *Node) checkRoundSwitch(b *types.Block) (evts []*test.Event) {
 		return
 	}
 	// Handle round switching logic.
-	n.govModule.NotifyRoundHeight(n.roundToNotify, b.Finalization.Height)
+	n.govModule.NotifyRound(n.roundToNotify)
 	if n.roundToNotify == uint64(len(n.roundEndTimes)) {
 		config := n.govModule.Configuration(n.roundToNotify)
 		if config == nil {

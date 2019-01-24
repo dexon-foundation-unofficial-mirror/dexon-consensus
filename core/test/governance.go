@@ -93,8 +93,9 @@ func (g *Governance) CRS(round uint64) common.Hash {
 	return g.stateModule.CRS(round)
 }
 
-// NotifyRoundHeight notifies governace contract to snapshot config.
-func (g *Governance) NotifyRoundHeight(round, height uint64) {
+// NotifyRound notifies governace contract to snapshot config, and broadcast
+// pending state change requests for next round if any.
+func (g *Governance) NotifyRound(round uint64) {
 	// Snapshot configuration for the shifted round, this behavior is synced with
 	// full node's implementation.
 	shiftedRound := round + g.roundShift

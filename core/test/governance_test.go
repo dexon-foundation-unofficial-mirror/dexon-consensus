@@ -87,13 +87,13 @@ func (s *GovernanceTestSuite) TestRegisterChange() {
 	req.NoError(g.RegisterConfigChange(7, StateChangeNumChains, uint32(40)))
 	// In local mode, state for round 6 would be ready after notified with
 	// round 2.
-	g.NotifyRoundHeight(2, 0)
-	g.NotifyRoundHeight(3, 0)
+	g.NotifyRound(2)
+	g.NotifyRound(3)
 	// In local mode, state for round 7 would be ready after notified with
 	// round 6.
-	g.NotifyRoundHeight(4, 0)
+	g.NotifyRound(4)
 	// Notify governance to take a snapshot for round 7's configuration.
-	g.NotifyRoundHeight(5, 0)
+	g.NotifyRound(5)
 	req.Equal(g.Configuration(6).NumChains, uint32(32))
 	req.Equal(g.Configuration(7).NumChains, uint32(40))
 }

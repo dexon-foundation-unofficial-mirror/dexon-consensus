@@ -115,10 +115,6 @@ type Governance interface {
 	// Return the genesis node set if round == 0.
 	NodeSet(round uint64) []crypto.PublicKey
 
-	// NotifyRoundHeight notifies governance contract the consensus height of
-	// the first block of the given round.
-	NotifyRoundHeight(targetRound, consensusHeight uint64)
-
 	//// DKG-related methods.
 
 	// AddDKGComplaint adds a DKGComplaint.
