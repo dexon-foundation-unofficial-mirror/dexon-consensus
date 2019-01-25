@@ -1026,6 +1026,12 @@ func (con *Consensus) ProcessAgreementResult(
 		return err
 	}
 	con.lattice.AddShallowBlock(rand.BlockHash, rand.Position)
+
+	first, err := con.baMgr.firstAgreementResult(rand)
+	if err != nil {
+		return err
+	}
+
 	// Syncing BA Module.
 	if err := con.baMgr.processAgreementResult(rand); err != nil {
 		return err
@@ -1039,9 +1045,12 @@ func (con *Consensus) ProcessAgreementResult(
 	if !con.cfgModule.touchTSigHash(rand.BlockHash) {
 		return nil
 	}
-	con.logger.Debug("Rebroadcast AgreementResult",
-		"result", rand)
-	con.network.BroadcastAgreementResult(rand)
+
+	if first {
+		con.logger.Debug("Rebroadcast AgreementResult",
+			"result", rand)
+		con.network.BroadcastAgreementResult(rand)
+	}
 	dkgSet, err := con.nodeSetCache.GetDKGSet(rand.Position.Round)
 	if err != nil {
 		return err

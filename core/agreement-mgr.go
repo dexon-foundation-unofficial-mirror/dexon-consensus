@@ -94,6 +94,7 @@ type agreementMgr struct {
 	initRound     uint64
 	configs       []*agreementMgrConfig
 	baModules     []*agreement
+	lastBAResult  []types.Position
 	voteFilters   []*utils.VoteFilter
 	waitGroup     sync.WaitGroup
 	pendingVotes  map[uint64][]*types.Vote
@@ -203,6 +204,10 @@ func (mgr *agreementMgr) appendConfig(
 		recv.agreementModule = agrModule
 		mgr.baModules = append(mgr.baModules, agrModule)
 		mgr.voteFilters = append(mgr.voteFilters, utils.NewVoteFilter())
+		mgr.lastBAResult = append(mgr.lastBAResult, types.Position{
+			Round:   round,
+			ChainID: i,
+		})
 		if mgr.isRunning {
 			mgr.waitGroup.Add(1)
 			go func(idx uint32) {
@@ -251,6 +256,21 @@ func (mgr *agreementMgr) processBlock(b *types.Block) error {
 	return mgr.baModules[b.Position.ChainID].processBlock(b)
 }
 
+func (mgr *agreementMgr) firstAgreementResult(
+	result *types.AgreementResult) (bool, error) {
+	mgr.lock.RLock()
+	defer mgr.lock.RUnlock()
+	if result.Position.ChainID >= uint32(len(mgr.lastBAResult)) {
+		mgr.logger.Error("Process unknown result for unknown chain to BA",
+			"position", &result.Position,
+			"baChain", len(mgr.lastBAResult),
+			"baRound", len(mgr.configs),
+			"initRound", mgr.initRound)
+		return false, utils.ErrInvalidChainID
+	}
+	return result.Position.Newer(&mgr.lastBAResult[result.Position.ChainID]), nil
+}
+
 func (mgr *agreementMgr) processAgreementResult(
 	result *types.AgreementResult) error {
 	mgr.lock.RLock()
@@ -262,6 +282,10 @@ func (mgr *agreementMgr) processAgreementResult(
 			"baRound", len(mgr.configs),
 			"initRound", mgr.initRound)
 		return utils.ErrInvalidChainID
+	}
+	// TODO(jimmy): lock in this function is not safe.
+	if result.Position.Newer(&mgr.lastBAResult[result.Position.ChainID]) {
+		mgr.lastBAResult[result.Position.ChainID] = result.Position
 	}
 	agreement := mgr.baModules[result.Position.ChainID]
 	aID := agreement.agreementID()
