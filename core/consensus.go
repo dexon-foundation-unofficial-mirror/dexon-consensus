@@ -1021,16 +1021,16 @@ func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
 // ProcessAgreementResult processes the randomness request.
 func (con *Consensus) ProcessAgreementResult(
 	rand *types.AgreementResult) error {
+	if !con.baMgr.touchAgreementResult(rand) {
+		return nil
+	}
+
 	// Sanity Check.
 	if err := VerifyAgreementResult(rand, con.nodeSetCache); err != nil {
+		con.baMgr.untouchAgreementResult(rand)
 		return err
 	}
 	con.lattice.AddShallowBlock(rand.BlockHash, rand.Position)
-
-	first, err := con.baMgr.firstAgreementResult(rand)
-	if err != nil {
-		return err
-	}
 
 	// Syncing BA Module.
 	if err := con.baMgr.processAgreementResult(rand); err != nil {
@@ -1046,34 +1046,45 @@ func (con *Consensus) ProcessAgreementResult(
 		return nil
 	}
 
-	if first {
-		con.logger.Debug("Rebroadcast AgreementResult",
-			"result", rand)
-		con.network.BroadcastAgreementResult(rand)
-	}
-	dkgSet, err := con.nodeSetCache.GetDKGSet(rand.Position.Round)
-	if err != nil {
-		return err
-	}
-	if _, exist := dkgSet[con.ID]; !exist {
-		return nil
-	}
-	psig, err := con.cfgModule.preparePartialSignature(rand.Position.Round, rand.BlockHash)
-	if err != nil {
-		return err
-	}
-	if err = con.signer.SignDKGPartialSignature(psig); err != nil {
-		return err
-	}
-	if err = con.cfgModule.processPartialSignature(psig); err != nil {
-		return err
-	}
-	con.logger.Debug("Calling Network.BroadcastDKGPartialSignature",
-		"proposer", psig.ProposerID,
-		"round", psig.Round,
-		"hash", psig.Hash.String()[:6])
-	con.network.BroadcastDKGPartialSignature(psig)
+	con.logger.Debug("Rebroadcast AgreementResult",
+		"result", rand)
+	con.network.BroadcastAgreementResult(rand)
+
 	go func() {
+		dkgSet, err := con.nodeSetCache.GetDKGSet(rand.Position.Round)
+		if err != nil {
+			con.logger.Error("Failed to get dkg set",
+				"round", rand.Position.Round, "error", err)
+			return
+		}
+		if _, exist := dkgSet[con.ID]; !exist {
+			return
+		}
+		psig, err := con.cfgModule.preparePartialSignature(rand.Position.Round, rand.BlockHash)
+		if err != nil {
+			con.logger.Error("Failed to prepare psig",
+				"round", rand.Position.Round,
+				"hash", rand.BlockHash.String()[:6],
+				"error", err)
+			return
+		}
+		if err = con.signer.SignDKGPartialSignature(psig); err != nil {
+			con.logger.Error("Failed to sign psig",
+				"hash", rand.BlockHash.String()[:6],
+				"error", err)
+			return
+		}
+		if err = con.cfgModule.processPartialSignature(psig); err != nil {
+			con.logger.Error("Failed process psig",
+				"hash", rand.BlockHash.String()[:6],
+				"error", err)
+			return
+		}
+		con.logger.Debug("Calling Network.BroadcastDKGPartialSignature",
+			"proposer", psig.ProposerID,
+			"round", psig.Round,
+			"hash", psig.Hash.String()[:6])
+		con.network.BroadcastDKGPartialSignature(psig)
 		tsig, err := con.cfgModule.runTSig(rand.Position.Round, rand.BlockHash)
 		if err != nil {
 			if err != ErrTSigAlreadyRunning {
@@ -1089,11 +1100,9 @@ func (con *Consensus) ProcessAgreementResult(
 			Position:   rand.Position,
 			Randomness: tsig.Signature,
 		}
-		if err := con.ProcessBlockRandomnessResult(result, true); err != nil {
-			con.logger.Error("Failed to process randomness result",
-				"error", err)
-			return
-		}
+		// ProcessBlockRandomnessResult is not thread-safe so we put the result in
+		// the message channnel to be processed in the main thread.
+		con.msgChan <- result
 	}()
 	return nil
 }
@@ -1104,10 +1113,8 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 	if rand.Position.Round == 0 {
 		return nil
 	}
-	if needBroadcast {
-		if !con.ccModule.firstBlockRandomnessResult(rand) {
-			needBroadcast = false
-		}
+	if !con.ccModule.touchBlockRandomnessResult(rand) {
+		return nil
 	}
 	if err := con.ccModule.processBlockRandomnessResult(rand); err != nil {
 		if err == ErrBlockNotRegistered {

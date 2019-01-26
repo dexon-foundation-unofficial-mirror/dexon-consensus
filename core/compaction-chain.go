@@ -41,6 +41,7 @@ var (
 )
 
 const maxPendingPeriod = 3 * time.Second
+const maxRandomnessCache = 100
 
 type pendingRandomnessResult struct {
 	receivedTime time.Time
@@ -50,24 +51,26 @@ type pendingRandomnessResult struct {
 type finalizedBlockHeap = types.ByFinalizationHeight
 
 type compactionChain struct {
-	gov               Governance
-	chainUnsynced     uint32
-	tsigVerifier      *TSigVerifierCache
-	blocks            map[common.Hash]*types.Block
-	blockRandomness   map[common.Hash][]byte
-	pendingRandomness map[common.Hash]pendingRandomnessResult
-	pendingBlocks     []*types.Block
-	lock              sync.RWMutex
-	prevBlock         *types.Block
+	gov                       Governance
+	chainUnsynced             uint32
+	tsigVerifier              *TSigVerifierCache
+	blocks                    map[common.Hash]*types.Block
+	blockRandomness           map[common.Hash][]byte
+	pendingRandomness         map[common.Hash]pendingRandomnessResult
+	processedRandomnessResult map[types.Position]struct{}
+	pendingBlocks             []*types.Block
+	lock                      sync.RWMutex
+	prevBlock                 *types.Block
 }
 
 func newCompactionChain(gov Governance) *compactionChain {
 	return &compactionChain{
-		gov:               gov,
-		tsigVerifier:      NewTSigVerifierCache(gov, 7),
-		blocks:            make(map[common.Hash]*types.Block),
-		blockRandomness:   make(map[common.Hash][]byte),
-		pendingRandomness: make(map[common.Hash]pendingRandomnessResult),
+		gov:                       gov,
+		tsigVerifier:              NewTSigVerifierCache(gov, 7),
+		blocks:                    make(map[common.Hash]*types.Block),
+		blockRandomness:           make(map[common.Hash][]byte),
+		pendingRandomness:         make(map[common.Hash]pendingRandomnessResult),
+		processedRandomnessResult: make(map[types.Position]struct{}, maxRandomnessCache),
 	}
 }
 
@@ -207,17 +210,21 @@ func (cc *compactionChain) processFinalizedBlock(block *types.Block) error {
 	return nil
 }
 
-func (cc *compactionChain) firstBlockRandomnessResult(
-	rand *types.BlockRandomnessResult) bool {
-	cc.lock.RLock()
-	defer cc.lock.RUnlock()
-	if _, exist := cc.pendingRandomness[rand.BlockHash]; exist {
-		return false
+func (cc *compactionChain) touchBlockRandomnessResult(
+	rand *types.BlockRandomnessResult) (first bool) {
+	// DO NOT LOCK THIS FUNCTION!!!!!!!! YOU WILL REGRET IT!!!!!
+	if _, exist := cc.processedRandomnessResult[rand.Position]; !exist {
+		first = true
+		if len(cc.processedRandomnessResult) > maxRandomnessCache {
+			for k := range cc.processedRandomnessResult {
+				// Randomly drop one element.
+				delete(cc.processedRandomnessResult, k)
+				break
+			}
+		}
+		cc.processedRandomnessResult[rand.Position] = struct{}{}
 	}
-	if _, exist := cc.blockRandomness[rand.BlockHash]; exist {
-		return false
-	}
-	return true
+	return
 }
 
 func (cc *compactionChain) processBlockRandomnessResult(
