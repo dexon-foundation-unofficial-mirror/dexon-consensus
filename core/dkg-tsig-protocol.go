@@ -234,6 +234,7 @@ func (d *dkgProtocol) processNackComplaints(complaints []*typesDKG.Complaint) (
 			continue
 		}
 		d.recv.ProposeDKGAntiNackComplaint(&typesDKG.PrivateShare{
+			ProposerID:   d.ID,
 			ReceiverID:   complaint.ProposerID,
 			Round:        d.round,
 			PrivateShare: *share,
