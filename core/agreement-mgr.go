@@ -235,7 +235,7 @@ func (mgr *agreementMgr) processVote(v *types.Vote) error {
 		return err
 	}
 	if v.Position.ChainID >= uint32(len(mgr.baModules)) {
-		mgr.logger.Error("Process signal for unknown chain to BA",
+		mgr.logger.Error("Process vote for unknown chain to BA",
 			"position", &v.Position,
 			"baChain", len(mgr.baModules),
 			"baRound", len(mgr.configs),

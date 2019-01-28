@@ -365,9 +365,6 @@ func (a *agreement) processSignal(signal *agrPkg.Signal) error {
 	case agrPkg.SignalFork:
 		a.data.recv.ReportForkVote(refVote, &signal.Votes[1])
 	case agrPkg.SignalDecide:
-		if a.hasOutput {
-			break
-		}
 		a.hasOutput = true
 		a.data.recv.ConfirmBlock(refVote.BlockHash, signal.Votes)
 		close(a.doneChan)
