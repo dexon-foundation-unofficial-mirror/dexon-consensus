@@ -56,8 +56,12 @@ type votesInfo struct {
 	purged          bool
 }
 
-func (info *votesInfo) add(v *types.Vote) {
-	if _, exist := info.votes[v.ProposerID]; exist {
+func (info *votesInfo) add(v *types.Vote) (oldV *types.Vote) {
+	oldV, exist := info.votes[v.ProposerID]
+	if exist {
+		if oldV.BlockHash == v.BlockHash {
+			oldV = nil
+		}
 		return
 	}
 	info.votes[v.ProposerID] = v
@@ -68,6 +72,7 @@ func (info *votesInfo) add(v *types.Vote) {
 			info.best = v.BlockHash
 		}
 	}
+	return
 }
 
 func (info *votesInfo) getVotes(
@@ -419,12 +424,10 @@ func (a *voteChainCache) checkVote(v *types.Vote) (bool, error) {
 		return false, ErrNotInNotarySet
 	}
 	// Check for forked vote.
-	if vForPos, exist := a.votes[v.Position]; exist {
-		if vForPeriod, exist := vForPos[v.Period]; exist {
-			if oldVote, exist := vForPeriod[v.Type].votes[v.ProposerID]; exist {
-				if v.BlockHash != oldVote.BlockHash {
-					return false, &ErrForkVote{v.ProposerID, oldVote, v}
-				}
+	if info := a.votesInfo(v, false); info != nil {
+		if oldVote, exist := info.votes[v.ProposerID]; exist {
+			if v.BlockHash != oldVote.BlockHash {
+				return false, &ErrForkVote{v.ProposerID, oldVote, v}
 			}
 		}
 	}
@@ -474,7 +477,9 @@ func (a *voteChainCache) processVote(v *types.Vote) error {
 		}
 		fallthrough
 	default:
-		info.add(v)
+		if oldV := info.add(v); oldV != nil {
+			panic(fmt.Errorf("unexpected forked detection: %s %s", oldV, v))
+		}
 		if s := a.trigger(v, info); s != nil {
 			if a.updateReferenceSignal(s) {
 				a.purgeBy(s)
@@ -498,15 +503,11 @@ func (a *voteChainCache) processResult(result *types.AgreementResult) error {
 			"receive agreement result in purged period: %s", result))
 	}
 	for _, v := range result.Votes {
-		oldV, exist := info.votes[v.ProposerID]
-		if exist {
-			if v.BlockHash != oldV.BlockHash {
-				a.pendingSignals = append(a.pendingSignals, NewSignal(
-					SignalFork, []types.Vote{*oldV, v}))
-				continue
-			}
+		if oldV := info.add(&v); oldV != nil {
+			a.pendingSignals = append(a.pendingSignals, NewSignal(
+				SignalFork, []types.Vote{*oldV, v}))
+			continue
 		}
-		info.add(&v)
 	}
 	if s := a.trigger(&result.Votes[0], info); s != nil {
 		if a.updateReferenceSignal(s) {
