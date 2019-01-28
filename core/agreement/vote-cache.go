@@ -243,7 +243,7 @@ func (a *voteChainCache) updateReferenceSignal(s *Signal) (updated bool) {
 			panic(fmt.Errorf("backward signal: %s %s", refSignal, s))
 		}
 		if s.Position.Equal(&refSignal.Position) {
-			switch refSignal.Type {
+			switch s.Type {
 			case SignalDecide:
 				// "Decide" is the strongest signal in a position, we shouldn't
 				// overwrite it.
