@@ -225,7 +225,6 @@ func (s *ConsensusTestSuite) TestSimple() {
 Loop:
 	for {
 		<-time.After(5 * time.Second)
-		fmt.Println("check latest position delivered by each node")
 		for _, n := range nodes {
 			latestPos := n.app.GetLatestDeliveredPosition()
 			fmt.Println("latestPos", n.ID, &latestPos)
@@ -305,7 +304,6 @@ func (s *ConsensusTestSuite) TestNumChainsChange() {
 Loop:
 	for {
 		<-time.After(5 * time.Second)
-		fmt.Println("check latest position delivered by each node")
 		for _, n := range nodes {
 			latestPos := n.app.GetLatestDeliveredPosition()
 			fmt.Println("latestPos", n.ID, &latestPos)
@@ -413,11 +411,13 @@ ReachAlive:
 			err          error
 			syncedCon    *core.Consensus
 		)
+		fmt.Println("Start Syncing", syncNode.ID.String())
 	SyncLoop:
 		for {
 			syncedCon, syncedHeight, err = s.syncBlocksWithSomeNode(
 				stoppedNode, syncNode, syncerObj, syncedHeight)
 			if syncedCon != nil {
+				fmt.Println("Synced")
 				syncNode.con = syncedCon
 				go syncNode.con.Run()
 				go func() {
