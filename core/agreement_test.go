@@ -208,7 +208,7 @@ func (s *AgreementTestSuite) TestSimpleConfirm() {
 	s.Equal(types.VoteCom, vote.Type)
 	s.Equal(blockHash, vote.BlockHash)
 	s.Equal(blockHash, a.data.lockValue)
-	s.Equal(uint64(1), a.data.lockIter)
+	s.Equal(uint64(2), a.data.lockIter)
 	for nID := range s.signers {
 		v := s.copyVote(vote, nID)
 		s.Require().NoError(a.processVote(v))
@@ -256,7 +256,7 @@ func (s *AgreementTestSuite) TestPartitionOnCommitVote() {
 	s.Equal(types.VoteCom, vote.Type)
 	s.Equal(blockHash, vote.BlockHash)
 	s.Equal(blockHash, a.data.lockValue)
-	s.Equal(uint64(1), a.data.lockIter)
+	s.Equal(uint64(2), a.data.lockIter)
 	// RepeateVoteState
 	a.nextState()
 	s.True(a.pullVotes())

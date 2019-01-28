@@ -172,7 +172,7 @@ func (a *agreement) restart(
 		defer a.data.blocksLock.Unlock()
 		a.data.votes = make(map[uint64][]map[types.NodeID]*types.Vote)
 		a.data.votes[1] = newVoteListMap()
-		a.data.period = 1
+		a.data.period = 2
 		a.data.blocks = make(map[types.NodeID]*types.Block)
 		a.data.requiredVote = len(notarySet)/3*2 + 1
 		a.data.leader.restart(crs)
@@ -266,7 +266,11 @@ func isStop(aID types.Position) bool {
 func (a *agreement) clocks() int {
 	a.data.lock.RLock()
 	defer a.data.lock.RUnlock()
-	scale := int(a.data.period)
+	scale := int(a.data.period) - 1
+	if scale < 1 {
+		// just in case.
+		scale = 1
+	}
 	// 10 is a magic number derived from many years of experience.
 	if scale > 10 {
 		scale = 10
@@ -420,7 +424,7 @@ func (a *agreement) processVote(vote *types.Vote) error {
 					a.data.recv.ProposeVote(
 						types.NewVote(types.VoteFastCom, hash, vote.Period))
 					a.data.lockValue = hash
-					a.data.lockIter = math.MaxUint64
+					a.data.lockIter = 1
 					a.hasVoteFast = true
 				}
 			} else {
