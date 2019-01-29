@@ -20,8 +20,8 @@ package agreement
 import (
 	"fmt"
 
+	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
-	"github.com/ethereum/go-ethereum/common"
 )
 
 // SignalType is the type of agreemnt signal.
@@ -80,10 +80,11 @@ func (s *Signal) String() string {
 // NewSignal constructs an Signal instance.
 func NewSignal(t SignalType, votes []types.Vote) *Signal {
 	return &Signal{
-		Position: votes[0].Position,
-		Period:   votes[0].Period,
-		Type:     t,
-		VType:    votes[0].Type,
-		Votes:    votes,
+		Position:  votes[0].Position,
+		Period:    votes[0].Period,
+		Type:      t,
+		VType:     votes[0].Type,
+		Votes:     votes,
+		BlockHash: votes[0].BlockHash,
 	}
 }
