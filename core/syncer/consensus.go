@@ -162,6 +162,7 @@ func (con *Consensus) checkIfValidated() (validated bool) {
 	con.logger.Debug("syncer chain-validation status",
 		"validated-chain", validatedChainCount,
 		"round", round,
+		"num-chains", numChains,
 		"valid", validated)
 	return
 }
@@ -392,6 +393,7 @@ func (con *Consensus) processFinalizedBlock(block *types.Block) error {
 	if con.lattice == nil {
 		return nil
 	}
+	con.logger.Trace("syncer process finalized block", "block", block)
 	delivered, err := con.lattice.ProcessFinalizedBlock(block)
 	if err != nil {
 		return err
@@ -400,6 +402,7 @@ func (con *Consensus) processFinalizedBlock(block *types.Block) error {
 	defer con.lock.Unlock()
 	con.finalizedBlockHashes = append(con.finalizedBlockHashes, block.Hash)
 	for idx, b := range delivered {
+		con.logger.Trace("syncer block devliered", "block", b)
 		if con.finalizedBlockHashes[idx] != b.Hash {
 			return ErrMismatchBlockHashSequence
 		}
