@@ -228,9 +228,14 @@ func (mgr *agreementMgr) appendConfig(
 }
 
 func (mgr *agreementMgr) processVote(v *types.Vote) error {
+	mgr.logger.Debug("process vote", "vote", v)
+	defer func() {
+		mgr.logger.Debug("vote processing finished", "vote", v)
+	}()
 	mgr.chainLock.RLock()
 	defer mgr.chainLock.RUnlock()
 	signals, err := mgr.vCache.ProcessVote(v)
+	mgr.logger.Debug("vote processed", "vote", v, "error", err, "signals", len(signals))
 	if err != nil || len(signals) == 0 {
 		return err
 	}

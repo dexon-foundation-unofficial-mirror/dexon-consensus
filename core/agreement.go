@@ -154,6 +154,7 @@ func newAgreement(
 // restart the agreement
 func (a *agreement) restart(
 	aID types.Position, leader types.NodeID, crs common.Hash) {
+	a.logger.Trace("restart agreement", "pos", &aID, "leader", leader.String()[:6], "crs", crs.String()[:6])
 	if !func() bool {
 		a.lock.Lock()
 		defer a.lock.Unlock()

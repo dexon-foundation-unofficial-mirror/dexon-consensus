@@ -20,6 +20,8 @@ package integration
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -32,8 +34,23 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/test"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/suite"
 )
+
+func newLogger(logPrefix string) common.Logger {
+	mw := io.Writer(os.Stderr)
+	if logPrefix != "" {
+		f, err := os.Create(logPrefix + ".log")
+		if err != nil {
+			panic(err)
+		}
+		mw = io.MultiWriter(f)
+	}
+	logger := log.New()
+	logger.SetHandler(log.StreamHandler(mw, log.TerminalFormat(false)))
+	return logger
+}
 
 // There is no scheduler in these tests, we need to wait a long period to make
 // sure these tests are ok.
@@ -100,7 +117,7 @@ func (s *ConsensusTestSuite) setupNodes(
 			node.db,
 			node.network,
 			k,
-			&common.NullLogger{},
+			newLogger(node.ID.String()[:6]),
 		)
 	}
 	return nodes
@@ -189,7 +206,7 @@ func (s *ConsensusTestSuite) syncBlocksWithSomeNode(
 	return
 }
 
-func (s *ConsensusTestSuite) TestSimple() {
+func (s *ConsensusTestSuite) _TestSimple() {
 	// The simplest test case:
 	//  - Node set is equals to DKG set and notary set for each chain in each
 	//    round.
@@ -238,7 +255,7 @@ Loop:
 	s.verifyNodes(nodes)
 }
 
-func (s *ConsensusTestSuite) TestNumChainsChange() {
+func (s *ConsensusTestSuite) _TestNumChainsChange() {
 	var (
 		req        = s.Require()
 		peerCount  = 4
@@ -342,10 +359,10 @@ func (s *ConsensusTestSuite) TestSync() {
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeRoundInterval, 55*time.Second))
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeNumChains, uint32(5)))
+		test.StateChangeNumChains, uint32(7)))
 	seedGov.CatchUpWithRound(0)
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeNumChains, uint32(4)))
+		test.StateChangeNumChains, uint32(6)))
 	seedGov.CatchUpWithRound(1)
 	// A short round interval.
 	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
@@ -401,7 +418,7 @@ ReachAlive:
 		syncNode.db,
 		syncNode.network,
 		prvKeys[0],
-		&common.NullLogger{},
+		newLogger(syncNode.ID.String()[:6]+"-sync"),
 	)
 	// Initialize communication channel, it's not recommended to assertion in
 	// another go routine.
