@@ -475,6 +475,21 @@ func (s *VoteCacheTestSuite) TestDecideAfterForward() {
 	s.Require().Equal(signals[0].Type, SignalDecide)
 }
 
+func (s *VoteCacheTestSuite) TestFastBA() {
+	var (
+		hash     = common.NewRandomHash()
+		position = types.Position{Round: 1, ChainID: 1, Height: 1}
+	)
+	// Fast -> FastCom, successfuly confirmed by Fast mode.
+	s.testVotes(s.newVotes(types.VoteFast, hash, position, 1), SignalLock)
+	s.testVotes(s.newVotes(types.VoteFastCom, hash, position, 1), SignalDecide)
+	// Fast -> PreCom -> Com, confirmed by RBA.
+	position.Height++
+	s.testVotes(s.newVotes(types.VoteFast, hash, position, 1), SignalLock)
+	s.testVotes(s.newVotes(types.VotePreCom, hash, position, 2), SignalLock)
+	s.testVotes(s.newVotes(types.VoteCom, hash, position, 2), SignalDecide)
+}
+
 func TestVoteCache(t *testing.T) {
 	suite.Run(t, new(VoteCacheTestSuite))
 }
