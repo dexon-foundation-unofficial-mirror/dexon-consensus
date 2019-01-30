@@ -154,7 +154,7 @@ func newAgreement(
 // restart the agreement
 func (a *agreement) restart(
 	aID types.Position, leader types.NodeID, crs common.Hash) {
-	a.logger.Trace("restart agreement", "pos", &aID, "leader", leader.String()[:6], "crs", crs.String()[:6])
+	a.logger.Debug("restart agreement", "pos", &aID, "leader", leader.String()[:6], "crs", crs.String()[:6])
 	if !func() bool {
 		a.lock.Lock()
 		defer a.lock.Unlock()
@@ -346,18 +346,18 @@ func (a *agreement) processSignal(signal *agrPkg.Signal) error {
 		if signal.Position.Height == 0 {
 			a.pendingSignal = append(a.pendingSignal, signal)
 		}
-		a.logger.Trace("Dropping signal when stopped", "signal", signal)
+		a.logger.Debug("Dropping signal when stopped", "signal", signal)
 		return nil
 	}
 	if signal.Position != aID {
 		if aID.Newer(&signal.Position) {
-			a.logger.Trace("Dropping older stopped", "signal", signal)
+			a.logger.Debug("Dropping older stopped", "signal", signal)
 			return nil
 		}
 		a.pendingSignal = append(a.pendingSignal, signal)
 		return nil
 	}
-	a.logger.Trace("ProcessSignal", "signal", signal)
+	a.logger.Debug("ProcessSignal", "signal", signal)
 	if a.hasOutput {
 		return nil
 	}

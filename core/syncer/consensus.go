@@ -393,7 +393,7 @@ func (con *Consensus) processFinalizedBlock(block *types.Block) error {
 	if con.lattice == nil {
 		return nil
 	}
-	con.logger.Trace("syncer process finalized block", "block", block)
+	con.logger.Debug("syncer process finalized block", "block", block)
 	delivered, err := con.lattice.ProcessFinalizedBlock(block)
 	if err != nil {
 		return err
@@ -402,7 +402,7 @@ func (con *Consensus) processFinalizedBlock(block *types.Block) error {
 	defer con.lock.Unlock()
 	con.finalizedBlockHashes = append(con.finalizedBlockHashes, block.Hash)
 	for idx, b := range delivered {
-		con.logger.Trace("syncer block devliered", "block", b)
+		con.logger.Debug("syncer block devliered", "block", b)
 		if con.finalizedBlockHashes[idx] != b.Hash {
 			return ErrMismatchBlockHashSequence
 		}
@@ -450,7 +450,7 @@ func (con *Consensus) SyncBlocks(
 		err = ErrInvalidSyncingFinalizationHeight
 		return
 	}
-	con.logger.Trace("syncBlocks",
+	con.logger.Debug("syncBlocks",
 		"position", &blocks[0].Position,
 		"final height", blocks[0].Finalization.Height,
 		"len", len(blocks),
@@ -583,15 +583,15 @@ func (con *Consensus) GetSyncedConsensus() (*core.Consensus, error) {
 // This method is mainly for caller to stop the syncer before synced, the syncer
 // would call this method automatically after being synced.
 func (con *Consensus) Stop() error {
-	con.logger.Trace("syncer is about to stop")
+	con.logger.Debug("syncer is about to stop")
 	// Stop network and CRS routines, wait until they are all stoped.
 	con.ctxCancel()
-	con.logger.Trace("stop syncer modules")
+	con.logger.Debug("stop syncer modules")
 	con.moduleWaitGroup.Wait()
 	// Stop agreements.
-	con.logger.Trace("stop syncer agreement modules")
+	con.logger.Debug("stop syncer agreement modules")
 	con.stopAgreement()
-	con.logger.Trace("syncer stopped")
+	con.logger.Debug("syncer stopped")
 	return nil
 }
 
@@ -643,7 +643,7 @@ func (con *Consensus) setupConfigsUntilRound(round uint64) {
 		}
 	}()
 	con.resizeByNumChains(curMaxNumChains)
-	con.logger.Trace("setupConfgis finished", "round", round)
+	con.logger.Debug("setupConfgis finished", "round", round)
 }
 
 // setupConfigs is called by SyncBlocks with blocks from compaction chain. In
