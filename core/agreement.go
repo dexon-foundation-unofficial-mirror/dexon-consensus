@@ -562,17 +562,22 @@ func (a *agreement) processBlock(block *types.Block) error {
 		block.ProposerID == a.leader() {
 		go func() {
 			for func() bool {
+				if aID != a.agreementID() {
+					return false
+				}
 				a.lock.RLock()
 				defer a.lock.RUnlock()
 				if a.state.state() != stateFast && a.state.state() != stateFastVote {
 					return false
 				}
+				a.data.lock.RLock()
+				defer a.data.lock.RUnlock()
+				a.data.blocksLock.Lock()
+				defer a.data.blocksLock.Unlock()
 				block, exist := a.data.blocks[a.leader()]
 				if !exist {
 					return true
 				}
-				a.data.lock.RLock()
-				defer a.data.lock.RUnlock()
 				ok, err := a.data.leader.validLeader(block)
 				if err != nil {
 					fmt.Println("Error checking validLeader for Fast BA",
