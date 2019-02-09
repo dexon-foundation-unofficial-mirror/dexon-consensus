@@ -66,7 +66,10 @@ func (s *StateTestSuite) newDKGComplaint(round uint64) *typesDKG.Complaint {
 			PrivateShare: *dkg.NewPrivateKey(),
 		},
 	}
-	s.Require().NoError(utils.NewSigner(prvKey).SignDKGComplaint(comp))
+	signer := utils.NewSigner(prvKey)
+	s.Require().NoError(signer.SignDKGComplaint(comp))
+	s.Require().NoError(signer.SignDKGPrivateShare(&comp.PrivateShare))
+	s.Require().False(comp.IsNack())
 	return comp
 }
 

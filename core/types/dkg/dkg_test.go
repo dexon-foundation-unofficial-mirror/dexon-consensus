@@ -81,6 +81,88 @@ func (s *DKGTestSuite) TestRLPEncodeDecode() {
 	s.Require().True(d.Round == dd.Round)
 	s.Require().True(reflect.DeepEqual(d.Signature, dd.Signature))
 	s.Require().Equal(d.DKGID.GetHexString(), dd.DKGID.GetHexString())
+
+	// Test DKGPrivateShare.
+	p := PrivateShare{
+		ProposerID:   types.NodeID{Hash: common.Hash{1, 3, 5}},
+		Round:        10,
+		PrivateShare: *cryptoDKG.NewPrivateKey(),
+		Signature: crypto.Signature{
+			Type:      "123",
+			Signature: []byte{2, 4, 6},
+		},
+	}
+
+	b, err = rlp.EncodeToBytes(&p)
+	s.Require().NoError(err)
+
+	var pp PrivateShare
+	err = rlp.DecodeBytes(b, &pp)
+	s.Require().NoError(err)
+
+	bb, err = rlp.EncodeToBytes(&pp)
+	s.Require().NoError(err)
+	s.Require().True(reflect.DeepEqual(b, bb))
+	s.Require().True(p.ProposerID.Equal(pp.ProposerID))
+	s.Require().True(p.Round == pp.Round)
+	s.Require().True(reflect.DeepEqual(p.PrivateShare, pp.PrivateShare))
+	s.Require().True(reflect.DeepEqual(p.Signature, pp.Signature))
+
+	// Test DKG Nack Complaint.
+	c := Complaint{
+		ProposerID: d.ProposerID,
+		Round:      10,
+		PrivateShare: PrivateShare{
+			ProposerID: p.ProposerID,
+			Round:      10,
+		},
+		Signature: crypto.Signature{
+			Type:      "123",
+			Signature: []byte{3, 3, 3},
+		},
+	}
+	s.Require().True(c.IsNack())
+
+	b, err = rlp.EncodeToBytes(&c)
+	s.Require().NoError(err)
+
+	var cc Complaint
+	err = rlp.DecodeBytes(b, &cc)
+	s.Require().NoError(err)
+
+	bb, err = rlp.EncodeToBytes(&cc)
+	s.Require().NoError(err)
+	s.Require().True(reflect.DeepEqual(c, cc))
+	s.Require().True(c.ProposerID.Equal(cc.ProposerID))
+	s.Require().True(c.Round == cc.Round)
+	s.Require().True(reflect.DeepEqual(c.PrivateShare, cc.PrivateShare))
+	s.Require().True(reflect.DeepEqual(c.Signature, cc.Signature))
+
+	// Test DKG Complaint.
+	c = Complaint{
+		ProposerID:   d.ProposerID,
+		Round:        10,
+		PrivateShare: p,
+		Signature: crypto.Signature{
+			Type:      "123",
+			Signature: []byte{3, 3, 3},
+		},
+	}
+	s.Require().False(c.IsNack())
+
+	b, err = rlp.EncodeToBytes(&c)
+	s.Require().NoError(err)
+
+	err = rlp.DecodeBytes(b, &cc)
+	s.Require().NoError(err)
+
+	bb, err = rlp.EncodeToBytes(&cc)
+	s.Require().NoError(err)
+	s.Require().True(reflect.DeepEqual(c, cc))
+	s.Require().True(c.ProposerID.Equal(cc.ProposerID))
+	s.Require().True(c.Round == cc.Round)
+	s.Require().True(reflect.DeepEqual(c.PrivateShare, cc.PrivateShare))
+	s.Require().True(reflect.DeepEqual(c.Signature, cc.Signature))
 }
 
 func (s *DKGTestSuite) TestMasterPublicKeyEquality() {

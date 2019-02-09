@@ -163,6 +163,64 @@ func (c *Complaint) Equal(other *Complaint) bool {
 		bytes.Compare(c.Signature.Signature, other.Signature.Signature) == 0
 }
 
+type rlpComplaint struct {
+	ProposerID   types.NodeID
+	Round        uint64
+	IsNack       bool
+	PrivateShare []byte
+	Signature    crypto.Signature
+}
+
+// EncodeRLP implements rlp.Encoder
+func (c *Complaint) EncodeRLP(w io.Writer) error {
+	if c.IsNack() {
+		return rlp.Encode(w, rlpComplaint{
+			ProposerID:   c.ProposerID,
+			Round:        c.Round,
+			IsNack:       true,
+			PrivateShare: c.PrivateShare.ProposerID.Hash[:],
+			Signature:    c.Signature,
+		})
+	}
+	prvShare, err := rlp.EncodeToBytes(&c.PrivateShare)
+	if err != nil {
+		return err
+	}
+	return rlp.Encode(w, rlpComplaint{
+		ProposerID:   c.ProposerID,
+		Round:        c.Round,
+		IsNack:       false,
+		PrivateShare: prvShare,
+		Signature:    c.Signature,
+	})
+}
+
+// DecodeRLP implements rlp.Decoder
+func (c *Complaint) DecodeRLP(s *rlp.Stream) error {
+	var dec rlpComplaint
+	if err := s.Decode(&dec); err != nil {
+		return err
+	}
+
+	var prvShare PrivateShare
+	if dec.IsNack {
+		copy(prvShare.ProposerID.Hash[:], dec.PrivateShare)
+		prvShare.Round = dec.Round
+	} else {
+		if err := rlp.DecodeBytes(dec.PrivateShare, &prvShare); err != nil {
+			return err
+		}
+	}
+
+	*c = Complaint{
+		ProposerID:   dec.ProposerID,
+		Round:        dec.Round,
+		PrivateShare: prvShare,
+		Signature:    dec.Signature,
+	}
+	return nil
+}
+
 // PartialSignature describe a partial signature in DKG protocol.
 type PartialSignature struct {
 	ProposerID       types.NodeID               `json:"proposer_id"`
