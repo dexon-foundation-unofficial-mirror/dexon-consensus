@@ -267,6 +267,9 @@ func (a *agreement) clocks() int {
 	a.data.lock.RLock()
 	defer a.data.lock.RUnlock()
 	scale := int(a.data.period) - 1
+	if a.state.state() == stateForward {
+		scale = 1
+	}
 	if scale < 1 {
 		// just in case.
 		scale = 1
