@@ -468,6 +468,7 @@ func (a *agreement) processVote(vote *types.Vote) error {
 					a.data.lockIter = vote.Period
 				}
 				a.fastForward <- vote.Period
+				close(a.doneChan)
 				return nil
 			}
 		}
@@ -493,6 +494,7 @@ func (a *agreement) processVote(vote *types.Vote) error {
 			a.data.recv.PullBlocks(hashes)
 		}
 		a.fastForward <- vote.Period + 1
+		close(a.doneChan)
 		return nil
 	}
 	return nil
@@ -513,7 +515,6 @@ func (a *agreement) done() <-chan struct{} {
 		}
 		a.data.setPeriod(period)
 		a.state = newPreCommitState(a.data)
-		close(a.doneChan)
 		a.doneChan = make(chan struct{})
 		return closedchan
 	default:

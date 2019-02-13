@@ -404,6 +404,7 @@ func (s *AgreementTestSuite) TestFastForwardCond2() {
 		return true, nil
 	})
 	a.data.period = 1
+	done := a.done()
 	hash := common.NewRandomHash()
 	for nID := range a.notarySet {
 		vote := s.prepareVote(nID, types.VotePreCom, hash, uint64(2))
@@ -413,6 +414,11 @@ func (s *AgreementTestSuite) TestFastForwardCond2() {
 		}
 	}
 
+	select {
+	case <-done:
+	default:
+		s.FailNow("Expecting fast forward for pending done() call.")
+	}
 	select {
 	case <-a.done():
 	default:
@@ -443,6 +449,7 @@ func (s *AgreementTestSuite) TestFastForwardCond3() {
 		return true, nil
 	})
 	a.data.period = 1
+	done := a.done()
 	for nID := range a.notarySet {
 		vote := s.prepareVote(nID, types.VoteCom, common.NewRandomHash(), uint64(2))
 		votes = append(votes, vote)
@@ -452,6 +459,11 @@ func (s *AgreementTestSuite) TestFastForwardCond3() {
 		}
 	}
 
+	select {
+	case <-done:
+	default:
+		s.FailNow("Expecting fast forward for pending done() call.")
+	}
 	select {
 	case <-a.done():
 	default:
