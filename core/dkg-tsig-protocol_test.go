@@ -780,6 +780,11 @@ func (s *DKGTSIGProtocolTestSuite) TestTSigVerifierCache() {
 	ok, err := cache.Update(uint64(1))
 	s.Require().Equal(ErrRoundAlreadyPurged, err)
 
+	cache.Delete(uint64(5))
+	s.Len(cache.verifier, 2)
+	_, exist := cache.Get(uint64(5))
+	s.False(exist)
+
 	cache = NewTSigVerifierCache(gov, 1)
 	ok, err = cache.Update(uint64(3))
 	s.Require().NoError(err)
@@ -790,6 +795,7 @@ func (s *DKGTSIGProtocolTestSuite) TestTSigVerifierCache() {
 	s.Require().NoError(err)
 	s.Require().True(ok)
 	s.Equal(uint64(5), cache.minRound)
+
 }
 
 func TestDKGTSIGProtocol(t *testing.T) {

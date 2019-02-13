@@ -400,6 +400,9 @@ func NewDKGGroupPublicKey(
 		}
 	}
 	qualifyIDs := make(dkg.IDs, 0, len(mpks)-len(disqualifyIDs))
+	if cap(qualifyIDs) < threshold {
+		return nil, ErrNotReachThreshold
+	}
 	qualifyNodeIDs := make(map[types.NodeID]struct{})
 	mpkMap := make(map[dkg.ID]*typesDKG.MasterPublicKey, cap(qualifyIDs))
 	idMap := make(map[types.NodeID]dkg.ID)
@@ -513,6 +516,13 @@ func (tc *TSigVerifierCache) Update(round uint64) (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+// Delete the cache of given round.
+func (tc *TSigVerifierCache) Delete(round uint64) {
+	tc.lock.Lock()
+	defer tc.lock.Unlock()
+	delete(tc.verifier, round)
 }
 
 // Get the TSigVerifier of round and returns if it exists.

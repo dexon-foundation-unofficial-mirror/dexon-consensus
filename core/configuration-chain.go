@@ -308,11 +308,6 @@ func (cc *configurationChain) recoverDKGInfo(round uint64) error {
 	if err != nil {
 		return err
 	}
-	// Restore DKG share secret, this segment of code is copied from
-	// dkgProtocol.recoverShareSecret.
-	if len(gpk.qualifyIDs) < threshold {
-		return ErrNotReachThreshold
-	}
 	// Check if we have private shares in DB.
 	prvKey, err := cc.db.GetDKGPrivateKey(round)
 	if err != nil {
