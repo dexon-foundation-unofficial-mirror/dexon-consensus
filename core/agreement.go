@@ -434,8 +434,10 @@ func (a *agreement) processVote(vote *types.Vote) error {
 				a.hasOutput = true
 				a.data.recv.ConfirmBlock(hash,
 					a.data.votes[vote.Period][vote.Type])
-				close(a.doneChan)
-				a.doneChan = nil
+				if a.doneChan != nil {
+					close(a.doneChan)
+					a.doneChan = nil
+				}
 			}
 			return nil
 		}
@@ -468,7 +470,10 @@ func (a *agreement) processVote(vote *types.Vote) error {
 					a.data.lockIter = vote.Period
 				}
 				a.fastForward <- vote.Period
-				close(a.doneChan)
+				if a.doneChan != nil {
+					close(a.doneChan)
+					a.doneChan = nil
+				}
 				return nil
 			}
 		}
@@ -494,7 +499,10 @@ func (a *agreement) processVote(vote *types.Vote) error {
 			a.data.recv.PullBlocks(hashes)
 		}
 		a.fastForward <- vote.Period + 1
-		close(a.doneChan)
+		if a.doneChan != nil {
+			close(a.doneChan)
+			a.doneChan = nil
+		}
 		return nil
 	}
 	return nil
@@ -503,13 +511,10 @@ func (a *agreement) processVote(vote *types.Vote) error {
 func (a *agreement) done() <-chan struct{} {
 	a.lock.Lock()
 	defer a.lock.Unlock()
-	if a.doneChan == nil {
-		return closedchan
-	}
-	a.data.lock.Lock()
-	defer a.data.lock.Unlock()
 	select {
 	case period := <-a.fastForward:
+		a.data.lock.Lock()
+		defer a.data.lock.Unlock()
 		if period <= a.data.period {
 			break
 		}
@@ -518,6 +523,9 @@ func (a *agreement) done() <-chan struct{} {
 		a.doneChan = make(chan struct{})
 		return closedchan
 	default:
+	}
+	if a.doneChan == nil {
+		return closedchan
 	}
 	return a.doneChan
 }
