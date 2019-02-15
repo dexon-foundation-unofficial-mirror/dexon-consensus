@@ -37,6 +37,8 @@ import (
 const (
 	// Count of maximum count of peers to pull votes from.
 	maxPullingPeerCount = 3
+	maxBlockCache       = 1000
+	maxVoteCache        = 128
 )
 
 // NetworkType is the simulation network type.
@@ -181,7 +183,7 @@ func NewNetwork(pubKey crypto.PublicKey, config NetworkConfig) (
 		toNode:               make(chan interface{}, 1000),
 		sentRandomness:       make(map[common.Hash]struct{}),
 		sentAgreement:        make(map[common.Hash]struct{}),
-		blockCache:           make(map[common.Hash]*types.Block),
+		blockCache:           make(map[common.Hash]*types.Block, maxBlockCache),
 		randomnessCache:      make(map[common.Hash]*types.BlockRandomnessResult),
 		unreceivedBlocks:     make(map[common.Hash]chan<- common.Hash),
 		unreceivedRandomness: make(map[common.Hash]chan<- common.Hash),
@@ -632,7 +634,7 @@ Loop:
 func (n *Network) addBlockToCache(b *types.Block) {
 	n.blockCacheLock.Lock()
 	defer n.blockCacheLock.Unlock()
-	if len(n.blockCache) > 1000 {
+	if len(n.blockCache) > maxBlockCache {
 		// Randomly purge one block from cache.
 		for k := range n.blockCache {
 			delete(n.blockCache, k)
@@ -645,7 +647,7 @@ func (n *Network) addBlockToCache(b *types.Block) {
 func (n *Network) addVoteToCache(v *types.Vote) {
 	n.voteCacheLock.Lock()
 	defer n.voteCacheLock.Unlock()
-	if n.voteCacheSize >= 128 {
+	if n.voteCacheSize >= maxVoteCache {
 		pos := n.votePositions[0]
 		n.voteCacheSize -= len(n.voteCache[pos])
 		delete(n.voteCache, pos)

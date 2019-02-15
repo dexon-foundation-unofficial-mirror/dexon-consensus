@@ -166,13 +166,11 @@ func (s *NetworkTestSuite) TestPullBlocks() {
 }
 
 func (s *NetworkTestSuite) TestPullVotes() {
-	// The functionality of pulling votes is not deterministic, so the test here
-	// only tries to "retry pulling votes until we can get some votes back".
 	var (
-		peerCount     = 10
+		peerCount     = maxPullingPeerCount
 		maxRound      = uint64(5)
-		voteCount     = 200
-		voteTestCount = 15
+		voteCount     = maxVoteCache
+		voteTestCount = maxVoteCache / 2
 		req           = s.Require()
 	)
 	_, pubKeys, err := NewKeys(peerCount)
@@ -218,14 +216,15 @@ func (s *NetworkTestSuite) TestPullVotes() {
 			break
 		}
 	}
+	time.Sleep(1 * time.Second)
 	// Try to pull all votes with timeout.
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 3*time.Second)
-	defer func() { cancelFunc() }()
 	for len(votesToTest) > 0 {
 		for vHeader := range votesToTest {
 			master.PullVotes(vHeader.Position)
 			break
 		}
+		ctx, cancelFunc := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancelFunc()
 		select {
 		case v := <-master.ReceiveChan():
 			vv, ok := v.(*types.Vote)
@@ -234,8 +233,7 @@ func (s *NetworkTestSuite) TestPullVotes() {
 			}
 			delete(votesToTest, vv.VoteHeader)
 		case <-ctx.Done():
-			req.True(false)
-		default:
+			s.FailNow("PullVote Fail")
 		}
 	}
 }
