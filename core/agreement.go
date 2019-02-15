@@ -162,7 +162,7 @@ func (a *agreement) restart(
 		defer a.lock.Unlock()
 		if !isStop(aID) {
 			oldAID := a.agreementID()
-			if !isStop(oldAID) && !aID.Newer(&oldAID) {
+			if !isStop(oldAID) && !aID.Newer(oldAID) {
 				return false
 			}
 		}
@@ -209,7 +209,7 @@ func (a *agreement) restart(
 		defer a.lock.Unlock()
 		newPendingBlock := make([]pendingBlock, 0)
 		for _, pending := range a.pendingBlock {
-			if aID.Newer(&pending.block.Position) {
+			if aID.Newer(pending.block.Position) {
 				continue
 			} else if pending.block.Position == aID {
 				replayBlock = append(replayBlock, pending.block)
@@ -226,7 +226,7 @@ func (a *agreement) restart(
 		defer a.lock.Unlock()
 		newPendingVote := make([]pendingVote, 0)
 		for _, pending := range a.pendingVote {
-			if aID.Newer(&pending.vote.Position) {
+			if aID.Newer(pending.vote.Position) {
 				continue
 			} else if pending.vote.Position == aID {
 				replayVote = append(replayVote, pending.vote)
@@ -390,7 +390,7 @@ func (a *agreement) processVote(vote *types.Vote) error {
 		return nil
 	}
 	if vote.Position != aID {
-		if aID.Newer(&vote.Position) {
+		if aID.Newer(vote.Position) {
 			return nil
 		}
 		a.pendingVote = append(a.pendingVote, pendingVote{
@@ -547,7 +547,7 @@ func (a *agreement) processBlock(block *types.Block) error {
 	if block.Position != aID {
 		// Agreement module has stopped.
 		if !isStop(aID) {
-			if aID.Newer(&block.Position) {
+			if aID.Newer(block.Position) {
 				return nil
 			}
 		}

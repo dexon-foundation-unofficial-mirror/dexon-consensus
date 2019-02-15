@@ -29,18 +29,16 @@ import (
 
 // slowApp is an Application instance slow things down in every method.
 type slowApp struct {
-	sleep                  time.Duration
-	blockConfirmed         map[common.Hash]struct{}
-	totalOrderingDelivered map[common.Hash]struct{}
-	blockDelivered         map[common.Hash]struct{}
+	sleep          time.Duration
+	blockConfirmed map[common.Hash]struct{}
+	blockDelivered map[common.Hash]struct{}
 }
 
 func newSlowApp(sleep time.Duration) *slowApp {
 	return &slowApp{
-		sleep:                  sleep,
-		blockConfirmed:         make(map[common.Hash]struct{}),
-		totalOrderingDelivered: make(map[common.Hash]struct{}),
-		blockDelivered:         make(map[common.Hash]struct{}),
+		sleep:          sleep,
+		blockConfirmed: make(map[common.Hash]struct{}),
+		blockDelivered: make(map[common.Hash]struct{}),
 	}
 }
 
@@ -59,13 +57,6 @@ func (app *slowApp) VerifyBlock(_ *types.Block) types.BlockVerifyStatus {
 func (app *slowApp) BlockConfirmed(block types.Block) {
 	time.Sleep(app.sleep)
 	app.blockConfirmed[block.Hash] = struct{}{}
-}
-
-func (app *slowApp) TotalOrderingDelivered(blockHashes common.Hashes, mode uint32) {
-	time.Sleep(app.sleep)
-	for _, hash := range blockHashes {
-		app.totalOrderingDelivered[hash] = struct{}{}
-	}
 }
 
 func (app *slowApp) BlockDelivered(blockHash common.Hash,
@@ -137,7 +128,6 @@ func (s *NonBlockingTestSuite) TestNonBlocking() {
 		nbModule.BlockDelivered(
 			hash, types.Position{}, types.FinalizationResult{})
 	}
-	nbModule.TotalOrderingDelivered(hashes, TotalOrderingModeEarly)
 
 	// nonBlocking should be non-blocking.
 	s.True(shouldFinish.After(time.Now().UTC()))
@@ -145,7 +135,6 @@ func (s *NonBlockingTestSuite) TestNonBlocking() {
 	nbModule.wait()
 	for _, hash := range hashes {
 		s.Contains(app.blockConfirmed, hash)
-		s.Contains(app.totalOrderingDelivered, hash)
 		s.Contains(app.blockDelivered, hash)
 	}
 }

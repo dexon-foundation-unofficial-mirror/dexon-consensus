@@ -61,8 +61,7 @@ endif
 
 COMPONENTS = \
 	dexcon-simulation \
-	dexcon-simulation-peer-server \
-	dexcon-simulation-with-scheduler
+	dexcon-simulation-peer-server
 
 .PHONY: clean default
 

@@ -20,6 +20,8 @@ commands:
           command: |
             if [ "${CIRCLE_BRANCH}" == "master" ]; then
               make test
+            elif [ "${CIRCLE_BRANCH}" == "single-chain" ]; then
+              make test
             else
               make test-short
             fi
@@ -128,6 +130,7 @@ workflows:
             branches:
               only:
                 - master
+                - single-chain
 
   test_and_build:
     jobs:

@@ -50,10 +50,6 @@ var (
 	// ErrDeliveredBlockNotConfirmed means some block delivered (confirmed) but
 	// not confirmed.
 	ErrDeliveredBlockNotConfirmed = fmt.Errorf("delivered block not confirmed")
-	// ErrMismatchTotalOrderingAndDelivered mean the sequence of total ordering
-	// and delivered are different.
-	ErrMismatchTotalOrderingAndDelivered = fmt.Errorf(
-		"mismatch total ordering and delivered sequence")
 	// ErrAckingBlockNotDelivered means the delivered sequence not forming a
 	// DAG.
 	ErrAckingBlockNotDelivered = fmt.Errorf("acking block not delivered")
@@ -70,26 +66,6 @@ var (
 	ErrParentBlockNotDelivered = fmt.Errorf("parent block not delivered")
 )
 
-// This definition is copied from core package.
-const (
-	// TotalOrderingModeError returns mode error.
-	TotalOrderingModeError uint32 = iota
-	// TotalOrderingModeNormal returns mode normal.
-	TotalOrderingModeNormal
-	// TotalOrderingModeEarly returns mode early.
-	TotalOrderingModeEarly
-	// TotalOrderingModeFlush returns mode flush.
-	TotalOrderingModeFlush
-)
-
-// AppTotalOrderRecord caches information when this application received
-// a total-ordering deliver notification.
-type AppTotalOrderRecord struct {
-	BlockHashes common.Hashes
-	Mode        uint32
-	When        time.Time
-}
-
 // AppDeliveredRecord caches information when this application received
 // a block delivered notification.
 type AppDeliveredRecord struct {
@@ -103,9 +79,6 @@ type App struct {
 	Confirmed             map[common.Hash]*types.Block
 	LastConfirmedHeights  map[uint32]uint64
 	confirmedLock         sync.RWMutex
-	TotalOrdered          []*AppTotalOrderRecord
-	TotalOrderedByHash    map[common.Hash]*AppTotalOrderRecord
-	totalOrderedLock      sync.RWMutex
 	Delivered             map[common.Hash]*AppDeliveredRecord
 	DeliverSequence       common.Hashes
 	deliveredLock         sync.RWMutex
@@ -121,8 +94,6 @@ func NewApp(initRound uint64, gov *Governance) (app *App) {
 	app = &App{
 		Confirmed:            make(map[common.Hash]*types.Block),
 		LastConfirmedHeights: make(map[uint32]uint64),
-		TotalOrdered:         []*AppTotalOrderRecord{},
-		TotalOrderedByHash:   make(map[common.Hash]*AppTotalOrderRecord),
 		Delivered:            make(map[common.Hash]*AppDeliveredRecord),
 		DeliverSequence:      common.Hashes{},
 		gov:                  gov,
@@ -223,25 +194,6 @@ func (app *App) BlockConfirmed(b types.Block) {
 	app.LastConfirmedHeights[b.Position.ChainID] = b.Position.Height
 }
 
-// TotalOrderingDelivered implements Application interface.
-func (app *App) TotalOrderingDelivered(blockHashes common.Hashes, mode uint32) {
-	app.totalOrderedLock.Lock()
-	defer app.totalOrderedLock.Unlock()
-
-	rec := &AppTotalOrderRecord{
-		BlockHashes: blockHashes,
-		Mode:        mode,
-		When:        time.Now().UTC(),
-	}
-	app.TotalOrdered = append(app.TotalOrdered, rec)
-	for _, h := range blockHashes {
-		if _, exists := app.TotalOrderedByHash[h]; exists {
-			panic(fmt.Errorf("deliver duplicated blocks from total ordering"))
-		}
-		app.TotalOrderedByHash[h] = rec
-	}
-}
-
 // BlockDelivered implements Application interface.
 func (app *App) BlockDelivered(
 	blockHash common.Hash, pos types.Position, result types.FinalizationResult) {
@@ -307,30 +259,33 @@ func (app *App) GetLatestDeliveredPosition() types.Position {
 // and return erros if not passed:
 // - deliver sequence by comparing block hashes.
 // - consensus timestamp of each block are equal.
-func (app *App) Compare(other *App) error {
-	app.deliveredLock.RLock()
-	defer app.deliveredLock.RUnlock()
-	other.deliveredLock.RLock()
-	defer other.deliveredLock.RUnlock()
-
-	minLength := len(app.DeliverSequence)
-	if minLength > len(other.DeliverSequence) {
-		minLength = len(other.DeliverSequence)
-	}
-	if minLength == 0 {
-		return ErrEmptyDeliverSequence
-	}
-	for idx, h := range app.DeliverSequence[:minLength] {
-		hOther := other.DeliverSequence[idx]
-		if hOther != h {
-			return ErrMismatchBlockHashSequence
-		}
-		if app.Delivered[h].Result.Timestamp !=
-			other.Delivered[h].Result.Timestamp {
-			return ErrMismatchConsensusTime
-		}
-	}
-	return nil
+func (app *App) Compare(other *App) (err error) {
+	app.WithLock(func(app *App) {
+		other.WithLock(func(other *App) {
+			minLength := len(app.DeliverSequence)
+			if minLength > len(other.DeliverSequence) {
+				minLength = len(other.DeliverSequence)
+			}
+			if minLength == 0 {
+				err = ErrEmptyDeliverSequence
+				return
+			}
+			// Here we assumes both Apps begin from the same height.
+			for idx, h := range app.DeliverSequence[:minLength] {
+				hOther := other.DeliverSequence[idx]
+				if hOther != h {
+					err = ErrMismatchBlockHashSequence
+					return
+				}
+				if app.Delivered[h].Result.Timestamp !=
+					other.Delivered[h].Result.Timestamp {
+					err = ErrMismatchConsensusTime
+					return
+				}
+			}
+		})
+	})
+	return
 }
 
 // Verify checks the integrity of date received by this App instance.
@@ -371,57 +326,6 @@ func (app *App) Verify() error {
 		}
 		expectHeight++
 	}
-	// Check causality.
-	revealedDAG := make(map[common.Hash]struct{})
-	for _, toDeliver := range app.TotalOrdered {
-		for _, h := range toDeliver.BlockHashes {
-			b, exists := app.Confirmed[h]
-			if !exists {
-				return ErrDeliveredBlockNotConfirmed
-			}
-			for _, ack := range b.Acks {
-				if _, ackingBlockExists := revealedDAG[ack]; !ackingBlockExists {
-					return ErrAckingBlockNotDelivered
-				}
-			}
-			if toDeliver.Mode == TotalOrderingModeFlush {
-				// For blocks delivered by flushing, the acking relations would
-				// exist in one deliver set, however, only later block would
-				// ack previous block, not backward.
-				revealedDAG[h] = struct{}{}
-			}
-		}
-		// For blocks not delivered by flushing, the acking relations only exist
-		// between deliver sets.
-		if toDeliver.Mode != TotalOrderingModeFlush {
-			for _, h := range toDeliver.BlockHashes {
-				revealedDAG[h] = struct{}{}
-			}
-		}
-	}
-	// Make sure the order of delivered and total ordering are the same by
-	// comparing the concated string.
-	app.totalOrderedLock.RLock()
-	defer app.totalOrderedLock.RUnlock()
-
-	hashSequenceIdx := 0
-Loop:
-	for _, rec := range app.TotalOrdered {
-		for _, h := range rec.BlockHashes {
-			if hashSequenceIdx >= len(app.DeliverSequence) {
-				break Loop
-			}
-			if h != app.DeliverSequence[hashSequenceIdx] {
-				return ErrMismatchTotalOrderingAndDelivered
-			}
-			hashSequenceIdx++
-		}
-	}
-	if hashSequenceIdx != len(app.DeliverSequence) {
-		// The count of delivered blocks should be larger than those delivered
-		// by total ordering.
-		return ErrMismatchTotalOrderingAndDelivered
-	}
 	return nil
 }
 
@@ -435,8 +339,6 @@ func (app *App) BlockReady(hash common.Hash) {}
 func (app *App) WithLock(function func(*App)) {
 	app.confirmedLock.RLock()
 	defer app.confirmedLock.RUnlock()
-	app.totalOrderedLock.RLock()
-	defer app.totalOrderedLock.RUnlock()
 	app.deliveredLock.RLock()
 	defer app.deliveredLock.RUnlock()
 	app.lastPendingHeightLock.RLock()

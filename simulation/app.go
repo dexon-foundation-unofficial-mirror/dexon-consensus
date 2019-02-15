@@ -150,29 +150,6 @@ func (a *simApp) PrepareWitness(height uint64) (types.Witness, error) {
 	return a.latestWitness, nil
 }
 
-// TotalOrderingDelivered is called when blocks are delivered by the total
-// ordering algorithm.
-func (a *simApp) TotalOrderingDelivered(
-	blockHashes common.Hashes, mode uint32) {
-	fmt.Println("OUTPUT", a.NodeID, mode, blockHashes)
-	latencies := []time.Duration{}
-	func() {
-		a.lock.RLock()
-		defer a.lock.RUnlock()
-		for _, h := range blockHashes {
-			latencies = append(latencies, time.Since(a.blockTimestamps[h][blockEventReceived]))
-		}
-	}()
-	blockList := &BlockList{
-		ID:             a.DeliverID,
-		BlockHash:      blockHashes,
-		ConfirmLatency: latencies,
-	}
-	// #nosec G104
-	a.netModule.Report(blockList)
-	a.DeliverID++
-}
-
 // BlockDelivered is called when a block in compaction chain is delivered.
 func (a *simApp) BlockDelivered(
 	blockHash common.Hash, pos types.Position, result types.FinalizationResult) {

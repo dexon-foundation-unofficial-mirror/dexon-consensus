@@ -23,52 +23,12 @@ import (
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
-	"github.com/dexon-foundation/dexon-consensus/core"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	"github.com/stretchr/testify/suite"
 )
 
 type AppTestSuite struct {
 	suite.Suite
-
-	to1, to2, to3 *AppTotalOrderRecord
-}
-
-func (s *AppTestSuite) SetupSuite() {
-	s.to1 = &AppTotalOrderRecord{
-		BlockHashes: common.Hashes{
-			common.NewRandomHash(),
-			common.NewRandomHash(),
-		},
-		Mode: core.TotalOrderingModeNormal,
-	}
-	s.to2 = &AppTotalOrderRecord{
-		BlockHashes: common.Hashes{
-			common.NewRandomHash(),
-			common.NewRandomHash(),
-			common.NewRandomHash(),
-		},
-		Mode: core.TotalOrderingModeNormal,
-	}
-	s.to3 = &AppTotalOrderRecord{
-		BlockHashes: common.Hashes{
-			common.NewRandomHash(),
-		},
-		Mode: core.TotalOrderingModeNormal,
-	}
-}
-
-func (s *AppTestSuite) setupAppByTotalOrderDeliver(
-	app *App, to *AppTotalOrderRecord) {
-	for _, h := range to.BlockHashes {
-		app.BlockConfirmed(types.Block{Hash: h})
-	}
-	app.TotalOrderingDelivered(to.BlockHashes, to.Mode)
-	for _, h := range to.BlockHashes {
-		// To make it simpler, use the index of hash sequence
-		// as the time.
-		s.deliverBlockWithTimeFromSequenceLength(app, h)
-	}
 }
 
 func (s *AppTestSuite) deliverBlockWithTimeFromSequenceLength(
@@ -89,112 +49,94 @@ func (s *AppTestSuite) deliverBlock(
 }
 
 func (s *AppTestSuite) TestCompare() {
-	req := s.Require()
-
+	var (
+		now = time.Now().UTC()
+		b0  = types.Block{Hash: common.Hash{}}
+		b1  = types.Block{
+			Hash:     common.NewRandomHash(),
+			Position: types.Position{Height: 1},
+		}
+	)
+	// Prepare an OK App instance.
 	app1 := NewApp(0, nil)
-	s.setupAppByTotalOrderDeliver(app1, s.to1)
-	s.setupAppByTotalOrderDeliver(app1, s.to2)
-	s.setupAppByTotalOrderDeliver(app1, s.to3)
-	// An App with different deliver sequence.
+	app1.BlockConfirmed(b0)
+	app1.BlockConfirmed(b1)
+	app1.BlockDelivered(b0.Hash, b0.Position, types.FinalizationResult{
+		Height:    1,
+		Timestamp: now,
+	})
+	app1.BlockDelivered(b1.Hash, b1.Position, types.FinalizationResult{
+		Height:    2,
+		Timestamp: now.Add(1 * time.Second),
+	})
 	app2 := NewApp(0, nil)
-	s.setupAppByTotalOrderDeliver(app2, s.to1)
-	s.setupAppByTotalOrderDeliver(app2, s.to2)
-	hash := common.NewRandomHash()
-	app2.BlockConfirmed(types.Block{Hash: hash})
-	app2.TotalOrderingDelivered(common.Hashes{hash}, core.TotalOrderingModeNormal)
-	s.deliverBlockWithTimeFromSequenceLength(app2, hash)
-	req.Equal(ErrMismatchBlockHashSequence, app1.Compare(app2))
-	// An App with different consensus time for the same block.
-	app3 := NewApp(0, nil)
-	s.setupAppByTotalOrderDeliver(app3, s.to1)
-	s.setupAppByTotalOrderDeliver(app3, s.to2)
-	for _, h := range s.to3.BlockHashes {
-		app3.BlockConfirmed(types.Block{Hash: h})
+	s.Require().Equal(ErrEmptyDeliverSequence.Error(),
+		app1.Compare(app2).Error())
+	app2.BlockConfirmed(b0)
+	app2.BlockDelivered(b0.Hash, b0.Position, types.FinalizationResult{
+		Height:    1,
+		Timestamp: now,
+	})
+	b1Bad := types.Block{
+		Hash:     common.NewRandomHash(),
+		Position: types.Position{Height: 1},
 	}
-	app3.TotalOrderingDelivered(s.to3.BlockHashes, s.to3.Mode)
-	wrongTime := time.Time{}.Add(
-		time.Duration(len(app3.DeliverSequence)) * time.Second)
-	wrongTime = wrongTime.Add(1 * time.Second)
-	s.deliverBlock(app3, s.to3.BlockHashes[0], wrongTime,
-		uint64(len(app3.DeliverSequence)+1))
-	req.Equal(ErrMismatchConsensusTime, app1.Compare(app3))
-	req.Equal(ErrMismatchConsensusTime, app3.Compare(app1))
-	// An App without any delivered blocks.
-	app4 := NewApp(0, nil)
-	req.Equal(ErrEmptyDeliverSequence, app4.Compare(app1))
-	req.Equal(ErrEmptyDeliverSequence, app1.Compare(app4))
+	app2.BlockConfirmed(b1Bad)
+	app2.BlockDelivered(b1Bad.Hash, b1Bad.Position, types.FinalizationResult{
+		Height:    1,
+		Timestamp: now,
+	})
+	s.Require().Equal(ErrMismatchBlockHashSequence.Error(),
+		app1.Compare(app2).Error())
+	app2 = NewApp(0, nil)
+	app2.BlockConfirmed(b0)
+	app2.BlockDelivered(b0.Hash, b0.Position, types.FinalizationResult{
+		Height:    1,
+		Timestamp: now.Add(1 * time.Second),
+	})
+	s.Require().Equal(ErrMismatchConsensusTime.Error(),
+		app1.Compare(app2).Error())
 }
 
 func (s *AppTestSuite) TestVerify() {
-	req := s.Require()
-
-	// An OK App instance.
-	app1 := NewApp(0, nil)
-	s.setupAppByTotalOrderDeliver(app1, s.to1)
-	s.setupAppByTotalOrderDeliver(app1, s.to2)
-	s.setupAppByTotalOrderDeliver(app1, s.to3)
-	req.NoError(app1.Verify())
-	// A delivered block without strongly ack
-	s.deliverBlock(app1, common.NewRandomHash(), time.Time{},
-		uint64(len(app1.DeliverSequence)))
-	req.Equal(ErrDeliveredBlockNotConfirmed, app1.Verify())
-	// The consensus time is out of order.
-	app2 := NewApp(0, nil)
-	s.setupAppByTotalOrderDeliver(app2, s.to1)
-	for _, h := range s.to2.BlockHashes {
-		app2.BlockConfirmed(types.Block{Hash: h})
-	}
-	app2.TotalOrderingDelivered(s.to2.BlockHashes, s.to2.Mode)
-	s.deliverBlock(app2, s.to2.BlockHashes[0], time.Time{},
-		uint64(len(app2.DeliverSequence)+1))
-	req.Equal(ErrConsensusTimestampOutOfOrder, app2.Verify())
-	// A delivered block is not found in total ordering delivers.
-	app3 := NewApp(0, nil)
-	s.setupAppByTotalOrderDeliver(app3, s.to1)
-	hash := common.NewRandomHash()
-	app3.BlockConfirmed(types.Block{Hash: hash})
-	s.deliverBlockWithTimeFromSequenceLength(app3, hash)
-	req.Equal(ErrMismatchTotalOrderingAndDelivered, app3.Verify())
-	// A delivered block is not found in total ordering delivers.
-	app4 := NewApp(0, nil)
-	s.setupAppByTotalOrderDeliver(app4, s.to1)
-	for _, h := range s.to2.BlockHashes {
-		app4.BlockConfirmed(types.Block{Hash: h})
-	}
-	app4.TotalOrderingDelivered(s.to2.BlockHashes, s.to2.Mode)
-	hash = common.NewRandomHash()
-	app4.BlockConfirmed(types.Block{Hash: hash})
-	app4.TotalOrderingDelivered(common.Hashes{hash}, core.TotalOrderingModeNormal)
-	s.deliverBlockWithTimeFromSequenceLength(app4, hash)
-	// Witness ack on unknown block.
-	app5 := NewApp(0, nil)
-	s.setupAppByTotalOrderDeliver(app5, s.to1)
-	// The conensus height is out of order.
-	app6 := NewApp(0, nil)
-	s.setupAppByTotalOrderDeliver(app6, s.to1)
-	for _, h := range s.to2.BlockHashes {
-		app6.BlockConfirmed(types.Block{Hash: h})
-	}
-	app6.TotalOrderingDelivered(s.to2.BlockHashes, s.to2.Mode)
-	s.deliverBlock(app6, s.to2.BlockHashes[0], time.Time{}.Add(
-		time.Duration(len(app6.DeliverSequence))*time.Second),
-		uint64(len(app6.DeliverSequence)+2))
-	req.Equal(ErrConsensusHeightOutOfOrder, app6.Verify())
-	// Test the acking block doesn't delivered.
-	app7 := NewApp(0, nil)
-	// Patch a block's acks.
-	b7 := &types.Block{
-		Hash: common.NewRandomHash(),
-		Acks: common.NewSortedHashes(common.Hashes{common.NewRandomHash()}),
-	}
-	app7.BlockConfirmed(*b7)
-	app7.TotalOrderingDelivered(
-		common.Hashes{b7.Hash}, core.TotalOrderingModeNormal)
-	app7.BlockDelivered(b7.Hash, types.Position{}, types.FinalizationResult{
-		Timestamp: time.Now(),
+	var (
+		now = time.Now().UTC()
+		b0  = types.Block{Hash: common.Hash{}}
+		b1  = types.Block{
+			Hash:     common.NewRandomHash(),
+			Position: types.Position{Height: 1},
+		}
+	)
+	app := NewApp(0, nil)
+	s.Require().Equal(ErrEmptyDeliverSequence.Error(), app.Verify().Error())
+	app.BlockDelivered(b0.Hash, b0.Position, types.FinalizationResult{})
+	app.BlockDelivered(b1.Hash, b1.Position, types.FinalizationResult{Height: 1})
+	s.Require().Equal(
+		ErrDeliveredBlockNotConfirmed.Error(), app.Verify().Error())
+	app = NewApp(0, nil)
+	app.BlockConfirmed(b0)
+	app.BlockDelivered(b0.Hash, b0.Position, types.FinalizationResult{
 		Height:    1,
+		Timestamp: now,
 	})
-	req.Equal(ErrAckingBlockNotDelivered, app7.Verify())
+	app.BlockConfirmed(b1)
+	app.BlockDelivered(b1.Hash, b1.Position, types.FinalizationResult{
+		Height:    2,
+		Timestamp: now.Add(-1 * time.Second),
+	})
+	s.Require().Equal(ErrConsensusTimestampOutOfOrder.Error(),
+		app.Verify().Error())
+	app = NewApp(0, nil)
+	app.BlockConfirmed(b0)
+	app.BlockConfirmed(b1)
+	app.BlockDelivered(b0.Hash, b0.Position, types.FinalizationResult{
+		Height:    1,
+		Timestamp: now,
+	})
+	app.BlockDelivered(b1.Hash, b1.Position, types.FinalizationResult{
+		Height:    1,
+		Timestamp: now.Add(1 * time.Second),
+	})
 }
 
 func (s *AppTestSuite) TestWitness() {
@@ -255,7 +197,7 @@ func (s *AppTestSuite) TestWitness() {
 	s.Require().Equal(app.LastPendingHeight, uint64(3))
 	// We can only prepare witness for what've delivered.
 	_, err := app.PrepareWitness(4)
-	s.Require().IsType(err, ErrLowerPendingHeight)
+	s.Require().Equal(err.Error(), ErrLowerPendingHeight.Error())
 	// It should be ok to prepare for height that already delivered.
 	w, err := app.PrepareWitness(3)
 	s.Require().NoError(err)

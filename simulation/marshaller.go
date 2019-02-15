@@ -36,12 +36,6 @@ func (m *jsonMarshaller) Unmarshal(
 			break
 		}
 		msg = notif
-	case "blocklist":
-		var blocks BlockList
-		if err = json.Unmarshal(payload, &blocks); err != nil {
-			break
-		}
-		msg = &blocks
 	case "message":
 		var m message
 		if err = json.Unmarshal(payload, &m); err != nil {
@@ -63,8 +57,6 @@ func (m *jsonMarshaller) Marshal(msg interface{}) (
 	switch msg.(type) {
 	case serverNotification:
 		msgType = "server-notif"
-	case *BlockList:
-		msgType = "blocklist"
 	case *message:
 		msgType = "message"
 	default:

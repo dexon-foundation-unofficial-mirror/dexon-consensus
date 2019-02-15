@@ -198,7 +198,7 @@ func (b *Block) DecodeRLP(s *rlp.Stream) error {
 }
 
 func (b *Block) String() string {
-	return fmt.Sprintf("Block{Hash:%v %s}", b.Hash.String()[:6], &b.Position)
+	return fmt.Sprintf("Block{Hash:%v %s}", b.Hash.String()[:6], b.Position)
 }
 
 // Clone returns a deep copy of a block.
@@ -263,62 +263,62 @@ func (b ByHash) Swap(i int, j int) {
 	b[i], b[j] = b[j], b[i]
 }
 
-// ByPosition is the helper type for sorting slice of blocks by position.
-type ByPosition []*Block
+// BlocksByPosition is the helper type for sorting slice of blocks by position.
+type BlocksByPosition []*Block
 
 // Len implements Len method in sort.Sort interface.
-func (bs ByPosition) Len() int {
+func (bs BlocksByPosition) Len() int {
 	return len(bs)
 }
 
 // Less implements Less method in sort.Sort interface.
-func (bs ByPosition) Less(i int, j int) bool {
-	return bs[j].Position.Newer(&bs[i].Position)
+func (bs BlocksByPosition) Less(i int, j int) bool {
+	return bs[j].Position.Newer(bs[i].Position)
 }
 
 // Swap implements Swap method in sort.Sort interface.
-func (bs ByPosition) Swap(i int, j int) {
+func (bs BlocksByPosition) Swap(i int, j int) {
 	bs[i], bs[j] = bs[j], bs[i]
 }
 
 // Push implements Push method in heap interface.
-func (bs *ByPosition) Push(x interface{}) {
+func (bs *BlocksByPosition) Push(x interface{}) {
 	*bs = append(*bs, x.(*Block))
 }
 
 // Pop implements Pop method in heap interface.
-func (bs *ByPosition) Pop() (ret interface{}) {
+func (bs *BlocksByPosition) Pop() (ret interface{}) {
 	n := len(*bs)
 	*bs, ret = (*bs)[0:n-1], (*bs)[n-1]
 	return
 }
 
-// ByFinalizationHeight is the helper type for sorting slice of blocks by
+// BlocksByFinalizationHeight is the helper type for sorting slice of blocks by
 // finalization height.
-type ByFinalizationHeight []*Block
+type BlocksByFinalizationHeight []*Block
 
 // Len implements Len method in sort.Sort interface.
-func (bs ByFinalizationHeight) Len() int {
+func (bs BlocksByFinalizationHeight) Len() int {
 	return len(bs)
 }
 
 // Less implements Less method in sort.Sort interface.
-func (bs ByFinalizationHeight) Less(i int, j int) bool {
+func (bs BlocksByFinalizationHeight) Less(i int, j int) bool {
 	return bs[i].Finalization.Height < bs[j].Finalization.Height
 }
 
 // Swap implements Swap method in sort.Sort interface.
-func (bs ByFinalizationHeight) Swap(i int, j int) {
+func (bs BlocksByFinalizationHeight) Swap(i int, j int) {
 	bs[i], bs[j] = bs[j], bs[i]
 }
 
 // Push implements Push method in heap interface.
-func (bs *ByFinalizationHeight) Push(x interface{}) {
+func (bs *BlocksByFinalizationHeight) Push(x interface{}) {
 	*bs = append(*bs, x.(*Block))
 }
 
 // Pop implements Pop method in heap interface.
-func (bs *ByFinalizationHeight) Pop() (ret interface{}) {
+func (bs *BlocksByFinalizationHeight) Pop() (ret interface{}) {
 	n := len(*bs)
 	*bs, ret = (*bs)[0:n-1], (*bs)[n-1]
 	return

@@ -35,24 +35,24 @@ func (s *PositionTestSuite) TestNewer() {
 		Height:  1,
 	}
 	s.Panics(func() {
-		pos.Newer(&Position{ChainID: 2})
+		pos.Newer(Position{ChainID: 2})
 	})
-	s.False(pos.Newer(&Position{
+	s.False(pos.Newer(Position{
 		Round:   2,
 		ChainID: 1,
 		Height:  0,
 	}))
-	s.False(pos.Newer(&Position{
+	s.False(pos.Newer(Position{
 		Round:   1,
 		ChainID: 1,
 		Height:  2,
 	}))
-	s.True(pos.Newer(&Position{
+	s.True(pos.Newer(Position{
 		Round:   0,
 		ChainID: 1,
 		Height:  100,
 	}))
-	s.True(pos.Newer(&Position{
+	s.True(pos.Newer(Position{
 		Round:   1,
 		ChainID: 1,
 		Height:  0,
@@ -66,24 +66,24 @@ func (s *PositionTestSuite) TestOlder() {
 		Height:  1,
 	}
 	s.Panics(func() {
-		pos.Older(&Position{ChainID: 2})
+		pos.Older(Position{ChainID: 2})
 	})
-	s.False(pos.Older(&Position{
+	s.False(pos.Older(Position{
 		Round:   0,
 		ChainID: 1,
 		Height:  0,
 	}))
-	s.False(pos.Older(&Position{
+	s.False(pos.Older(Position{
 		Round:   1,
 		ChainID: 1,
 		Height:  0,
 	}))
-	s.True(pos.Older(&Position{
+	s.True(pos.Older(Position{
 		Round:   2,
 		ChainID: 1,
 		Height:  0,
 	}))
-	s.True(pos.Older(&Position{
+	s.True(pos.Older(Position{
 		Round:   1,
 		ChainID: 1,
 		Height:  100,
@@ -91,37 +91,37 @@ func (s *PositionTestSuite) TestOlder() {
 }
 
 func (s *PositionTestSuite) TestSearchInAsendingOrder() {
-	positions := []*Position{
-		&Position{Round: 0, Height: 1},
-		&Position{Round: 0, Height: 2},
-		&Position{Round: 0, Height: 3},
-		&Position{Round: 2, Height: 0},
-		&Position{Round: 2, Height: 1},
-		&Position{Round: 2, Height: 2},
-		&Position{Round: 4, Height: 0},
-		&Position{Round: 4, Height: 1},
-		&Position{Round: 4, Height: 2},
+	positions := []Position{
+		Position{Round: 0, Height: 1},
+		Position{Round: 0, Height: 2},
+		Position{Round: 0, Height: 3},
+		Position{Round: 2, Height: 0},
+		Position{Round: 2, Height: 1},
+		Position{Round: 2, Height: 2},
+		Position{Round: 4, Height: 0},
+		Position{Round: 4, Height: 1},
+		Position{Round: 4, Height: 2},
 	}
-	search := func(pos *Position) int {
+	search := func(pos Position) int {
 		return sort.Search(len(positions), func(i int) bool {
 			return positions[i].Newer(pos) || positions[i].Equal(pos)
 		})
 	}
-	s.Equal(0, search(&Position{Round: 0, Height: 0}))
-	s.Equal(len(positions), search(&Position{Round: 4, Height: 4}))
-	s.Equal(0, search(&Position{Round: 0, Height: 1}))
-	s.Equal(len(positions)-1, search(&Position{Round: 4, Height: 2}))
-	s.Equal(2, search(&Position{Round: 0, Height: 3}))
+	s.Equal(0, search(Position{Round: 0, Height: 0}))
+	s.Equal(len(positions), search(Position{Round: 4, Height: 4}))
+	s.Equal(0, search(Position{Round: 0, Height: 1}))
+	s.Equal(len(positions)-1, search(Position{Round: 4, Height: 2}))
+	s.Equal(2, search(Position{Round: 0, Height: 3}))
 }
 
 func (s *PositionTestSuite) TestEqual() {
 	pos := Position{}
 	s.Panics(func() {
-		pos.Equal(&Position{ChainID: 1})
+		pos.Equal(Position{ChainID: 1})
 	})
-	s.True(pos.Equal(&Position{}))
-	s.False(pos.Equal(&Position{Round: 1}))
-	s.False(pos.Equal(&Position{Height: 1}))
+	s.True(pos.Equal(Position{}))
+	s.False(pos.Equal(Position{Round: 1}))
+	s.False(pos.Equal(Position{Height: 1}))
 }
 
 func TestPosition(t *testing.T) {

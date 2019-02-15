@@ -136,16 +136,19 @@ func (s *BlockTestSuite) TestSortByHash() {
 	s.Equal(blocks[3].Hash, b3.Hash)
 }
 
-func (s *BlockTestSuite) TestSortByPosition() {
-	b00 := &Block{Position: Position{Height: 0}}
-	b01 := &Block{Position: Position{Height: 1}}
-	b02 := &Block{Position: Position{Height: 2}}
-	b10 := &Block{Position: Position{Round: 1, Height: 0}}
-	b11 := &Block{Position: Position{Round: 1, Height: 1}}
-	b12 := &Block{Position: Position{Round: 1, Height: 2}}
+func (s *BlockTestSuite) TestSortBlocksByPosition() {
+	b00 := &Block{Hash: common.NewRandomHash(), Position: Position{Height: 0}}
+	b01 := &Block{Hash: common.NewRandomHash(), Position: Position{Height: 1}}
+	b02 := &Block{Hash: common.NewRandomHash(), Position: Position{Height: 2}}
+	b10 := &Block{Hash: common.NewRandomHash(),
+		Position: Position{Round: 1, Height: 0}}
+	b11 := &Block{Hash: common.NewRandomHash(),
+		Position: Position{Round: 1, Height: 1}}
+	b12 := &Block{Hash: common.NewRandomHash(),
+		Position: Position{Round: 1, Height: 2}}
 
 	blocks := []*Block{b12, b11, b10, b02, b01, b00}
-	sort.Sort(ByPosition(blocks))
+	sort.Sort(BlocksByPosition(blocks))
 	s.Equal(blocks[0].Hash, b00.Hash)
 	s.Equal(blocks[1].Hash, b01.Hash)
 	s.Equal(blocks[2].Hash, b02.Hash)

@@ -53,6 +53,8 @@ var (
 		"not enough of partial signatures")
 	ErrRoundAlreadyPurged = fmt.Errorf(
 		"cache of round already been purged")
+	ErrTSigNotReady = fmt.Errorf(
+		"tsig not ready")
 )
 
 type dkgReceiver interface {

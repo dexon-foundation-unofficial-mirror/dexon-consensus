@@ -19,3 +19,13 @@ func NewRandomHash() Hash {
 	}
 	return x
 }
+
+// GenerateRandomBytes generates bytes randomly.
+func GenerateRandomBytes() []byte {
+	randomness := make([]byte, 32)
+	_, err := rand.Read(randomness)
+	if err != nil {
+		panic(err)
+	}
+	return randomness
+}

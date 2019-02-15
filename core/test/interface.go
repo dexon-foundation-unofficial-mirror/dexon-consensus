@@ -34,22 +34,6 @@ type BlockRevealer interface {
 	Reset()
 }
 
-// Stopper defines an interface for Scheduler to tell when to stop execution.
-type Stopper interface {
-	// ShouldStop is provided with the ID of the handler just finishes an event.
-	// It's thread-safe to access internal/shared state of the handler at this
-	// moment.
-	// The Stopper should check state of that handler and return 'true'
-	// if the execution could be stopped.
-	ShouldStop(nID types.NodeID) bool
-}
-
-// EventHandler defines an interface to handle a Scheduler event.
-type EventHandler interface {
-	// Handle the event belongs to this handler, and return derivated events.
-	Handle(*Event) []*Event
-}
-
 // TransportPeerType defines the type of peer, either 'peer' or 'server'.
 type TransportPeerType string
 

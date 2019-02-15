@@ -239,10 +239,10 @@ Loop:
 	s.verifyNodes(nodes)
 }
 
-func (s *ConsensusTestSuite) TestNumChainsChange() {
+func (s *ConsensusTestSuite) TestSetSizeChange() {
 	var (
 		req        = s.Require()
-		peerCount  = 4
+		peerCount  = 7
 		dMoment    = time.Now().UTC()
 		untilRound = uint64(6)
 	)
@@ -261,24 +261,34 @@ func (s *ConsensusTestSuite) TestNumChainsChange() {
 	req.NoError(err)
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeRoundInterval, 45*time.Second))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeNotarySetSize, uint32(4)))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeDKGSetSize, uint32(4)))
 	seedGov.CatchUpWithRound(0)
 	// Setup configuration for round 0 and round 1.
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeNumChains, uint32(5)))
-	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeRoundInterval, 55*time.Second))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeNotarySetSize, uint32(5)))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeDKGSetSize, uint32(6)))
 	seedGov.CatchUpWithRound(1)
 	// Setup configuration for round 2.
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeNumChains, uint32(6)))
-	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeRoundInterval, 55*time.Second))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeNotarySetSize, uint32(6)))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeDKGSetSize, uint32(5)))
 	seedGov.CatchUpWithRound(2)
 	// Setup configuration for round 3.
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeNumChains, uint32(5)))
-	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeRoundInterval, 75*time.Second))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeNotarySetSize, uint32(4)))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeDKGSetSize, uint32(4)))
 	seedGov.CatchUpWithRound(3)
 	// Setup nodes.
 	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
@@ -289,14 +299,18 @@ func (s *ConsensusTestSuite) TestNumChainsChange() {
 	}
 	// Register configuration changes for round 4.
 	req.NoError(pickedNode.gov.RegisterConfigChange(
-		4, test.StateChangeNumChains, uint32(4)))
-	req.NoError(pickedNode.gov.RegisterConfigChange(
 		4, test.StateChangeRoundInterval, 45*time.Second))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeNotarySetSize, uint32(5)))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeDKGSetSize, uint32(5)))
 	// Register configuration changes for round 5.
 	req.NoError(pickedNode.gov.RegisterConfigChange(
-		5, test.StateChangeNumChains, uint32(5)))
-	req.NoError(pickedNode.gov.RegisterConfigChange(
 		5, test.StateChangeRoundInterval, 55*time.Second))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeNotarySetSize, uint32(4)))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeDKGSetSize, uint32(4)))
 	// Run test.
 	for _, n := range nodes {
 		go n.con.Run()

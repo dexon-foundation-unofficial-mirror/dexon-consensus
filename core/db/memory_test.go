@@ -144,10 +144,10 @@ func (s *MemBackedDBTestSuite) TestCompactionChainTipInfo() {
 	s.Require().Equal(height, uint64(1))
 	// Unable to put compaction chain tip info with lower height.
 	err = dbInst.PutCompactionChainTipInfo(hash, 0)
-	s.Require().IsType(err, ErrInvalidCompactionChainTipHeight)
+	s.Require().Equal(err.Error(), ErrInvalidCompactionChainTipHeight.Error())
 	// Unable to put compaction chain tip info with height not incremental by 1.
 	err = dbInst.PutCompactionChainTipInfo(hash, 3)
-	s.Require().IsType(err, ErrInvalidCompactionChainTipHeight)
+	s.Require().Equal(err.Error(), ErrInvalidCompactionChainTipHeight.Error())
 	// It's OK to put compaction chain tip info with height incremental by 1.
 	s.Require().NoError(dbInst.PutCompactionChainTipInfo(hash, 2))
 }
@@ -163,12 +163,12 @@ func (s *MemBackedDBTestSuite) TestDKGPrivateKey() {
 	s.Require().False(exists)
 	// We should be unable to get it, too.
 	_, err = dbInst.GetDKGPrivateKey(1)
-	s.Require().IsType(err, ErrDKGPrivateKeyDoesNotExist)
+	s.Require().Equal(err.Error(), ErrDKGPrivateKeyDoesNotExist.Error())
 	// Put it.
 	s.Require().NoError(dbInst.PutDKGPrivateKey(1, *p))
 	// Put it again, should not success.
 	err = dbInst.PutDKGPrivateKey(1, *p)
-	s.Require().IsType(err, ErrDKGPrivateKeyExists)
+	s.Require().Equal(err.Error(), ErrDKGPrivateKeyExists.Error())
 	// Get it back.
 	tmpPrv, err := dbInst.GetDKGPrivateKey(1)
 	s.Require().NoError(err)

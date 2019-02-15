@@ -97,7 +97,7 @@ func (s *NodeSetCacheTestSuite) TestBasicUsage() {
 	chk(cache, 0, dkgSet)
 	leaderNode, err := cache.GetLeaderNode(types.Position{
 		Round:   uint64(0),
-		ChainID: uint32(3),
+		ChainID: uint32(0),
 		Height:  uint64(10),
 	})
 	req.NoError(err)

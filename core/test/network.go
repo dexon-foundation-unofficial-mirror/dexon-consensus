@@ -166,7 +166,7 @@ type Network struct {
 	unreceivedRandomness     map[common.Hash]chan<- common.Hash
 	cache                    *utils.NodeSetCache
 	notarySetCachesLock      sync.Mutex
-	notarySetCaches          map[uint64]map[uint32]map[types.NodeID]struct{}
+	notarySetCaches          map[uint64]map[types.NodeID]struct{}
 	dkgSetCachesLock         sync.Mutex
 	dkgSetCaches             map[uint64]map[types.NodeID]struct{}
 }
@@ -188,9 +188,8 @@ func NewNetwork(pubKey crypto.PublicKey, config NetworkConfig) (
 		unreceivedBlocks:     make(map[common.Hash]chan<- common.Hash),
 		unreceivedRandomness: make(map[common.Hash]chan<- common.Hash),
 		peers:                make(map[types.NodeID]struct{}),
-		notarySetCaches: make(
-			map[uint64]map[uint32]map[types.NodeID]struct{}),
-		dkgSetCaches: make(map[uint64]map[types.NodeID]struct{}),
+		notarySetCaches:      make(map[uint64]map[types.NodeID]struct{}),
+		dkgSetCaches:         make(map[uint64]map[types.NodeID]struct{}),
 		voteCache: make(
 			map[types.Position]map[types.VoteHeader]*types.Vote),
 	}
@@ -226,8 +225,7 @@ func (n *Network) PullRandomness(hashes common.Hashes) {
 
 // BroadcastVote implements core.Network interface.
 func (n *Network) BroadcastVote(vote *types.Vote) {
-	if err := n.trans.Broadcast(
-		n.getNotarySet(vote.Position.Round, vote.Position.ChainID),
+	if err := n.trans.Broadcast(n.getNotarySet(vote.Position.Round),
 		n.config.DirectLatency, vote); err != nil {
 		panic(err)
 	}
@@ -238,7 +236,7 @@ func (n *Network) BroadcastVote(vote *types.Vote) {
 func (n *Network) BroadcastBlock(block *types.Block) {
 	// Avoid data race in fake transport.
 	block = n.cloneForFake(block).(*types.Block)
-	notarySet := n.getNotarySet(block.Position.Round, block.Position.ChainID)
+	notarySet := n.getNotarySet(block.Position.Round)
 	if err := n.trans.Broadcast(
 		notarySet, n.config.DirectLatency, block); err != nil {
 		panic(err)
@@ -276,8 +274,7 @@ func (n *Network) BroadcastRandomnessResult(
 		return
 	}
 	// Send to notary set first.
-	notarySet := n.getNotarySet(
-		randResult.Position.Round, randResult.Position.ChainID)
+	notarySet := n.getNotarySet(randResult.Position.Round)
 	if err := n.trans.Broadcast(
 		notarySet, n.config.DirectLatency, randResult); err != nil {
 		panic(err)
@@ -568,7 +565,7 @@ func (n *Network) pullVotesAsync(pos types.Position) {
 		Identity:  pos,
 	}
 	// Get corresponding notary set.
-	notarySet := n.getNotarySet(pos.Round, pos.ChainID)
+	notarySet := n.getNotarySet(pos.Round)
 	// Randomly select one peer from notary set and send a pull request.
 	sentCount := 0
 	for nID := range notarySet {
@@ -727,8 +724,7 @@ func (n *Network) cloneForFake(v interface{}) interface{} {
 }
 
 // getNotarySet gets notary set for that (round, chain) from cache.
-func (n *Network) getNotarySet(
-	round uint64, chain uint32) map[types.NodeID]struct{} {
+func (n *Network) getNotarySet(round uint64) map[types.NodeID]struct{} {
 	if n.cache == nil {
 		// Default behavior is to broadcast to all peers, which makes it easier
 		// to be used in simple test cases.
@@ -736,19 +732,14 @@ func (n *Network) getNotarySet(
 	}
 	n.notarySetCachesLock.Lock()
 	defer n.notarySetCachesLock.Unlock()
-	roundSets, exists := n.notarySetCaches[round]
-	if !exists {
-		roundSets = make(map[uint32]map[types.NodeID]struct{})
-		n.notarySetCaches[round] = roundSets
-	}
-	set, exists := roundSets[chain]
+	set, exists := n.notarySetCaches[round]
 	if !exists {
 		var err error
-		set, err = n.cache.GetNotarySet(round, chain)
+		set, err = n.cache.GetNotarySet(round, 0)
 		if err != nil {
 			panic(err)
 		}
-		roundSets[chain] = set
+		n.notarySetCaches[round] = set
 	}
 	return set
 }

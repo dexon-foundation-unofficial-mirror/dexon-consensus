@@ -34,7 +34,7 @@ type AgreementResult struct {
 
 func (r *AgreementResult) String() string {
 	return fmt.Sprintf("agreementResult{Hash:%s %s}",
-		r.BlockHash.String()[:6], &r.Position)
+		r.BlockHash.String()[:6], r.Position)
 }
 
 // BlockRandomnessResult describes a block randomness result
@@ -46,7 +46,7 @@ type BlockRandomnessResult struct {
 
 func (r *BlockRandomnessResult) String() string {
 	return fmt.Sprintf("blockRandomness{Block:%s Pos:%s Rand:%s}",
-		r.BlockHash.String()[:6], &r.Position,
+		r.BlockHash.String()[:6], r.Position,
 		hex.EncodeToString(r.Randomness)[:6],
 	)
 }

@@ -29,11 +29,6 @@ type blockConfirmedEvent struct {
 	block *types.Block
 }
 
-type totalOrderingDeliveredEvent struct {
-	blockHashes common.Hashes
-	mode        uint32
-}
-
 type blockDeliveredEvent struct {
 	blockHash     common.Hash
 	blockPosition types.Position
@@ -91,8 +86,6 @@ func (nb *nonBlocking) run() {
 		switch e := event.(type) {
 		case blockConfirmedEvent:
 			nb.app.BlockConfirmed(*e.block)
-		case totalOrderingDeliveredEvent:
-			nb.debug.TotalOrderingDelivered(e.blockHashes, e.mode)
 		case blockDeliveredEvent:
 			nb.app.BlockDelivered(e.blockHash, e.blockPosition, *e.result)
 		default:
@@ -131,15 +124,6 @@ func (nb *nonBlocking) VerifyBlock(block *types.Block) types.BlockVerifyStatus {
 // BlockConfirmed is called when a block is confirmed and added to lattice.
 func (nb *nonBlocking) BlockConfirmed(block types.Block) {
 	nb.addEvent(blockConfirmedEvent{&block})
-}
-
-// TotalOrderingDelivered is called when the total ordering algorithm deliver
-// a set of block.
-func (nb *nonBlocking) TotalOrderingDelivered(
-	blockHashes common.Hashes, mode uint32) {
-	if nb.debug != nil {
-		nb.addEvent(totalOrderingDeliveredEvent{blockHashes, mode})
-	}
 }
 
 // BlockDelivered is called when a block is add to the compaction chain.

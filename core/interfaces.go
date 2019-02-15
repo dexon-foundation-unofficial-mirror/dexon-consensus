@@ -51,9 +51,6 @@ type Application interface {
 type Debug interface {
 	// BlockReceived is called when the block received in agreement.
 	BlockReceived(common.Hash)
-	// TotalOrderingDelivered is called when the total ordering algorithm deliver
-	// a set of block.
-	TotalOrderingDelivered(common.Hashes, uint32)
 	// BlockReady is called when the block's randomness is ready.
 	BlockReady(common.Hash)
 }

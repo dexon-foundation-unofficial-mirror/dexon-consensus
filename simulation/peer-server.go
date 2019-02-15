@@ -19,12 +19,10 @@ package simulation
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"reflect"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
@@ -38,8 +36,6 @@ type PeerServer struct {
 	peers             map[types.NodeID]struct{}
 	msgChannel        chan *test.TransportEnvelope
 	trans             test.TransportServer
-	peerTotalOrder    PeerTotalOrder
-	peerTotalOrderMu  sync.Mutex
 	verifiedLen       uint64
 	cfg               *config.Config
 	ctx               context.Context
@@ -53,7 +49,6 @@ func NewPeerServer() *PeerServer {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &PeerServer{
 		peers:             make(map[types.NodeID]struct{}),
-		peerTotalOrder:    make(PeerTotalOrder),
 		ctx:               ctx,
 		ctxCancel:         cancel,
 		blockEvents:       make(map[types.NodeID]map[common.Hash][]time.Time),
@@ -68,36 +63,6 @@ func (p *PeerServer) isNode(nID types.NodeID) bool {
 	return exist
 }
 
-// handleBlockList is the handler for messages with BlockList as payload.
-func (p *PeerServer) handleBlockList(id types.NodeID, blocks *BlockList) {
-	p.peerTotalOrderMu.Lock()
-	defer p.peerTotalOrderMu.Unlock()
-
-	readyForVerify := p.peerTotalOrder[id].PushBlocks(*blocks)
-	if !readyForVerify {
-		return
-	}
-	// Verify the total order result.
-	go func(id types.NodeID) {
-		p.peerTotalOrderMu.Lock()
-		defer p.peerTotalOrderMu.Unlock()
-
-		var correct bool
-		var length int
-		p.peerTotalOrder, correct, length = VerifyTotalOrder(id, p.peerTotalOrder)
-		if !correct {
-			log.Printf("The result of Total Ordering Algorithm has error.\n")
-		}
-		p.verifiedLen += uint64(length)
-		if p.verifiedLen >= p.cfg.Node.MaxBlock {
-			if err := p.trans.Broadcast(
-				p.peers, &test.FixedLatencyModel{}, ntfShutdown); err != nil {
-				panic(err)
-			}
-		}
-	}(id)
-}
-
 // handleMessage is the handler for messages with Message as payload.
 func (p *PeerServer) handleMessage(id types.NodeID, m *message) {
 	switch m.Type {
@@ -106,16 +71,6 @@ func (p *PeerServer) handleMessage(id types.NodeID, m *message) {
 		log.Printf("%v shutdown, %d remains.\n", id, len(p.peers))
 		if len(p.peers) == 0 {
 			p.ctxCancel()
-		}
-	case blockTimestamp:
-		msgs := []timestampMessage{}
-		if err := json.Unmarshal(m.Payload, &msgs); err != nil {
-			panic(err)
-		}
-		for _, msg := range msgs {
-			if ok := p.peerTotalOrder[id].PushTimestamp(msg); !ok {
-				panic(fmt.Errorf("unable to push timestamp: %v", m))
-			}
 		}
 	default:
 		panic(fmt.Errorf("unknown simulation message type: %v", m))
@@ -157,8 +112,6 @@ func (p *PeerServer) mainLoop() {
 			}
 			// Handle messages based on their type.
 			switch val := e.Msg.(type) {
-			case *BlockList:
-				p.handleBlockList(e.From, val)
 			case *message:
 				p.handleMessage(e.From, val)
 			case *test.BlockEventMessage:
@@ -235,14 +188,8 @@ func (p *PeerServer) Run() {
 		panic(err)
 	}
 	log.Println("Simulation is ready to go with", len(p.peers), "nodes")
-	// Initialize total order result cache.
-	for id := range p.peers {
-		p.peerTotalOrder[id] = NewTotalOrderResult(id)
-	}
 	// Block to handle incoming messages.
 	p.mainLoop()
-	// The simulation is done, clean up.
-	LogStatus(p.peerTotalOrder)
 	if err := p.trans.Close(); err != nil {
 		log.Printf("Error shutting down peerServer: %v\n", err)
 	}

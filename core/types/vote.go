@@ -68,7 +68,7 @@ type Vote struct {
 func (v *Vote) String() string {
 	return fmt.Sprintf("Vote{BP:%s %s Period:%d Type:%d Hash:%s}",
 		v.ProposerID.String()[:6],
-		&v.Position, v.Period, v.Type, v.BlockHash.String()[:6])
+		v.Position, v.Period, v.Type, v.BlockHash.String()[:6])
 }
 
 // NewVote constructs a Vote instance with header fields.

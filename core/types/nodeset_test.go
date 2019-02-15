@@ -35,7 +35,7 @@ func (s *NodeSetTestSuite) TestGetSubSet() {
 	for len(nodes.IDs) < total {
 		nodes.IDs[NodeID{common.NewRandomHash()}] = struct{}{}
 	}
-	target := NewNotarySetTarget(crs, 0)
+	target := NewNotarySetTarget(crs)
 	ranks := make(map[NodeID]*nodeRank, len(nodes.IDs))
 	for nID := range nodes.IDs {
 		ranks[nID] = newNodeRank(nID, target)
