@@ -550,9 +550,13 @@ func (bc *blockChain) prepareBlock(position types.Position,
 		}
 		b.ParentHash = tip.Hash
 		if !empty {
+			bc.logger.Debug("Calling Application.PreparePayload",
+				"position", b.Position)
 			if b.Payload, err = bc.app.PreparePayload(b.Position); err != nil {
 				return
 			}
+			bc.logger.Debug("Calling Application.PrepareWitness",
+				"height", tip.Witness.Height)
 			if b.Witness, err = bc.app.PrepareWitness(
 				tip.Witness.Height); err != nil {
 				return

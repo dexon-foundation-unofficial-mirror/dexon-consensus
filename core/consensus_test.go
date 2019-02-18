@@ -237,6 +237,7 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 		nID := types.NewNodeID(key.PublicKey())
 		cons[nID] = con
 	}
+	time.Sleep(gov.Configuration(0).MinBlockInterval * 4)
 	for _, con := range cons {
 		go con.runDKG(0, gov.Configuration(0))
 	}

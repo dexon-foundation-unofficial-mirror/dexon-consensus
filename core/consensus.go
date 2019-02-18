@@ -590,23 +590,28 @@ func (con *Consensus) prepare(initBlock *types.Block) (err error) {
 	if err = con.bcModule.appendConfig(initRound+1, initPlusOneCfg); err != nil {
 		return
 	}
+	if initRound == 0 {
+		dkgSet, err := con.nodeSetCache.GetDKGSet(initRound)
+		if err != nil {
+			return err
+		}
+		if _, exist := dkgSet[con.ID]; exist {
+			con.logger.Info("Selected as DKG set", "round", initRound)
+			go func() {
+				// Sleep until dMoment come.
+				time.Sleep(con.dMoment.Sub(time.Now().UTC()))
+				// Network is not stable upon starting. Wait some time to ensure first
+				// DKG would success. Three is a magic number.
+				time.Sleep(initConfig.MinBlockInterval * 3)
+				con.cfgModule.registerDKG(initRound, getDKGThreshold(initConfig))
+				con.event.RegisterTime(con.dMoment.Add(initConfig.RoundInterval/4),
+					func(time.Time) {
+						con.runDKG(initRound, initConfig)
+					})
+			}()
+		}
+	}
 	// Register events.
-	dkgSet, err := con.nodeSetCache.GetDKGSet(initRound)
-	if err != nil {
-		return
-	}
-	if _, exist := dkgSet[con.ID]; exist {
-		con.logger.Info("Selected as DKG set", "round", initRound)
-		go func() {
-			// Sleep until dMoment come.
-			time.Sleep(con.dMoment.Sub(time.Now().UTC()))
-			con.cfgModule.registerDKG(initRound, getDKGThreshold(initConfig))
-			con.event.RegisterTime(con.dMoment.Add(initConfig.RoundInterval/4),
-				func(time.Time) {
-					con.runDKG(initRound, initConfig)
-				})
-		}()
-	}
 	con.initialRound(con.dMoment, initRound, initConfig)
 	return
 }
