@@ -582,17 +582,17 @@ Loop:
 			}
 		default:
 		}
-		if agr.pullVotes() {
-			pos := agr.agreementID()
-			mgr.logger.Debug("Calling Network.PullVotes for syncing votes",
-				"position", &pos)
-			mgr.network.PullVotes(pos)
-		}
 		if err = agr.nextState(); err != nil {
 			mgr.logger.Error("Failed to proceed to next state",
 				"nodeID", mgr.ID.String(),
 				"error", err)
 			break Loop
+		}
+		if agr.pullVotes() {
+			pos := agr.agreementID()
+			mgr.logger.Debug("Calling Network.PullVotes for syncing votes",
+				"position", &pos)
+			mgr.network.PullVotes(pos)
 		}
 		for i := 0; i < agr.clocks(); i++ {
 			// Priority select for agreement.done().
