@@ -110,7 +110,7 @@ func newBlockChainConfig(prev blockChainConfig, config *types.Config) (
 	c blockChainConfig) {
 	c = blockChainConfig{}
 	c.fromConfig(prev.roundID+1, config)
-	c.setRoundBeginTime(prev.roundEndTime)
+	c.setRoundBeginHeight(prev.roundEndHeight)
 	return
 }
 
@@ -131,9 +131,10 @@ type blockChain struct {
 	configs             []blockChainConfig
 	pendingBlocks       pendingBlockRecords
 	confirmedBlocks     types.BlocksByPosition
+	dMoment             time.Time
 }
 
-func newBlockChain(nID types.NodeID, initBlock *types.Block,
+func newBlockChain(nID types.NodeID, dMoment time.Time, initBlock *types.Block,
 	initConfig blockChainConfig, app Application, vGetter tsigVerifierGetter,
 	signer *utils.Signer, logger common.Logger) *blockChain {
 	if initBlock != nil {
@@ -156,6 +157,7 @@ func newBlockChain(nID types.NodeID, initBlock *types.Block,
 		app:           app,
 		logger:        logger,
 		configs:       []blockChainConfig{initConfig},
+		dMoment:       dMoment,
 		pendingRandomnesses: make(
 			map[types.Position]*types.BlockRandomnessResult),
 	}
@@ -203,9 +205,6 @@ func (bc *blockChain) extractBlocks() (ret []*types.Block) {
 }
 
 func (bc *blockChain) sanityCheck(b *types.Block) error {
-	if b.Position.ChainID != 0 {
-		panic(fmt.Errorf("attempt to process block from non-zero chainID"))
-	}
 	if b.IsEmpty() {
 		panic(fmt.Errorf("pass empty block to sanity check: %s", b))
 	}
@@ -228,7 +227,7 @@ func (bc *blockChain) sanityCheck(b *types.Block) error {
 		}
 		return ErrInvalidBlockHeight
 	}
-	tipConfig := bc.getTipConfig()
+	tipConfig := bc.tipConfig()
 	if tipConfig.isLastBlock(bc.lastConfirmed) {
 		if b.Position.Round != bc.lastConfirmed.Position.Round+1 {
 			return ErrRoundNotSwitch
@@ -250,9 +249,6 @@ func (bc *blockChain) sanityCheck(b *types.Block) error {
 // addEmptyBlock is called when an empty block is confirmed by BA.
 func (bc *blockChain) addEmptyBlock(position types.Position) (
 	*types.Block, error) {
-	if position.ChainID != 0 {
-		panic(fmt.Errorf("attempt to process block from non-zero chainID"))
-	}
 	bc.lock.Lock()
 	defer bc.lock.Unlock()
 	add := func() *types.Block {
@@ -286,9 +282,6 @@ func (bc *blockChain) addEmptyBlock(position types.Position) (
 // addBlock should be called when the block is confirmed by BA, we won't perform
 // sanity check against this block, it's ok to add block with skipping height.
 func (bc *blockChain) addBlock(b *types.Block) error {
-	if b.Position.ChainID != 0 {
-		panic(fmt.Errorf("attempt to process block from non-zero chainID"))
-	}
 	bc.lock.Lock()
 	defer bc.lock.Unlock()
 	confirmed := false
@@ -314,9 +307,6 @@ func (bc *blockChain) addBlock(b *types.Block) error {
 }
 
 func (bc *blockChain) addRandomness(r *types.BlockRandomnessResult) error {
-	if r.Position.ChainID != 0 {
-		panic(fmt.Errorf("attempt to process block from non-zero chainID"))
-	}
 	if func() bool {
 		bc.lock.RLock()
 		defer bc.lock.RUnlock()
@@ -361,8 +351,8 @@ func (bc *blockChain) tipRound() uint64 {
 	if bc.lastConfirmed == nil {
 		return 0
 	}
-	offset := uint64(0)
-	if bc.lastConfirmed.Timestamp.After(bc.getTipConfig().roundEndTime) {
+	offset, tipConfig := uint64(0), bc.tipConfig()
+	if tipConfig.isLastBlock(bc.lastConfirmed) {
 		offset++
 	}
 	return bc.lastConfirmed.Position.Round + offset
@@ -392,7 +382,7 @@ func (bc *blockChain) nextBlock() (uint64, time.Time) {
 	// lastConfirmed block in the scenario of "nextBlock" method.
 	tip, config := bc.lastConfirmed, bc.configs[0]
 	if tip == nil {
-		return 0, config.roundBeginTime
+		return 0, bc.dMoment
 	}
 	return tip.Position.Height + 1, tip.Timestamp.Add(config.minBlockInterval)
 }
@@ -528,25 +518,30 @@ func (bc *blockChain) prepareBlock(position types.Position,
 	b = &types.Block{Position: position, Timestamp: proposeTime}
 	tip := bc.lastConfirmed
 	// Make sure we can propose a block at expected position for callers.
-	expectedPosition := types.Position{}
 	if tip == nil {
 		// The case for genesis block.
-		if !position.Equal(expectedPosition) {
+		if !position.Equal(types.Position{}) {
 			b, err = nil, ErrNotGenesisBlock
+			return
 		} else if empty {
-			b.Timestamp = bc.configs[0].roundBeginTime
+			b.Timestamp = bc.dMoment
 		}
 	} else {
-		expectedPosition.Height = tip.Position.Height + 1
-		tipConfig := bc.getTipConfig()
-		if tipConfig.isLastBlock(tip) {
-			expectedPosition.Round = tip.Position.Round + 1
-		} else {
-			expectedPosition.Round = tip.Position.Round
-		}
-		if !expectedPosition.Equal(position) {
+		tipConfig := bc.tipConfig()
+		if tip.Position.Height+1 != position.Height {
 			b, err = nil, ErrNotFollowTipPosition
 			return
+		}
+		if tipConfig.isLastBlock(tip) {
+			if tip.Position.Round+1 != position.Round {
+				b, err = nil, ErrRoundNotSwitch
+				return
+			}
+		} else {
+			if tip.Position.Round != position.Round {
+				b, err = nil, ErrInvalidRoundID
+				return
+			}
 		}
 		b.ParentHash = tip.Hash
 		if !empty {
@@ -564,7 +559,6 @@ func (bc *blockChain) prepareBlock(position types.Position,
 			if !b.Timestamp.After(tip.Timestamp) {
 				b.Timestamp = tip.Timestamp.Add(tipConfig.minBlockInterval)
 			}
-
 		} else {
 			b.Witness.Height = tip.Witness.Height
 			b.Witness.Data = make([]byte, len(tip.Witness.Data))
@@ -585,7 +579,7 @@ func (bc *blockChain) prepareBlock(position types.Position,
 	return
 }
 
-func (bc *blockChain) getTipConfig() blockChainConfig {
+func (bc *blockChain) tipConfig() blockChainConfig {
 	if bc.lastConfirmed == nil {
 		panic(fmt.Errorf("attempting to access config without tip"))
 	}

@@ -382,7 +382,7 @@ func (g *Governance) Equal(other *Governance, checkState bool) bool {
 // NOTE: this function should be called before running.
 func (g *Governance) RegisterConfigChange(
 	round uint64, t StateChangeType, v interface{}) (err error) {
-	if t < StateChangeNumChains || t > StateChangeDKGSetSize {
+	if t < StateAddCRS || t > StateChangeDKGSetSize {
 		return fmt.Errorf("state changes to register is not supported: %v", t)
 	}
 	if round < 2 {

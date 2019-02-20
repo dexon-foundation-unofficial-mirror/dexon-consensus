@@ -30,63 +30,47 @@ type PositionTestSuite struct {
 
 func (s *PositionTestSuite) TestNewer() {
 	pos := Position{
-		Round:   1,
-		ChainID: 1,
-		Height:  1,
+		Round:  1,
+		Height: 1,
 	}
-	s.Panics(func() {
-		pos.Newer(Position{ChainID: 2})
-	})
 	s.False(pos.Newer(Position{
-		Round:   2,
-		ChainID: 1,
-		Height:  0,
+		Round:  2,
+		Height: 0,
 	}))
 	s.False(pos.Newer(Position{
-		Round:   1,
-		ChainID: 1,
-		Height:  2,
+		Round:  1,
+		Height: 2,
 	}))
 	s.True(pos.Newer(Position{
-		Round:   0,
-		ChainID: 1,
-		Height:  100,
+		Round:  0,
+		Height: 100,
 	}))
 	s.True(pos.Newer(Position{
-		Round:   1,
-		ChainID: 1,
-		Height:  0,
+		Round:  1,
+		Height: 0,
 	}))
 }
 
 func (s *PositionTestSuite) TestOlder() {
 	pos := Position{
-		Round:   1,
-		ChainID: 1,
-		Height:  1,
+		Round:  1,
+		Height: 1,
 	}
-	s.Panics(func() {
-		pos.Older(Position{ChainID: 2})
-	})
 	s.False(pos.Older(Position{
-		Round:   0,
-		ChainID: 1,
-		Height:  0,
+		Round:  0,
+		Height: 0,
 	}))
 	s.False(pos.Older(Position{
-		Round:   1,
-		ChainID: 1,
-		Height:  0,
+		Round:  1,
+		Height: 0,
 	}))
 	s.True(pos.Older(Position{
-		Round:   2,
-		ChainID: 1,
-		Height:  0,
+		Round:  2,
+		Height: 0,
 	}))
 	s.True(pos.Older(Position{
-		Round:   1,
-		ChainID: 1,
-		Height:  100,
+		Round:  1,
+		Height: 100,
 	}))
 }
 
@@ -116,9 +100,6 @@ func (s *PositionTestSuite) TestSearchInAsendingOrder() {
 
 func (s *PositionTestSuite) TestEqual() {
 	pos := Position{}
-	s.Panics(func() {
-		pos.Equal(Position{ChainID: 1})
-	})
 	s.True(pos.Equal(Position{}))
 	s.False(pos.Equal(Position{Round: 1}))
 	s.False(pos.Equal(Position{Height: 1}))

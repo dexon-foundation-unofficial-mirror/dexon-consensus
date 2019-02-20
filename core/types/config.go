@@ -19,40 +19,29 @@ package types
 
 import (
 	"encoding/binary"
-	"math"
 	"time"
 )
 
 // Config stands for Current Configuration Parameters.
 type Config struct {
-	// Network related.
-	NumChains uint32
-
 	// Lambda related.
 	LambdaBA  time.Duration
 	LambdaDKG time.Duration
-
-	// Total ordering related.
-	K        int
-	PhiRatio float32
 
 	// Set related.
 	NotarySetSize uint32
 	DKGSetSize    uint32
 
 	// Time related.
-	RoundInterval    time.Duration
+	RoundInterval    uint64
 	MinBlockInterval time.Duration
 }
 
 // Clone return a copied configuration.
 func (c *Config) Clone() *Config {
 	return &Config{
-		NumChains:        c.NumChains,
 		LambdaBA:         c.LambdaBA,
 		LambdaDKG:        c.LambdaDKG,
-		K:                c.K,
-		PhiRatio:         c.PhiRatio,
 		NotarySetSize:    c.NotarySetSize,
 		DKGSetSize:       c.DKGSetSize,
 		RoundInterval:    c.RoundInterval,
@@ -62,9 +51,6 @@ func (c *Config) Clone() *Config {
 
 // Bytes returns []byte representation of Config.
 func (c *Config) Bytes() []byte {
-	binaryNumChains := make([]byte, 4)
-	binary.LittleEndian.PutUint32(binaryNumChains, c.NumChains)
-
 	binaryLambdaBA := make([]byte, 8)
 	binary.LittleEndian.PutUint64(
 		binaryLambdaBA, uint64(c.LambdaBA.Nanoseconds()))
@@ -72,29 +58,20 @@ func (c *Config) Bytes() []byte {
 	binary.LittleEndian.PutUint64(
 		binaryLambdaDKG, uint64(c.LambdaDKG.Nanoseconds()))
 
-	binaryK := make([]byte, 4)
-	binary.LittleEndian.PutUint32(binaryK, uint32(c.K))
-	binaryPhiRatio := make([]byte, 4)
-	binary.LittleEndian.PutUint32(binaryPhiRatio, math.Float32bits(c.PhiRatio))
-
 	binaryNotarySetSize := make([]byte, 4)
 	binary.LittleEndian.PutUint32(binaryNotarySetSize, c.NotarySetSize)
 	binaryDKGSetSize := make([]byte, 4)
 	binary.LittleEndian.PutUint32(binaryDKGSetSize, c.DKGSetSize)
 
 	binaryRoundInterval := make([]byte, 8)
-	binary.LittleEndian.PutUint64(binaryRoundInterval,
-		uint64(c.RoundInterval.Nanoseconds()))
+	binary.LittleEndian.PutUint64(binaryRoundInterval, c.RoundInterval)
 	binaryMinBlockInterval := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryMinBlockInterval,
 		uint64(c.MinBlockInterval.Nanoseconds()))
 
 	enc := make([]byte, 0, 40)
-	enc = append(enc, binaryNumChains...)
 	enc = append(enc, binaryLambdaBA...)
 	enc = append(enc, binaryLambdaDKG...)
-	enc = append(enc, binaryK...)
-	enc = append(enc, binaryPhiRatio...)
 	enc = append(enc, binaryNotarySetSize...)
 	enc = append(enc, binaryDKGSetSize...)
 	enc = append(enc, binaryRoundInterval...)

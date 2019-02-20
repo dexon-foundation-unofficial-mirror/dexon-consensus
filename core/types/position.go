@@ -23,33 +23,22 @@ import (
 
 // Position describes the position in the block lattice of an entity.
 type Position struct {
-	ChainID uint32 `json:"chain_id"`
-	Round   uint64 `json:"round"`
-	Height  uint64 `json:"height"`
+	Round  uint64 `json:"round"`
+	Height uint64 `json:"height"`
 }
 
 func (pos Position) String() string {
-	return fmt.Sprintf("Position{Round:%d Chain:%d Height:%d}",
-		pos.Round, pos.ChainID, pos.Height)
+	return fmt.Sprintf("Position{Round:%d Height:%d}", pos.Round, pos.Height)
 }
 
-// Equal checks if two positions are equal, it panics when their chainIDs
-// are different.
+// Equal checks if two positions are equal.
 func (pos Position) Equal(other Position) bool {
-	if pos.ChainID != other.ChainID {
-		panic(fmt.Errorf("unexpected chainID %d, should be %d",
-			other.ChainID, pos.ChainID))
-	}
 	return pos.Round == other.Round && pos.Height == other.Height
 }
 
 // Newer checks if one block is newer than another one on the same chain.
 // If two blocks on different chain compared by this function, it would panic.
 func (pos Position) Newer(other Position) bool {
-	if pos.ChainID != other.ChainID {
-		panic(fmt.Errorf("unexpected chainID %d, should be %d",
-			other.ChainID, pos.ChainID))
-	}
 	return pos.Round > other.Round ||
 		(pos.Round == other.Round && pos.Height > other.Height)
 }
@@ -57,10 +46,6 @@ func (pos Position) Newer(other Position) bool {
 // Older checks if one block is older than another one on the same chain.
 // If two blocks on different chain compared by this function, it would panic.
 func (pos Position) Older(other Position) bool {
-	if pos.ChainID != other.ChainID {
-		panic(fmt.Errorf("unexpected chainID %d, should be %d",
-			other.ChainID, pos.ChainID))
-	}
 	return pos.Round < other.Round ||
 		(pos.Round == other.Round && pos.Height < other.Height)
 }

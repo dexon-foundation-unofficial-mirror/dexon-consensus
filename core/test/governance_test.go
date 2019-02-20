@@ -75,16 +75,16 @@ func (s *GovernanceTestSuite) TestRegisterChange() {
 		genesisNodes, 100*time.Millisecond, &common.NullLogger{}, true), 2)
 	req.NoError(err)
 	// Unable to register change for genesis round.
-	req.Error(g.RegisterConfigChange(0, StateChangeNumChains, uint32(32)))
+	req.Error(g.RegisterConfigChange(0, StateChangeDKGSetSize, uint32(32)))
 	// Make some round prepared.
 	g.CatchUpWithRound(4)
-	req.Equal(g.Configuration(4).NumChains, uint32(20))
+	req.Equal(g.Configuration(4).DKGSetSize, uint32(20))
 	// Unable to register change for prepared round.
-	req.Error(g.RegisterConfigChange(4, StateChangeNumChains, uint32(32)))
+	req.Error(g.RegisterConfigChange(4, StateChangeDKGSetSize, uint32(32)))
 	// It's ok to make some change when condition is met.
-	req.NoError(g.RegisterConfigChange(5, StateChangeNumChains, uint32(32)))
-	req.NoError(g.RegisterConfigChange(6, StateChangeNumChains, uint32(32)))
-	req.NoError(g.RegisterConfigChange(7, StateChangeNumChains, uint32(40)))
+	req.NoError(g.RegisterConfigChange(5, StateChangeDKGSetSize, uint32(32)))
+	req.NoError(g.RegisterConfigChange(6, StateChangeDKGSetSize, uint32(32)))
+	req.NoError(g.RegisterConfigChange(7, StateChangeDKGSetSize, uint32(40)))
 	// In local mode, state for round 6 would be ready after notified with
 	// round 2.
 	g.NotifyRound(2)
@@ -94,8 +94,8 @@ func (s *GovernanceTestSuite) TestRegisterChange() {
 	g.NotifyRound(4)
 	// Notify governance to take a snapshot for round 7's configuration.
 	g.NotifyRound(5)
-	req.Equal(g.Configuration(6).NumChains, uint32(32))
-	req.Equal(g.Configuration(7).NumChains, uint32(40))
+	req.Equal(g.Configuration(6).DKGSetSize, uint32(32))
+	req.Equal(g.Configuration(7).DKGSetSize, uint32(40))
 }
 
 func TestGovernance(t *testing.T) {

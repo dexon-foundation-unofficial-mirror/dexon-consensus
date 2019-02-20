@@ -735,7 +735,7 @@ func (n *Network) getNotarySet(round uint64) map[types.NodeID]struct{} {
 	set, exists := n.notarySetCaches[round]
 	if !exists {
 		var err error
-		set, err = n.cache.GetNotarySet(round, 0)
+		set, err = n.cache.GetNotarySet(round)
 		if err != nil {
 			panic(err)
 		}

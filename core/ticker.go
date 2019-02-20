@@ -18,6 +18,9 @@
 package core
 
 import (
+	"context"
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
@@ -36,32 +39,65 @@ const (
 // defaultTicker is a wrapper to implement ticker interface based on
 // time.Ticker.
 type defaultTicker struct {
-	ticker   *time.Ticker
-	duration time.Duration
+	ticker     *time.Ticker
+	tickerChan chan time.Time
+	duration   time.Duration
+	ctx        context.Context
+	ctxCancel  context.CancelFunc
+	waitGroup  sync.WaitGroup
 }
 
 // newDefaultTicker constructs an defaultTicker instance by giving an interval.
 func newDefaultTicker(lambda time.Duration) *defaultTicker {
-	return &defaultTicker{
-		ticker:   time.NewTicker(lambda),
-		duration: lambda,
-	}
+	ticker := &defaultTicker{duration: lambda}
+	ticker.init()
+	return ticker
 }
 
 // Tick implements Tick method of ticker interface.
 func (t *defaultTicker) Tick() <-chan time.Time {
-	return t.ticker.C
+	return t.tickerChan
 }
 
 // Stop implements Stop method of ticker interface.
 func (t *defaultTicker) Stop() {
 	t.ticker.Stop()
+	t.ctxCancel()
+	t.waitGroup.Wait()
+	t.ctx = nil
+	t.ctxCancel = nil
+	close(t.tickerChan)
+	t.tickerChan = nil
 }
 
 // Restart implements Stop method of ticker interface.
 func (t *defaultTicker) Restart() {
-	t.ticker.Stop()
+	t.Stop()
+	t.init()
+}
+
+func (t *defaultTicker) init() {
 	t.ticker = time.NewTicker(t.duration)
+	t.tickerChan = make(chan time.Time)
+	t.ctx, t.ctxCancel = context.WithCancel(context.Background())
+	t.waitGroup.Add(1)
+	go t.monitor()
+}
+
+func (t *defaultTicker) monitor() {
+	defer t.waitGroup.Done()
+loop:
+	for {
+		select {
+		case <-t.ctx.Done():
+			break loop
+		case v := <-t.ticker.C:
+			select {
+			case t.tickerChan <- v:
+			default:
+			}
+		}
+	}
 }
 
 // newTicker is a helper to setup a ticker by giving an Governance. If
@@ -82,8 +118,8 @@ func newTicker(gov Governance, round uint64, tickerType TickerType) (t Ticker) {
 			duration = utils.GetConfigWithPanic(gov, round, nil).LambdaBA
 		case TickerDKG:
 			duration = utils.GetConfigWithPanic(gov, round, nil).LambdaDKG
-		case TickerCRS:
-			duration = utils.GetConfigWithPanic(gov, round, nil).RoundInterval / 2
+		default:
+			panic(fmt.Errorf("unknown ticker type: %d", tickerType))
 		}
 		t = newDefaultTicker(duration)
 	}

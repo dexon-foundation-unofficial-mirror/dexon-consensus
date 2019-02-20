@@ -27,8 +27,6 @@ import (
 // StateChangeTypeFromString convert a string to test.StateChangeType.
 func StateChangeTypeFromString(s string) test.StateChangeType {
 	switch s {
-	case "num_chains":
-		return test.StateChangeNumChains
 	case "lambda_ba":
 		return test.StateChangeLambdaBA
 	case "lambda_dkg":
@@ -37,10 +35,6 @@ func StateChangeTypeFromString(s string) test.StateChangeType {
 		return test.StateChangeRoundInterval
 	case "min_block_interval":
 		return test.StateChangeMinBlockInterval
-	case "k":
-		return test.StateChangeK
-	case "phi_ratio":
-		return test.StateChangePhiRatio
 	case "notary_set_size":
 		return test.StateChangeNotarySetSize
 	case "dkg_set_size":
@@ -54,27 +48,19 @@ func StateChangeTypeFromString(s string) test.StateChangeType {
 func StateChangeValueFromString(
 	t test.StateChangeType, v string) interface{} {
 	switch t {
-	case test.StateChangeNumChains, test.StateChangeNotarySetSize,
-		test.StateChangeDKGSetSize:
+	case test.StateChangeNotarySetSize, test.StateChangeDKGSetSize:
 		ret, err := strconv.ParseUint(v, 10, 32)
 		if err != nil {
 			panic(err)
 		}
 		return uint32(ret)
 	case test.StateChangeLambdaBA, test.StateChangeLambdaDKG,
-		test.StateChangeRoundInterval, test.StateChangeMinBlockInterval,
-		test.StateChangeK:
+		test.StateChangeRoundInterval, test.StateChangeMinBlockInterval:
 		ret, err := strconv.ParseInt(v, 10, 32)
 		if err != nil {
 			panic(err)
 		}
 		return int(ret)
-	case test.StateChangePhiRatio:
-		ret, err := strconv.ParseFloat(v, 32)
-		if err != nil {
-			panic(err)
-		}
-		return float32(ret)
 	}
 	panic(fmt.Errorf("unsupported state change type %s", t))
 }

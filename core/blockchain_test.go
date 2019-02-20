@@ -51,7 +51,6 @@ type BlockChainTestSuite struct {
 	signer        *utils.Signer
 	dMoment       time.Time
 	blockInterval time.Duration
-	roundInterval time.Duration
 }
 
 func (s *BlockChainTestSuite) SetupSuite() {
@@ -61,7 +60,6 @@ func (s *BlockChainTestSuite) SetupSuite() {
 	s.signer = utils.NewSigner(prvKeys[0])
 	s.dMoment = time.Now().UTC()
 	s.blockInterval = 1 * time.Millisecond
-	s.roundInterval = 10 * time.Second
 }
 
 func (s *BlockChainTestSuite) newBlocks(c uint64, initBlock *types.Block) (
@@ -129,7 +127,8 @@ func (s *BlockChainTestSuite) newRandomnessFromBlock(
 	}
 }
 
-func (s *BlockChainTestSuite) newBlockChain(initB *types.Block) *blockChain {
+func (s *BlockChainTestSuite) newBlockChain(initB *types.Block,
+	roundInterval uint64) *blockChain {
 	initRound := uint64(0)
 	if initB != nil {
 		initRound = initB.Position.Round
@@ -137,11 +136,16 @@ func (s *BlockChainTestSuite) newBlockChain(initB *types.Block) *blockChain {
 	initConfig := blockChainConfig{}
 	initConfig.fromConfig(initRound, &types.Config{
 		MinBlockInterval: s.blockInterval,
-		RoundInterval:    s.roundInterval,
+		RoundInterval:    roundInterval,
 	})
-	initConfig.setRoundBeginTime(s.dMoment)
-	return newBlockChain(s.nID, initB, initConfig, test.NewApp(0, nil),
-		&testTSigVerifierGetter{}, s.signer, &common.NullLogger{})
+	if initB != nil {
+		initConfig.setRoundBeginHeight(initB.Position.Height)
+	} else {
+		initConfig.setRoundBeginHeight(0)
+	}
+	return newBlockChain(s.nID, s.dMoment, initB, initConfig,
+		test.NewApp(0, nil), &testTSigVerifierGetter{}, s.signer,
+		&common.NullLogger{})
 }
 
 func (s *BlockChainTestSuite) newRoundOneInitBlock() *types.Block {
@@ -157,7 +161,7 @@ func (s *BlockChainTestSuite) newRoundOneInitBlock() *types.Block {
 func (s *BlockChainTestSuite) baseConcurrentAceessTest(initBlock *types.Block,
 	blocks []*types.Block, rands []*types.BlockRandomnessResult) {
 	var (
-		bc        = s.newBlockChain(initBlock)
+		bc        = s.newBlockChain(initBlock, uint64(len(blocks)+1))
 		start     = make(chan struct{})
 		newNotif  = make(chan struct{}, 1)
 		delivered []*types.Block
@@ -214,7 +218,7 @@ func (s *BlockChainTestSuite) baseConcurrentAceessTest(initBlock *types.Block,
 
 func (s *BlockChainTestSuite) TestBasicUsage() {
 	initBlock := s.newRoundOneInitBlock()
-	bc := s.newBlockChain(initBlock)
+	bc := s.newBlockChain(initBlock, 10)
 	// test scenario: block, empty block, randomness can be added in any order
 	// of position.
 	blocks := s.newBlocks(4, initBlock)
@@ -273,11 +277,7 @@ func (s *BlockChainTestSuite) TestConcurrentAccess() {
 }
 
 func (s *BlockChainTestSuite) TestSanityCheck() {
-	bc := s.newBlockChain(nil)
-	// Non-zero chainID is not allowed.
-	s.Require().Panics(func() {
-		bc.sanityCheck(&types.Block{Position: types.Position{ChainID: 1}})
-	})
+	bc := s.newBlockChain(nil, 4)
 	// Empty block is not allowed.
 	s.Require().Panics(func() {
 		bc.sanityCheck(&types.Block{})
@@ -331,7 +331,7 @@ func (s *BlockChainTestSuite) TestSanityCheck() {
 }
 
 func (s *BlockChainTestSuite) TestAppendConfig() {
-	bc := s.newBlockChain(nil)
+	bc := s.newBlockChain(nil, 10)
 	s.Require().Equal(ErrRoundNotIncreasing.Error(),
 		bc.appendConfig(0, &types.Config{}).Error())
 	s.Require().Equal(ErrRoundNotIncreasing.Error(),
@@ -340,7 +340,7 @@ func (s *BlockChainTestSuite) TestAppendConfig() {
 }
 
 func (s *BlockChainTestSuite) TestConfirmed() {
-	bc := s.newBlockChain(nil)
+	bc := s.newBlockChain(nil, 10)
 	blocks := s.newBlocks(3, nil)
 	// Add a confirmed block.
 	s.Require().NoError(bc.addBlock(blocks[0]))
@@ -351,12 +351,17 @@ func (s *BlockChainTestSuite) TestConfirmed() {
 	s.Require().True(bc.confirmed(2))
 }
 
-func (s *BlockChainTestSuite) TestNextBlock() {
-	bc := s.newBlockChain(nil)
+func (s *BlockChainTestSuite) TestNextBlockAndTipRound() {
+	var roundInterval uint64 = 3
+	bc := s.newBlockChain(nil, roundInterval)
+	s.Require().NoError(bc.appendConfig(1, &types.Config{
+		MinBlockInterval: s.blockInterval,
+		RoundInterval:    roundInterval,
+	}))
 	blocks := s.newBlocks(3, nil)
 	nextH, nextT := bc.nextBlock()
 	s.Require().Equal(nextH, uint64(0))
-	s.Require().Equal(nextT, bc.configs[0].roundBeginTime)
+	s.Require().Equal(nextT, s.dMoment)
 	// Add one block.
 	s.Require().NoError(bc.addBlock(blocks[0]))
 	nextH, nextT = bc.nextBlock()
@@ -368,11 +373,17 @@ func (s *BlockChainTestSuite) TestNextBlock() {
 	nextH2, nextT2 := bc.nextBlock()
 	s.Require().Equal(nextH, nextH2)
 	s.Require().Equal(nextT, nextT2)
+	// Add a block, which is the last block of this round.
+	b3 := s.newBlock(blocks[2], 1, 1*time.Second)
+	s.Require().NoError(bc.addBlock(blocks[1]))
+	s.Require().NoError(bc.sanityCheck(b3))
+	s.Require().NoError(bc.addBlock(b3))
+	s.Require().Equal(bc.tipRound(), uint64(1))
 }
 
 func (s *BlockChainTestSuite) TestPendingBlocksWithoutRandomness() {
 	initBlock := s.newRoundOneInitBlock()
-	bc := s.newBlockChain(initBlock)
+	bc := s.newBlockChain(initBlock, 10)
 	blocks := s.newBlocks(4, initBlock)
 	s.Require().NoError(bc.addBlock(blocks[0]))
 	s.Require().NoError(bc.addBlock(blocks[1]))
@@ -386,7 +397,7 @@ func (s *BlockChainTestSuite) TestPendingBlocksWithoutRandomness() {
 
 func (s *BlockChainTestSuite) TestLastXBlock() {
 	initBlock := s.newRoundOneInitBlock()
-	bc := s.newBlockChain(initBlock)
+	bc := s.newBlockChain(initBlock, 10)
 	s.Require().Nil(bc.lastPendingBlock())
 	s.Require().True(bc.lastDeliveredBlock() == initBlock)
 	blocks := s.newBlocks(2, initBlock)
@@ -422,7 +433,7 @@ func (s *BlockChainTestSuite) TestPendingBlockRecords() {
 }
 
 func (s *BlockChainTestSuite) TestFindPendingBlock() {
-	bc := s.newBlockChain(nil)
+	bc := s.newBlockChain(nil, 10)
 	blocks := s.newBlocks(7, nil)
 	s.Require().NoError(bc.addBlock(blocks[6]))
 	s.Require().NoError(bc.addBlock(blocks[5]))
@@ -440,7 +451,7 @@ func (s *BlockChainTestSuite) TestFindPendingBlock() {
 }
 
 func (s *BlockChainTestSuite) TestAddEmptyBlockDirectly() {
-	bc := s.newBlockChain(nil)
+	bc := s.newBlockChain(nil, 10)
 	blocks := s.newBlocks(1, nil)
 	s.Require().NoError(bc.addBlock(blocks[0]))
 	// Add an empty block after a normal block.

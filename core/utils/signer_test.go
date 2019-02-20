@@ -42,8 +42,8 @@ func (s *SignerTestSuite) TestBlock() {
 	b := &types.Block{
 		ParentHash: common.NewRandomHash(),
 		Position: types.Position{
-			ChainID: 2,
-			Height:  3,
+			Round:  2,
+			Height: 3,
 		},
 		Timestamp: time.Now().UTC(),
 	}
@@ -55,8 +55,8 @@ func (s *SignerTestSuite) TestVote() {
 	k := s.setupSigner()
 	v := types.NewVote(types.VoteCom, common.NewRandomHash(), 123)
 	v.Position = types.Position{
-		ChainID: 4,
-		Height:  6,
+		Round:  4,
+		Height: 6,
 	}
 	v.ProposerID = types.NodeID{Hash: common.NewRandomHash()}
 	s.NoError(k.SignVote(v))
@@ -70,8 +70,8 @@ func (s *SignerTestSuite) TestCRS() {
 	b := &types.Block{
 		ParentHash: common.NewRandomHash(),
 		Position: types.Position{
-			ChainID: 8,
-			Height:  9,
+			Round:  8,
+			Height: 9,
 		},
 		Timestamp: time.Now().UTC(),
 	}

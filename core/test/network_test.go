@@ -90,9 +90,8 @@ func (s *NetworkTestSuite) TestPullRequestMarshaling() {
 		Requester: GenerateRandomNodeIDs(1)[0],
 		Type:      "vote",
 		Identity: types.Position{
-			Round:   1,
-			ChainID: 2,
-			Height:  3,
+			Round:  1,
+			Height: 3,
 		}}
 	b, err = json.Marshal(req)
 	s.Require().NoError(err)
@@ -102,8 +101,6 @@ func (s *NetworkTestSuite) TestPullRequestMarshaling() {
 	s.Require().Equal(req.Type, req2.Type)
 	s.Require().Equal(req.Identity.(types.Position).Round,
 		req.Identity.(types.Position).Round)
-	s.Require().Equal(req.Identity.(types.Position).ChainID,
-		req.Identity.(types.Position).ChainID)
 	s.Require().Equal(req.Identity.(types.Position).Height,
 		req.Identity.(types.Position).Height)
 }
@@ -197,9 +194,8 @@ func (s *NetworkTestSuite) TestPullVotes() {
 			v := types.NewVote(
 				types.VoteInit, common.NewRandomHash(), randObj.Uint64())
 			v.Position = types.Position{
-				ChainID: randObj.Uint32(),
-				Height:  randObj.Uint64(),
-				Round:   uint64(randObj.Intn(int(maxRound + 1))),
+				Height: randObj.Uint64(),
+				Round:  uint64(randObj.Intn(int(maxRound + 1))),
 			}
 			req.NoError(master.trans.Send(n.ID, v))
 			votes[v.VoteHeader] = v
@@ -262,7 +258,7 @@ func (s *NetworkTestSuite) TestBroadcastToSet() {
 	dkgSet, err := cache.GetDKGSet(0)
 	req.NoError(err)
 	req.Len(dkgSet, 1)
-	notarySet, err := cache.GetNotarySet(0, 0)
+	notarySet, err := cache.GetNotarySet(0)
 	req.NoError(err)
 	req.Len(notarySet, 1)
 	var (

@@ -18,6 +18,7 @@
 package integration
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -143,7 +144,7 @@ func (s *ByzantineTestSuite) TestOneSlowNodeOneDeadNode() {
 		core.ConfigRoundShift)
 	req.NoError(err)
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeRoundInterval, 100*time.Second))
+		test.StateChangeRoundInterval, uint64(60)))
 	slowNodeID := types.NewNodeID(pubKeys[0])
 	deadNodeID := types.NewNodeID(pubKeys[1])
 	s.directLatencyModel[slowNodeID] = &test.FixedLatencyModel{
@@ -157,6 +158,11 @@ func (s *ByzantineTestSuite) TestOneSlowNodeOneDeadNode() {
 		go n.con.Run()
 		defer n.con.Stop()
 	}
+	// Clean deadNode's network receive channel, or it might exceed the limit
+	// and block other go routines.
+	dummyReceiverCtxCancel, _ := utils.LaunchDummyReceiver(
+		context.Background(), nodes[deadNodeID].network.ReceiveChan(), nil)
+	defer dummyReceiverCtxCancel()
 Loop:
 	for {
 		<-time.After(5 * time.Second)

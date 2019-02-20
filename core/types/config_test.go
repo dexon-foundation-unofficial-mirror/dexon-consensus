@@ -30,13 +30,11 @@ type ConfigTestSuite struct {
 
 func (s *ConfigTestSuite) TestClone() {
 	c := &Config{
-		NumChains:        2,
 		LambdaBA:         1 * time.Millisecond,
 		LambdaDKG:        2 * time.Hour,
-		K:                4,
 		NotarySetSize:    5,
 		DKGSetSize:       6,
-		RoundInterval:    3 * time.Second,
+		RoundInterval:    1000,
 		MinBlockInterval: 7 * time.Nanosecond,
 	}
 	s.Require().Equal(c, c.Clone())

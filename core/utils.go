@@ -21,7 +21,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
 	"os"
 	"sort"
 	"time"
@@ -130,11 +129,6 @@ func removeFromSortedUint32Slice(xs []uint32, x uint32) []uint32 {
 	return append(xs[:indexToRemove], xs[indexToRemove+1:]...)
 }
 
-// pickBiasedTime returns a biased time based on a given range.
-func pickBiasedTime(base time.Time, biasedRange time.Duration) time.Time {
-	return base.Add(time.Duration(rand.Intn(int(biasedRange))))
-}
-
 // HashConfigurationBlock returns the hash value of configuration block.
 func HashConfigurationBlock(
 	notarySet map[types.NodeID]struct{},
@@ -165,8 +159,7 @@ func HashConfigurationBlock(
 // instance.
 func VerifyAgreementResult(
 	res *types.AgreementResult, cache *utils.NodeSetCache) error {
-	notarySet, err := cache.GetNotarySet(
-		res.Position.Round, res.Position.ChainID)
+	notarySet, err := cache.GetNotarySet(res.Position.Round)
 	if err != nil {
 		return err
 	}

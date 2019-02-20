@@ -19,7 +19,6 @@ package test
 
 import (
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
@@ -42,13 +41,10 @@ const (
 	StateAddDKGMPKReady
 	StateAddDKGFinal
 	// Configuration related.
-	StateChangeNumChains
 	StateChangeLambdaBA
 	StateChangeLambdaDKG
 	StateChangeRoundInterval
 	StateChangeMinBlockInterval
-	StateChangeK
-	StateChangePhiRatio
 	StateChangeNotarySetSize
 	StateChangeDKGSetSize
 	// Node set related.
@@ -69,8 +65,6 @@ func (t StateChangeType) String() string {
 		return "AddDKGMPKReady"
 	case StateAddDKGFinal:
 		return "AddDKGFinal"
-	case StateChangeNumChains:
-		return "ChangeNumChains"
 	case StateChangeLambdaBA:
 		return "ChangeLambdaBA"
 	case StateChangeLambdaDKG:
@@ -79,10 +73,6 @@ func (t StateChangeType) String() string {
 		return "ChangeRoundInterval"
 	case StateChangeMinBlockInterval:
 		return "ChangeMinBlockInterval"
-	case StateChangeK:
-		return "ChangeK"
-	case StateChangePhiRatio:
-		return "ChangePhiRatio"
 	case StateChangeNotarySetSize:
 		return "ChangeNotarySetSize"
 	case StateChangeDKGSetSize:
@@ -194,8 +184,6 @@ func (req *StateChangeRequest) String() (ret string) {
 		ret += fmt.Sprintf("%s", req.Payload.(*typesDKG.MPKReady))
 	case StateAddDKGFinal:
 		ret += fmt.Sprintf("%s", req.Payload.(*typesDKG.Finalize))
-	case StateChangeNumChains:
-		ret += fmt.Sprintf("%v", req.Payload.(uint32))
 	case StateChangeLambdaBA:
 		ret += fmt.Sprintf("%v", time.Duration(req.Payload.(uint64)))
 	case StateChangeLambdaDKG:
@@ -204,10 +192,6 @@ func (req *StateChangeRequest) String() (ret string) {
 		ret += fmt.Sprintf("%v", time.Duration(req.Payload.(uint64)))
 	case StateChangeMinBlockInterval:
 		ret += fmt.Sprintf("%v", time.Duration(req.Payload.(uint64)))
-	case StateChangeK:
-		ret += fmt.Sprintf("%v", req.Payload.(uint64))
-	case StateChangePhiRatio:
-		ret += fmt.Sprintf("%v", math.Float32frombits(req.Payload.(uint32)))
 	case StateChangeNotarySetSize:
 		ret += fmt.Sprintf("%v", req.Payload.(uint32))
 	case StateChangeDKGSetSize:

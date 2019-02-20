@@ -38,9 +38,8 @@ func (g *nsIntf) Configuration(round uint64) (cfg *types.Config) {
 	return &types.Config{
 		NotarySetSize:    7,
 		DKGSetSize:       7,
-		NumChains:        4,
+		RoundInterval:    60,
 		LambdaBA:         250 * time.Millisecond,
-		RoundInterval:    60 * time.Second,
 		MinBlockInterval: 1 * time.Second,
 	}
 }
@@ -89,16 +88,15 @@ func (s *NodeSetCacheTestSuite) TestBasicUsage() {
 	nodeSet0, err := cache.GetNodeSet(0)
 	req.NoError(err)
 	chk(cache, 0, nodeSet0.IDs)
-	notarySet, err := cache.GetNotarySet(0, 0)
+	notarySet, err := cache.GetNotarySet(0)
 	req.NoError(err)
 	chk(cache, 0, notarySet)
 	dkgSet, err := cache.GetDKGSet(0)
 	req.NoError(err)
 	chk(cache, 0, dkgSet)
 	leaderNode, err := cache.GetLeaderNode(types.Position{
-		Round:   uint64(0),
-		ChainID: uint32(0),
-		Height:  uint64(10),
+		Round:  uint64(0),
+		Height: uint64(10),
 	})
 	req.NoError(err)
 	chk(cache, 0, map[types.NodeID]struct{}{

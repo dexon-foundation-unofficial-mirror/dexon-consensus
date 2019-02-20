@@ -140,9 +140,6 @@ func VerifyCRSSignature(block *types.Block, crs common.Hash) (
 }
 
 func hashPosition(position types.Position) common.Hash {
-	binaryChainID := make([]byte, 4)
-	binary.LittleEndian.PutUint32(binaryChainID, position.ChainID)
-
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, position.Round)
 
@@ -150,7 +147,6 @@ func hashPosition(position types.Position) common.Hash {
 	binary.LittleEndian.PutUint64(binaryHeight, position.Height)
 
 	return crypto.Keccak256Hash(
-		binaryChainID,
 		binaryRound,
 		binaryHeight,
 	)

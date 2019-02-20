@@ -203,16 +203,6 @@ func (s *ConsensusTestSuite) prepareConsensus(
 	return app, con
 }
 
-func (s *ConsensusTestSuite) prepareAgreementMgrWithoutRunning(
-	con *Consensus, numChains uint32) {
-	// This is a workaround to setup agreementMgr.
-	con.baMgr.appendConfig(0, &types.Config{
-		NumChains:     numChains,
-		RoundInterval: time.Hour,
-		LambdaBA:      50 * time.Millisecond,
-	}, common.NewRandomHash())
-}
-
 func (s *ConsensusTestSuite) TestDKGCRS() {
 	n := 21
 	lambda := 200 * time.Millisecond
@@ -229,7 +219,7 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 	gov, err := test.NewGovernance(test.NewState(
 		pubKeys, lambda, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
-	gov.State().RequestChange(test.StateChangeRoundInterval, 200*lambda)
+	gov.State().RequestChange(test.StateChangeRoundInterval, uint64(200))
 	cons := map[types.NodeID]*Consensus{}
 	dMoment := time.Now().UTC()
 	for _, key := range prvKeys {
@@ -281,9 +271,8 @@ func (s *ConsensusTestSuite) TestSyncBA() {
 		signers = append(signers, utils.NewSigner(prvKey))
 	}
 	pos := types.Position{
-		Round:   0,
-		ChainID: 0,
-		Height:  20,
+		Round:  0,
+		Height: 20,
 	}
 	baResult := &types.AgreementResult{
 		BlockHash: hash,

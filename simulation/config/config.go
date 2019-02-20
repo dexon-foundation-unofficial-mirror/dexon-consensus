@@ -29,9 +29,6 @@ import (
 
 // Consensus settings.
 type Consensus struct {
-	PhiRatio         float32
-	K                int
-	NumChains        uint32
 	GenesisCRS       string `toml:"genesis_crs"`
 	LambdaBA         int    `toml:"lambda_ba"`
 	LambdaDKG        int    `toml:"lambda_dkg"`
@@ -114,13 +111,10 @@ func GenerateDefault(path string) error {
 		Title: "DEXON Consensus Simulation Config",
 		Node: Node{
 			Consensus: Consensus{
-				PhiRatio:         float32(2) / 3,
-				K:                0,
-				NumChains:        7,
 				GenesisCRS:       "In DEXON we trust.",
 				LambdaBA:         250,
 				LambdaDKG:        1000,
-				RoundInterval:    30 * 1000,
+				RoundInterval:    1000,
 				NotarySetSize:    7,
 				DKGSetSize:       7,
 				MinBlockInterval: 750,

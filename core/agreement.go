@@ -254,12 +254,12 @@ func (a *agreement) restart(
 
 func (a *agreement) stop() {
 	a.restart(make(map[types.NodeID]struct{}), types.Position{
-		ChainID: math.MaxUint32,
+		Height: math.MaxUint64,
 	}, types.NodeID{}, common.Hash{})
 }
 
 func isStop(aID types.Position) bool {
-	return aID.ChainID == math.MaxUint32
+	return aID.Height == math.MaxUint64
 }
 
 // clocks returns how many time this state is required.

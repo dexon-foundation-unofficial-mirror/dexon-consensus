@@ -30,8 +30,8 @@ type StateChangeRequestTestSuite struct {
 
 func (s *StateChangeRequestTestSuite) TestEqual() {
 	// Basically, only the cloned one would be equal.
-	st00 := NewStateChangeRequest(StateChangeNumChains, uint32(4))
-	st01 := NewStateChangeRequest(StateChangeNumChains, uint32(4))
+	st00 := NewStateChangeRequest(StateChangeNotarySetSize, uint32(4))
+	st01 := NewStateChangeRequest(StateChangeNotarySetSize, uint32(4))
 	s.Error(ErrStatePendingChangesNotEqual, st00.Equal(st01))
 	// Even with identical payload, they would be different.
 	mKey := typesDKG.NewMasterPublicKey()
@@ -42,7 +42,7 @@ func (s *StateChangeRequestTestSuite) TestEqual() {
 
 func (s *StateChangeRequestTestSuite) TestClone() {
 	// The cloned one should be no error when compared with 'Equal' method.
-	st00 := NewStateChangeRequest(StateChangeNumChains, uint32(7))
+	st00 := NewStateChangeRequest(StateChangeDKGSetSize, uint32(7))
 	s.NoError(st00.Equal(st00.Clone()))
 	st10 := NewStateChangeRequest(
 		StateAddDKGMasterPublicKey, typesDKG.NewMasterPublicKey())

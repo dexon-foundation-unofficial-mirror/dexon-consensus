@@ -67,9 +67,8 @@ func (s *BlockTestSuite) createRandomBlock() *Block {
 		ParentHash: common.NewRandomHash(),
 		Hash:       common.NewRandomHash(),
 		Position: Position{
-			Round:   rand.Uint64(),
-			ChainID: rand.Uint32(),
-			Height:  rand.Uint64(),
+			Round:  rand.Uint64(),
+			Height: rand.Uint64(),
 		},
 		Acks: common.NewSortedHashes(common.Hashes{
 			common.NewRandomHash(),

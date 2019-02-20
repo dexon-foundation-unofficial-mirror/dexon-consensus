@@ -77,7 +77,7 @@ type AppDeliveredRecord struct {
 // App implements Application interface for testing purpose.
 type App struct {
 	Confirmed             map[common.Hash]*types.Block
-	LastConfirmedHeights  map[uint32]uint64
+	LastConfirmedHeight   uint64
 	confirmedLock         sync.RWMutex
 	Delivered             map[common.Hash]*AppDeliveredRecord
 	DeliverSequence       common.Hashes
@@ -92,12 +92,11 @@ type App struct {
 // NewApp constructs a TestApp instance.
 func NewApp(initRound uint64, gov *Governance) (app *App) {
 	app = &App{
-		Confirmed:            make(map[common.Hash]*types.Block),
-		LastConfirmedHeights: make(map[uint32]uint64),
-		Delivered:            make(map[common.Hash]*AppDeliveredRecord),
-		DeliverSequence:      common.Hashes{},
-		gov:                  gov,
-		roundToNotify:        initRound,
+		Confirmed:       make(map[common.Hash]*types.Block),
+		Delivered:       make(map[common.Hash]*AppDeliveredRecord),
+		DeliverSequence: common.Hashes{},
+		gov:             gov,
+		roundToNotify:   initRound,
 	}
 	if gov != nil {
 		app.state = gov.State()
@@ -171,8 +170,7 @@ func (app *App) VerifyBlock(block *types.Block) types.BlockVerifyStatus {
 		// verify the next block in a given chain.
 		app.confirmedLock.RLock()
 		defer app.confirmedLock.RUnlock()
-		if app.LastConfirmedHeights[block.Position.ChainID]+1 !=
-			block.Position.Height {
+		if app.LastConfirmedHeight+1 != block.Position.Height {
 			return types.VerifyRetryLater
 		}
 	}
@@ -185,13 +183,11 @@ func (app *App) BlockConfirmed(b types.Block) {
 	defer app.confirmedLock.Unlock()
 	app.Confirmed[b.Hash] = &b
 	if b.Position.Height != 0 {
-		if h, exists := app.LastConfirmedHeights[b.Position.ChainID]; exists {
-			if h+1 != b.Position.Height {
-				panic(ErrConfirmedHeightNotIncreasing)
-			}
+		if app.LastConfirmedHeight+1 != b.Position.Height {
+			panic(ErrConfirmedHeightNotIncreasing)
 		}
 	}
-	app.LastConfirmedHeights[b.Position.ChainID] = b.Position.Height
+	app.LastConfirmedHeight = b.Position.Height
 }
 
 // BlockDelivered implements Application interface.

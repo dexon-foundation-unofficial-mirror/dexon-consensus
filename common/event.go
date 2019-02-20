@@ -20,26 +20,25 @@ package common
 import (
 	"container/heap"
 	"sync"
-	"time"
 )
 
-type timeEventFn func(time.Time)
+type heightEventFn func(uint64)
 
-type timeEvent struct {
-	t  time.Time
-	fn timeEventFn
+type heightEvent struct {
+	h  uint64
+	fn heightEventFn
 }
 
-// timeEvents implements a Min-Heap structure.
-type timeEvents []timeEvent
+// heightEvents implements a Min-Heap structure.
+type heightEvents []heightEvent
 
-func (h timeEvents) Len() int           { return len(h) }
-func (h timeEvents) Less(i, j int) bool { return h[i].t.Before(h[j].t) }
-func (h timeEvents) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-func (h *timeEvents) Push(x interface{}) {
-	*h = append(*h, x.(timeEvent))
+func (h heightEvents) Len() int           { return len(h) }
+func (h heightEvents) Less(i, j int) bool { return h[i].h < h[j].h }
+func (h heightEvents) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *heightEvents) Push(x interface{}) {
+	*h = append(*h, x.(heightEvent))
 }
-func (h *timeEvents) Pop() interface{} {
+func (h *heightEvents) Pop() interface{} {
 	old := *h
 	n := len(old)
 	x := old[n-1]
@@ -49,54 +48,54 @@ func (h *timeEvents) Pop() interface{} {
 
 // Event implements the Observer pattern.
 type Event struct {
-	timeEvents     timeEvents
-	timeEventsLock sync.Mutex
+	heightEvents     heightEvents
+	heightEventsLock sync.Mutex
 }
 
 // NewEvent creates a new event instance.
 func NewEvent() *Event {
-	te := timeEvents{}
-	heap.Init(&te)
+	he := heightEvents{}
+	heap.Init(&he)
 	return &Event{
-		timeEvents: te,
+		heightEvents: he,
 	}
 }
 
-// RegisterTime to get notified on and after specific time.
-func (e *Event) RegisterTime(t time.Time, fn timeEventFn) {
-	e.timeEventsLock.Lock()
-	defer e.timeEventsLock.Unlock()
-	heap.Push(&e.timeEvents, timeEvent{
-		t:  t,
+// RegisterHeight to get notified on a specific height.
+func (e *Event) RegisterHeight(h uint64, fn heightEventFn) {
+	e.heightEventsLock.Lock()
+	defer e.heightEventsLock.Unlock()
+	heap.Push(&e.heightEvents, heightEvent{
+		h:  h,
 		fn: fn,
 	})
 }
 
-// NotifyTime and trigger function callback.
-func (e *Event) NotifyTime(t time.Time) {
-	fns := func() (fns []timeEventFn) {
-		e.timeEventsLock.Lock()
-		defer e.timeEventsLock.Unlock()
-		if len(e.timeEvents) == 0 {
+// NotifyHeight and trigger function callback.
+func (e *Event) NotifyHeight(h uint64) {
+	fns := func() (fns []heightEventFn) {
+		e.heightEventsLock.Lock()
+		defer e.heightEventsLock.Unlock()
+		if len(e.heightEvents) == 0 {
 			return
 		}
-		for !t.Before(e.timeEvents[0].t) {
-			te := heap.Pop(&e.timeEvents).(timeEvent)
-			fns = append(fns, te.fn)
-			if len(e.timeEvents) == 0 {
+		for h >= e.heightEvents[0].h {
+			he := heap.Pop(&e.heightEvents).(heightEvent)
+			fns = append(fns, he.fn)
+			if len(e.heightEvents) == 0 {
 				return
 			}
 		}
 		return
 	}()
 	for _, fn := range fns {
-		fn(t)
+		fn(h)
 	}
 }
 
 // Reset clears all pending event
 func (e *Event) Reset() {
-	e.timeEventsLock.Lock()
-	defer e.timeEventsLock.Unlock()
-	e.timeEvents = timeEvents{}
+	e.heightEventsLock.Lock()
+	defer e.heightEventsLock.Unlock()
+	e.heightEvents = heightEvents{}
 }

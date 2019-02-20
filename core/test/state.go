@@ -20,7 +20,6 @@ package test
 import (
 	"bytes"
 	"errors"
-	"math"
 	"sort"
 	"sync"
 	"time"
@@ -86,14 +85,11 @@ type crsAdditionRequest struct {
 // State emulates what the global state in governace contract on a fullnode.
 type State struct {
 	// Configuration related.
-	numChains        uint32
 	lambdaBA         time.Duration
 	lambdaDKG        time.Duration
-	k                int
-	phiRatio         float32
 	notarySetSize    uint32
 	dkgSetSize       uint32
-	roundInterval    time.Duration
+	roundInterval    uint64
 	minBlockInterval time.Duration
 	// Nodes
 	nodes map[types.NodeID]crypto.PublicKey
@@ -129,15 +125,12 @@ func NewState(
 	return &State{
 		local:            local,
 		logger:           logger,
-		numChains:        uint32(len(nodes)),
 		lambdaBA:         lambda,
 		lambdaDKG:        lambda * 10,
-		roundInterval:    lambda * 10000,
+		roundInterval:    1000,
 		minBlockInterval: 4 * lambda,
 		crs:              []common.Hash{genesisCRS},
 		nodes:            nodes,
-		phiRatio:         0.667,
-		k:                0,
 		notarySetSize:    uint32(len(nodes)),
 		dkgSetSize:       uint32(len(nodes)),
 		ownRequests:      make(map[common.Hash]*StateChangeRequest),
@@ -173,11 +166,8 @@ func (s *State) Snapshot() (*types.Config, []crypto.PublicKey) {
 		nodes = append(nodes, key)
 	}
 	cfg := &types.Config{
-		NumChains:        s.numChains,
 		LambdaBA:         s.lambdaBA,
 		LambdaDKG:        s.lambdaDKG,
-		K:                s.k,
-		PhiRatio:         s.phiRatio,
 		NotarySetSize:    s.notarySetSize,
 		DKGSetSize:       s.dkgSetSize,
 		RoundInterval:    s.roundInterval,
@@ -210,10 +200,6 @@ func (s *State) unpackPayload(
 	case StateAddDKGFinal:
 		v = &typesDKG.Finalize{}
 		err = rlp.DecodeBytes(raw.Payload, v)
-	case StateChangeNumChains:
-		var tmp uint32
-		err = rlp.DecodeBytes(raw.Payload, &tmp)
-		v = tmp
 	case StateChangeLambdaBA:
 		var tmp uint64
 		err = rlp.DecodeBytes(raw.Payload, &tmp)
@@ -228,14 +214,6 @@ func (s *State) unpackPayload(
 		v = tmp
 	case StateChangeMinBlockInterval:
 		var tmp uint64
-		err = rlp.DecodeBytes(raw.Payload, &tmp)
-		v = tmp
-	case StateChangeK:
-		var tmp uint64
-		err = rlp.DecodeBytes(raw.Payload, &tmp)
-		v = tmp
-	case StateChangePhiRatio:
-		var tmp uint32
 		err = rlp.DecodeBytes(raw.Payload, &tmp)
 		v = tmp
 	case StateChangeNotarySetSize:
@@ -284,11 +262,8 @@ func (s *State) unpackRequests(
 // Equal checks equality between State instance.
 func (s *State) Equal(other *State) error {
 	// Check configuration part.
-	configEqual := s.numChains == other.numChains &&
-		s.lambdaBA == other.lambdaBA &&
+	configEqual := s.lambdaBA == other.lambdaBA &&
 		s.lambdaDKG == other.lambdaDKG &&
-		s.k == other.k &&
-		s.phiRatio == other.phiRatio &&
 		s.notarySetSize == other.notarySetSize &&
 		s.dkgSetSize == other.dkgSetSize &&
 		s.roundInterval == other.roundInterval &&
@@ -447,11 +422,8 @@ func (s *State) Equal(other *State) error {
 func (s *State) Clone() (copied *State) {
 	// Clone configuration parts.
 	copied = &State{
-		numChains:        s.numChains,
 		lambdaBA:         s.lambdaBA,
 		lambdaDKG:        s.lambdaDKG,
-		k:                s.k,
-		phiRatio:         s.phiRatio,
 		notarySetSize:    s.notarySetSize,
 		dkgSetSize:       s.dkgSetSize,
 		roundInterval:    s.roundInterval,
@@ -730,20 +702,14 @@ func (s *State) applyRequest(req *StateChangeRequest) error {
 			s.dkgFinals[final.Round] = make(map[types.NodeID]*typesDKG.Finalize)
 		}
 		s.dkgFinals[final.Round][final.ProposerID] = final
-	case StateChangeNumChains:
-		s.numChains = req.Payload.(uint32)
 	case StateChangeLambdaBA:
 		s.lambdaBA = time.Duration(req.Payload.(uint64))
 	case StateChangeLambdaDKG:
 		s.lambdaDKG = time.Duration(req.Payload.(uint64))
 	case StateChangeRoundInterval:
-		s.roundInterval = time.Duration(req.Payload.(uint64))
+		s.roundInterval = req.Payload.(uint64)
 	case StateChangeMinBlockInterval:
 		s.minBlockInterval = time.Duration(req.Payload.(uint64))
-	case StateChangeK:
-		s.k = int(req.Payload.(uint64))
-	case StateChangePhiRatio:
-		s.phiRatio = math.Float32frombits(req.Payload.(uint32))
 	case StateChangeNotarySetSize:
 		s.notarySetSize = req.Payload.(uint32)
 	case StateChangeDKGSetSize:
@@ -773,13 +739,8 @@ func (s *State) RequestChange(
 		payload = payload.(crypto.PublicKey).Bytes()
 	case StateChangeLambdaBA,
 		StateChangeLambdaDKG,
-		StateChangeRoundInterval,
 		StateChangeMinBlockInterval:
 		payload = uint64(payload.(time.Duration))
-	case StateChangeK:
-		payload = uint64(payload.(int))
-	case StateChangePhiRatio:
-		payload = math.Float32bits(payload.(float32))
 	// These cases for for type assertion, make sure callers pass expected types.
 	case StateAddCRS:
 		payload = payload.(*crsAdditionRequest)

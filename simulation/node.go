@@ -204,9 +204,6 @@ MainLoop:
 func (n *node) prepareConfigs() {
 	// Prepare configurations.
 	cConfig := n.cfg.Node.Consensus
-	n.gov.State().RequestChange(test.StateChangeK, cConfig.K)                 // #nosec G104
-	n.gov.State().RequestChange(test.StateChangePhiRatio, cConfig.PhiRatio)   // #nosec G104
-	n.gov.State().RequestChange(test.StateChangeNumChains, cConfig.NumChains) // #nosec G104
 	n.gov.State().RequestChange(
 		test.StateChangeNotarySetSize, cConfig.NotarySetSize) // #nosec G104
 	n.gov.State().RequestChange(test.StateChangeDKGSetSize, cConfig.DKGSetSize) // #nosec G104
@@ -214,8 +211,7 @@ func (n *node) prepareConfigs() {
 		cConfig.LambdaBA)*time.Millisecond) // #nosec G104
 	n.gov.State().RequestChange(test.StateChangeLambdaDKG, time.Duration(
 		cConfig.LambdaDKG)*time.Millisecond) // #nosec G104
-	n.gov.State().RequestChange(test.StateChangeRoundInterval, time.Duration(
-		cConfig.RoundInterval)*time.Millisecond) // #nosec G104
+	n.gov.State().RequestChange(test.StateChangeRoundInterval, cConfig.RoundInterval) // #nosec G104
 	n.gov.State().RequestChange(test.StateChangeMinBlockInterval, time.Duration(
 		cConfig.MinBlockInterval)*time.Millisecond) // #nosec G104
 	n.gov.State().ProposeCRS(0, crypto.Keccak256Hash([]byte(cConfig.GenesisCRS))) // #nosec G104

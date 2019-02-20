@@ -135,26 +135,20 @@ func (s *StateTestSuite) makeDKGChanges(
 }
 
 func (s *StateTestSuite) makeConfigChanges(st *State) {
-	st.RequestChange(StateChangeNumChains, uint32(7))
 	st.RequestChange(StateChangeLambdaBA, time.Nanosecond)
 	st.RequestChange(StateChangeLambdaDKG, time.Millisecond)
-	st.RequestChange(StateChangeRoundInterval, time.Hour)
+	st.RequestChange(StateChangeRoundInterval, uint64(1001))
 	st.RequestChange(StateChangeMinBlockInterval, time.Second)
-	st.RequestChange(StateChangeK, 1)
-	st.RequestChange(StateChangePhiRatio, float32(0.5))
 	st.RequestChange(StateChangeNotarySetSize, uint32(5))
 	st.RequestChange(StateChangeDKGSetSize, uint32(6))
 }
 
 func (s *StateTestSuite) checkConfigChanges(config *types.Config) {
 	req := s.Require()
-	req.Equal(config.NumChains, uint32(7))
 	req.Equal(config.LambdaBA, time.Nanosecond)
 	req.Equal(config.LambdaDKG, time.Millisecond)
-	req.Equal(config.RoundInterval, time.Hour)
+	req.Equal(config.RoundInterval, uint64(1001))
 	req.Equal(config.MinBlockInterval, time.Second)
-	req.Equal(config.K, 1)
-	req.Equal(config.PhiRatio, float32(0.5))
 	req.Equal(config.NotarySetSize, uint32(5))
 	req.Equal(config.DKGSetSize, uint32(6))
 }
@@ -210,7 +204,7 @@ func (s *StateTestSuite) TestEqual() {
 	// Switch to remote mode.
 	st.SwitchToRemoteMode()
 	// Make some change.
-	req.NoError(st.RequestChange(StateChangeK, int(5)))
+	req.NoError(st.RequestChange(StateChangeNotarySetSize, uint32(100)))
 	st6 := st.Clone()
 	req.NoError(st.Equal(st6))
 	// Remove the pending change, should not be equal.
@@ -254,14 +248,11 @@ func (s *StateTestSuite) TestLocalMode() {
 	config1, nodes1 := st.Snapshot()
 	req.True(s.compareNodes(genesisNodes, nodes1))
 	// Check settings of config1 affected by genesisNodes and lambda.
-	req.Equal(config1.NumChains, uint32(len(genesisNodes)))
 	req.Equal(config1.LambdaBA, lambda)
 	req.Equal(config1.LambdaDKG, lambda*10)
-	req.Equal(config1.RoundInterval, lambda*10000)
+	req.Equal(config1.RoundInterval, uint64(1000))
 	req.Equal(config1.NotarySetSize, uint32(len(genesisNodes)))
 	req.Equal(config1.DKGSetSize, uint32(len(genesisNodes)))
-	req.Equal(config1.K, 0)
-	req.Equal(config1.PhiRatio, float32(0.667))
 	// Request some changes, every fields for config should be affected.
 	s.makeConfigChanges(st)
 	// Add new node.

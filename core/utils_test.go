@@ -58,9 +58,8 @@ func (s *UtilsTestSuite) TestVerifyAgreementResult() {
 		signers = append(signers, utils.NewSigner(prvKey))
 	}
 	pos := types.Position{
-		Round:   0,
-		ChainID: 0,
-		Height:  20,
+		Round:  0,
+		Height: 20,
 	}
 	baResult := &types.AgreementResult{
 		BlockHash: hash,

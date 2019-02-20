@@ -20,7 +20,6 @@ package common
 import (
 	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/suite"
 )
@@ -29,37 +28,35 @@ type EventTestSuite struct {
 	suite.Suite
 }
 
-func (s *EventTestSuite) TestTimeEvent() {
+func (s *EventTestSuite) TestHeightEvent() {
 	event := NewEvent()
-	now := time.Now()
 	triggered := make(chan int, 100)
-	trigger := func(id int) func(t time.Time) {
-		return func(t time.Time) {
+	trigger := func(id int) func(uint64) {
+		return func(uint64) {
 			triggered <- id
 		}
 	}
-	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
-	event.NotifyTime(now)
+	event.RegisterHeight(100, trigger(0))
+	event.NotifyHeight(0)
 	s.Len(triggered, 0)
-	event.NotifyTime(now.Add(150 * time.Millisecond))
+	event.NotifyHeight(150)
 	s.Len(triggered, 1)
 	triggered = make(chan int, 100)
-	event.NotifyTime(now.Add(150 * time.Millisecond))
+	event.NotifyHeight(150)
 	s.Len(triggered, 0)
 
-	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
-	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
-	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
-	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
-	event.NotifyTime(now.Add(150 * time.Millisecond))
+	event.RegisterHeight(100, trigger(0))
+	event.RegisterHeight(100, trigger(0))
+	event.RegisterHeight(100, trigger(0))
+	event.RegisterHeight(100, trigger(0))
+	event.NotifyHeight(150)
 	s.Len(triggered, 4)
 
 	triggered = make(chan int, 100)
 	for i := 0; i < 10; i++ {
-		event.RegisterTime(now.Add(time.Duration(100+i*10)*time.Millisecond),
-			trigger(i))
+		event.RegisterHeight(uint64(100+i*10), trigger(i))
 	}
-	event.NotifyTime(now.Add(130 * time.Millisecond))
+	event.NotifyHeight(130)
 	s.Require().Len(triggered, 4)
 	for i := 0; i < 4; i++ {
 		j := <-triggered
@@ -76,10 +73,9 @@ func (s *EventTestSuite) TestTimeEvent() {
 		nums[i], nums[j] = nums[j], nums[i]
 	})
 	for _, i := range nums {
-		event.RegisterTime(now.Add(time.Duration(100+i*10)*time.Millisecond),
-			trigger(i))
+		event.RegisterHeight(uint64(100+i*10), trigger(i))
 	}
-	event.NotifyTime(now.Add(130 * time.Millisecond))
+	event.NotifyHeight(130)
 	s.Require().Len(triggered, 4)
 	for i := 0; i < 4; i++ {
 		j := <-triggered
@@ -89,20 +85,19 @@ func (s *EventTestSuite) TestTimeEvent() {
 
 func (s *EventTestSuite) TestReset() {
 	event := NewEvent()
-	now := time.Now()
 	triggered := make(chan int, 100)
-	trigger := func(id int) func(t time.Time) {
-		return func(t time.Time) {
+	trigger := func(id int) func(h uint64) {
+		return func(uint64) {
 			triggered <- id
 		}
 	}
-	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
-	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
-	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
-	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
-	event.RegisterTime(now.Add(100*time.Millisecond), trigger(0))
+	event.RegisterHeight(100, trigger(0))
+	event.RegisterHeight(100, trigger(0))
+	event.RegisterHeight(100, trigger(0))
+	event.RegisterHeight(100, trigger(0))
+	event.RegisterHeight(100, trigger(0))
 	event.Reset()
-	event.NotifyTime(now.Add(150 * time.Millisecond))
+	event.NotifyHeight(150)
 	s.Len(triggered, 0)
 }
 

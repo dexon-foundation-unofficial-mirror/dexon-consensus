@@ -18,20 +18,16 @@
 package core
 
 import (
-	"time"
+	"fmt"
 
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
 type roundBasedConfig struct {
-	roundID uint64
-
-	// roundBeginTime is the beginning of round, as local time.
-	roundBeginTime time.Time
-	roundInterval  time.Duration
-
-	// roundEndTime is a cache for begin + interval.
-	roundEndTime time.Time
+	roundID          uint64
+	roundBeginHeight uint64
+	roundEndHeight   uint64
+	roundInterval    uint64
 }
 
 func (config *roundBasedConfig) setupRoundBasedFields(
@@ -40,13 +36,16 @@ func (config *roundBasedConfig) setupRoundBasedFields(
 	config.roundInterval = cfg.RoundInterval
 }
 
-func (config *roundBasedConfig) setRoundBeginTime(begin time.Time) {
-	config.roundBeginTime = begin
-	config.roundEndTime = begin.Add(config.roundInterval)
+func (config *roundBasedConfig) setRoundBeginHeight(begin uint64) {
+	config.roundBeginHeight = begin
+	config.roundEndHeight = begin + config.roundInterval
 }
 
 // isLastBlock checks if a block is the last block of this round.
 func (config *roundBasedConfig) isLastBlock(b *types.Block) bool {
-	return b.Position.Round == config.roundID &&
-		b.Timestamp.After(config.roundEndTime)
+	if b.Position.Round != config.roundID {
+		panic(fmt.Errorf("attempt to compare by different round: %s, %d",
+			b, config.roundID))
+	}
+	return b.Position.Height+1 == config.roundEndHeight
 }
