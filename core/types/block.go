@@ -23,7 +23,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"sort"
 	"time"
 
 	"github.com/dexon-foundation/dexon/rlp"
@@ -125,17 +124,16 @@ type Witness struct {
 
 // Block represents a single event broadcasted on the network.
 type Block struct {
-	ProposerID   NodeID              `json:"proposer_id"`
-	ParentHash   common.Hash         `json:"parent_hash"`
-	Hash         common.Hash         `json:"hash"`
-	Position     Position            `json:"position"`
-	Timestamp    time.Time           `json:"timestamp"`
-	Acks         common.SortedHashes `json:"acks"`
-	Payload      []byte              `json:"payload"`
-	PayloadHash  common.Hash         `json:"payload_hash"`
-	Witness      Witness             `json:"witness"`
-	Finalization FinalizationResult  `json:"finalization"`
-	Signature    crypto.Signature    `json:"signature"`
+	ProposerID   NodeID             `json:"proposer_id"`
+	ParentHash   common.Hash        `json:"parent_hash"`
+	Hash         common.Hash        `json:"hash"`
+	Position     Position           `json:"position"`
+	Timestamp    time.Time          `json:"timestamp"`
+	Payload      []byte             `json:"payload"`
+	PayloadHash  common.Hash        `json:"payload_hash"`
+	Witness      Witness            `json:"witness"`
+	Finalization FinalizationResult `json:"finalization"`
+	Signature    crypto.Signature   `json:"signature"`
 
 	CRSSignature crypto.Signature `json:"crs_signature"`
 }
@@ -146,7 +144,6 @@ type rlpBlock struct {
 	Hash         common.Hash
 	Position     Position
 	Timestamp    *rlpTimestamp
-	Acks         common.SortedHashes
 	Payload      []byte
 	PayloadHash  common.Hash
 	Witness      *Witness
@@ -164,7 +161,6 @@ func (b *Block) EncodeRLP(w io.Writer) error {
 		Hash:         b.Hash,
 		Position:     b.Position,
 		Timestamp:    &rlpTimestamp{b.Timestamp},
-		Acks:         b.Acks,
 		Payload:      b.Payload,
 		PayloadHash:  b.PayloadHash,
 		Witness:      &b.Witness,
@@ -185,7 +181,6 @@ func (b *Block) DecodeRLP(s *rlp.Stream) error {
 			Hash:         dec.Hash,
 			Position:     dec.Position,
 			Timestamp:    dec.Timestamp.Time,
-			Acks:         dec.Acks,
 			Payload:      dec.Payload,
 			PayloadHash:  dec.PayloadHash,
 			Witness:      *dec.Witness,
@@ -216,8 +211,6 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.Witness.Data = make([]byte, len(b.Witness.Data))
 	copy(bcopy.Witness.Data, b.Witness.Data)
 	bcopy.Timestamp = b.Timestamp
-	bcopy.Acks = make(common.SortedHashes, len(b.Acks))
-	copy(bcopy.Acks, b.Acks)
 	bcopy.Payload = make([]byte, len(b.Payload))
 	copy(bcopy.Payload, b.Payload)
 	bcopy.PayloadHash = b.PayloadHash
@@ -237,14 +230,6 @@ func (b *Block) IsFinalized() bool {
 // IsEmpty checks if the block is an 'empty block'.
 func (b *Block) IsEmpty() bool {
 	return b.ProposerID.Hash == common.Hash{}
-}
-
-// IsAcking checks if a block acking another by it's hash.
-func (b *Block) IsAcking(hash common.Hash) bool {
-	idx := sort.Search(len(b.Acks), func(i int) bool {
-		return bytes.Compare(b.Acks[i][:], hash[:]) >= 0
-	})
-	return !(idx == len(b.Acks) || b.Acks[idx] != hash)
 }
 
 // ByHash is the helper type for sorting slice of blocks by hash.

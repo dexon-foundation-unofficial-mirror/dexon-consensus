@@ -337,7 +337,6 @@ func (con *Consensus) buildEmptyBlock(b *types.Block, parent *types.Block) {
 	b.Witness.Height = parent.Witness.Height
 	b.Witness.Data = make([]byte, len(parent.Witness.Data))
 	copy(b.Witness.Data, parent.Witness.Data)
-	b.Acks = common.NewSortedHashes(common.Hashes{parent.Hash})
 }
 
 // setupConfigs is called by SyncBlocks with blocks from compaction chain. In

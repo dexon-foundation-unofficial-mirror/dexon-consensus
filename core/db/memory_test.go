@@ -46,7 +46,6 @@ func (s *MemBackedDBTestSuite) SetupSuite() {
 		Position: types.Position{
 			Height: 0,
 		},
-		Acks: common.NewSortedHashes(common.Hashes{}),
 	}
 	s.b01 = &types.Block{
 		ProposerID: s.v0,
@@ -55,7 +54,6 @@ func (s *MemBackedDBTestSuite) SetupSuite() {
 		Position: types.Position{
 			Height: 1,
 		},
-		Acks: common.NewSortedHashes(common.Hashes{s.b00.Hash}),
 	}
 	s.b02 = &types.Block{
 		ProposerID: s.v0,
@@ -64,7 +62,6 @@ func (s *MemBackedDBTestSuite) SetupSuite() {
 		Position: types.Position{
 			Height: 2,
 		},
-		Acks: common.NewSortedHashes(common.Hashes{s.b01.Hash}),
 	}
 }
 

@@ -70,10 +70,6 @@ func (s *BlockTestSuite) createRandomBlock() *Block {
 			Round:  rand.Uint64(),
 			Height: rand.Uint64(),
 		},
-		Acks: common.NewSortedHashes(common.Hashes{
-			common.NewRandomHash(),
-			common.NewRandomHash(),
-		}),
 		Timestamp: time.Now().UTC(),
 		Witness: Witness{
 			Height: rand.Uint64(),
@@ -178,20 +174,6 @@ func (s *BlockTestSuite) TestGenesisBlock() {
 		ParentHash: common.NewRandomHash(),
 	}
 	s.False(b2.IsGenesis())
-}
-
-func (s *BlockTestSuite) TestIsAcking() {
-	// This test case would check if types.Block.IsAcking works
-	ack0 := common.NewRandomHash()
-	acks0 := common.Hashes{
-		ack0,
-		common.NewRandomHash(),
-		common.NewRandomHash(),
-	}
-	b0 := &Block{Acks: common.NewSortedHashes(acks0)}
-	s.True(b0.IsAcking(ack0))
-	s.False(b0.IsAcking(common.Hash{}))
-	s.False(b0.IsAcking(common.NewRandomHash()))
 }
 
 func (s *BlockTestSuite) TestClone() {

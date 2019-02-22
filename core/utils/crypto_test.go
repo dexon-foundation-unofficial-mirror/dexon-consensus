@@ -37,11 +37,9 @@ type CryptoTestSuite struct {
 var myNID = types.NodeID{Hash: common.NewRandomHash()}
 
 func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
-	acks := common.Hashes{}
 	now := time.Now().UTC()
 	if prevBlock == nil {
 		return &types.Block{
-			Acks:      common.NewSortedHashes(acks),
 			Timestamp: now,
 			Finalization: types.FinalizationResult{
 				Timestamp: time.Now(),
@@ -52,7 +50,6 @@ func (s *CryptoTestSuite) prepareBlock(prevBlock *types.Block) *types.Block {
 	s.Require().NotEqual(prevBlock.Hash, common.Hash{})
 	return &types.Block{
 		ParentHash: prevBlock.Hash,
-		Acks:       common.NewSortedHashes(acks),
 		Timestamp:  now,
 		Position: types.Position{
 			Height: prevBlock.Position.Height + 1,
@@ -115,11 +112,6 @@ func (s *CryptoTestSuite) TestBlockSignature() {
 			s.Equal(hash, block.ParentHash)
 		}
 		s.NoError(VerifyBlockSignature(block))
-	}
-	// Modify Block.Acks and verify signature again.
-	for _, block := range blocks {
-		block.Acks = append(block.Acks, common.NewRandomHash())
-		s.Error(VerifyBlockSignature(block))
 	}
 }
 

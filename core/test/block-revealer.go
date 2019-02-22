@@ -31,19 +31,6 @@ var (
 	ErrNotValidCompactionChain = errors.New("not valid compaction chain")
 )
 
-// isAllAckingBlockRevealed is a helper to check if all acking blocks of
-// one block are revealed.
-func isAllAckingBlockRevealed(
-	b *types.Block, revealed map[common.Hash]struct{}) bool {
-
-	for _, ack := range b.Acks {
-		if _, exists := revealed[ack]; !exists {
-			return false
-		}
-	}
-	return true
-}
-
 // loadAllBlocks is a helper to load all blocks from db.BlockIterator.
 func loadAllBlocks(iter db.BlockIterator) (
 	blocks map[common.Hash]*types.Block, err error) {
