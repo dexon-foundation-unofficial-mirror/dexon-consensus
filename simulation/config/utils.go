@@ -32,7 +32,7 @@ func StateChangeTypeFromString(s string) test.StateChangeType {
 	case "lambda_dkg":
 		return test.StateChangeLambdaDKG
 	case "round_interval":
-		return test.StateChangeRoundInterval
+		return test.StateChangeRoundLength
 	case "min_block_interval":
 		return test.StateChangeMinBlockInterval
 	case "notary_set_size":
@@ -55,7 +55,7 @@ func StateChangeValueFromString(
 		}
 		return uint32(ret)
 	case test.StateChangeLambdaBA, test.StateChangeLambdaDKG,
-		test.StateChangeRoundInterval, test.StateChangeMinBlockInterval:
+		test.StateChangeRoundLength, test.StateChangeMinBlockInterval:
 		ret, err := strconv.ParseInt(v, 10, 32)
 		if err != nil {
 			panic(err)

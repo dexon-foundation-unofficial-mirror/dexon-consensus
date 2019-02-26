@@ -370,7 +370,7 @@ func (con *Consensus) setupConfigsUntilRound(round uint64) {
 		con.configs = append(con.configs, cfg)
 		con.roundBeginHeights = append(
 			con.roundBeginHeights,
-			con.roundBeginHeights[r-1]+con.configs[r-1].RoundInterval)
+			con.roundBeginHeights[r-1]+con.configs[r-1].RoundLength)
 	}
 }
 

@@ -228,7 +228,7 @@ func (cache *NodeSetCache) update(round uint64) (nIDs *sets, err error) {
 		notarySet: make(map[types.NodeID]struct{}),
 		dkgSet: nodeSet.GetSubSet(
 			int(cfg.DKGSetSize), types.NewDKGSetTarget(crs)),
-		leaderNode: make(map[uint64]types.NodeID, cfg.RoundInterval),
+		leaderNode: make(map[uint64]types.NodeID, cfg.RoundLength),
 	}
 	nIDs.notarySet = nodeSet.GetSubSet(
 		int(cfg.NotarySetSize), types.NewNotarySetTarget(crs))

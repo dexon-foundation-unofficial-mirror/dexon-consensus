@@ -211,7 +211,7 @@ func (n *node) prepareConfigs() {
 		cConfig.LambdaBA)*time.Millisecond) // #nosec G104
 	n.gov.State().RequestChange(test.StateChangeLambdaDKG, time.Duration(
 		cConfig.LambdaDKG)*time.Millisecond) // #nosec G104
-	n.gov.State().RequestChange(test.StateChangeRoundInterval, cConfig.RoundInterval) // #nosec G104
+	n.gov.State().RequestChange(test.StateChangeRoundLength, cConfig.RoundLength) // #nosec G104
 	n.gov.State().RequestChange(test.StateChangeMinBlockInterval, time.Duration(
 		cConfig.MinBlockInterval)*time.Millisecond) // #nosec G104
 	n.gov.State().ProposeCRS(0, crypto.Keccak256Hash([]byte(cConfig.GenesisCRS))) // #nosec G104

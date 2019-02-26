@@ -170,7 +170,7 @@ func (s *State) Snapshot() (*types.Config, []crypto.PublicKey) {
 		LambdaDKG:        s.lambdaDKG,
 		NotarySetSize:    s.notarySetSize,
 		DKGSetSize:       s.dkgSetSize,
-		RoundInterval:    s.roundInterval,
+		RoundLength:      s.roundInterval,
 		MinBlockInterval: s.minBlockInterval,
 	}
 	s.logger.Info("Snapshot config", "config", cfg)
@@ -208,7 +208,7 @@ func (s *State) unpackPayload(
 		var tmp uint64
 		err = rlp.DecodeBytes(raw.Payload, &tmp)
 		v = tmp
-	case StateChangeRoundInterval:
+	case StateChangeRoundLength:
 		var tmp uint64
 		err = rlp.DecodeBytes(raw.Payload, &tmp)
 		v = tmp
@@ -706,7 +706,7 @@ func (s *State) applyRequest(req *StateChangeRequest) error {
 		s.lambdaBA = time.Duration(req.Payload.(uint64))
 	case StateChangeLambdaDKG:
 		s.lambdaDKG = time.Duration(req.Payload.(uint64))
-	case StateChangeRoundInterval:
+	case StateChangeRoundLength:
 		s.roundInterval = req.Payload.(uint64)
 	case StateChangeMinBlockInterval:
 		s.minBlockInterval = time.Duration(req.Payload.(uint64))

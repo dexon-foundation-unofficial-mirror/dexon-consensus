@@ -38,7 +38,7 @@ func (g *nsIntf) Configuration(round uint64) (cfg *types.Config) {
 	return &types.Config{
 		NotarySetSize:    7,
 		DKGSetSize:       7,
-		RoundInterval:    60,
+		RoundLength:      60,
 		LambdaBA:         250 * time.Millisecond,
 		MinBlockInterval: 1 * time.Second,
 	}

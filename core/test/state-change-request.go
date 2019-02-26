@@ -43,7 +43,7 @@ const (
 	// Configuration related.
 	StateChangeLambdaBA
 	StateChangeLambdaDKG
-	StateChangeRoundInterval
+	StateChangeRoundLength
 	StateChangeMinBlockInterval
 	StateChangeNotarySetSize
 	StateChangeDKGSetSize
@@ -69,8 +69,8 @@ func (t StateChangeType) String() string {
 		return "ChangeLambdaBA"
 	case StateChangeLambdaDKG:
 		return "ChangeLambdaDKG"
-	case StateChangeRoundInterval:
-		return "ChangeRoundInterval"
+	case StateChangeRoundLength:
+		return "ChangeRoundLength"
 	case StateChangeMinBlockInterval:
 		return "ChangeMinBlockInterval"
 	case StateChangeNotarySetSize:
@@ -188,7 +188,7 @@ func (req *StateChangeRequest) String() (ret string) {
 		ret += fmt.Sprintf("%v", time.Duration(req.Payload.(uint64)))
 	case StateChangeLambdaDKG:
 		ret += fmt.Sprintf("%v", time.Duration(req.Payload.(uint64)))
-	case StateChangeRoundInterval:
+	case StateChangeRoundLength:
 		ret += fmt.Sprintf("%v", time.Duration(req.Payload.(uint64)))
 	case StateChangeMinBlockInterval:
 		ret += fmt.Sprintf("%v", time.Duration(req.Payload.(uint64)))

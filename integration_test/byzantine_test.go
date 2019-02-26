@@ -144,7 +144,7 @@ func (s *ByzantineTestSuite) TestOneSlowNodeOneDeadNode() {
 		core.ConfigRoundShift)
 	req.NoError(err)
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeRoundInterval, uint64(60)))
+		test.StateChangeRoundLength, uint64(60)))
 	slowNodeID := types.NewNodeID(pubKeys[0])
 	deadNodeID := types.NewNodeID(pubKeys[1])
 	s.directLatencyModel[slowNodeID] = &test.FixedLatencyModel{

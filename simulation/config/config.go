@@ -32,7 +32,7 @@ type Consensus struct {
 	GenesisCRS       string `toml:"genesis_crs"`
 	LambdaBA         int    `toml:"lambda_ba"`
 	LambdaDKG        int    `toml:"lambda_dkg"`
-	RoundInterval    int
+	RoundLength      int
 	NotarySetSize    uint32
 	DKGSetSize       uint32 `toml:"dkg_set_size"`
 	MinBlockInterval int
@@ -114,7 +114,7 @@ func GenerateDefault(path string) error {
 				GenesisCRS:       "In DEXON we trust.",
 				LambdaBA:         250,
 				LambdaDKG:        1000,
-				RoundInterval:    1000,
+				RoundLength:      1000,
 				NotarySetSize:    7,
 				DKGSetSize:       7,
 				MinBlockInterval: 750,

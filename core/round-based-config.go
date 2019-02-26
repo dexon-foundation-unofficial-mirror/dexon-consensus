@@ -33,7 +33,7 @@ type roundBasedConfig struct {
 func (config *roundBasedConfig) setupRoundBasedFields(
 	roundID uint64, cfg *types.Config) {
 	config.roundID = roundID
-	config.roundInterval = cfg.RoundInterval
+	config.roundInterval = cfg.RoundLength
 }
 
 func (config *roundBasedConfig) setRoundBeginHeight(begin uint64) {

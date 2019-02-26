@@ -613,7 +613,7 @@ func (con *Consensus) prepare(
 				time.Sleep(initConfig.MinBlockInterval * 3)
 				con.cfgModule.registerDKG(initRound, getDKGThreshold(initConfig))
 				con.event.RegisterHeight(
-					initConfig.RoundInterval/4,
+					initConfig.RoundLength/4,
 					func(uint64) {
 						con.runDKG(initRound, initConfig)
 					})
@@ -755,7 +755,7 @@ func (con *Consensus) initialRound(
 	// Initiate CRS routine.
 	if _, exist := curDkgSet[con.ID]; exist {
 		con.event.RegisterHeight(
-			startHeight+config.RoundInterval/2,
+			startHeight+config.RoundLength/2,
 			func(uint64) {
 				go func() {
 					con.runCRS(round)
@@ -777,7 +777,7 @@ func (con *Consensus) initialRound(
 		}
 	}
 	// Initiate BA modules.
-	con.event.RegisterHeight(startHeight+config.RoundInterval/2, func(uint64) {
+	con.event.RegisterHeight(startHeight+config.RoundLength/2, func(uint64) {
 		go func(nextRound uint64) {
 			if !checkWithCancel(
 				con.ctx, 500*time.Millisecond, checkCRS(nextRound)) {
@@ -798,7 +798,7 @@ func (con *Consensus) initialRound(
 		}(round + 1)
 	})
 	// Initiate DKG for this round.
-	con.event.RegisterHeight(startHeight+config.RoundInterval/2, func(uint64) {
+	con.event.RegisterHeight(startHeight+config.RoundLength/2, func(uint64) {
 		go func(nextRound uint64) {
 			// Normally, gov.CRS would return non-nil. Use this for in case of
 			// unexpected network fluctuation and ensure the robustness.
@@ -820,7 +820,7 @@ func (con *Consensus) initialRound(
 			}
 			con.logger.Info("Selected as DKG set", "round", nextRound)
 			con.cfgModule.registerDKG(nextRound, getDKGThreshold(config))
-			con.event.RegisterHeight(startHeight+config.RoundInterval*2/3,
+			con.event.RegisterHeight(startHeight+config.RoundLength*2/3,
 				func(uint64) {
 					func() {
 						con.dkgReady.L.Lock()
@@ -834,13 +834,13 @@ func (con *Consensus) initialRound(
 		}(round + 1)
 	})
 	// Prepare blockChain module for next round and next "initialRound" routine.
-	con.event.RegisterHeight(startHeight+config.RoundInterval, func(uint64) {
+	con.event.RegisterHeight(startHeight+config.RoundLength, func(uint64) {
 		// Change round.
 		// Get configuration for next round.
 		nextRound := round + 1
 		nextConfig := utils.GetConfigWithPanic(con.gov, nextRound, con.logger)
 		con.initialRound(
-			startHeight+config.RoundInterval, nextRound, nextConfig)
+			startHeight+config.RoundLength, nextRound, nextConfig)
 	})
 }
 

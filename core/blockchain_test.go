@@ -128,7 +128,7 @@ func (s *BlockChainTestSuite) newRandomnessFromBlock(
 }
 
 func (s *BlockChainTestSuite) newBlockChain(initB *types.Block,
-	roundInterval uint64) *blockChain {
+	roundLength uint64) *blockChain {
 	initRound := uint64(0)
 	if initB != nil {
 		initRound = initB.Position.Round
@@ -136,7 +136,7 @@ func (s *BlockChainTestSuite) newBlockChain(initB *types.Block,
 	initConfig := blockChainConfig{}
 	initConfig.fromConfig(initRound, &types.Config{
 		MinBlockInterval: s.blockInterval,
-		RoundInterval:    roundInterval,
+		RoundLength:      roundLength,
 	})
 	if initB != nil {
 		initConfig.setRoundBeginHeight(initB.Position.Height)
@@ -352,11 +352,11 @@ func (s *BlockChainTestSuite) TestConfirmed() {
 }
 
 func (s *BlockChainTestSuite) TestNextBlockAndTipRound() {
-	var roundInterval uint64 = 3
-	bc := s.newBlockChain(nil, roundInterval)
+	var roundLength uint64 = 3
+	bc := s.newBlockChain(nil, roundLength)
 	s.Require().NoError(bc.appendConfig(1, &types.Config{
 		MinBlockInterval: s.blockInterval,
-		RoundInterval:    roundInterval,
+		RoundLength:      roundLength,
 	}))
 	blocks := s.newBlocks(3, nil)
 	nextH, nextT := bc.nextBlock()

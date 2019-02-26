@@ -34,7 +34,7 @@ func (s *ConfigTestSuite) TestClone() {
 		LambdaDKG:        2 * time.Hour,
 		NotarySetSize:    5,
 		DKGSetSize:       6,
-		RoundInterval:    1000,
+		RoundLength:      1000,
 		MinBlockInterval: 7 * time.Nanosecond,
 	}
 	s.Require().Equal(c, c.Clone())

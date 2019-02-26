@@ -219,7 +219,7 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 	gov, err := test.NewGovernance(test.NewState(
 		pubKeys, lambda, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
-	gov.State().RequestChange(test.StateChangeRoundInterval, uint64(200))
+	gov.State().RequestChange(test.StateChangeRoundLength, uint64(200))
 	cons := map[types.NodeID]*Consensus{}
 	dMoment := time.Now().UTC()
 	for _, key := range prvKeys {

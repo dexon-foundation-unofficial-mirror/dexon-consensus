@@ -33,7 +33,7 @@ type Config struct {
 	DKGSetSize    uint32
 
 	// Time related.
-	RoundInterval    uint64
+	RoundLength      uint64
 	MinBlockInterval time.Duration
 }
 
@@ -44,7 +44,7 @@ func (c *Config) Clone() *Config {
 		LambdaDKG:        c.LambdaDKG,
 		NotarySetSize:    c.NotarySetSize,
 		DKGSetSize:       c.DKGSetSize,
-		RoundInterval:    c.RoundInterval,
+		RoundLength:      c.RoundLength,
 		MinBlockInterval: c.MinBlockInterval,
 	}
 }
@@ -63,8 +63,8 @@ func (c *Config) Bytes() []byte {
 	binaryDKGSetSize := make([]byte, 4)
 	binary.LittleEndian.PutUint32(binaryDKGSetSize, c.DKGSetSize)
 
-	binaryRoundInterval := make([]byte, 8)
-	binary.LittleEndian.PutUint64(binaryRoundInterval, c.RoundInterval)
+	binaryRoundLength := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryRoundLength, c.RoundLength)
 	binaryMinBlockInterval := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryMinBlockInterval,
 		uint64(c.MinBlockInterval.Nanoseconds()))
@@ -74,7 +74,7 @@ func (c *Config) Bytes() []byte {
 	enc = append(enc, binaryLambdaDKG...)
 	enc = append(enc, binaryNotarySetSize...)
 	enc = append(enc, binaryDKGSetSize...)
-	enc = append(enc, binaryRoundInterval...)
+	enc = append(enc, binaryRoundLength...)
 	enc = append(enc, binaryMinBlockInterval...)
 	return enc
 }
