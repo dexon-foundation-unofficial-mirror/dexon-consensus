@@ -160,8 +160,10 @@ func (a *agreement) processNewCRS(round uint64) {
 	if round <= a.latestCRSRound {
 		return
 	}
+	prevRound := a.latestCRSRound + 1
+	a.latestCRSRound = round
 	// Verify all pending results.
-	for r := a.latestCRSRound + 1; r <= round; r++ {
+	for r := prevRound; r <= a.latestCRSRound; r++ {
 		pendingsForRound := a.pendings[r]
 		if pendingsForRound == nil {
 			continue
@@ -169,7 +171,9 @@ func (a *agreement) processNewCRS(round uint64) {
 		delete(a.pendings, r)
 		for _, res := range pendingsForRound {
 			if err := core.VerifyAgreementResult(res, a.cache); err != nil {
-				a.logger.Error("invalid agreement result", "result", res)
+				a.logger.Error("invalid agreement result",
+					"result", res,
+					"error", err)
 				continue
 			}
 			a.logger.Error("flush agreement result", "result", res)
@@ -177,7 +181,6 @@ func (a *agreement) processNewCRS(round uint64) {
 			break
 		}
 	}
-	a.latestCRSRound = round
 }
 
 // confirm notifies consensus the confirmation of a block in BA.
