@@ -76,6 +76,7 @@ type Consensus struct {
 
 	// lock for accessing all fields.
 	lock               sync.RWMutex
+	latestCRSRound     uint64
 	moduleWaitGroup    sync.WaitGroup
 	agreementWaitGroup sync.WaitGroup
 	pullChan           chan common.Hash
@@ -720,11 +721,13 @@ func (con *Consensus) cacheRandomnessResult(r *types.BlockRandomnessResult) {
 	if r.Position.Round == 0 {
 		return
 	}
-	// We only have to cache randomness result after cutting round.
-	if r.Position.Round < func() uint64 {
+	// We only have to cache randomness result after cutting round, and can only
+	// verify them when corresponding CRS is ready.
+	if func() bool {
 		con.lock.RLock()
 		defer con.lock.RUnlock()
-		return con.agreementRoundCut
+		return r.Position.Round < con.agreementRoundCut ||
+			r.Position.Round > con.latestCRSRound
 	}() {
 		return
 	}
@@ -819,6 +822,7 @@ func (con *Consensus) startCRSMonitor() {
 		lastNotifiedRound = round
 		con.lock.Lock()
 		defer con.lock.Unlock()
+		con.latestCRSRound = round
 		for idx, a := range con.agreements {
 		loop:
 			for {
