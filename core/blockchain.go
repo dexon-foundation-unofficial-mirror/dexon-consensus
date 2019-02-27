@@ -451,6 +451,11 @@ func (bc *blockChain) findPendingBlock(p types.Position) *types.Block {
 
 func (bc *blockChain) addPendingBlockRecord(p pendingBlockRecord) {
 	if err := bc.pendingBlocks.insert(p); err != nil {
+		if err == ErrDuplicatedPendingBlock {
+			// TODO(mission): panic directly once our BA can confirm blocks
+			//                uniquely and in sequence.
+			return
+		}
 		panic(err)
 	}
 	if p.block != nil {
