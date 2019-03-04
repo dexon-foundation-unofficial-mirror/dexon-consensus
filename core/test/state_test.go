@@ -174,8 +174,9 @@ func (s *StateTestSuite) TestEqual() {
 	req.NoError(st.Equal(st2))
 	s.makeConfigChanges(st)
 	req.Equal(st.Equal(st2), ErrStateConfigNotEqual)
-	crs := common.NewRandomHash()
-	req.NoError(st.ProposeCRS(1, crs))
+	req.NoError(st.ProposeCRS(1, common.NewRandomHash()))
+	req.NoError(st.ProposeCRS(2, common.NewRandomHash()))
+	req.NoError(st.RequestChange(StateResetDKG, common.NewRandomHash()))
 	masterPubKey := s.newDKGMasterPublicKey(2)
 	ready := s.newDKGMPKReady(2)
 	comp := s.newDKGComplaint(2)
@@ -201,18 +202,24 @@ func (s *StateTestSuite) TestEqual() {
 	req.NoError(st.Equal(st5))
 	delete(st5.dkgFinals, uint64(2))
 	req.Equal(st.Equal(st5), ErrStateDKGFinalsNotEqual)
+	// Remove dkgResetCount from cloned one to check if equal.
+	st6 := st.Clone()
+	req.NoError(st.Equal(st6))
+	delete(st6.dkgResetCount, uint64(2))
+	req.Equal(st.Equal(st6), ErrStateDKGResetCountNotEqual)
+
 	// Switch to remote mode.
 	st.SwitchToRemoteMode()
 	// Make some change.
 	req.NoError(st.RequestChange(StateChangeNotarySetSize, uint32(100)))
-	st6 := st.Clone()
-	req.NoError(st.Equal(st6))
+	str := st.Clone()
+	req.NoError(st.Equal(str))
 	// Remove the pending change, should not be equal.
-	req.Len(st6.ownRequests, 1)
-	for k := range st6.ownRequests {
-		delete(st6.ownRequests, k)
+	req.Len(str.ownRequests, 1)
+	for k := range str.ownRequests {
+		delete(str.ownRequests, k)
 	}
-	req.Error(ErrStatePendingChangesNotEqual, st.Equal(st6))
+	req.Error(ErrStatePendingChangesNotEqual, st.Equal(str))
 }
 
 func (s *StateTestSuite) TestPendingChangesEqual() {
@@ -269,6 +276,9 @@ func (s *StateTestSuite) TestLocalMode() {
 	crs := common.NewRandomHash()
 	req.NoError(st.ProposeCRS(1, crs))
 	req.Equal(st.CRS(1), crs)
+	crs = common.NewRandomHash()
+	req.NoError(st.ProposeCRS(2, crs))
+	req.Equal(st.CRS(2), crs)
 	// Test adding node set, DKG complaints, final, master public key.
 	// Make sure everything is empty before changed.
 	req.Empty(st.DKGMasterPublicKeys(2))
@@ -293,6 +303,15 @@ func (s *StateTestSuite) TestLocalMode() {
 	req.True(compForRound[0].Equal(comp))
 	// Check IsDKGFinal.
 	req.True(st.IsDKGFinal(2, 0))
+	// Test ResetDKG.
+	crs = common.NewRandomHash()
+	req.NoError(st.RequestChange(StateResetDKG, crs))
+	req.Equal(st.CRS(2), crs)
+	// Make sure all DKG fields are cleared.
+	req.Empty(st.DKGMasterPublicKeys(2))
+	req.False(st.IsDKGMPKReady(2, 0))
+	req.Empty(st.DKGComplaints(2))
+	req.False(st.IsDKGFinal(2, 0))
 }
 
 func (s *StateTestSuite) TestPacking() {
@@ -302,6 +321,17 @@ func (s *StateTestSuite) TestPacking() {
 		req    = s.Require()
 		lambda = 250 * time.Millisecond
 	)
+	packAndApply := func(st *State) {
+		// In remote mode, we need to manually convert own requests to global ones.
+		_, err := st.PackOwnRequests()
+		req.NoError(err)
+		// Pack changes into bytes.
+		b, err := st.PackRequests()
+		req.NoError(err)
+		req.NotEmpty(b)
+		// Apply those bytes back.
+		req.NoError(st.Apply(b))
+	}
 	// Make config changes.
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
@@ -310,6 +340,11 @@ func (s *StateTestSuite) TestPacking() {
 	// Add new CRS.
 	crs := common.NewRandomHash()
 	req.NoError(st.ProposeCRS(1, crs))
+	packAndApply(st)
+	// Check if CRS is added.
+	req.Equal(st.CRS(1), crs)
+	crs2 := common.NewRandomHash()
+	req.NoError(st.ProposeCRS(2, crs2))
 	// Add new node.
 	prvKey, err := ecdsa.NewPrivateKey()
 	req.NoError(err)
@@ -326,20 +361,12 @@ func (s *StateTestSuite) TestPacking() {
 	req.False(st.IsDKGMPKReady(2, 0))
 	req.Empty(st.DKGComplaints(2))
 	req.False(st.IsDKGFinal(2, 0))
-	// In remote mode, we need to manually convert own requests to global ones.
-	_, err = st.PackOwnRequests()
-	req.NoError(err)
-	// Pack changes into bytes.
-	b, err := st.PackRequests()
-	req.NoError(err)
-	req.NotEmpty(b)
-	// Apply those bytes back.
-	req.NoError(st.Apply(b))
+	packAndApply(st)
 	// Check if configs are changed.
 	config, nodes := st.Snapshot()
 	s.checkConfigChanges(config)
 	// Check if CRS is added.
-	req.Equal(st.CRS(1), crs)
+	req.Equal(st.CRS(2), crs2)
 	// Check if new node is added.
 	req.True(s.findNode(nodes, pubKey))
 	// Check DKGMasterPublicKeys.
@@ -354,6 +381,18 @@ func (s *StateTestSuite) TestPacking() {
 	req.True(st.IsDKGMPKReady(2, 0))
 	// Check IsDKGFinal.
 	req.True(st.IsDKGFinal(2, 0))
+
+	// Test ResetDKG.
+	crs = common.NewRandomHash()
+	req.NoError(st.RequestChange(StateResetDKG, crs))
+	packAndApply(st)
+	req.Equal(st.CRS(2), crs)
+	// Make sure all DKG fields are cleared.
+	req.Empty(st.DKGMasterPublicKeys(2))
+	req.False(st.IsDKGMPKReady(2, 0))
+	req.Empty(st.DKGComplaints(2))
+	req.False(st.IsDKGFinal(2, 0))
+
 }
 
 func (s *StateTestSuite) TestRequestBroadcastAndPack() {

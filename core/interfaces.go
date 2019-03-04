@@ -143,6 +143,12 @@ type Governance interface {
 
 	// ReportForkBlock reports a node for forking blocks.
 	ReportForkBlock(block1, block2 *types.Block)
+
+	// ResetDKG resets latest DKG data and propose new CRS.
+	ResetDKG(newSignedCRS []byte)
+
+	// DKGResetCount returns the reset count for DKG of given round.
+	DKGResetCount(round uint64) uint64
 }
 
 // Ticker define the capability to tick by interval.

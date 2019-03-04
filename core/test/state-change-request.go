@@ -40,6 +40,7 @@ const (
 	StateAddDKGMasterPublicKey
 	StateAddDKGMPKReady
 	StateAddDKGFinal
+	StateResetDKG
 	// Configuration related.
 	StateChangeLambdaBA
 	StateChangeLambdaDKG

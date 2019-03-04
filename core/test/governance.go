@@ -240,6 +240,27 @@ func (g *Governance) ReportForkVote(vote1, vote2 *types.Vote) {
 func (g *Governance) ReportForkBlock(block1, block2 *types.Block) {
 }
 
+// ResetDKG resets latest DKG data and propose new CRS.
+func (g *Governance) ResetDKG(newSignedCRS []byte) {
+	g.lock.Lock()
+	defer g.lock.Unlock()
+	crs := crypto.Keccak256Hash(newSignedCRS)
+	if err := g.stateModule.RequestChange(StateResetDKG, crs); err != nil {
+		// ResetDKG can be proposed multiple times, other errors are not
+		// accepted.
+		if err != ErrDuplicatedChange {
+			panic(err)
+		}
+		return
+	}
+	g.broadcastPendingStateChanges()
+}
+
+// DKGResetCount returns the reset count for DKG of given round.
+func (g *Governance) DKGResetCount(round uint64) uint64 {
+	return g.stateModule.DKGResetCount(round)
+}
+
 //
 // Test Utilities
 //
