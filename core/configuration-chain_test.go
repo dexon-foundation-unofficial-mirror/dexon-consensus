@@ -202,7 +202,7 @@ func (s *ConfigurationChainTestSuite) runDKG(
 	recv := newTestCCGlobalReceiver(s)
 
 	for _, nID := range s.nIDs {
-		gov, err := test.NewGovernance(test.NewState(
+		gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
 			s.pubKeys, 100*time.Millisecond, &common.NullLogger{}, true,
 		), ConfigRoundShift)
 		s.Require().NoError(err)
@@ -271,7 +271,7 @@ func (s *ConfigurationChainTestSuite) preparePartialSignature(
 func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 	k := 4
 	n := 10
-	round := uint64(0)
+	round := DKGDelayRound
 	cfgChains := s.runDKG(k, n, round)
 
 	hash := crypto.Keccak256Hash([]byte("🌚🌝"))
@@ -316,7 +316,7 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 func (s *ConfigurationChainTestSuite) TestDKGMasterPublicKeyDelayAdd() {
 	k := 4
 	n := 10
-	round := uint64(0)
+	round := DKGDelayRound
 	lambdaDKG := 1000 * time.Millisecond
 	s.setupNodes(n)
 
@@ -325,7 +325,7 @@ func (s *ConfigurationChainTestSuite) TestDKGMasterPublicKeyDelayAdd() {
 	delayNode := s.nIDs[0]
 
 	for _, nID := range s.nIDs {
-		state := test.NewState(
+		state := test.NewState(DKGDelayRound,
 			s.pubKeys, 100*time.Millisecond, &common.NullLogger{}, true)
 		gov, err := test.NewGovernance(state, ConfigRoundShift)
 		s.Require().NoError(err)
@@ -382,7 +382,7 @@ func (s *ConfigurationChainTestSuite) TestDKGMasterPublicKeyDelayAdd() {
 func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 	k := 4
 	n := 10
-	round := uint64(0)
+	round := DKGDelayRound
 	lambdaDKG := 1000 * time.Millisecond
 	s.setupNodes(n)
 
@@ -390,7 +390,7 @@ func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 	recv := newTestCCGlobalReceiver(s)
 	recvs := make(map[types.NodeID]*testCCReceiver)
 	for _, nID := range s.nIDs {
-		state := test.NewState(
+		state := test.NewState(DKGDelayRound,
 			s.pubKeys, 100*time.Millisecond, &common.NullLogger{}, true)
 		gov, err := test.NewGovernance(state, ConfigRoundShift)
 		s.Require().NoError(err)
@@ -458,7 +458,7 @@ func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 func (s *ConfigurationChainTestSuite) TestMultipleTSig() {
 	k := 2
 	n := 7
-	round := uint64(0)
+	round := DKGDelayRound
 	cfgChains := s.runDKG(k, n, round)
 
 	hash1 := crypto.Keccak256Hash([]byte("Hash1"))
@@ -518,7 +518,7 @@ func (s *ConfigurationChainTestSuite) TestMultipleTSig() {
 func (s *ConfigurationChainTestSuite) TestTSigTimeout() {
 	k := 2
 	n := 7
-	round := uint64(0)
+	round := DKGDelayRound
 	cfgChains := s.runDKG(k, n, round)
 	timeout := 6 * time.Second
 
@@ -555,7 +555,7 @@ func (s *ConfigurationChainTestSuite) TestTSigTimeout() {
 func (s *ConfigurationChainTestSuite) TestDKGSignerRecoverFromDB() {
 	k := 2
 	n := 7
-	round := uint64(0)
+	round := DKGDelayRound
 	cfgChains := s.runDKG(k, n, round)
 	hash := crypto.Keccak256Hash([]byte("Hash1"))
 	// Make sure we have more than one configurationChain instance.

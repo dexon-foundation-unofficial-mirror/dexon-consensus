@@ -599,25 +599,8 @@ func (con *Consensus) prepare(
 		return
 	}
 	if initRound == 0 {
-		dkgSet, err := con.nodeSetCache.GetDKGSet(initRound)
-		if err != nil {
-			return err
-		}
-		if _, exist := dkgSet[con.ID]; exist {
-			con.logger.Info("Selected as DKG set", "round", initRound)
-			go func() {
-				// Sleep until dMoment come.
-				time.Sleep(con.dMoment.Sub(time.Now().UTC()))
-				// Network is not stable upon starting. Wait some time to ensure first
-				// DKG would success. Three is a magic number.
-				time.Sleep(initConfig.MinBlockInterval * 3)
-				con.cfgModule.registerDKG(initRound, getDKGThreshold(initConfig))
-				con.event.RegisterHeight(
-					initConfig.RoundLength/4,
-					func(uint64) {
-						con.runDKG(initRound, initConfig)
-					})
-			}()
+		if DKGDelayRound == 0 {
+			panic("not implemented yet")
 		}
 	}
 	// Register events.
@@ -747,20 +730,22 @@ func (con *Consensus) initialRound(
 		return
 	default:
 	}
-	curDkgSet, err := con.nodeSetCache.GetDKGSet(round)
-	if err != nil {
-		con.logger.Error("Error getting DKG set", "round", round, "error", err)
-		curDkgSet = make(map[types.NodeID]struct{})
-	}
-	// Initiate CRS routine.
-	if _, exist := curDkgSet[con.ID]; exist {
-		con.event.RegisterHeight(
-			startHeight+config.RoundLength/2,
-			func(uint64) {
-				go func() {
-					con.runCRS(round)
-				}()
-			})
+	if round >= DKGDelayRound {
+		curDkgSet, err := con.nodeSetCache.GetDKGSet(round)
+		if err != nil {
+			con.logger.Error("Error getting DKG set", "round", round, "error", err)
+			curDkgSet = make(map[types.NodeID]struct{})
+		}
+		// Initiate CRS routine.
+		if _, exist := curDkgSet[con.ID]; exist {
+			con.event.RegisterHeight(
+				startHeight+config.RoundLength/2,
+				func(uint64) {
+					go func() {
+						con.runCRS(round)
+					}()
+				})
+		}
 	}
 	// checkCRS is a generator of checker to check if CRS for that round is
 	// ready or not.
@@ -800,6 +785,10 @@ func (con *Consensus) initialRound(
 	// Initiate DKG for this round.
 	con.event.RegisterHeight(startHeight+config.RoundLength/2, func(uint64) {
 		go func(nextRound uint64) {
+			if nextRound < DKGDelayRound {
+				con.logger.Info("Skip runDKG for round", "round", nextRound)
+				return
+			}
 			// Normally, gov.CRS would return non-nil. Use this for in case of
 			// unexpected network fluctuation and ensure the robustness.
 			if !checkWithCancel(

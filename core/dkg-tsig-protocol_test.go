@@ -148,7 +148,7 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 	round := uint64(1)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
 		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 
@@ -253,7 +253,7 @@ func (s *DKGTSIGProtocolTestSuite) TestNackComplaint() {
 	round := uint64(1)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
 		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 
@@ -300,7 +300,7 @@ func (s *DKGTSIGProtocolTestSuite) TestComplaint() {
 	round := uint64(1)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
 		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 
@@ -365,7 +365,7 @@ func (s *DKGTSIGProtocolTestSuite) TestDuplicateComplaint() {
 	round := uint64(1)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
 		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 
@@ -408,7 +408,7 @@ func (s *DKGTSIGProtocolTestSuite) TestAntiComplaint() {
 	round := uint64(1)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
 		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 
@@ -466,7 +466,7 @@ func (s *DKGTSIGProtocolTestSuite) TestEncorceNackComplaint() {
 	round := uint64(1)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
 		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 
@@ -521,7 +521,7 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 	round := uint64(1)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
 		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 
@@ -587,7 +587,7 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 	round := uint64(1)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
 		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 
@@ -724,7 +724,7 @@ func (s *DKGTSIGProtocolTestSuite) TestTSigVerifierCache() {
 	n := 10
 	_, pubKeys, err := test.NewKeys(n)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
 		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 	gov.CatchUpWithRound(10)

@@ -216,7 +216,7 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 	conn := s.newNetworkConnection()
 	prvKeys, pubKeys, err := test.NewKeys(n)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
 		pubKeys, lambda, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 	gov.State().RequestChange(test.StateChangeRoundLength, uint64(200))
@@ -258,7 +258,7 @@ func (s *ConsensusTestSuite) TestSyncBA() {
 	conn := s.newNetworkConnection()
 	prvKeys, pubKeys, err := test.NewKeys(4)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
 		pubKeys, lambdaBA, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 	prvKey := prvKeys[0]

@@ -248,7 +248,7 @@ func (s *NetworkTestSuite) TestBroadcastToSet() {
 	_, pubKeys, err := NewKeys(peerCount)
 	req.NoError(err)
 	gov, err := NewGovernance(NewState(
-		pubKeys, time.Second, &common.NullLogger{}, true), 2)
+		1, pubKeys, time.Second, &common.NullLogger{}, true), 2)
 	req.NoError(err)
 	req.NoError(gov.State().RequestChange(StateChangeDKGSetSize, uint32(1)))
 	req.NoError(gov.State().RequestChange(StateChangeNotarySetSize, uint32(1)))

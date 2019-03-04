@@ -35,11 +35,11 @@ func (s *GovernanceTestSuite) TestEqual() {
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
 	g1, err := NewGovernance(NewState(
-		genesisNodes, 100*time.Millisecond, &common.NullLogger{}, true), 2)
+		1, genesisNodes, 100*time.Millisecond, &common.NullLogger{}, true), 2)
 	req.NoError(err)
 	// Create a governance with different lambda.
 	g2, err := NewGovernance(NewState(
-		genesisNodes, 50*time.Millisecond, &common.NullLogger{}, true), 2)
+		1, genesisNodes, 50*time.Millisecond, &common.NullLogger{}, true), 2)
 	req.NoError(err)
 	req.False(g1.Equal(g2, true))
 	// Create configs for 3 rounds for g1.
@@ -72,7 +72,7 @@ func (s *GovernanceTestSuite) TestRegisterChange() {
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
 	g, err := NewGovernance(NewState(
-		genesisNodes, 100*time.Millisecond, &common.NullLogger{}, true), 2)
+		1, genesisNodes, 100*time.Millisecond, &common.NullLogger{}, true), 2)
 	req.NoError(err)
 	// Unable to register change for genesis round.
 	req.Error(g.RegisterConfigChange(0, StateChangeDKGSetSize, uint32(32)))

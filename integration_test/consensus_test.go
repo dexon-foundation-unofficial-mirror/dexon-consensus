@@ -210,7 +210,7 @@ func (s *ConsensusTestSuite) TestSimple() {
 	// Setup seed governance instance. Give a short latency to make this test
 	// run faster.
 	seedGov, err := test.NewGovernance(
-		test.NewState(
+		test.NewState(core.DKGDelayRound,
 			pubKeys, 100*time.Millisecond, &common.NullLogger{}, true),
 		core.ConfigRoundShift)
 	req.NoError(err)
@@ -255,7 +255,7 @@ func (s *ConsensusTestSuite) TestSetSizeChange() {
 	req.NoError(err)
 	// Setup seed governance instance.
 	seedGov, err := test.NewGovernance(
-		test.NewState(pubKeys, 100*time.Millisecond, &common.NullLogger{}, true),
+		test.NewState(core.DKGDelayRound, pubKeys, 100*time.Millisecond, &common.NullLogger{}, true),
 		core.ConfigRoundShift)
 	req.NoError(err)
 	req.NoError(seedGov.State().RequestChange(
@@ -350,7 +350,7 @@ func (s *ConsensusTestSuite) TestSync() {
 	// Setup seed governance instance. Give a short latency to make this test
 	// run faster.
 	seedGov, err := test.NewGovernance(
-		test.NewState(
+		test.NewState(core.DKGDelayRound,
 			pubKeys, 100*time.Millisecond, &common.NullLogger{}, true),
 		core.ConfigRoundShift)
 	req.NoError(err)

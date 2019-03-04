@@ -160,10 +160,10 @@ func (s *StateTestSuite) TestEqual() {
 	)
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
-	st := NewState(genesisNodes, lambda, &common.NullLogger{}, true)
+	st := NewState(1, genesisNodes, lambda, &common.NullLogger{}, true)
 	req.NoError(st.Equal(st))
 	// One node is missing.
-	st1 := NewState(genesisNodes, lambda, &common.NullLogger{}, true)
+	st1 := NewState(1, genesisNodes, lambda, &common.NullLogger{}, true)
 	for nID := range st1.nodes {
 		delete(st1.nodes, nID)
 		break
@@ -174,7 +174,6 @@ func (s *StateTestSuite) TestEqual() {
 	req.NoError(st.Equal(st2))
 	s.makeConfigChanges(st)
 	req.Equal(st.Equal(st2), ErrStateConfigNotEqual)
-	req.NoError(st.ProposeCRS(1, common.NewRandomHash()))
 	req.NoError(st.ProposeCRS(2, common.NewRandomHash()))
 	req.NoError(st.RequestChange(StateResetDKG, common.NewRandomHash()))
 	masterPubKey := s.newDKGMasterPublicKey(2)
@@ -230,12 +229,12 @@ func (s *StateTestSuite) TestPendingChangesEqual() {
 	// Setup a non-local mode State instance.
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
-	st := NewState(genesisNodes, lambda, &common.NullLogger{}, false)
+	st := NewState(1, genesisNodes, lambda, &common.NullLogger{}, false)
 	req.NoError(st.Equal(st))
 	// Apply some changes.
 	s.makeConfigChanges(st)
 	crs := common.NewRandomHash()
-	req.NoError(st.ProposeCRS(1, crs))
+	req.NoError(st.ProposeCRS(2, crs))
 	masterPubKey := s.newDKGMasterPublicKey(2)
 	ready := s.newDKGMPKReady(2)
 	comp := s.newDKGComplaint(2)
@@ -251,7 +250,7 @@ func (s *StateTestSuite) TestLocalMode() {
 	)
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
-	st := NewState(genesisNodes, lambda, &common.NullLogger{}, true)
+	st := NewState(1, genesisNodes, lambda, &common.NullLogger{}, true)
 	config1, nodes1 := st.Snapshot()
 	req.True(s.compareNodes(genesisNodes, nodes1))
 	// Check settings of config1 affected by genesisNodes and lambda.
@@ -274,9 +273,6 @@ func (s *StateTestSuite) TestLocalMode() {
 	req.True(s.findNode(newNodes, pubKey))
 	// Test adding CRS.
 	crs := common.NewRandomHash()
-	req.NoError(st.ProposeCRS(1, crs))
-	req.Equal(st.CRS(1), crs)
-	crs = common.NewRandomHash()
 	req.NoError(st.ProposeCRS(2, crs))
 	req.Equal(st.CRS(2), crs)
 	// Test adding node set, DKG complaints, final, master public key.
@@ -335,16 +331,11 @@ func (s *StateTestSuite) TestPacking() {
 	// Make config changes.
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
-	st := NewState(genesisNodes, lambda, &common.NullLogger{}, false)
+	st := NewState(1, genesisNodes, lambda, &common.NullLogger{}, false)
 	s.makeConfigChanges(st)
 	// Add new CRS.
 	crs := common.NewRandomHash()
-	req.NoError(st.ProposeCRS(1, crs))
-	packAndApply(st)
-	// Check if CRS is added.
-	req.Equal(st.CRS(1), crs)
-	crs2 := common.NewRandomHash()
-	req.NoError(st.ProposeCRS(2, crs2))
+	req.NoError(st.ProposeCRS(2, crs))
 	// Add new node.
 	prvKey, err := ecdsa.NewPrivateKey()
 	req.NoError(err)
@@ -366,7 +357,7 @@ func (s *StateTestSuite) TestPacking() {
 	config, nodes := st.Snapshot()
 	s.checkConfigChanges(config)
 	// Check if CRS is added.
-	req.Equal(st.CRS(2), crs2)
+	req.Equal(st.CRS(2), crs)
 	// Check if new node is added.
 	req.True(s.findNode(nodes, pubKey))
 	// Check DKGMasterPublicKeys.
@@ -409,14 +400,14 @@ func (s *StateTestSuite) TestRequestBroadcastAndPack() {
 	)
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
-	st := NewState(genesisNodes, lambda, &common.NullLogger{}, false)
-	st1 := NewState(genesisNodes, lambda, &common.NullLogger{}, false)
+	st := NewState(1, genesisNodes, lambda, &common.NullLogger{}, false)
+	st1 := NewState(1, genesisNodes, lambda, &common.NullLogger{}, false)
 	req.NoError(st.Equal(st1))
 	// Make configuration changes.
 	s.makeConfigChanges(st)
 	// Add new CRS.
 	crs := common.NewRandomHash()
-	req.NoError(st.ProposeCRS(1, crs))
+	req.NoError(st.ProposeCRS(2, crs))
 	// Add new node.
 	prvKey, err := ecdsa.NewPrivateKey()
 	req.NoError(err)

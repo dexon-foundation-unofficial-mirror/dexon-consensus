@@ -139,7 +139,7 @@ func (s *ByzantineTestSuite) TestOneSlowNodeOneDeadNode() {
 	// run faster.
 	lambda := 100 * time.Millisecond
 	seedGov, err := test.NewGovernance(
-		test.NewState(
+		test.NewState(core.DKGDelayRound,
 			pubKeys, lambda, &common.NullLogger{}, true),
 		core.ConfigRoundShift)
 	req.NoError(err)

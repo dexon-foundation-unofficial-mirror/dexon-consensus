@@ -188,7 +188,7 @@ func (bc *blockChain) extractBlocks() (ret []*types.Block) {
 	defer bc.lock.Unlock()
 	for len(bc.confirmedBlocks) > 0 {
 		c := bc.confirmedBlocks[0]
-		if c.Position.Round > 0 && len(c.Finalization.Randomness) == 0 {
+		if c.Position.Round >= DKGDelayRound && len(c.Finalization.Randomness) == 0 {
 			break
 		}
 		c, bc.confirmedBlocks = bc.confirmedBlocks[0], bc.confirmedBlocks[1:]
@@ -502,7 +502,7 @@ func (bc *blockChain) purgeConfig() {
 
 func (bc *blockChain) verifyRandomness(
 	blockHash common.Hash, round uint64, randomness []byte) (bool, error) {
-	if round == 0 {
+	if round < DKGDelayRound {
 		return len(randomness) == 0, nil
 	}
 	v, ok, err := bc.vGetter.UpdateAndGet(round)

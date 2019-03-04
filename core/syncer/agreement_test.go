@@ -78,13 +78,13 @@ func (s *AgreementTestSuite) TestFutureAgreementResult() {
 		pos         = types.Position{Round: 7, Height: 1000}
 	)
 	gov, err := test.NewGovernance(
-		test.NewState(s.pubKeys, time.Second, &common.NullLogger{}, true),
+		test.NewState(1, s.pubKeys, time.Second, &common.NullLogger{}, true),
 		core.ConfigRoundShift,
 	)
 	s.Require().NoError(err)
 	// Make sure goverance is ready for some future round, including CRS.
 	gov.CatchUpWithRound(futureRound)
-	for i := uint64(1); i <= futureRound; i++ {
+	for i := uint64(2); i <= futureRound; i++ {
 		gov.ProposeCRS(i, common.NewRandomHash().Bytes())
 	}
 	s.Require().NoError(err)

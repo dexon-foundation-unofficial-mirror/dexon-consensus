@@ -90,7 +90,7 @@ func newNode(prvKey crypto.PrivateKey, logger common.Logger,
 	}
 	// Sync config to state in governance.
 	gov, err := test.NewGovernance(
-		test.NewState(
+		test.NewState(core.DKGDelayRound,
 			[]crypto.PublicKey{pubKey}, time.Millisecond, logger, true),
 		core.ConfigRoundShift)
 	if err != nil {

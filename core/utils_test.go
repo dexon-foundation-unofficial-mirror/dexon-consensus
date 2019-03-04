@@ -48,7 +48,7 @@ func (s *UtilsTestSuite) TestRemoveFromSortedUint32Slice() {
 func (s *UtilsTestSuite) TestVerifyAgreementResult() {
 	prvKeys, pubKeys, err := test.NewKeys(4)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
 		pubKeys, time.Second, &common.NullLogger{}, true), ConfigRoundShift)
 	s.Require().NoError(err)
 	cache := utils.NewNodeSetCache(gov)

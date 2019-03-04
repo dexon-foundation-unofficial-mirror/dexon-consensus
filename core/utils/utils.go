@@ -26,6 +26,13 @@ import (
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
 )
 
+var dkgDelayRound uint64
+
+// SetDKGDelayRound sets the variable.
+func SetDKGDelayRound(delay uint64) {
+	dkgDelayRound = delay
+}
+
 type configAccessor interface {
 	Configuration(round uint64) *types.Config
 }

@@ -117,6 +117,7 @@ type State struct {
 //  - node set
 //  - crs
 func NewState(
+	dkgDelayRound uint64,
 	nodePubKeys []crypto.PublicKey,
 	lambda time.Duration,
 	logger common.Logger,
@@ -126,6 +127,11 @@ func NewState(
 		nodes[types.NewNodeID(key)] = key
 	}
 	genesisCRS := crypto.Keccak256Hash([]byte("__ DEXON"))
+	crs := make([]common.Hash, dkgDelayRound+1)
+	for i := range crs {
+		crs[i] = genesisCRS
+		genesisCRS = crypto.Keccak256Hash(genesisCRS[:])
+	}
 	return &State{
 		local:            local,
 		logger:           logger,
@@ -133,7 +139,7 @@ func NewState(
 		lambdaDKG:        lambda * 10,
 		roundInterval:    1000,
 		minBlockInterval: 4 * lambda,
-		crs:              []common.Hash{genesisCRS},
+		crs:              crs,
 		nodes:            nodes,
 		notarySetSize:    uint32(len(nodes)),
 		dkgSetSize:       uint32(len(nodes)),

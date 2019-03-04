@@ -17,9 +17,21 @@
 
 package core
 
+import "github.com/dexon-foundation/dexon-consensus/core/utils"
+
 // ConfigRoundShift refers to the difference between block's round and config
 // round derived from its state.
 //
 // For example, when round shift is 2, a block in round 0 should derive config
 // for round 2.
 const ConfigRoundShift uint64 = 2
+
+// DKGDelayRound refers to the round that first DKG is run.
+//
+// For example, when delay round is 1, new DKG will run at round 1. Round 0 will
+// have neither DKG nor CRS.
+const DKGDelayRound uint64 = 1
+
+func init() {
+	utils.SetDKGDelayRound(DKGDelayRound)
+}
