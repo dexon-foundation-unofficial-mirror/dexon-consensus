@@ -138,13 +138,6 @@ type PublicKeyShares struct {
 	masterPublicKey []bls.PublicKey
 }
 
-type rlpPublicKeyShares struct {
-	ShareCaches      [][]byte
-	ShareCacheIndexK [][]byte
-	ShareCacheIndexV []uint32
-	MasterPublicKey  [][]byte
-}
-
 // Equal checks equality of two PublicKeyShares instance.
 func (pubs *PublicKeyShares) Equal(other *PublicKeyShares) bool {
 	// Check shares.
@@ -172,53 +165,22 @@ func (pubs *PublicKeyShares) Equal(other *PublicKeyShares) bool {
 
 // EncodeRLP implements rlp.Encoder
 func (pubs *PublicKeyShares) EncodeRLP(w io.Writer) error {
-	var rps rlpPublicKeyShares
-	for _, share := range pubs.shareCaches {
-		rps.ShareCaches = append(rps.ShareCaches, share.Serialize())
+	mpks := make([][]byte, len(pubs.masterPublicKey))
+	for i, m := range pubs.masterPublicKey {
+		mpks[i] = m.Serialize()
 	}
-
-	for id, v := range pubs.shareCacheIndex {
-		rps.ShareCacheIndexK = append(
-			rps.ShareCacheIndexK, id.GetLittleEndian())
-		rps.ShareCacheIndexV = append(rps.ShareCacheIndexV, uint32(v))
-	}
-
-	for _, m := range pubs.masterPublicKey {
-		rps.MasterPublicKey = append(rps.MasterPublicKey, m.Serialize())
-	}
-
-	return rlp.Encode(w, rps)
+	return rlp.Encode(w, mpks)
 }
 
 // DecodeRLP implements rlp.Decoder
 func (pubs *PublicKeyShares) DecodeRLP(s *rlp.Stream) error {
-	var dec rlpPublicKeyShares
+	var dec [][]byte
 	if err := s.Decode(&dec); err != nil {
 		return err
 	}
 
-	if len(dec.ShareCacheIndexK) != len(dec.ShareCacheIndexV) {
-		return fmt.Errorf("invalid shareIndex")
-	}
-
 	ps := NewEmptyPublicKeyShares()
-	for _, share := range dec.ShareCaches {
-		var publicKey PublicKey
-		if err := publicKey.Deserialize(share); err != nil {
-			return err
-		}
-		ps.shareCaches = append(ps.shareCaches, publicKey)
-	}
-
-	for i, k := range dec.ShareCacheIndexK {
-		id, err := BytesID(k)
-		if err != nil {
-			return err
-		}
-		ps.shareCacheIndex[id] = int(dec.ShareCacheIndexV[i])
-	}
-
-	for _, k := range dec.MasterPublicKey {
+	for _, k := range dec {
 		var key bls.PublicKey
 		if err := key.Deserialize(k); err != nil {
 			return err

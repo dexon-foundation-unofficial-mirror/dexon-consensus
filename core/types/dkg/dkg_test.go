@@ -57,10 +57,12 @@ func (s *DKGTestSuite) clone(src, dst interface{}) {
 func (s *DKGTestSuite) TestRLPEncodeDecode() {
 	dID := s.genID()
 	// Prepare master public key for testing.
+	_, pubShare := cryptoDKG.NewPrivateKeyShares(10)
 	d := MasterPublicKey{
-		ProposerID: types.NodeID{Hash: common.Hash{1, 2, 3}},
-		Round:      10,
-		DKGID:      dID,
+		ProposerID:      types.NodeID{Hash: common.Hash{1, 2, 3}},
+		Round:           10,
+		DKGID:           dID,
+		PublicKeyShares: *pubShare,
 		Signature: crypto.Signature{
 			Type:      "123",
 			Signature: []byte{4, 5, 6},
@@ -81,6 +83,7 @@ func (s *DKGTestSuite) TestRLPEncodeDecode() {
 	s.Require().True(d.Round == dd.Round)
 	s.Require().True(reflect.DeepEqual(d.Signature, dd.Signature))
 	s.Require().Equal(d.DKGID.GetHexString(), dd.DKGID.GetHexString())
+	s.Require().True(d.PublicKeyShares.Equal(pubShare))
 
 	// Test DKGPrivateShare.
 	p := PrivateShare{
