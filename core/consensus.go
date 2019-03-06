@@ -891,13 +891,11 @@ MessageLoop:
 				ch, e := con.baConfirmedBlock[val.Hash]
 				return ch, e
 			}(); exist {
-				if err := con.bcModule.sanityCheck(val); err != nil {
-					if err == ErrRetrySanityCheckLater {
-						err = nil
-					} else {
-						con.logger.Error("SanityCheck failed", "error", err)
-						continue MessageLoop
-					}
+				if err := utils.VerifyBlockSignature(val); err != nil {
+					con.logger.Error("VerifyBlockSignature failed",
+						"block", val,
+						"error", err)
+					continue MessageLoop
 				}
 				func() {
 					con.lock.Lock()
