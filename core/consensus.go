@@ -1075,6 +1075,14 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 
 // preProcessBlock performs Byzantine Agreement on the block.
 func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
+	var exist bool
+	exist, err = con.nodeSetCache.Exists(b.Position.Round, b.ProposerID)
+	if err != nil {
+		return
+	}
+	if !exist {
+		return ErrProposerNotInNodeSet
+	}
 	err = con.baMgr.processBlock(b)
 	if err == nil && con.debugApp != nil {
 		con.debugApp.BlockReceived(b.Hash)
