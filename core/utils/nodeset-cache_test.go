@@ -118,6 +118,26 @@ func (s *NodeSetCacheTestSuite) TestBasicUsage() {
 	}
 }
 
+func (s *NodeSetCacheTestSuite) TestTouch() {
+	var (
+		nsIntf = &nsIntf{
+			s:   s,
+			crs: common.NewRandomHash(),
+		}
+		cache = NewNodeSetCache(nsIntf)
+		req   = s.Require()
+	)
+
+	_, exists := cache.get(1)
+	req.False(exists)
+
+	err := cache.Touch(1)
+	req.NoError(err)
+
+	_, exists = cache.get(1)
+	req.True(exists)
+}
+
 func TestNodeSetCache(t *testing.T) {
 	suite.Run(t, new(NodeSetCacheTestSuite))
 }

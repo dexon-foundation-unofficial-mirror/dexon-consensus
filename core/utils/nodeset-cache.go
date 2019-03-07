@@ -165,6 +165,12 @@ func (cache *NodeSetCache) GetLeaderNode(pos types.Position) (
 	return IDs.leaderNode[pos.Height], nil
 }
 
+// Touch updates the internal cache of round.
+func (cache *NodeSetCache) Touch(round uint64) (err error) {
+	_, err = cache.update(round)
+	return
+}
+
 func (cache *NodeSetCache) cloneMap(
 	nIDs map[types.NodeID]struct{}) map[types.NodeID]struct{} {
 	nIDsCopy := make(map[types.NodeID]struct{}, len(nIDs))

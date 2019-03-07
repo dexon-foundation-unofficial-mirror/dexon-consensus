@@ -831,6 +831,16 @@ func (con *Consensus) initialRound(
 		con.initialRound(
 			startHeight+config.RoundLength, nextRound, nextConfig)
 	})
+	// Touch nodeSetCache for next round.
+	con.event.RegisterHeight(startHeight+config.RoundLength*9/10, func(uint64) {
+		go func() {
+			// TODO(jimmy): check DKGResetCount and do not touch if nextRound is reset.
+			if err := con.nodeSetCache.Touch(round + 1); err != nil {
+				con.logger.Warn("Failed to update nodeSetCache",
+					"round", round+1, "error", err)
+			}
+		}()
+	})
 }
 
 // Stop the Consensus core.
