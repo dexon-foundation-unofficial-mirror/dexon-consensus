@@ -530,6 +530,17 @@ func (bc *blockChain) prepareBlock(position types.Position,
 			return
 		} else if empty {
 			b.Timestamp = bc.dMoment
+		} else {
+			bc.logger.Debug("Calling genesis Application.PreparePayload")
+			if b.Payload, err = bc.app.PreparePayload(b.Position); err != nil {
+				b = nil
+				return
+			}
+			bc.logger.Debug("Calling genesis Application.PrepareWitness")
+			if b.Witness, err = bc.app.PrepareWitness(0); err != nil {
+				b = nil
+				return
+			}
 		}
 	} else {
 		tipConfig := bc.tipConfig()
@@ -553,12 +564,14 @@ func (bc *blockChain) prepareBlock(position types.Position,
 			bc.logger.Debug("Calling Application.PreparePayload",
 				"position", b.Position)
 			if b.Payload, err = bc.app.PreparePayload(b.Position); err != nil {
+				b = nil
 				return
 			}
 			bc.logger.Debug("Calling Application.PrepareWitness",
 				"height", tip.Witness.Height)
 			if b.Witness, err = bc.app.PrepareWitness(
 				tip.Witness.Height); err != nil {
+				b = nil
 				return
 			}
 			if !b.Timestamp.After(tip.Timestamp) {
@@ -578,6 +591,7 @@ func (bc *blockChain) prepareBlock(position types.Position,
 		}
 	} else {
 		if err = bc.signer.SignBlock(b); err != nil {
+			b = nil
 			return
 		}
 	}

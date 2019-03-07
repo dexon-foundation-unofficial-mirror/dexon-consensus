@@ -41,8 +41,6 @@ var (
 		"hash of block is incorrect")
 	ErrIncorrectSignature = fmt.Errorf(
 		"signature of block is incorrect")
-	ErrGenesisBlockNotEmpty = fmt.Errorf(
-		"genesis block should be empty")
 	ErrUnknownBlockProposed = fmt.Errorf(
 		"unknown block is proposed")
 	ErrIncorrectAgreementResultPosition = fmt.Errorf(
@@ -1251,9 +1249,6 @@ func (con *Consensus) proposeBlock(position types.Position) (
 	}
 	if err = con.signer.SignCRS(b, crs); err != nil {
 		return nil, err
-	}
-	if b.IsGenesis() && len(b.Payload) != 0 {
-		return nil, ErrGenesisBlockNotEmpty
 	}
 	return b, nil
 }
