@@ -85,6 +85,7 @@ type Consensus struct {
 	dummyCancel        context.CancelFunc
 	dummyFinished      <-chan struct{}
 	dummyMsgBuffer     []interface{}
+	initChainTipHeight uint64
 }
 
 // NewConsensus creates an instance for Consensus (syncer consensus).
@@ -116,6 +117,7 @@ func NewConsensus(
 		randomnessResults: make(map[common.Hash]*types.BlockRandomnessResult),
 	}
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
+	_, con.initChainTipHeight = db.GetCompactionChainTipInfo()
 	con.agreementModule = newAgreement(
 		con.receiveChan, con.pullChan, con.nodeSetCache, con.logger)
 	con.agreementWaitGroup.Add(1)
@@ -466,6 +468,12 @@ func (con *Consensus) startNetwork() {
 				switch v := val.(type) {
 				case *types.Block:
 				case *types.AgreementResult:
+					// Avoid byzantine nodes attack by broadcasting older
+					// agreement results. Normal nodes might report 'synced'
+					// while still fall behind other nodes.
+					if v.Position.Height <= con.initChainTipHeight {
+						continue loop
+					}
 				case *types.BlockRandomnessResult:
 					con.cacheRandomnessResult(v)
 					continue loop
