@@ -419,10 +419,8 @@ func (s *BlockChainTestSuite) TestPendingBlockRecords() {
 	s.Require().NoError(ps.insert(pendingBlockRecord{bs[2].Position, bs[2]}))
 	s.Require().NoError(ps.insert(pendingBlockRecord{bs[1].Position, bs[1]}))
 	s.Require().NoError(ps.insert(pendingBlockRecord{bs[0].Position, bs[0]}))
-	// TODO(mission): unlock this checking once our BA can confirm blocks
-	//                uniquely in sequence.
-	// s.Require().Equal(ErrDuplicatedPendingBlock.Error(),
-	//    ps.insert(pendingBlockRecord{bs[0].Position, nil}).Error())
+	s.Require().Equal(ErrDuplicatedPendingBlock.Error(),
+		ps.insert(pendingBlockRecord{bs[0].Position, nil}).Error())
 	s.Require().True(ps[0].position.Equal(bs[0].Position))
 	s.Require().True(ps[1].position.Equal(bs[1].Position))
 	s.Require().True(ps[2].position.Equal(bs[2].Position))
@@ -458,16 +456,43 @@ func (s *BlockChainTestSuite) TestAddEmptyBlockDirectly() {
 	s.Require().NoError(bc.addBlock(blocks[0]))
 	// Add an empty block after a normal block.
 	pos := types.Position{Height: 1}
-	emptyB, err := bc.addEmptyBlock(pos)
-	s.Require().NotNil(emptyB)
-	s.Require().True(emptyB.Position.Equal(pos))
+	emptyB1, err := bc.addEmptyBlock(pos)
+	s.Require().NotNil(emptyB1)
+	s.Require().True(emptyB1.Position.Equal(pos))
 	s.Require().NoError(err)
 	// Add an empty block after an empty block.
 	pos = types.Position{Height: 2}
-	emptyB, err = bc.addEmptyBlock(pos)
-	s.Require().NotNil(emptyB)
-	s.Require().True(emptyB.Position.Equal(pos))
+	emptyB2, err := bc.addEmptyBlock(pos)
+	s.Require().NotNil(emptyB2)
+	s.Require().True(emptyB2.Position.Equal(pos))
 	s.Require().NoError(err)
+	// prepare a normal block.
+	pos = types.Position{Height: 3}
+	b3, err := bc.proposeBlock(pos, emptyB2.Timestamp.Add(s.blockInterval))
+	s.Require().NotNil(b3)
+	s.Require().NoError(err)
+	// Add an empty block far away from current tip.
+	pos = types.Position{Height: 4}
+	emptyB4, err := bc.addEmptyBlock(pos)
+	s.Require().Nil(emptyB4)
+	s.Require().NoError(err)
+	// propose an empty block based on the block at height=3, which mimics the
+	// scenario that the empty block is pulled from others.
+	emptyB4 = &types.Block{
+		ParentHash: b3.Hash,
+		Position:   pos,
+		Timestamp:  b3.Timestamp.Add(s.blockInterval),
+		Witness: types.Witness{
+			Height: b3.Witness.Height,
+			Data:   b3.Witness.Data, // Hacky, don't worry.
+		},
+	}
+	emptyB4.Hash, err = utils.HashBlock(emptyB4)
+	s.Require().NoError(err)
+	s.Require().NoError(bc.addBlock(emptyB4))
+	rec, found := bc.pendingBlocks.searchByHeight(4)
+	s.Require().True(found)
+	s.Require().NotNil(rec.block)
 }
 
 func TestBlockChain(t *testing.T) {

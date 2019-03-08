@@ -127,7 +127,15 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 			return
 		}
 		if block == nil {
-			panic(fmt.Errorf("empty block should be proposed directly: %s", aID))
+			// The empty block's parent is not found locally, thus we can't
+			// propose it at this moment.
+			//
+			// We can only rely on block pulling upon receiving
+			// types.AgreementResult from the next position.
+			recv.consensus.logger.Warn(
+				"An empty block is confirmed without its parent",
+				"position", aID)
+			return
 		}
 	} else {
 		var exist bool

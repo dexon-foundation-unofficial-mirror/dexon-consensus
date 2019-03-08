@@ -63,6 +63,13 @@ func (pb *pendingBlockRecords) insert(p pendingBlockRecord) error {
 		*pb = append(*pb, p)
 	default:
 		if (*pb)[idx].position.Equal(p.position) {
+			// Allow to overwrite pending block record for empty blocks, we may
+			// need to pull that block from others when its parent is not found
+			// locally.
+			if (*pb)[idx].block == nil && p.block != nil {
+				(*pb)[idx].block = p.block
+				return nil
+			}
 			return ErrDuplicatedPendingBlock
 		}
 		// Insert the value to that index.
@@ -275,8 +282,7 @@ func (bc *blockChain) addEmptyBlock(position types.Position) (
 	} else if position.Height == 0 && position.Round == 0 {
 		return add(), nil
 	}
-	bc.addPendingBlockRecord(pendingBlockRecord{position, nil})
-	return nil, nil
+	return nil, bc.addPendingBlockRecord(pendingBlockRecord{position, nil})
 }
 
 // addBlock should be called when the block is confirmed by BA, we won't perform
@@ -298,11 +304,10 @@ func (bc *blockChain) addBlock(b *types.Block) error {
 		confirmed = true
 	}
 	if !confirmed {
-		bc.addPendingBlockRecord(pendingBlockRecord{b.Position, b})
-	} else {
-		bc.confirmBlock(b)
-		bc.checkIfBlocksConfirmed()
+		return bc.addPendingBlockRecord(pendingBlockRecord{b.Position, b})
 	}
+	bc.confirmBlock(b)
+	bc.checkIfBlocksConfirmed()
 	return nil
 }
 
@@ -449,18 +454,19 @@ func (bc *blockChain) findPendingBlock(p types.Position) *types.Block {
 	return pendingRec.block
 }
 
-func (bc *blockChain) addPendingBlockRecord(p pendingBlockRecord) {
+func (bc *blockChain) addPendingBlockRecord(p pendingBlockRecord) error {
 	if err := bc.pendingBlocks.insert(p); err != nil {
 		if err == ErrDuplicatedPendingBlock {
-			// TODO(mission): panic directly once our BA can confirm blocks
-			//                uniquely and in sequence.
-			return
+			// TODO(mission): stop ignoreing this error once our BA can confirm
+			//                blocks uniquely and sequentially.
+			err = nil
 		}
-		panic(err)
+		return err
 	}
 	if p.block != nil {
 		bc.setRandomnessFromPending(p.block)
 	}
+	return nil
 }
 
 func (bc *blockChain) checkIfBlocksConfirmed() {
