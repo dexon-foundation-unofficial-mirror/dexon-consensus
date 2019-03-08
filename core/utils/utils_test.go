@@ -83,7 +83,7 @@ func (s *UtilsTestSuite) TestVerifyDKGComplaint() {
 	signComplaint(prv2, complaint)
 	ok, err = VerifyDKGComplaint(complaint, mpk)
 	s.Require().NoError(err)
-	s.True(ok)
+	s.False(ok)
 
 	// Incorrect privateShare.
 	share, exist = prvShares.Share(typesDKG.NewID(nID1))
@@ -95,7 +95,7 @@ func (s *UtilsTestSuite) TestVerifyDKGComplaint() {
 	signComplaint(prv2, complaint)
 	ok, err = VerifyDKGComplaint(complaint, mpk)
 	s.Require().NoError(err)
-	s.False(ok)
+	s.True(ok)
 
 	// MPK is incorrect.
 	mpk.Round++

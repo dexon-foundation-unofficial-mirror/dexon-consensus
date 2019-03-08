@@ -98,7 +98,7 @@ func VerifyDKGComplaint(
 	if err != nil {
 		return false, err
 	}
-	return ok, nil
+	return !ok, nil
 }
 
 // LaunchDummyReceiver launches a go routine to receive from the receive
