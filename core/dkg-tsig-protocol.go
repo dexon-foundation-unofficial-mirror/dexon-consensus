@@ -55,6 +55,12 @@ var (
 		"cache of round already been purged")
 	ErrTSigNotReady = fmt.Errorf(
 		"tsig not ready")
+	ErrSelfMPKNotRegister = fmt.Errorf(
+		"self mpk not registered")
+	ErrUnableGetSelfPrvShare = fmt.Errorf(
+		"unable to get self DKG PrivateShare")
+	ErrSelfPrvShareMismatch = fmt.Errorf(
+		"self privateShare does not match mpk registered")
 )
 
 type dkgReceiver interface {
@@ -186,6 +192,9 @@ func (d *dkgProtocol) processMasterPublicKeys(
 		ids[i] = mpks[i].DKGID
 	}
 	d.masterPrivateShare.SetParticipants(ids)
+	if err = d.verifySelfPrvShare(); err != nil {
+		return
+	}
 	for _, mpk := range mpks {
 		share, ok := d.masterPrivateShare.Share(mpk.DKGID)
 		if !ok {
@@ -199,6 +208,26 @@ func (d *dkgProtocol) processMasterPublicKeys(
 		})
 	}
 	return
+}
+
+func (d *dkgProtocol) verifySelfPrvShare() error {
+	selfMPK, exist := d.mpkMap[d.ID]
+	if !exist {
+		return ErrSelfMPKNotRegister
+	}
+	share, ok := d.masterPrivateShare.Share(d.idMap[d.ID])
+	if !ok {
+		return ErrUnableGetSelfPrvShare
+	}
+	ok, err := selfMPK.VerifyPrvShare(
+		d.idMap[d.ID], share)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrSelfPrvShareMismatch
+	}
+	return nil
 }
 
 func (d *dkgProtocol) proposeNackComplaints() {
@@ -218,6 +247,9 @@ func (d *dkgProtocol) proposeNackComplaints() {
 
 func (d *dkgProtocol) processNackComplaints(complaints []*typesDKG.Complaint) (
 	err error) {
+	if err = d.verifySelfPrvShare(); err != nil {
+		return
+	}
 	for _, complaint := range complaints {
 		if !complaint.IsNack() {
 			continue

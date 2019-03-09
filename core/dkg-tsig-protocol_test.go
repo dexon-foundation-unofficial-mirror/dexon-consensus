@@ -178,6 +178,12 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 		s.Require().Len(recv.complaints, 0)
 	}
 
+	for _, receiver := range receivers {
+		for _, complaint := range receiver.complaints {
+			gov.AddDKGComplaint(round, complaint)
+		}
+	}
+
 	for _, protocol := range protocols {
 		s.Require().NoError(protocol.processNackComplaints(
 			gov.DKGComplaints(round)))
@@ -245,6 +251,136 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 	sig, err := tsig.signature()
 	s.Require().NoError(err)
 	s.True(gpk.VerifySignature(msgHash, sig))
+}
+
+func (s *DKGTSIGProtocolTestSuite) TestErrMPKRegistered() {
+	k := 2
+	n := 10
+	round := uint64(1)
+	_, pubKeys, err := test.NewKeys(5)
+	s.Require().NoError(err)
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
+		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
+	s.Require().NoError(err)
+
+	receivers, protocols := s.newProtocols(k, n, round)
+	notRegisterID := s.nIDs[0]
+	errRegisterID := s.nIDs[1]
+
+	for ID, receiver := range receivers {
+		if ID == notRegisterID {
+			continue
+		}
+		if ID == errRegisterID {
+			_, mpk := dkg.NewPrivateKeyShares(k)
+			receiver.ProposeDKGMasterPublicKey(&typesDKG.MasterPublicKey{
+				Round:           round,
+				DKGID:           typesDKG.NewID(ID),
+				PublicKeyShares: *mpk,
+			})
+		}
+		gov.AddDKGMasterPublicKey(round, receiver.mpk)
+	}
+
+	for ID, protocol := range protocols {
+		err := protocol.processMasterPublicKeys(gov.DKGMasterPublicKeys(round))
+		if ID == notRegisterID {
+			s.Require().Equal(ErrSelfMPKNotRegister, err)
+		} else if ID == errRegisterID {
+			s.Require().Equal(ErrSelfPrvShareMismatch, err)
+		} else {
+			s.Require().NoError(err)
+		}
+	}
+
+	for ID, receiver := range receivers {
+		if ID == notRegisterID || ID == errRegisterID {
+			continue
+		}
+		s.Require().Len(receiver.prvShare, n-1)
+		for nID, prvShare := range receiver.prvShare {
+			s.Require().NoError(protocols[nID].processPrivateShare(prvShare))
+		}
+	}
+
+	for ID, protocol := range protocols {
+		if ID == notRegisterID {
+			continue
+		}
+		protocol.proposeNackComplaints()
+	}
+
+	for ID, recv := range receivers {
+		if ID == notRegisterID || ID == errRegisterID {
+			continue
+		}
+		s.Require().Len(recv.complaints, 1)
+		for _, complaint := range recv.complaints {
+			s.Require().True(complaint.IsNack())
+			s.Require().Equal(errRegisterID, complaint.PrivateShare.ProposerID)
+		}
+	}
+
+	for _, receiver := range receivers {
+		for _, complaint := range receiver.complaints {
+			gov.AddDKGComplaint(round, complaint)
+		}
+	}
+
+	s.Require().Len(gov.DKGComplaints(round), n-1)
+
+	for ID, protocol := range protocols {
+		err := protocol.processNackComplaints(gov.DKGComplaints(round))
+		if ID == notRegisterID {
+			s.Require().Equal(ErrSelfMPKNotRegister, err)
+		} else if ID == errRegisterID {
+			s.Require().Equal(ErrSelfPrvShareMismatch, err)
+		} else {
+			s.Require().NoError(err)
+		}
+	}
+
+	for _, recv := range receivers {
+		s.Require().Len(recv.antiComplaints, 0)
+	}
+
+	for _, protocol := range protocols {
+		protocol.enforceNackComplaints(gov.DKGComplaints(round))
+	}
+
+	for ID, recv := range receivers {
+		if ID == notRegisterID || ID == errRegisterID {
+			continue
+		}
+		s.Require().Len(recv.complaints, 1)
+		for _, complaint := range recv.complaints {
+			s.Require().True(complaint.IsNack())
+			s.Require().Equal(errRegisterID, complaint.PrivateShare.ProposerID)
+		}
+	}
+
+	// DKG is fininished.
+	gpk, err := NewDKGGroupPublicKey(round,
+		gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round),
+		k,
+	)
+	s.Require().NoError(err)
+	s.Require().Len(gpk.qualifyIDs, n-2)
+	qualifyIDs := make(map[dkg.ID]struct{}, len(gpk.qualifyIDs))
+	for _, id := range gpk.qualifyIDs {
+		qualifyIDs[id] = struct{}{}
+	}
+
+	for nID := range gpk.qualifyNodeIDs {
+		if nID == notRegisterID || nID == errRegisterID {
+			continue
+		}
+		id, exist := gpk.idMap[nID]
+		s.Require().True(exist)
+		_, exist = qualifyIDs[id]
+		s.Require().True(exist)
+	}
+
 }
 
 func (s *DKGTSIGProtocolTestSuite) TestNackComplaint() {
