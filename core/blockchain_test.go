@@ -495,6 +495,31 @@ func (s *BlockChainTestSuite) TestAddEmptyBlockDirectly() {
 	s.Require().NotNil(rec.block)
 }
 
+func (s *BlockChainTestSuite) TestShouldAddRandomness() {
+	initBlock := s.newRoundOneInitBlock()
+	bc := s.newBlockChain(initBlock, 10)
+	blocks := s.newBlocks(2, initBlock)
+	b0, b1 := blocks[0], blocks[1]
+	r0 := s.newRandomnessFromBlock(b0)
+	r1 := s.newRandomnessFromBlock(b1)
+
+	// If a block is extracted, the randomness should not be added.
+	s.Require().NoError(bc.addBlock(b0))
+	s.True(bc.shouldAddRandomness(r0))
+	s.Require().NoError(bc.addRandomness(r0))
+	s.False(bc.shouldAddRandomness(r0))
+	s.Require().Len(bc.extractBlocks(), 1)
+	s.Require().Equal(b0.Hash, bc.lastDelivered.Hash)
+
+	// If a block has already have randomness, it should not be added.
+	s.True(bc.shouldAddRandomness(r1))
+	s.Require().NoError(bc.addRandomness(r1))
+	s.Require().Len(bc.pendingRandomnesses, 1)
+	s.False(bc.shouldAddRandomness(r1))
+	s.Require().NoError(bc.addBlock(b1))
+	s.False(bc.shouldAddRandomness(r1))
+}
+
 func TestBlockChain(t *testing.T) {
 	suite.Run(t, new(BlockChainTestSuite))
 }

@@ -1070,6 +1070,9 @@ func (con *Consensus) ProcessBlockRandomnessResult(
 	if rand.Position.Round == 0 {
 		return nil
 	}
+	if !con.bcModule.shouldAddRandomness(rand) {
+		return nil
+	}
 	if err := con.bcModule.addRandomness(rand); err != nil {
 		return err
 	}

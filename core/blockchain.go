@@ -311,21 +311,23 @@ func (bc *blockChain) addBlock(b *types.Block) error {
 	return nil
 }
 
+func (bc *blockChain) shouldAddRandomness(r *types.BlockRandomnessResult) bool {
+	bc.lock.RLock()
+	defer bc.lock.RUnlock()
+	if bc.lastDelivered != nil &&
+		bc.lastDelivered.Position.Newer(r.Position) {
+		return false
+	}
+	_, exists := bc.pendingRandomnesses[r.Position]
+	if exists {
+		return false
+	}
+	b := bc.findPendingBlock(r.Position)
+	return b == nil || len(b.Finalization.Randomness) == 0
+}
+
 func (bc *blockChain) addRandomness(r *types.BlockRandomnessResult) error {
-	if func() bool {
-		bc.lock.RLock()
-		defer bc.lock.RUnlock()
-		if bc.lastDelivered != nil &&
-			bc.lastDelivered.Position.Newer(r.Position) {
-			return true
-		}
-		_, exists := bc.pendingRandomnesses[r.Position]
-		if exists {
-			return true
-		}
-		b := bc.findPendingBlock(r.Position)
-		return b != nil && len(b.Finalization.Randomness) > 0
-	}() {
+	if !bc.shouldAddRandomness(r) {
 		return nil
 	}
 	ok, err := bc.verifyRandomness(r.BlockHash, r.Position.Round, r.Randomness)
