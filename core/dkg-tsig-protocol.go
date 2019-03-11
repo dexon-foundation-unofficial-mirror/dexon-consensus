@@ -37,10 +37,6 @@ var (
 		"not a qualified DKG participant")
 	ErrIDShareNotFound = fmt.Errorf(
 		"private share not found for specific ID")
-	ErrNotReachThreshold = fmt.Errorf(
-		"threshold not reach")
-	ErrInvalidThreshold = fmt.Errorf(
-		"invalid threshold")
 	ErrIncorrectPrivateShareSignature = fmt.Errorf(
 		"incorrect private share signature")
 	ErrMismatchPartialSignatureHash = fmt.Errorf(
@@ -102,17 +98,6 @@ type dkgShareSecret struct {
 	privateKey *dkg.PrivateKey
 }
 
-// DKGGroupPublicKey is the result of DKG protocol.
-type DKGGroupPublicKey struct {
-	round          uint64
-	qualifyIDs     dkg.IDs
-	qualifyNodeIDs map[types.NodeID]struct{}
-	idMap          map[types.NodeID]dkg.ID
-	publicKeys     map[types.NodeID]*dkg.PublicKey
-	groupPublicKey *dkg.PublicKey
-	threshold      int
-}
-
 // TSigVerifier is the interface verifying threshold signature.
 type TSigVerifier interface {
 	VerifySignature(hash common.Hash, sig crypto.Signature) bool
@@ -144,7 +129,7 @@ type TSigVerifierCache struct {
 }
 
 type tsigProtocol struct {
-	groupPublicKey *DKGGroupPublicKey
+	groupPublicKey *typesDKG.GroupPublicKey
 	hash           common.Hash
 	sigs           map[dkg.ID]dkg.PartialSignature
 	threshold      int
@@ -385,7 +370,7 @@ func (d *dkgProtocol) proposeFinalize() {
 func (d *dkgProtocol) recoverShareSecret(qualifyIDs dkg.IDs) (
 	*dkgShareSecret, error) {
 	if len(qualifyIDs) < d.threshold {
-		return nil, ErrNotReachThreshold
+		return nil, typesDKG.ErrNotReachThreshold
 	}
 	prvKey, err := d.prvShares.RecoverPrivateKey(qualifyIDs)
 	if err != nil {
@@ -402,96 +387,7 @@ func (ss *dkgShareSecret) sign(hash common.Hash) dkg.PartialSignature {
 	return dkg.PartialSignature(sig)
 }
 
-// NewDKGGroupPublicKey creats a DKGGroupPublicKey instance.
-func NewDKGGroupPublicKey(
-	round uint64,
-	mpks []*typesDKG.MasterPublicKey, complaints []*typesDKG.Complaint,
-	threshold int) (
-	*DKGGroupPublicKey, error) {
-
-	if len(mpks) < threshold {
-		return nil, ErrInvalidThreshold
-	}
-
-	// Calculate qualify members.
-	disqualifyIDs := map[types.NodeID]struct{}{}
-	complaintsByID := map[types.NodeID]map[types.NodeID]struct{}{}
-	for _, complaint := range complaints {
-		if complaint.IsNack() {
-			if _, exist := complaintsByID[complaint.PrivateShare.ProposerID]; !exist {
-				complaintsByID[complaint.PrivateShare.ProposerID] =
-					make(map[types.NodeID]struct{})
-			}
-			complaintsByID[complaint.PrivateShare.ProposerID][complaint.ProposerID] =
-				struct{}{}
-		} else {
-			disqualifyIDs[complaint.PrivateShare.ProposerID] = struct{}{}
-		}
-	}
-	for nID, complaints := range complaintsByID {
-		if len(complaints) > threshold {
-			disqualifyIDs[nID] = struct{}{}
-		}
-	}
-	qualifyIDs := make(dkg.IDs, 0, len(mpks)-len(disqualifyIDs))
-	if cap(qualifyIDs) < threshold {
-		return nil, ErrNotReachThreshold
-	}
-	qualifyNodeIDs := make(map[types.NodeID]struct{})
-	mpkMap := make(map[dkg.ID]*typesDKG.MasterPublicKey, cap(qualifyIDs))
-	idMap := make(map[types.NodeID]dkg.ID)
-	for _, mpk := range mpks {
-		if _, exist := disqualifyIDs[mpk.ProposerID]; exist {
-			continue
-		}
-		mpkMap[mpk.DKGID] = mpk
-		idMap[mpk.ProposerID] = mpk.DKGID
-		qualifyIDs = append(qualifyIDs, mpk.DKGID)
-		qualifyNodeIDs[mpk.ProposerID] = struct{}{}
-	}
-	// Recover qualify members' public key.
-	pubKeys := make(map[types.NodeID]*dkg.PublicKey, len(qualifyIDs))
-	for _, recvID := range qualifyIDs {
-		pubShares := dkg.NewEmptyPublicKeyShares()
-		for _, id := range qualifyIDs {
-			pubShare, err := mpkMap[id].PublicKeyShares.Share(recvID)
-			if err != nil {
-				return nil, err
-			}
-			if err := pubShares.AddShare(id, pubShare); err != nil {
-				return nil, err
-			}
-		}
-		pubKey, err := pubShares.RecoverPublicKey(qualifyIDs)
-		if err != nil {
-			return nil, err
-		}
-		pubKeys[mpkMap[recvID].ProposerID] = pubKey
-	}
-	// Recover Group Public Key.
-	pubShares := make([]*dkg.PublicKeyShares, 0, len(qualifyIDs))
-	for _, id := range qualifyIDs {
-		pubShares = append(pubShares, &mpkMap[id].PublicKeyShares)
-	}
-	groupPK := dkg.RecoverGroupPublicKey(pubShares)
-	return &DKGGroupPublicKey{
-		round:          round,
-		qualifyIDs:     qualifyIDs,
-		qualifyNodeIDs: qualifyNodeIDs,
-		idMap:          idMap,
-		publicKeys:     pubKeys,
-		threshold:      threshold,
-		groupPublicKey: groupPK,
-	}, nil
-}
-
-// VerifySignature verifies if the signature is correct.
-func (gpk *DKGGroupPublicKey) VerifySignature(
-	hash common.Hash, sig crypto.Signature) bool {
-	return gpk.groupPublicKey.VerifySignature(hash, sig)
-}
-
-// NewTSigVerifierCache creats a DKGGroupPublicKey instance.
+// NewTSigVerifierCache creats a TSigVerifierCache instance.
 func NewTSigVerifierCache(
 	intf TSigVerifierCacheInterface, cacheSize int) *TSigVerifierCache {
 	return &TSigVerifierCache{
@@ -528,10 +424,10 @@ func (tc *TSigVerifierCache) Update(round uint64) (bool, error) {
 	if !tc.intf.IsDKGFinal(round) {
 		return false, nil
 	}
-	gpk, err := NewDKGGroupPublicKey(round,
+	gpk, err := typesDKG.NewGroupPublicKey(round,
 		tc.intf.DKGMasterPublicKeys(round),
 		tc.intf.DKGComplaints(round),
-		int(utils.GetConfigWithPanic(tc.intf, round, nil).DKGSetSize/3)+1)
+		utils.GetDKGThreshold(utils.GetConfigWithPanic(tc.intf, round, nil)))
 	if err != nil {
 		return false, err
 	}
@@ -568,17 +464,17 @@ func (tc *TSigVerifierCache) Get(round uint64) (TSigVerifier, bool) {
 }
 
 func newTSigProtocol(
-	gpk *DKGGroupPublicKey,
+	gpk *typesDKG.GroupPublicKey,
 	hash common.Hash) *tsigProtocol {
 	return &tsigProtocol{
 		groupPublicKey: gpk,
 		hash:           hash,
-		sigs:           make(map[dkg.ID]dkg.PartialSignature, gpk.threshold+1),
+		sigs:           make(map[dkg.ID]dkg.PartialSignature, gpk.Threshold+1),
 	}
 }
 
 func (tsig *tsigProtocol) sanityCheck(psig *typesDKG.PartialSignature) error {
-	_, exist := tsig.groupPublicKey.publicKeys[psig.ProposerID]
+	_, exist := tsig.groupPublicKey.PublicKeys[psig.ProposerID]
 	if !exist {
 		return ErrNotQualifyDKGParticipant
 	}
@@ -597,17 +493,17 @@ func (tsig *tsigProtocol) sanityCheck(psig *typesDKG.PartialSignature) error {
 
 func (tsig *tsigProtocol) processPartialSignature(
 	psig *typesDKG.PartialSignature) error {
-	if psig.Round != tsig.groupPublicKey.round {
+	if psig.Round != tsig.groupPublicKey.Round {
 		return nil
 	}
-	id, exist := tsig.groupPublicKey.idMap[psig.ProposerID]
+	id, exist := tsig.groupPublicKey.IDMap[psig.ProposerID]
 	if !exist {
 		return ErrNotQualifyDKGParticipant
 	}
 	if err := tsig.sanityCheck(psig); err != nil {
 		return err
 	}
-	pubKey := tsig.groupPublicKey.publicKeys[psig.ProposerID]
+	pubKey := tsig.groupPublicKey.PublicKeys[psig.ProposerID]
 	if !pubKey.VerifySignature(
 		tsig.hash, crypto.Signature(psig.PartialSignature)) {
 		return ErrIncorrectPartialSignature
@@ -617,7 +513,7 @@ func (tsig *tsigProtocol) processPartialSignature(
 }
 
 func (tsig *tsigProtocol) signature() (crypto.Signature, error) {
-	if len(tsig.sigs) < tsig.groupPublicKey.threshold {
+	if len(tsig.sigs) < tsig.groupPublicKey.Threshold {
 		return crypto.Signature{}, ErrNotEnoughtPartialSignatures
 	}
 	ids := make(dkg.IDs, 0, len(tsig.sigs))

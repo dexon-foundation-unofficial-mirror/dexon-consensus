@@ -129,7 +129,7 @@ type Governance interface {
 	// AddDKGMPKReady adds a DKG ready message.
 	AddDKGMPKReady(round uint64, ready *typesDKG.MPKReady)
 
-	// IsDKGFinal checks if DKG is ready.
+	// IsDKGMPKReady checks if DKG's master public key preparation is ready.
 	IsDKGMPKReady(round uint64) bool
 
 	// AddDKGFinalize adds a DKG finalize message.

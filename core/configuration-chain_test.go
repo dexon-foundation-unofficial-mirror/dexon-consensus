@@ -250,7 +250,7 @@ func (s *ConfigurationChainTestSuite) preparePartialSignature(
 		if _, exist := cc.gpk[round]; !exist {
 			continue
 		}
-		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+		if _, exist := cc.gpk[round].QualifyNodeIDs[nID]; !exist {
 			continue
 		}
 		psig, err := cc.preparePartialSignature(round, hash)
@@ -284,7 +284,7 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 		if _, exist := cc.gpk[round]; !exist {
 			continue
 		}
-		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+		if _, exist := cc.gpk[round].QualifyNodeIDs[nID]; !exist {
 			continue
 		}
 		go func(cc *configurationChain) {
@@ -302,7 +302,7 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 		if _, exist := cc.gpk[round]; !exist {
 			s.FailNow("Should be qualifyied")
 		}
-		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+		if _, exist := cc.gpk[round].QualifyNodeIDs[nID]; !exist {
 			s.FailNow("Should be qualifyied")
 		}
 		s.Require().NoError(<-errs)
@@ -374,7 +374,7 @@ func (s *ConfigurationChainTestSuite) TestDKGMasterPublicKeyDelayAdd() {
 		if !exist {
 			continue
 		}
-		_, exist = cc.gpk[round].qualifyNodeIDs[nID]
+		_, exist = cc.gpk[round].QualifyNodeIDs[nID]
 		s.Equal(shouldExist, exist)
 	}
 }
@@ -449,7 +449,7 @@ func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 		if _, exist := cc.gpk[round]; !exist {
 			s.FailNow("Should be qualifyied")
 		}
-		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+		if _, exist := cc.gpk[round].QualifyNodeIDs[nID]; !exist {
 			s.FailNow("Should be qualifyied")
 		}
 	}
@@ -474,7 +474,7 @@ func (s *ConfigurationChainTestSuite) TestMultipleTSig() {
 	tsigChan1 := make(chan crypto.Signature, n)
 	tsigChan2 := make(chan crypto.Signature, n)
 	for nID, cc := range cfgChains {
-		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+		if _, exist := cc.gpk[round].QualifyNodeIDs[nID]; !exist {
 			continue
 		}
 		go func(cc *configurationChain) {
@@ -499,7 +499,7 @@ func (s *ConfigurationChainTestSuite) TestMultipleTSig() {
 		}
 	}
 	for nID, cc := range cfgChains {
-		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+		if _, exist := cc.gpk[round].QualifyNodeIDs[nID]; !exist {
 			continue
 		}
 		s.Require().NoError(<-errs)
@@ -529,7 +529,7 @@ func (s *ConfigurationChainTestSuite) TestTSigTimeout() {
 	errs := make(chan error, n)
 	qualify := 0
 	for nID, cc := range cfgChains {
-		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+		if _, exist := cc.gpk[round].QualifyNodeIDs[nID]; !exist {
 			continue
 		}
 		qualify++
@@ -545,7 +545,7 @@ func (s *ConfigurationChainTestSuite) TestTSigTimeout() {
 	time.Sleep(timeout)
 	s.Require().Len(errs, qualify)
 	for nID, cc := range cfgChains {
-		if _, exist := cc.gpk[round].qualifyNodeIDs[nID]; !exist {
+		if _, exist := cc.gpk[round].QualifyNodeIDs[nID]; !exist {
 			continue
 		}
 		s.Equal(<-errs, ErrNotEnoughtPartialSignatures)

@@ -814,7 +814,7 @@ func (con *Consensus) initialRound(
 				return
 			}
 			con.logger.Info("Selected as DKG set", "round", nextRound)
-			con.cfgModule.registerDKG(nextRound, getDKGThreshold(config))
+			con.cfgModule.registerDKG(nextRound, utils.GetDKGThreshold(config))
 			con.event.RegisterHeight(startHeight+config.RoundLength*2/3,
 				func(uint64) {
 					func() {

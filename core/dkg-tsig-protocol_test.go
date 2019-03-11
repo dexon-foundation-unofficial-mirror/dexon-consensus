@@ -202,19 +202,19 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 	}
 
 	// DKG is fininished.
-	gpk, err := NewDKGGroupPublicKey(round,
+	gpk, err := typesDKG.NewGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round),
 		k,
 	)
 	s.Require().NoError(err)
-	s.Require().Len(gpk.qualifyIDs, n)
-	qualifyIDs := make(map[dkg.ID]struct{}, len(gpk.qualifyIDs))
-	for _, id := range gpk.qualifyIDs {
+	s.Require().Len(gpk.QualifyIDs, n)
+	qualifyIDs := make(map[dkg.ID]struct{}, len(gpk.QualifyIDs))
+	for _, id := range gpk.QualifyIDs {
 		qualifyIDs[id] = struct{}{}
 	}
 
-	for nID := range gpk.qualifyNodeIDs {
-		id, exist := gpk.idMap[nID]
+	for nID := range gpk.QualifyNodeIDs {
+		id, exist := gpk.IDMap[nID]
 		s.Require().True(exist)
 		_, exist = qualifyIDs[id]
 		s.Require().True(exist)
@@ -227,7 +227,7 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 		_, exist := qualifyIDs[s.dkgIDs[nID]]
 		s.Require().True(exist)
 		var err error
-		shareSecrets[nID], err = protocol.recoverShareSecret(gpk.qualifyIDs)
+		shareSecrets[nID], err = protocol.recoverShareSecret(gpk.QualifyIDs)
 		s.Require().NoError(err)
 	}
 
@@ -360,22 +360,22 @@ func (s *DKGTSIGProtocolTestSuite) TestErrMPKRegistered() {
 	}
 
 	// DKG is fininished.
-	gpk, err := NewDKGGroupPublicKey(round,
+	gpk, err := typesDKG.NewGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round),
 		k,
 	)
 	s.Require().NoError(err)
-	s.Require().Len(gpk.qualifyIDs, n-2)
-	qualifyIDs := make(map[dkg.ID]struct{}, len(gpk.qualifyIDs))
-	for _, id := range gpk.qualifyIDs {
+	s.Require().Len(gpk.QualifyIDs, n-2)
+	qualifyIDs := make(map[dkg.ID]struct{}, len(gpk.QualifyIDs))
+	for _, id := range gpk.QualifyIDs {
 		qualifyIDs[id] = struct{}{}
 	}
 
-	for nID := range gpk.qualifyNodeIDs {
+	for nID := range gpk.QualifyNodeIDs {
 		if nID == notRegisterID || nID == errRegisterID {
 			continue
 		}
-		id, exist := gpk.idMap[nID]
+		id, exist := gpk.IDMap[nID]
 		s.Require().True(exist)
 		_, exist = qualifyIDs[id]
 		s.Require().True(exist)
@@ -528,12 +528,12 @@ func (s *DKGTSIGProtocolTestSuite) TestDuplicateComplaint() {
 		s.Require().True(complaints[i].IsNack())
 	}
 
-	gpk, err := NewDKGGroupPublicKey(round,
+	gpk, err := typesDKG.NewGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), complaints,
 		k,
 	)
 	s.Require().NoError(err)
-	s.Require().Len(gpk.qualifyIDs, n)
+	s.Require().Len(gpk.QualifyIDs, n)
 }
 
 // TestAntiComplaint tests if a nack complaint is received,
@@ -684,33 +684,33 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 		s.Require().True(complaints[i].IsNack())
 	}
 
-	gpk, err := NewDKGGroupPublicKey(round,
+	gpk, err := typesDKG.NewGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), complaints,
 		k,
 	)
 	s.Require().NoError(err)
-	s.Require().Len(gpk.qualifyIDs, n-1)
-	for _, id := range gpk.qualifyIDs {
+	s.Require().Len(gpk.QualifyIDs, n-1)
+	for _, id := range gpk.QualifyIDs {
 		s.NotEqual(id, byzantineID)
 	}
 
-	gpk2, err := NewDKGGroupPublicKey(round,
+	gpk2, err := typesDKG.NewGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), complaints[:k],
 		k,
 	)
 	s.Require().NoError(err)
-	s.Require().Len(gpk2.qualifyIDs, n)
+	s.Require().Len(gpk2.QualifyIDs, n)
 
 	// Test for complaint.
 	complaints[0].PrivateShare.Signature = crypto.Signature{Signature: []byte{0}}
 	s.Require().False(complaints[0].IsNack())
-	gpk3, err := NewDKGGroupPublicKey(round,
+	gpk3, err := typesDKG.NewGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), complaints[:1],
 		k,
 	)
 	s.Require().NoError(err)
-	s.Require().Len(gpk3.qualifyIDs, n-1)
-	for _, id := range gpk3.qualifyIDs {
+	s.Require().Len(gpk3.QualifyIDs, n-1)
+	for _, id := range gpk3.QualifyIDs {
 		s.NotEqual(id, byzantineID)
 	}
 }
@@ -762,14 +762,14 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 	}
 
 	// DKG is fininished.
-	gpk, err := NewDKGGroupPublicKey(round,
+	gpk, err := typesDKG.NewGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round),
 		k,
 	)
 	s.Require().NoError(err)
-	s.Require().Len(gpk.qualifyIDs, n-1)
-	qualifyIDs := make(map[dkg.ID]struct{}, len(gpk.qualifyIDs))
-	for _, id := range gpk.qualifyIDs {
+	s.Require().Len(gpk.QualifyIDs, n-1)
+	qualifyIDs := make(map[dkg.ID]struct{}, len(gpk.QualifyIDs))
+	for _, id := range gpk.QualifyIDs {
 		qualifyIDs[id] = struct{}{}
 	}
 
@@ -783,7 +783,7 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 		}
 		s.Require().True(exist)
 		var err error
-		shareSecrets[nID], err = protocol.recoverShareSecret(gpk.qualifyIDs)
+		shareSecrets[nID], err = protocol.recoverShareSecret(gpk.QualifyIDs)
 		s.Require().NoError(err)
 	}
 

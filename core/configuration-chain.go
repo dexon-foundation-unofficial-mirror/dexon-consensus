@@ -48,7 +48,7 @@ type configurationChain struct {
 	logger          common.Logger
 	dkgLock         sync.RWMutex
 	dkgSigner       map[uint64]*dkgShareSecret
-	gpk             map[uint64]*DKGGroupPublicKey
+	gpk             map[uint64]*typesDKG.GroupPublicKey
 	dkgResult       sync.RWMutex
 	tsig            map[common.Hash]*tsigProtocol
 	tsigTouched     map[common.Hash]struct{}
@@ -76,7 +76,7 @@ func newConfigurationChain(
 		gov:         gov,
 		logger:      logger,
 		dkgSigner:   make(map[uint64]*dkgShareSecret),
-		gpk:         make(map[uint64]*DKGGroupPublicKey),
+		gpk:         make(map[uint64]*typesDKG.GroupPublicKey),
 		tsig:        make(map[common.Hash]*tsigProtocol),
 		tsigTouched: make(map[common.Hash]struct{}),
 		tsigReady:   sync.NewCond(&sync.Mutex{}),
@@ -221,7 +221,7 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	}
 	cc.logger.Debug("Calling Governance.DKGMasterPublicKeys", "round", round)
 	cc.logger.Debug("Calling Governance.DKGComplaints", "round", round)
-	gpk, err := NewDKGGroupPublicKey(round,
+	gpk, err := typesDKG.NewGroupPublicKey(round,
 		cc.gov.DKGMasterPublicKeys(round),
 		cc.gov.DKGComplaints(round),
 		cc.dkg.threshold)
@@ -229,19 +229,19 @@ func (cc *configurationChain) runDKG(round uint64) error {
 		return err
 	}
 	qualifies := ""
-	for nID := range gpk.qualifyNodeIDs {
+	for nID := range gpk.QualifyNodeIDs {
 		qualifies += fmt.Sprintf("%s ", nID.String()[:6])
 	}
 	cc.logger.Info("Qualify Nodes",
 		"nodeID", cc.ID,
 		"round", round,
-		"count", len(gpk.qualifyIDs),
+		"count", len(gpk.QualifyIDs),
 		"qualifies", qualifies)
-	if _, exist := gpk.qualifyNodeIDs[cc.ID]; !exist {
+	if _, exist := gpk.QualifyNodeIDs[cc.ID]; !exist {
 		cc.logger.Warn("Self is not in Qualify Nodes")
 		return nil
 	}
-	signer, err := cc.dkg.recoverShareSecret(gpk.qualifyIDs)
+	signer, err := cc.dkg.recoverShareSecret(gpk.QualifyIDs)
 	if err != nil {
 		return err
 	}
@@ -265,8 +265,8 @@ func (cc *configurationChain) isDKGFinal(round uint64) bool {
 }
 
 func (cc *configurationChain) getDKGInfo(
-	round uint64) (*DKGGroupPublicKey, *dkgShareSecret, error) {
-	getFromCache := func() (*DKGGroupPublicKey, *dkgShareSecret) {
+	round uint64) (*typesDKG.GroupPublicKey, *dkgShareSecret, error) {
+	getFromCache := func() (*typesDKG.GroupPublicKey, *dkgShareSecret) {
 		cc.dkgResult.RLock()
 		defer cc.dkgResult.RUnlock()
 		gpk := cc.gpk[round]
@@ -297,14 +297,12 @@ func (cc *configurationChain) recoverDKGInfo(round uint64) error {
 	if !cc.gov.IsDKGFinal(round) {
 		return ErrDKGNotReady
 	}
-
-	threshold := getDKGThreshold(
-		utils.GetConfigWithPanic(cc.gov, round, cc.logger))
 	// Restore group public key.
-	gpk, err := NewDKGGroupPublicKey(round,
+	gpk, err := typesDKG.NewGroupPublicKey(round,
 		cc.gov.DKGMasterPublicKeys(round),
 		cc.gov.DKGComplaints(round),
-		threshold)
+		utils.GetDKGThreshold(
+			utils.GetConfigWithPanic(cc.gov, round, cc.logger)))
 	if err != nil {
 		return err
 	}

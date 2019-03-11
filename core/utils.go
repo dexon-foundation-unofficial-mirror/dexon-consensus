@@ -229,10 +229,6 @@ func isTravisCI() bool {
 	return isCI() && os.Getenv("TRAVIS") == "true"
 }
 
-func getDKGThreshold(config *types.Config) int {
-	return int(config.DKGSetSize/3) + 1
-}
-
 // checkWithCancel is a helper to perform periodic checking with cancel.
 func checkWithCancel(parentCtx context.Context, interval time.Duration,
 	checker func() bool) (ret bool) {

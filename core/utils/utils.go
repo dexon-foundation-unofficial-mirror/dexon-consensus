@@ -133,3 +133,8 @@ func LaunchDummyReceiver(
 	}()
 	return dummyCancel, finishedChan
 }
+
+// GetDKGThreshold return expected threshold for given DKG set size.
+func GetDKGThreshold(config *types.Config) int {
+	return int(config.DKGSetSize/3) + 1
+}
