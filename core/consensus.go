@@ -845,6 +845,10 @@ func (con *Consensus) initialRound(
 				con.logger.Warn("Failed to update nodeSetCache",
 					"round", round+1, "error", err)
 			}
+			if _, _, err := con.bcModule.vGetter.UpdateAndGet(round + 1); err != nil {
+				con.logger.Warn("Failed to update tsigVerifierCache",
+					"round", round+1, "error", err)
+			}
 		}()
 	})
 }
