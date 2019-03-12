@@ -287,33 +287,58 @@ func (cc *configurationChain) getDKGInfo(
 }
 
 func (cc *configurationChain) recoverDKGInfo(round uint64) error {
-	cc.dkgResult.Lock()
-	defer cc.dkgResult.Unlock()
-	_, signerExists := cc.dkgSigner[round]
-	_, npksExists := cc.npks[round]
+	var npksExists, signerExists bool
+	func() {
+		cc.dkgResult.Lock()
+		defer cc.dkgResult.Unlock()
+		_, signerExists = cc.dkgSigner[round]
+		_, npksExists = cc.npks[round]
+	}()
 	if signerExists && npksExists {
 		return nil
 	}
 	if !cc.gov.IsDKGFinal(round) {
 		return ErrDKGNotReady
 	}
-	// Restore group public key.
-	npks, err := typesDKG.NewNodePublicKeys(round,
-		cc.gov.DKGMasterPublicKeys(round),
-		cc.gov.DKGComplaints(round),
-		utils.GetDKGThreshold(
-			utils.GetConfigWithPanic(cc.gov, round, cc.logger)))
-	if err != nil {
-		return err
+
+	if !npksExists {
+		threshold := utils.GetDKGThreshold(
+			utils.GetConfigWithPanic(cc.gov, round, cc.logger))
+		// Restore group public key.
+		cc.logger.Debug("Calling Governance.DKGMasterPublicKeys for recoverDKGInfo",
+			"round", round)
+		cc.logger.Debug("Calling Governance.DKGComplaints for recoverDKGInfo",
+			"round", round)
+		npks, err := typesDKG.NewNodePublicKeys(round,
+			cc.gov.DKGMasterPublicKeys(round),
+			cc.gov.DKGComplaints(round),
+			threshold)
+		if err != nil {
+			cc.logger.Warn("Failed to create DKGGroupPublicKey",
+				"round", round, "error", err)
+			return err
+		}
+		func() {
+			cc.dkgResult.Lock()
+			defer cc.dkgResult.Unlock()
+			cc.npks[round] = npks
+		}()
 	}
-	// Check if we have private shares in DB.
-	prvKey, err := cc.db.GetDKGPrivateKey(round)
-	if err != nil {
-		return err
-	}
-	cc.npks[round] = npks
-	cc.dkgSigner[round] = &dkgShareSecret{
-		privateKey: &prvKey,
+	if !signerExists {
+		// Check if we have private shares in DB.
+		prvKey, err := cc.db.GetDKGPrivateKey(round)
+		if err != nil {
+			cc.logger.Warn("Failed to create DKGPrivateKey",
+				"round", round, "error", err)
+			return err
+		}
+		func() {
+			cc.dkgResult.Lock()
+			defer cc.dkgResult.Unlock()
+			cc.dkgSigner[round] = &dkgShareSecret{
+				privateKey: &prvKey,
+			}
+		}()
 	}
 	return nil
 }
