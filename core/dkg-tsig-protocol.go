@@ -129,7 +129,7 @@ type TSigVerifierCache struct {
 }
 
 type tsigProtocol struct {
-	groupPublicKey *typesDKG.GroupPublicKey
+	nodePublicKeys *typesDKG.NodePublicKeys
 	hash           common.Hash
 	sigs           map[dkg.ID]dkg.PartialSignature
 	threshold      int
@@ -464,17 +464,17 @@ func (tc *TSigVerifierCache) Get(round uint64) (TSigVerifier, bool) {
 }
 
 func newTSigProtocol(
-	gpk *typesDKG.GroupPublicKey,
+	npks *typesDKG.NodePublicKeys,
 	hash common.Hash) *tsigProtocol {
 	return &tsigProtocol{
-		groupPublicKey: gpk,
+		nodePublicKeys: npks,
 		hash:           hash,
-		sigs:           make(map[dkg.ID]dkg.PartialSignature, gpk.Threshold+1),
+		sigs:           make(map[dkg.ID]dkg.PartialSignature, npks.Threshold+1),
 	}
 }
 
 func (tsig *tsigProtocol) sanityCheck(psig *typesDKG.PartialSignature) error {
-	_, exist := tsig.groupPublicKey.PublicKeys[psig.ProposerID]
+	_, exist := tsig.nodePublicKeys.PublicKeys[psig.ProposerID]
 	if !exist {
 		return ErrNotQualifyDKGParticipant
 	}
@@ -493,17 +493,17 @@ func (tsig *tsigProtocol) sanityCheck(psig *typesDKG.PartialSignature) error {
 
 func (tsig *tsigProtocol) processPartialSignature(
 	psig *typesDKG.PartialSignature) error {
-	if psig.Round != tsig.groupPublicKey.Round {
+	if psig.Round != tsig.nodePublicKeys.Round {
 		return nil
 	}
-	id, exist := tsig.groupPublicKey.IDMap[psig.ProposerID]
+	id, exist := tsig.nodePublicKeys.IDMap[psig.ProposerID]
 	if !exist {
 		return ErrNotQualifyDKGParticipant
 	}
 	if err := tsig.sanityCheck(psig); err != nil {
 		return err
 	}
-	pubKey := tsig.groupPublicKey.PublicKeys[psig.ProposerID]
+	pubKey := tsig.nodePublicKeys.PublicKeys[psig.ProposerID]
 	if !pubKey.VerifySignature(
 		tsig.hash, crypto.Signature(psig.PartialSignature)) {
 		return ErrIncorrectPartialSignature
@@ -513,7 +513,7 @@ func (tsig *tsigProtocol) processPartialSignature(
 }
 
 func (tsig *tsigProtocol) signature() (crypto.Signature, error) {
-	if len(tsig.sigs) < tsig.groupPublicKey.Threshold {
+	if len(tsig.sigs) < tsig.nodePublicKeys.Threshold {
 		return crypto.Signature{}, ErrNotEnoughtPartialSignatures
 	}
 	ids := make(dkg.IDs, 0, len(tsig.sigs))

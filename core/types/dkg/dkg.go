@@ -289,7 +289,6 @@ type GroupPublicKey struct {
 	QualifyIDs     cryptoDKG.IDs
 	QualifyNodeIDs map[types.NodeID]struct{}
 	IDMap          map[types.NodeID]cryptoDKG.ID
-	PublicKeys     map[types.NodeID]*cryptoDKG.PublicKey
 	GroupPublicKey *cryptoDKG.PublicKey
 	Threshold      int
 }
@@ -300,15 +299,12 @@ func (gpk *GroupPublicKey) VerifySignature(
 	return gpk.GroupPublicKey.VerifySignature(hash, sig)
 }
 
-// NewGroupPublicKey creats a GroupPublicKey instance.
-func NewGroupPublicKey(
-	round uint64,
-	mpks []*MasterPublicKey, complaints []*Complaint,
-	threshold int) (
-	*GroupPublicKey, error) {
-
+func calcQualifyNodes(
+	mpks []*MasterPublicKey, complaints []*Complaint, threshold int) (
+	qualifyIDs cryptoDKG.IDs, qualifyNodeIDs map[types.NodeID]struct{}, err error) {
 	if len(mpks) < threshold {
-		return nil, ErrInvalidThreshold
+		err = ErrInvalidThreshold
+		return
 	}
 
 	// Calculate qualify members.
@@ -331,21 +327,87 @@ func NewGroupPublicKey(
 			disqualifyIDs[nID] = struct{}{}
 		}
 	}
-	qualifyIDs := make(cryptoDKG.IDs, 0, len(mpks)-len(disqualifyIDs))
+	qualifyIDs = make(cryptoDKG.IDs, 0, len(mpks)-len(disqualifyIDs))
 	if cap(qualifyIDs) < threshold {
-		return nil, ErrNotReachThreshold
+		err = ErrNotReachThreshold
+		return
 	}
-	qualifyNodeIDs := make(map[types.NodeID]struct{})
-	mpkMap := make(map[cryptoDKG.ID]*MasterPublicKey, cap(qualifyIDs))
-	idMap := make(map[types.NodeID]cryptoDKG.ID)
+	qualifyNodeIDs = make(map[types.NodeID]struct{})
 	for _, mpk := range mpks {
 		if _, exist := disqualifyIDs[mpk.ProposerID]; exist {
 			continue
 		}
-		mpkMap[mpk.DKGID] = mpk
-		idMap[mpk.ProposerID] = mpk.DKGID
 		qualifyIDs = append(qualifyIDs, mpk.DKGID)
 		qualifyNodeIDs[mpk.ProposerID] = struct{}{}
+	}
+	return
+}
+
+// NewGroupPublicKey creats a GroupPublicKey instance.
+func NewGroupPublicKey(
+	round uint64,
+	mpks []*MasterPublicKey, complaints []*Complaint,
+	threshold int) (
+	*GroupPublicKey, error) {
+	qualifyIDs, qualifyNodeIDs, err :=
+		calcQualifyNodes(mpks, complaints, threshold)
+	if err != nil {
+		return nil, err
+	}
+	mpkMap := make(map[cryptoDKG.ID]*MasterPublicKey, cap(qualifyIDs))
+	idMap := make(map[types.NodeID]cryptoDKG.ID)
+	for _, mpk := range mpks {
+		if _, exist := qualifyNodeIDs[mpk.ProposerID]; !exist {
+			continue
+		}
+		mpkMap[mpk.DKGID] = mpk
+		idMap[mpk.ProposerID] = mpk.DKGID
+	}
+	// Recover Group Public Key.
+	pubShares := make([]*cryptoDKG.PublicKeyShares, 0, len(qualifyIDs))
+	for _, id := range qualifyIDs {
+		pubShares = append(pubShares, &mpkMap[id].PublicKeyShares)
+	}
+	groupPK := cryptoDKG.RecoverGroupPublicKey(pubShares)
+	return &GroupPublicKey{
+		Round:          round,
+		QualifyIDs:     qualifyIDs,
+		QualifyNodeIDs: qualifyNodeIDs,
+		IDMap:          idMap,
+		Threshold:      threshold,
+		GroupPublicKey: groupPK,
+	}, nil
+}
+
+// NodePublicKeys is the result of DKG protocol.
+type NodePublicKeys struct {
+	Round          uint64
+	QualifyIDs     cryptoDKG.IDs
+	QualifyNodeIDs map[types.NodeID]struct{}
+	IDMap          map[types.NodeID]cryptoDKG.ID
+	PublicKeys     map[types.NodeID]*cryptoDKG.PublicKey
+	Threshold      int
+}
+
+// NewNodePublicKeys creats a NodePublicKeys instance.
+func NewNodePublicKeys(
+	round uint64,
+	mpks []*MasterPublicKey, complaints []*Complaint,
+	threshold int) (
+	*NodePublicKeys, error) {
+	qualifyIDs, qualifyNodeIDs, err :=
+		calcQualifyNodes(mpks, complaints, threshold)
+	if err != nil {
+		return nil, err
+	}
+	mpkMap := make(map[cryptoDKG.ID]*MasterPublicKey, cap(qualifyIDs))
+	idMap := make(map[types.NodeID]cryptoDKG.ID)
+	for _, mpk := range mpks {
+		if _, exist := qualifyNodeIDs[mpk.ProposerID]; !exist {
+			continue
+		}
+		mpkMap[mpk.DKGID] = mpk
+		idMap[mpk.ProposerID] = mpk.DKGID
 	}
 	// Recover qualify members' public key.
 	pubKeys := make(map[types.NodeID]*cryptoDKG.PublicKey, len(qualifyIDs))
@@ -366,19 +428,12 @@ func NewGroupPublicKey(
 		}
 		pubKeys[mpkMap[recvID].ProposerID] = pubKey
 	}
-	// Recover Group Public Key.
-	pubShares := make([]*cryptoDKG.PublicKeyShares, 0, len(qualifyIDs))
-	for _, id := range qualifyIDs {
-		pubShares = append(pubShares, &mpkMap[id].PublicKeyShares)
-	}
-	groupPK := cryptoDKG.RecoverGroupPublicKey(pubShares)
-	return &GroupPublicKey{
+	return &NodePublicKeys{
 		Round:          round,
 		QualifyIDs:     qualifyIDs,
 		QualifyNodeIDs: qualifyNodeIDs,
 		IDMap:          idMap,
 		PublicKeys:     pubKeys,
 		Threshold:      threshold,
-		GroupPublicKey: groupPK,
 	}, nil
 }

@@ -204,8 +204,7 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 	// DKG is fininished.
 	gpk, err := typesDKG.NewGroupPublicKey(round,
 		gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round),
-		k,
-	)
+		k)
 	s.Require().NoError(err)
 	s.Require().Len(gpk.QualifyIDs, n)
 	qualifyIDs := make(map[dkg.ID]struct{}, len(gpk.QualifyIDs))
@@ -231,8 +230,11 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 		s.Require().NoError(err)
 	}
 
+	npks, err := typesDKG.NewNodePublicKeys(round,
+		gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round), k)
+	s.Require().NoError(err)
 	msgHash := crypto.Keccak256Hash([]byte("🏖🍹"))
-	tsig := newTSigProtocol(gpk, msgHash)
+	tsig := newTSigProtocol(npks, msgHash)
 	for nID, shareSecret := range shareSecrets {
 		psig := &typesDKG.PartialSignature{
 			ProposerID:       nID,
@@ -788,7 +790,10 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 	}
 
 	msgHash := crypto.Keccak256Hash([]byte("🏖🍹"))
-	tsig := newTSigProtocol(gpk, msgHash)
+	npks, err := typesDKG.NewNodePublicKeys(round,
+		gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round), k)
+	s.Require().NoError(err)
+	tsig := newTSigProtocol(npks, msgHash)
 	byzantineID2 := s.nIDs[1]
 	byzantineID3 := s.nIDs[2]
 	for nID, shareSecret := range shareSecrets {
@@ -936,4 +941,90 @@ func (s *DKGTSIGProtocolTestSuite) TestTSigVerifierCache() {
 
 func TestDKGTSIGProtocol(t *testing.T) {
 	suite.Run(t, new(DKGTSIGProtocolTestSuite))
+}
+
+func BenchmarkGPK4_7(b *testing.B)    { benchmarkDKGGroupPubliKey(4, 7, b) }
+func BenchmarkGPK9_13(b *testing.B)   { benchmarkDKGGroupPubliKey(9, 13, b) }
+func BenchmarkGPK17_24(b *testing.B)  { benchmarkDKGGroupPubliKey(17, 24, b) }
+func BenchmarkGPK81_121(b *testing.B) { benchmarkDKGGroupPubliKey(81, 121, b) }
+
+func benchmarkDKGGroupPubliKey(k, n int, b *testing.B) {
+	round := uint64(1)
+	_, pubKeys, err := test.NewKeys(n)
+	if err != nil {
+		panic(err)
+	}
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
+		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, pk := range pubKeys {
+		_, pubShare := dkg.NewPrivateKeyShares(k)
+		gov.AddDKGMasterPublicKey(round, &typesDKG.MasterPublicKey{
+			ProposerID:      types.NewNodeID(pk),
+			Round:           round,
+			DKGID:           typesDKG.NewID(types.NewNodeID(pk)),
+			PublicKeyShares: *pubShare,
+		})
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// DKG is fininished.
+		gpk, err := typesDKG.NewGroupPublicKey(round,
+			gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round),
+			k,
+		)
+		if err != nil {
+			panic(err)
+		}
+		if len(gpk.QualifyIDs) != n {
+			panic("not enough of qualify id")
+		}
+	}
+}
+
+func BenchmarkNPKs4_7(b *testing.B)    { benchmarkDKGNodePubliKeys(4, 7, b) }
+func BenchmarkNPKs9_13(b *testing.B)   { benchmarkDKGNodePubliKeys(9, 13, b) }
+func BenchmarkNPKs17_24(b *testing.B)  { benchmarkDKGNodePubliKeys(17, 24, b) }
+func BenchmarkNPKs81_121(b *testing.B) { benchmarkDKGNodePubliKeys(81, 121, b) }
+
+func benchmarkDKGNodePubliKeys(k, n int, b *testing.B) {
+	round := uint64(1)
+	_, pubKeys, err := test.NewKeys(n)
+	if err != nil {
+		panic(err)
+	}
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
+		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, pk := range pubKeys {
+		_, pubShare := dkg.NewPrivateKeyShares(k)
+		gov.AddDKGMasterPublicKey(round, &typesDKG.MasterPublicKey{
+			ProposerID:      types.NewNodeID(pk),
+			Round:           round,
+			DKGID:           typesDKG.NewID(types.NewNodeID(pk)),
+			PublicKeyShares: *pubShare,
+		})
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// DKG is fininished.
+		npks, err := typesDKG.NewNodePublicKeys(round,
+			gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round),
+			k,
+		)
+		if err != nil {
+			panic(err)
+		}
+		if len(npks.QualifyIDs) != n {
+			panic("not enough of qualify id")
+		}
+	}
 }
