@@ -29,9 +29,10 @@ import (
 )
 
 var (
-	blockKeyPrefix            = []byte("b-")
-	compactionChainTipInfoKey = []byte("cc-tip")
-	dkgPrivateKeyKeyPrefix    = []byte("dkg-prvs")
+	blockKeyPrefix               = []byte("b-")
+	compactionChainTipInfoKey    = []byte("cc-tip")
+	dkgPrivateKeyKeyPrefix       = []byte("dkg-prvs")
+	dkgMasterPrivateSharesPrefix = []byte("dkg-master-private-shares")
 )
 
 type compactionChainTipInfo struct {
@@ -188,6 +189,11 @@ func (lvl *LevelDBBackedDB) HasDKGPrivateKey(round uint64) (bool, error) {
 	return lvl.db.Has(lvl.getDKGPrivateKeyKey(round), nil)
 }
 
+// HasDKGMasterPrivateSharesKey check existence of DKG master private shares of one round.
+func (lvl *LevelDBBackedDB) HasDKGMasterPrivateSharesKey(round uint64) (bool, error) {
+	return lvl.db.Has(lvl.getDKGMasterPrivateSharesKey(round), nil)
+}
+
 // GetDKGPrivateKey get DKG private key of one round.
 func (lvl *LevelDBBackedDB) GetDKGPrivateKey(round uint64) (
 	prv dkg.PrivateKey, err error) {
@@ -221,6 +227,32 @@ func (lvl *LevelDBBackedDB) PutDKGPrivateKey(
 		lvl.getDKGPrivateKeyKey(round), marshaled, nil)
 }
 
+// GetDKGMasterPrivateShares get DKG master private shares of one round.
+func (lvl *LevelDBBackedDB) GetDKGMasterPrivateShares(round uint64) (
+	shares dkg.PrivateKeyShares, err error) {
+	queried, err := lvl.db.Get(lvl.getDKGMasterPrivateSharesKey(round), nil)
+	if err != nil {
+		if err == leveldb.ErrNotFound {
+			err = ErrDKGMasterPrivateSharesDoesNotExist
+		}
+		return
+	}
+
+	err = rlp.DecodeBytes(queried, &shares)
+	return
+}
+
+// PutOrUpdateDKGMasterPrivateShares save DKG master private shares of one round.
+func (lvl *LevelDBBackedDB) PutOrUpdateDKGMasterPrivateShares(
+	round uint64, shares dkg.PrivateKeyShares) error {
+	marshaled, err := rlp.EncodeToBytes(&shares)
+	if err != nil {
+		return err
+	}
+	return lvl.db.Put(
+		lvl.getDKGMasterPrivateSharesKey(round), marshaled, nil)
+}
+
 func (lvl *LevelDBBackedDB) getBlockKey(hash common.Hash) (ret []byte) {
 	ret = make([]byte, len(blockKeyPrefix)+len(hash[:]))
 	copy(ret, blockKeyPrefix)
@@ -234,5 +266,12 @@ func (lvl *LevelDBBackedDB) getDKGPrivateKeyKey(
 	copy(ret, dkgPrivateKeyKeyPrefix)
 	binary.LittleEndian.PutUint64(
 		ret[len(dkgPrivateKeyKeyPrefix):], round)
+	return
+}
+
+func (lvl *LevelDBBackedDB) getDKGMasterPrivateSharesKey(round uint64) (ret []byte) {
+	ret = make([]byte, len(dkgMasterPrivateSharesPrefix)+8)
+	copy(ret, dkgMasterPrivateSharesPrefix)
+	binary.LittleEndian.PutUint64(ret[len(dkgMasterPrivateSharesPrefix):], round)
 	return
 }

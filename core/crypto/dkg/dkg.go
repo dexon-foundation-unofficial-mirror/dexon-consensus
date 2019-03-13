@@ -131,6 +131,33 @@ func (prvs *PrivateKeyShares) Equal(other *PrivateKeyShares) bool {
 	return true
 }
 
+// EncodeRLP implements rlp.Encoder
+func (prvs *PrivateKeyShares) EncodeRLP(w io.Writer) error {
+	mpks := make([][]byte, len(prvs.masterPrivateKey))
+	for i, m := range prvs.masterPrivateKey {
+		mpks[i] = m.GetLittleEndian()
+	}
+	return rlp.Encode(w, mpks)
+}
+
+// DecodeRLP implements rlp.Decoder
+func (prvs *PrivateKeyShares) DecodeRLP(s *rlp.Stream) error {
+	var dec [][]byte
+	if err := s.Decode(&dec); err != nil {
+		return err
+	}
+
+	for _, k := range dec {
+		var key bls.SecretKey
+		if err := key.SetLittleEndian(k); err != nil {
+			return err
+		}
+		prvs.masterPrivateKey = append(prvs.masterPrivateKey, key)
+	}
+
+	return nil
+}
+
 // PublicKeyShares represents a public key shares for DKG protocol.
 type PublicKeyShares struct {
 	shareCaches     []PublicKey

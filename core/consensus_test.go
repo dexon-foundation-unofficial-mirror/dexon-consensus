@@ -203,6 +203,46 @@ func (s *ConsensusTestSuite) prepareConsensus(
 	return app, con
 }
 
+func (s *ConsensusTestSuite) prepareConsensusWithDB(
+	dMoment time.Time,
+	gov *test.Governance,
+	prvKey crypto.PrivateKey,
+	conn *networkConnection,
+	dbInst db.Database) (
+	*test.App, *Consensus) {
+
+	app := test.NewApp(0, nil)
+	nID := types.NewNodeID(prvKey.PublicKey())
+	network := conn.newNetwork(nID)
+	con := NewConsensus(
+		dMoment, app, gov, dbInst, network, prvKey, &common.NullLogger{})
+	conn.setCon(nID, con)
+	return app, con
+}
+
+func (s *ConsensusTestSuite) TestRegisteredDKGRecover() {
+	conn := s.newNetworkConnection()
+	prvKeys, pubKeys, err := test.NewKeys(1)
+	s.Require().NoError(err)
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
+		pubKeys, time.Second, &common.NullLogger{}, true), ConfigRoundShift)
+	s.Require().NoError(err)
+	gov.State().RequestChange(test.StateChangeRoundLength, uint64(200))
+	dMoment := time.Now().UTC()
+	dbInst, err := db.NewMemBackedDB()
+	s.Require().NoError(err)
+	_, con := s.prepareConsensusWithDB(dMoment, gov, prvKeys[0], conn, dbInst)
+
+	s.Require().Nil(con.cfgModule.dkg)
+
+	con.cfgModule.registerDKG(0, 10)
+
+	_, newCon := s.prepareConsensusWithDB(dMoment, gov, prvKeys[0], conn, dbInst)
+
+	s.Require().NotNil(newCon.cfgModule.dkg)
+	s.Require().True(newCon.cfgModule.dkg.prvShares.Equal(con.cfgModule.dkg.prvShares))
+}
+
 func (s *ConsensusTestSuite) TestDKGCRS() {
 	n := 21
 	lambda := 200 * time.Millisecond

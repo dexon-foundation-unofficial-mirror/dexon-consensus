@@ -185,6 +185,44 @@ func (s *LevelDBTestSuite) TestDKGPrivateKey() {
 	s.Require().Equal(bytes.Compare(p.Bytes(), tmpPrv.Bytes()), 0)
 }
 
+func (s *LevelDBTestSuite) TestDKGMasterPrivateShares() {
+	dbName := fmt.Sprintf("test-db-%v-dkg-master-prv-shares.db", time.Now().UTC())
+	dbInst, err := NewLevelDBBackedDB(dbName)
+	s.Require().NoError(err)
+	defer func(dbName string) {
+		err = dbInst.Close()
+		s.NoError(err)
+		err = os.RemoveAll(dbName)
+		s.NoError(err)
+	}(dbName)
+
+	exists, err := dbInst.HasDKGMasterPrivateSharesKey(1)
+	s.Require().NoError(err)
+	s.Require().False(exists)
+
+	_, err = dbInst.GetDKGMasterPrivateShares(1)
+	s.Require().Equal(err.Error(), ErrDKGMasterPrivateSharesDoesNotExist.Error())
+
+	privShares, _ := dkg.NewPrivateKeyShares(10)
+
+	s.Require().NoError(dbInst.PutOrUpdateDKGMasterPrivateShares(1, *privShares))
+
+	tmpShares, err := dbInst.GetDKGMasterPrivateShares(1)
+	s.Require().NoError(err)
+	s.Require().True(tmpShares.Equal(privShares))
+
+	newPrivShares, _ := dkg.NewPrivateKeyShares(10)
+
+	// This privShare will override the old noe.
+	s.Require().NoError(dbInst.PutOrUpdateDKGMasterPrivateShares(1, *newPrivShares))
+
+	newTmpShares, err := dbInst.GetDKGMasterPrivateShares(1)
+	s.Require().NoError(err)
+	s.Require().True(newTmpShares.Equal(newPrivShares))
+
+	s.Require().False(newTmpShares.Equal(&tmpShares))
+}
+
 func TestLevelDB(t *testing.T) {
 	suite.Run(t, new(LevelDBTestSuite))
 }

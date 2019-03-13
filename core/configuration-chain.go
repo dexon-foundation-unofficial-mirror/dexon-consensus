@@ -106,6 +106,12 @@ func (cc *configurationChain) registerDKG(round uint64, threshold int) {
 		cc.recv,
 		round,
 		threshold)
+	err = cc.db.PutOrUpdateDKGMasterPrivateShares(round, *cc.dkg.prvShares)
+	if err != nil {
+		cc.logger.Error("Error put or update DKG master private shares", "error",
+			err)
+		return
+	}
 	go func() {
 		ticker := newTicker(cc.gov, round, TickerDKG)
 		defer ticker.Stop()

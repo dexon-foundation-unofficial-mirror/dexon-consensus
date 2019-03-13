@@ -538,6 +538,11 @@ func newConsensusForRound(
 		logger:       logger,
 	}
 	cfgModule := newConfigurationChain(ID, recv, gov, nodeSetCache, db, logger)
+	dkg, err := recoverDKGProtocol(ID, recv, initRound, utils.GetDKGThreshold(initConfig), db)
+	if err != nil {
+		panic(err)
+	}
+	cfgModule.dkg = dkg
 	recv.cfgModule = cfgModule
 	appModule := app
 	if usingNonBlocking {
@@ -574,7 +579,6 @@ func newConsensusForRound(
 	baConfig := agreementMgrConfig{}
 	baConfig.from(initRound, initConfig, initCRS)
 	baConfig.SetRoundBeginHeight(initRoundBeginHeight)
-	var err error
 	con.baMgr, err = newAgreementMgr(con, initRound, baConfig)
 	if err != nil {
 		panic(err)

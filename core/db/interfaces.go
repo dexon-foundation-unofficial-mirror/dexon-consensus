@@ -50,6 +50,12 @@ var (
 	// ErrDKGPrivateKeyDoesNotExist raised when the DKG private key of the
 	// requested round does not exists.
 	ErrDKGPrivateKeyDoesNotExist = errors.New("dkg private key does not exists")
+	// ErrDKGMasterPrivateSharesExists raised when attempting to save DKG master private shares
+	// that already saved.
+	ErrDKGMasterPrivateSharesExists = errors.New("dkg master private shares exists")
+	// ErrDKGMasterPrivateSharesDoesNotExist raised when the DKG master private shares of the
+	// requested round does not exists.
+	ErrDKGMasterPrivateSharesDoesNotExist = errors.New("dkg master private shares does not exists")
 )
 
 // Database is the interface for a Database.
@@ -76,6 +82,7 @@ type Reader interface {
 	// DKG Private Key related methods.
 	HasDKGPrivateKey(round uint64) (bool, error)
 	GetDKGPrivateKey(round uint64) (dkg.PrivateKey, error)
+	GetDKGMasterPrivateShares(round uint64) (shares dkg.PrivateKeyShares, err error)
 }
 
 // Writer defines the interface for writing blocks into DB.
@@ -84,6 +91,7 @@ type Writer interface {
 	PutBlock(block types.Block) error
 	PutCompactionChainTipInfo(common.Hash, uint64) error
 	PutDKGPrivateKey(uint64, dkg.PrivateKey) error
+	PutOrUpdateDKGMasterPrivateShares(round uint64, shares dkg.PrivateKeyShares) error
 }
 
 // BlockIterator defines an iterator on blocks hold

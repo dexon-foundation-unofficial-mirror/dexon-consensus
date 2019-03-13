@@ -24,6 +24,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/dkg"
+	"github.com/dexon-foundation/dexon-consensus/core/db"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
 	"github.com/dexon-foundation/dexon-consensus/core/utils"
@@ -162,6 +163,35 @@ func newDKGProtocol(
 		nodeComplained:        make(map[types.NodeID]struct{}),
 		antiComplaintReceived: make(map[types.NodeID]map[types.NodeID]struct{}),
 	}
+}
+
+func recoverDKGProtocol(
+	ID types.NodeID,
+	recv dkgReceiver,
+	round uint64,
+	threshold int,
+	coreDB db.Database) (*dkgProtocol, error) {
+	shares, err := coreDB.GetDKGMasterPrivateShares(round)
+	if err != nil {
+		if err == db.ErrDKGMasterPrivateSharesDoesNotExist {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+	return &dkgProtocol{
+		ID:                    ID,
+		recv:                  recv,
+		round:                 round,
+		threshold:             threshold,
+		idMap:                 make(map[types.NodeID]dkg.ID),
+		mpkMap:                make(map[types.NodeID]*dkg.PublicKeyShares),
+		masterPrivateShare:    &shares,
+		prvShares:             dkg.NewEmptyPrivateKeyShares(),
+		prvSharesReceived:     make(map[types.NodeID]struct{}),
+		nodeComplained:        make(map[types.NodeID]struct{}),
+		antiComplaintReceived: make(map[types.NodeID]map[types.NodeID]struct{}),
+	}, nil
 }
 
 func (d *dkgProtocol) processMasterPublicKeys(
