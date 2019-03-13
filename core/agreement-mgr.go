@@ -65,7 +65,7 @@ func genValidLeader(
 }
 
 type agreementMgrConfig struct {
-	roundBasedConfig
+	utils.RoundBasedConfig
 
 	notarySetSize uint32
 	lambdaBA      time.Duration
@@ -77,14 +77,14 @@ func (c *agreementMgrConfig) from(
 	c.notarySetSize = config.NotarySetSize
 	c.lambdaBA = config.LambdaBA
 	c.crs = crs
-	c.setupRoundBasedFields(round, config)
+	c.SetupRoundBasedFields(round, config)
 }
 
 func newAgreementMgrConfig(prev agreementMgrConfig, config *types.Config,
 	crs common.Hash) (c agreementMgrConfig) {
 	c = agreementMgrConfig{}
-	c.from(prev.roundID+1, config, crs)
-	c.setRoundBeginHeight(prev.roundEndHeight)
+	c.from(prev.RoundID()+1, config, crs)
+	c.AppendTo(prev.RoundBasedConfig)
 	return
 }
 
@@ -356,7 +356,7 @@ Loop:
 		setting.recv.isNotary = checkRound()
 		// Run BA for this round.
 		setting.recv.roundValue.Store(currentRound)
-		setting.recv.changeNotaryHeight = curConfig.roundEndHeight
+		setting.recv.changeNotaryHeight = curConfig.RoundEndHeight()
 		setting.recv.restartNotary <- types.Position{
 			Round:  setting.recv.round(),
 			Height: math.MaxUint64,

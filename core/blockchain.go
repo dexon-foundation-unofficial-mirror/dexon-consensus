@@ -103,21 +103,21 @@ func (pb pendingBlockRecords) searchByPosition(p types.Position) (
 }
 
 type blockChainConfig struct {
-	roundBasedConfig
+	utils.RoundBasedConfig
 
 	minBlockInterval time.Duration
 }
 
 func (c *blockChainConfig) fromConfig(round uint64, config *types.Config) {
 	c.minBlockInterval = config.MinBlockInterval
-	c.setupRoundBasedFields(round, config)
+	c.SetupRoundBasedFields(round, config)
 }
 
 func newBlockChainConfig(prev blockChainConfig, config *types.Config) (
 	c blockChainConfig) {
 	c = blockChainConfig{}
-	c.fromConfig(prev.roundID+1, config)
-	c.setRoundBeginHeight(prev.roundEndHeight)
+	c.fromConfig(prev.RoundID()+1, config)
+	c.AppendTo(prev.RoundBasedConfig)
 	return
 }
 
@@ -145,14 +145,14 @@ func newBlockChain(nID types.NodeID, dMoment time.Time, initBlock *types.Block,
 	initConfig blockChainConfig, app Application, vGetter tsigVerifierGetter,
 	signer *utils.Signer, logger common.Logger) *blockChain {
 	if initBlock != nil {
-		if initConfig.roundID != initBlock.Position.Round {
+		if initConfig.RoundID() != initBlock.Position.Round {
 			panic(fmt.Errorf("incompatible config/block %s %d",
-				initBlock, initConfig.roundID))
+				initBlock, initConfig.RoundID()))
 		}
 	} else {
-		if initConfig.roundID != 0 {
+		if initConfig.RoundID() != 0 {
 			panic(fmt.Errorf("genesis config should from round 0 %d",
-				initConfig.roundID))
+				initConfig.RoundID()))
 		}
 	}
 	return &blockChain{
@@ -235,7 +235,7 @@ func (bc *blockChain) sanityCheck(b *types.Block) error {
 		return ErrInvalidBlockHeight
 	}
 	tipConfig := bc.tipConfig()
-	if tipConfig.isLastBlock(bc.lastConfirmed) {
+	if tipConfig.IsLastBlock(bc.lastConfirmed) {
 		if b.Position.Round != bc.lastConfirmed.Position.Round+1 {
 			return ErrRoundNotSwitch
 		}
@@ -359,7 +359,7 @@ func (bc *blockChain) tipRound() uint64 {
 		return 0
 	}
 	offset, tipConfig := uint64(0), bc.tipConfig()
-	if tipConfig.isLastBlock(bc.lastConfirmed) {
+	if tipConfig.IsLastBlock(bc.lastConfirmed) {
 		offset++
 	}
 	return bc.lastConfirmed.Position.Round + offset
@@ -499,12 +499,12 @@ func (bc *blockChain) checkIfBlocksConfirmed() {
 }
 
 func (bc *blockChain) purgeConfig() {
-	for bc.configs[0].roundID < bc.lastConfirmed.Position.Round {
+	for bc.configs[0].RoundID() < bc.lastConfirmed.Position.Round {
 		bc.configs = bc.configs[1:]
 	}
-	if bc.configs[0].roundID != bc.lastConfirmed.Position.Round {
+	if bc.configs[0].RoundID() != bc.lastConfirmed.Position.Round {
 		panic(fmt.Errorf("mismatched tip config: %d %d",
-			bc.configs[0].roundID, bc.lastConfirmed.Position.Round))
+			bc.configs[0].RoundID(), bc.lastConfirmed.Position.Round))
 	}
 }
 
@@ -556,7 +556,7 @@ func (bc *blockChain) prepareBlock(position types.Position,
 			b, err = nil, ErrNotFollowTipPosition
 			return
 		}
-		if tipConfig.isLastBlock(tip) {
+		if tipConfig.IsLastBlock(tip) {
 			if tip.Position.Round+1 != position.Round {
 				b, err = nil, ErrRoundNotSwitch
 				return
@@ -610,9 +610,9 @@ func (bc *blockChain) tipConfig() blockChainConfig {
 	if bc.lastConfirmed == nil {
 		panic(fmt.Errorf("attempting to access config without tip"))
 	}
-	if bc.lastConfirmed.Position.Round != bc.configs[0].roundID {
+	if bc.lastConfirmed.Position.Round != bc.configs[0].RoundID() {
 		panic(fmt.Errorf("inconsist config and tip: %d %d",
-			bc.lastConfirmed.Position.Round, bc.configs[0].roundID))
+			bc.lastConfirmed.Position.Round, bc.configs[0].RoundID()))
 	}
 	return bc.configs[0]
 }

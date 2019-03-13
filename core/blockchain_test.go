@@ -139,9 +139,9 @@ func (s *BlockChainTestSuite) newBlockChain(initB *types.Block,
 		RoundLength:      roundLength,
 	})
 	if initB != nil {
-		initConfig.setRoundBeginHeight(initB.Position.Height)
+		initConfig.SetRoundBeginHeight(initB.Position.Height)
 	} else {
-		initConfig.setRoundBeginHeight(0)
+		initConfig.SetRoundBeginHeight(0)
 	}
 	return newBlockChain(s.nID, s.dMoment, initB, initConfig,
 		test.NewApp(0, nil), &testTSigVerifierGetter{}, s.signer,

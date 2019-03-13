@@ -545,7 +545,7 @@ func newConsensusForRound(
 	}
 	bcConfig := blockChainConfig{}
 	bcConfig.fromConfig(initRound, initConfig)
-	bcConfig.setRoundBeginHeight(initRoundBeginHeight)
+	bcConfig.SetRoundBeginHeight(initRoundBeginHeight)
 	bcModule := newBlockChain(ID, dMoment, initBlock, bcConfig, appModule,
 		NewTSigVerifierCache(gov, 7), signer, logger)
 	// Construct Consensus instance.
@@ -573,7 +573,7 @@ func newConsensusForRound(
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
 	baConfig := agreementMgrConfig{}
 	baConfig.from(initRound, initConfig, initCRS)
-	baConfig.setRoundBeginHeight(initRoundBeginHeight)
+	baConfig.SetRoundBeginHeight(initRoundBeginHeight)
 	var err error
 	con.baMgr, err = newAgreementMgr(con, initRound, baConfig)
 	if err != nil {
