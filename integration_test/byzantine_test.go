@@ -81,7 +81,7 @@ func (s *ByzantineTestSuite) setupNodes(
 		gov.SwitchToRemoteMode(networkModule)
 		gov.NotifyRound(0)
 		networkModule.AddNodeSetCache(utils.NewNodeSetCache(gov))
-		app := test.NewApp(1, gov)
+		app := test.NewApp(1, gov, nil)
 		nodes[nID] = &node{nID, nil, app, gov, dbInst, networkModule}
 		go func() {
 			defer wg.Done()

@@ -24,6 +24,7 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 var (
@@ -84,22 +85,39 @@ type App struct {
 	deliveredLock         sync.RWMutex
 	state                 *State
 	gov                   *Governance
+	rEvt                  *utils.RoundEvent
+	hEvt                  *common.Event
 	lastPendingHeightLock sync.RWMutex
 	LastPendingHeight     uint64
 	roundToNotify         uint64
 }
 
 // NewApp constructs a TestApp instance.
-func NewApp(initRound uint64, gov *Governance) (app *App) {
+func NewApp(initRound uint64, gov *Governance, rEvt *utils.RoundEvent) (
+	app *App) {
 	app = &App{
 		Confirmed:       make(map[common.Hash]*types.Block),
 		Delivered:       make(map[common.Hash]*AppDeliveredRecord),
 		DeliverSequence: common.Hashes{},
 		gov:             gov,
+		rEvt:            rEvt,
+		hEvt:            common.NewEvent(),
 		roundToNotify:   initRound,
 	}
 	if gov != nil {
 		app.state = gov.State()
+	}
+	if rEvt != nil {
+		app.hEvt.RegisterHeight(
+			utils.GetNextRoundCheckpoint(rEvt.LastPeriod()), func(h uint64) {
+				rEvt.ValidateNextRound(h)
+			})
+		rEvt.Register(func(evts []utils.RoundEventParam) {
+			app.hEvt.RegisterHeight(evts[len(evts)-1].NextRoundCheckpoint(),
+				func(h uint64) {
+					rEvt.ValidateNextRound(h)
+				})
+		})
 	}
 	return app
 }
@@ -191,8 +209,8 @@ func (app *App) BlockConfirmed(b types.Block) {
 }
 
 // BlockDelivered implements Application interface.
-func (app *App) BlockDelivered(
-	blockHash common.Hash, pos types.Position, result types.FinalizationResult) {
+func (app *App) BlockDelivered(blockHash common.Hash, pos types.Position,
+	result types.FinalizationResult) {
 	func() {
 		app.deliveredLock.Lock()
 		defer app.deliveredLock.Unlock()
@@ -236,6 +254,7 @@ func (app *App) BlockDelivered(
 			}
 		}
 	}()
+	app.hEvt.NotifyHeight(result.Height)
 }
 
 // GetLatestDeliveredPosition would return the latest position of delivered

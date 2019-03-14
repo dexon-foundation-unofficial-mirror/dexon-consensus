@@ -43,6 +43,7 @@ type Governance struct {
 	stateModule          *State
 	networkModule        *Network
 	pendingConfigChanges map[uint64]map[StateChangeType]interface{}
+	prohibitedTypes      map[StateChangeType]struct{}
 	lock                 sync.RWMutex
 }
 
@@ -53,6 +54,7 @@ func NewGovernance(state *State, roundShift uint64) (g *Governance, err error) {
 		roundShift:           roundShift,
 		pendingConfigChanges: make(map[uint64]map[StateChangeType]interface{}),
 		stateModule:          state,
+		prohibitedTypes:      make(map[StateChangeType]struct{}),
 	}
 	return
 }
@@ -140,6 +142,9 @@ func (g *Governance) ProposeCRS(round uint64, signedCRS []byte) {
 // AddDKGComplaint add a DKGComplaint.
 func (g *Governance) AddDKGComplaint(
 	round uint64, complaint *typesDKG.Complaint) {
+	if g.isProhibited(StateAddDKGComplaint) {
+		return
+	}
 	if round != complaint.Round {
 		return
 	}
@@ -161,6 +166,9 @@ func (g *Governance) DKGComplaints(round uint64) []*typesDKG.Complaint {
 // AddDKGMasterPublicKey adds a DKGMasterPublicKey.
 func (g *Governance) AddDKGMasterPublicKey(
 	round uint64, masterPublicKey *typesDKG.MasterPublicKey) {
+	if g.isProhibited(StateAddDKGMasterPublicKey) {
+		return
+	}
 	if round != masterPublicKey.Round {
 		return
 	}
@@ -208,6 +216,9 @@ func (g *Governance) IsDKGMPKReady(round uint64) bool {
 
 // AddDKGFinalize adds a DKG finalize message.
 func (g *Governance) AddDKGFinalize(round uint64, final *typesDKG.Finalize) {
+	if g.isProhibited(StateAddDKGFinal) {
+		return
+	}
 	if round != final.Round {
 		return
 	}
@@ -435,4 +446,34 @@ func (g *Governance) SwitchToRemoteMode(n *Network) {
 	g.stateModule.SwitchToRemoteMode()
 	g.networkModule = n
 	n.addStateModule(g.stateModule)
+}
+
+// Prohibit would prohibit DKG related state change requests.
+//
+// Note this method only prevents local modification, state changes related to
+// DKG from others won't be prohibited.
+func (g *Governance) Prohibit(t StateChangeType) {
+	g.lock.Lock()
+	defer g.lock.Unlock()
+	switch t {
+	case StateAddDKGMasterPublicKey, StateAddDKGFinal, StateAddDKGComplaint:
+		g.prohibitedTypes[t] = struct{}{}
+	default:
+		panic(fmt.Errorf("unsupported state change type to prohibit: %s", t))
+	}
+}
+
+// Unprohibit would unprohibit DKG related state change requests.
+func (g *Governance) Unprohibit(t StateChangeType) {
+	g.lock.Lock()
+	defer g.lock.Unlock()
+	delete(g.prohibitedTypes, t)
+}
+
+// isProhibited checks if a state change request is prohibited or not.
+func (g *Governance) isProhibited(t StateChangeType) (prohibited bool) {
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+	_, prohibited = g.prohibitedTypes[t]
+	return
 }

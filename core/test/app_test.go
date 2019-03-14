@@ -19,16 +19,82 @@ package test
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
+	"github.com/dexon-foundation/dexon-consensus/core"
+	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus/core/crypto/dkg"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
+	"github.com/dexon-foundation/dexon-consensus/core/utils"
 	"github.com/stretchr/testify/suite"
 )
 
+func getCRS(round, reset uint64) []byte {
+	return []byte(fmt.Sprintf("r#%d,reset#%d", round, reset))
+}
+
+type evtParamToCheck struct {
+	round  uint64
+	reset  uint64
+	height uint64
+	crs    common.Hash
+}
+
 type AppTestSuite struct {
 	suite.Suite
+
+	pubKeys []crypto.PublicKey
+	signers []*utils.Signer
+	logger  common.Logger
+}
+
+func (s *AppTestSuite) SetupSuite() {
+	prvKeys, pubKeys, err := NewKeys(4)
+	s.Require().NoError(err)
+	s.pubKeys = pubKeys
+	for _, k := range prvKeys {
+		s.signers = append(s.signers, utils.NewSigner(k))
+	}
+	s.logger = &common.NullLogger{}
+}
+
+func (s *AppTestSuite) prepareGov() *Governance {
+	gov, err := NewGovernance(
+		NewState(1, s.pubKeys, 100*time.Millisecond, s.logger, true),
+		core.ConfigRoundShift)
+	s.Require().NoError(err)
+	return gov
+}
+
+func (s *AppTestSuite) proposeMPK(gov *Governance, round uint64, count int) {
+	for idx, pubKey := range s.pubKeys[:count] {
+		_, pubShare := dkg.NewPrivateKeyShares(utils.GetDKGThreshold(
+			gov.Configuration(round)))
+		mpk := &typesDKG.MasterPublicKey{
+			Round:           round,
+			DKGID:           typesDKG.NewID(types.NewNodeID(pubKey)),
+			PublicKeyShares: *pubShare,
+		}
+		s.Require().NoError(s.signers[idx].SignDKGMasterPublicKey(mpk))
+		gov.AddDKGMasterPublicKey(round, mpk)
+	}
+}
+
+func (s *AppTestSuite) proposeFinalize(gov *Governance, round uint64,
+	count int) {
+	for idx, pubKey := range s.pubKeys[:count] {
+		final := &typesDKG.Finalize{
+			ProposerID: types.NewNodeID(pubKey),
+			Round:      round,
+		}
+		s.Require().NoError(s.signers[idx].SignDKGFinalize(final))
+		gov.AddDKGFinalize(round, final)
+	}
 }
 
 func (s *AppTestSuite) deliverBlockWithTimeFromSequenceLength(
@@ -58,7 +124,7 @@ func (s *AppTestSuite) TestCompare() {
 		}
 	)
 	// Prepare an OK App instance.
-	app1 := NewApp(0, nil)
+	app1 := NewApp(0, nil, nil)
 	app1.BlockConfirmed(b0)
 	app1.BlockConfirmed(b1)
 	app1.BlockDelivered(b0.Hash, b0.Position, types.FinalizationResult{
@@ -69,7 +135,7 @@ func (s *AppTestSuite) TestCompare() {
 		Height:    2,
 		Timestamp: now.Add(1 * time.Second),
 	})
-	app2 := NewApp(0, nil)
+	app2 := NewApp(0, nil, nil)
 	s.Require().Equal(ErrEmptyDeliverSequence.Error(),
 		app1.Compare(app2).Error())
 	app2.BlockConfirmed(b0)
@@ -88,7 +154,7 @@ func (s *AppTestSuite) TestCompare() {
 	})
 	s.Require().Equal(ErrMismatchBlockHashSequence.Error(),
 		app1.Compare(app2).Error())
-	app2 = NewApp(0, nil)
+	app2 = NewApp(0, nil, nil)
 	app2.BlockConfirmed(b0)
 	app2.BlockDelivered(b0.Hash, b0.Position, types.FinalizationResult{
 		Height:    1,
@@ -107,13 +173,13 @@ func (s *AppTestSuite) TestVerify() {
 			Position: types.Position{Height: 1},
 		}
 	)
-	app := NewApp(0, nil)
+	app := NewApp(0, nil, nil)
 	s.Require().Equal(ErrEmptyDeliverSequence.Error(), app.Verify().Error())
 	app.BlockDelivered(b0.Hash, b0.Position, types.FinalizationResult{})
 	app.BlockDelivered(b1.Hash, b1.Position, types.FinalizationResult{Height: 1})
 	s.Require().Equal(
 		ErrDeliveredBlockNotConfirmed.Error(), app.Verify().Error())
-	app = NewApp(0, nil)
+	app = NewApp(0, nil, nil)
 	app.BlockConfirmed(b0)
 	app.BlockDelivered(b0.Hash, b0.Position, types.FinalizationResult{
 		Height:    1,
@@ -126,7 +192,7 @@ func (s *AppTestSuite) TestVerify() {
 	})
 	s.Require().Equal(ErrConsensusTimestampOutOfOrder.Error(),
 		app.Verify().Error())
-	app = NewApp(0, nil)
+	app = NewApp(0, nil, nil)
 	app.BlockConfirmed(b0)
 	app.BlockConfirmed(b1)
 	app.BlockDelivered(b0.Hash, b0.Position, types.FinalizationResult{
@@ -141,7 +207,7 @@ func (s *AppTestSuite) TestVerify() {
 
 func (s *AppTestSuite) TestWitness() {
 	// Deliver several blocks, there is only one chain only.
-	app := NewApp(0, nil)
+	app := NewApp(0, nil, nil)
 	deliver := func(b *types.Block) {
 		app.BlockConfirmed(*b)
 		app.BlockDelivered(b.Hash, b.Position, b.Finalization)
@@ -203,6 +269,78 @@ func (s *AppTestSuite) TestWitness() {
 	s.Require().NoError(err)
 	s.Require().Equal(w.Height, b02.Finalization.Height)
 	s.Require().Equal(0, bytes.Compare(w.Data, b02.Hash[:]))
+}
+
+func (s *AppTestSuite) TestAttachedWithRoundEvent() {
+	// This test case is copied/modified from
+	// integraion.RoundEventTestSuite.TestFromRoundN, the difference is the
+	// calls to utils.RoundEvent.ValidateNextRound is not explicitly called but
+	// triggered by App.BlockDelivered.
+	gov := s.prepareGov()
+	s.Require().NoError(gov.State().RequestChange(StateChangeRoundLength,
+		uint64(100)))
+	gov.CatchUpWithRound(22)
+	for r := uint64(2); r <= uint64(20); r++ {
+		gov.ProposeCRS(r, getCRS(r, 0))
+	}
+	// Reset round#20 twice, then make it done DKG preparation.
+	gov.ResetDKG(getCRS(20, 1))
+	gov.ResetDKG(getCRS(20, 2))
+	s.proposeMPK(gov, 20, 3)
+	s.proposeFinalize(gov, 20, 3)
+	s.Require().Equal(gov.DKGResetCount(20), uint64(2))
+	// Propose CRS for round#21, and it works without reset.
+	gov.ProposeCRS(21, getCRS(21, 0))
+	s.proposeMPK(gov, 21, 3)
+	s.proposeFinalize(gov, 21, 3)
+	// Propose CRS for round#22, and it works without reset.
+	gov.ProposeCRS(22, getCRS(22, 0))
+	s.proposeMPK(gov, 22, 3)
+	s.proposeFinalize(gov, 22, 3)
+	// Prepare utils.RoundEvent, starts from round#19, reset(for round#20)#1.
+	rEvt, err := utils.NewRoundEvent(context.Background(), gov, s.logger, 19,
+		1900, 2019, core.ConfigRoundShift)
+	s.Require().NoError(err)
+	// Register a handler to collects triggered events.
+	var evts []evtParamToCheck
+	rEvt.Register(func(params []utils.RoundEventParam) {
+		for _, p := range params {
+			evts = append(evts, evtParamToCheck{
+				round:  p.Round,
+				reset:  p.Reset,
+				height: p.BeginHeight,
+				crs:    p.CRS,
+			})
+		}
+	})
+	// Setup App instance.
+	app := NewApp(19, gov, rEvt)
+	deliver := func(round, start, end uint64) {
+		for i := start; i <= end; i++ {
+			b := &types.Block{
+				Hash:         common.NewRandomHash(),
+				Position:     types.Position{Round: round, Height: i},
+				Finalization: types.FinalizationResult{Height: i},
+			}
+			app.BlockConfirmed(*b)
+			app.BlockDelivered(b.Hash, b.Position, b.Finalization)
+		}
+	}
+	// Deliver blocks from height=2020 to height=2081.
+	deliver(0, 0, 2019)
+	deliver(19, 2020, 2091)
+	s.Require().Len(evts, 2)
+	s.Require().Equal(evts[0], evtParamToCheck{19, 2, 2100, gov.CRS(19)})
+	s.Require().Equal(evts[1], evtParamToCheck{20, 0, 2200, gov.CRS(20)})
+	// Deliver blocks from height=2082 to height=2281.
+	deliver(19, 2092, 2199)
+	deliver(20, 2200, 2291)
+	s.Require().Len(evts, 3)
+	s.Require().Equal(evts[2], evtParamToCheck{21, 0, 2300, gov.CRS(21)})
+	// Deliver blocks from height=2282 to height=2381.
+	deliver(20, 2292, 2299)
+	deliver(21, 2300, 2391)
+	s.Require().Equal(evts[3], evtParamToCheck{22, 0, 2400, gov.CRS(22)})
 }
 
 func TestApp(t *testing.T) {

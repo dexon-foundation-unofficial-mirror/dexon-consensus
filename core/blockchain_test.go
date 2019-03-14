@@ -144,7 +144,7 @@ func (s *BlockChainTestSuite) newBlockChain(initB *types.Block,
 		initConfig.SetRoundBeginHeight(0)
 	}
 	return newBlockChain(s.nID, s.dMoment, initB, initConfig,
-		test.NewApp(0, nil), &testTSigVerifierGetter{}, s.signer,
+		test.NewApp(0, nil, nil), &testTSigVerifierGetter{}, s.signer,
 		&common.NullLogger{})
 }
 

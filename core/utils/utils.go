@@ -138,3 +138,9 @@ func LaunchDummyReceiver(
 func GetDKGThreshold(config *types.Config) int {
 	return int(config.DKGSetSize/3) + 1
 }
+
+// GetNextRoundCheckpoint returns the block height to check if the next round
+// is ready.
+func GetNextRoundCheckpoint(begin, length uint64) uint64 {
+	return begin + length*9/10
+}
