@@ -162,3 +162,12 @@ type Ticker interface {
 	// Retart the ticker and clear all internal data.
 	Restart()
 }
+
+// Recovery interface for interacting with recovery information.
+type Recovery interface {
+	// ProposeSkipBlock proposes a skip block.
+	ProposeSkipBlock(height uint64) error
+
+	// Votes gets the number of votes of given height.
+	Votes(height uint64) (uint64, error)
+}
