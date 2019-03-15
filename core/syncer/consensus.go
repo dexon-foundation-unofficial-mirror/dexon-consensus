@@ -82,6 +82,7 @@ type Consensus struct {
 	ctxCancel          context.CancelFunc
 	syncedLastBlock    *types.Block
 	syncedConsensus    *core.Consensus
+	syncedSkipNext     bool
 	dummyCancel        context.CancelFunc
 	dummyFinished      <-chan struct{}
 	dummyMsgBuffer     []interface{}
@@ -178,6 +179,29 @@ func (con *Consensus) buildAllEmptyBlocks() {
 			}
 		}
 	}
+}
+
+// ForceSync forces syncer to become synced.
+func (con *Consensus) ForceSync(skip bool) {
+	if con.syncedLastBlock != nil {
+		return
+	}
+	hash, _ := con.db.GetCompactionChainTipInfo()
+	var block types.Block
+	block, err := con.db.GetBlock(hash)
+	if err != nil {
+		panic(err)
+	}
+	con.logger.Info("Force Sync", "block", &block)
+	con.setupConfigsUntilRound(block.Position.Round + core.ConfigRoundShift - 1)
+	con.syncedLastBlock = &block
+	con.stopBuffering()
+	con.dummyCancel, con.dummyFinished = utils.LaunchDummyReceiver(
+		context.Background(), con.network.ReceiveChan(),
+		func(msg interface{}) {
+			con.dummyMsgBuffer = append(con.dummyMsgBuffer, msg)
+		})
+	con.syncedSkipNext = skip
 }
 
 // SyncBlocks syncs blocks from compaction chain, latest is true if the caller
@@ -279,6 +303,7 @@ func (con *Consensus) GetSyncedConsensus() (*core.Consensus, error) {
 	con.syncedConsensus, err = core.NewConsensusFromSyncer(
 		con.syncedLastBlock,
 		con.roundBeginHeights[con.syncedLastBlock.Position.Round],
+		con.syncedSkipNext,
 		con.dMoment,
 		con.app,
 		con.gov,

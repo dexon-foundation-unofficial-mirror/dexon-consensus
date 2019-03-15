@@ -208,6 +208,15 @@ func (app *App) BlockConfirmed(b types.Block) {
 	app.LastConfirmedHeight = b.Position.Height
 }
 
+// ClearUndeliveredBlocks --
+func (app *App) ClearUndeliveredBlocks() {
+	app.deliveredLock.RLock()
+	defer app.deliveredLock.RUnlock()
+	app.confirmedLock.Lock()
+	defer app.confirmedLock.Unlock()
+	app.LastConfirmedHeight = uint64(len(app.DeliverSequence) - 1)
+}
+
 // BlockDelivered implements Application interface.
 func (app *App) BlockDelivered(blockHash common.Hash, pos types.Position,
 	result types.FinalizationResult) {

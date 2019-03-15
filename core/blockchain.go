@@ -558,8 +558,11 @@ func (bc *blockChain) prepareBlock(position types.Position,
 		}
 		if tipConfig.IsLastBlock(tip) {
 			if tip.Position.Round+1 != position.Round {
-				b, err = nil, ErrRoundNotSwitch
-				return
+				if !empty {
+					b, err = nil, ErrRoundNotSwitch
+					return
+				}
+				b.Position.Round = tip.Position.Round + 1
 			}
 		} else {
 			if tip.Position.Round != position.Round {

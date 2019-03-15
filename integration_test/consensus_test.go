@@ -487,6 +487,147 @@ ReachAlive:
 	}
 }
 
+func (s *ConsensusTestSuite) TestForceSync() {
+	// The sync test case:
+	// - No configuration change.
+	// - One node does not run when all others starts until aliveRound exceeded.
+	var (
+		req        = s.Require()
+		peerCount  = 4
+		dMoment    = time.Now().UTC()
+		untilRound = uint64(3)
+		stopRound  = uint64(1)
+		errChan    = make(chan error, 100)
+	)
+	prvKeys, pubKeys, err := test.NewKeys(peerCount)
+	req.NoError(err)
+	// Setup seed governance instance. Give a short latency to make this test
+	// run faster.
+	seedGov, err := test.NewGovernance(
+		test.NewState(core.DKGDelayRound,
+			pubKeys, 100*time.Millisecond, &common.NullLogger{}, true),
+		core.ConfigRoundShift)
+	req.NoError(err)
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeRoundLength, uint64(60)))
+	seedGov.CatchUpWithRound(0)
+	seedGov.CatchUpWithRound(1)
+	// A short round interval.
+	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
+	for _, n := range nodes {
+		go n.con.Run()
+	}
+ReachStop:
+	for {
+		// Check if any error happened or sleep for a period of time.
+		select {
+		case err := <-errChan:
+			req.NoError(err)
+		case <-time.After(5 * time.Second):
+		}
+		// If one of the nodes have reached stopRound, stop all nodes to simulate
+		// crash.
+		for _, n := range nodes {
+			pos := n.app.GetLatestDeliveredPosition()
+			if pos.Round >= stopRound {
+				break ReachStop
+			} else {
+				fmt.Println("latestPos", n.ID, &pos)
+			}
+		}
+	}
+
+	var latestPos types.Position
+	var latestNodeID types.NodeID
+	for _, n := range nodes {
+		n.con.Stop()
+		time.Sleep(1 * time.Second)
+	}
+	for nID, n := range nodes {
+		pos := n.app.GetLatestDeliveredPosition()
+		if pos.Newer(latestPos) {
+			fmt.Println("Newe position", nID, pos)
+			latestNodeID = nID
+			latestPos = pos
+		}
+	}
+	fmt.Println("Latest node", latestNodeID, &latestPos)
+	for nID, node := range nodes {
+		if nID == latestNodeID {
+			continue
+		}
+		fmt.Printf("[%p] Clearing %s %s\n", node.app, nID, node.app.GetLatestDeliveredPosition())
+		node.app.ClearUndeliveredBlocks()
+	}
+	syncerCon := make(map[types.NodeID]*syncer.Consensus, len(nodes))
+	for _, prvKey := range prvKeys {
+		nID := types.NewNodeID(prvKey.PublicKey())
+		node := nodes[nID]
+		syncerCon[nID] = syncer.NewConsensus(
+			dMoment,
+			node.app,
+			node.gov,
+			node.db,
+			node.network,
+			prvKey,
+			&common.NullLogger{},
+		)
+	}
+
+	targetNode := nodes[latestNodeID]
+	for nID, node := range nodes {
+		if nID == latestNodeID {
+			continue
+		}
+		syncedHeight := node.app.GetLatestDeliveredPosition().Height + 1
+		// FinalizationHeight = Height + 1
+		syncedHeight++
+		var err error
+		for {
+			fmt.Println("Syncing", nID, syncedHeight)
+			if syncedHeight >= latestPos.Height {
+				break
+			}
+			_, syncedHeight, err = s.syncBlocksWithSomeNode(
+				targetNode, node, syncerCon[nID], syncedHeight)
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("Syncing", nID, syncedHeight)
+		}
+		fmt.Println("Synced", nID, syncedHeight)
+	}
+
+	for _, con := range syncerCon {
+		con.ForceSync(true)
+	}
+	for nID := range nodes {
+		con, err := syncerCon[nID].GetSyncedConsensus()
+		s.Require().NoError(err)
+		nodes[nID].con = con
+	}
+	for _, node := range nodes {
+		go node.con.Run()
+		defer node.con.Stop()
+	}
+
+Loop:
+	for {
+		<-time.After(5 * time.Second)
+		fmt.Println("check latest position delivered by each node")
+		for _, n := range nodes {
+			latestPos := n.app.GetLatestDeliveredPosition()
+			fmt.Println("latestPos", n.ID, &latestPos)
+			if latestPos.Round < untilRound {
+				continue Loop
+			}
+		}
+		// Oh ya.
+		break
+	}
+	s.verifyNodes(nodes)
+}
+
 func TestConsensus(t *testing.T) {
 	suite.Run(t, new(ConsensusTestSuite))
 }
