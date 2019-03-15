@@ -27,7 +27,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
-type TerminatorTestSuite struct {
+type WatchCatTestSuite struct {
 	suite.Suite
 }
 
@@ -59,34 +59,34 @@ func (rec *recovery) Votes(height uint64) (uint64, error) {
 	return rec.votes[height], nil
 }
 
-func (s *TerminatorTestSuite) newTerminator(
-	notarySetSize uint32, polling time.Duration) (*Terminator, *recovery) {
+func (s *WatchCatTestSuite) newWatchCat(
+	notarySetSize uint32, polling time.Duration) (*WatchCat, *recovery) {
 	cfg := &testConfigAccessor{
 		notarySetSize: notarySetSize,
 	}
 	recovery := &recovery{
 		votes: make(map[uint64]uint64),
 	}
-	return NewTerminator(recovery, cfg, polling, &common.NullLogger{}), recovery
+	return NewWatchCat(recovery, cfg, polling, &common.NullLogger{}), recovery
 }
 
-func (s *TerminatorTestSuite) TestBasicUsage() {
+func (s *WatchCatTestSuite) TestBasicUsage() {
 	polling := 50 * time.Millisecond
 	timeout := 50 * time.Millisecond
 	notarySet := uint32(24)
-	terminator, rec := s.newTerminator(notarySet, polling)
-	terminator.Start(timeout)
-	defer terminator.Stop()
+	watchCat, rec := s.newWatchCat(notarySet, polling)
+	watchCat.Start(timeout)
+	defer watchCat.Stop()
 	pos := types.Position{
 		Height: 10,
 	}
 
 	for i := 0; i < 10; i++ {
 		pos.Height++
-		terminator.Ping(pos)
+		watchCat.Feed(pos)
 		time.Sleep(timeout / 2)
 		select {
-		case <-terminator.Terminated():
+		case <-watchCat.Meow():
 			s.FailNow("unexpected terminated")
 		default:
 		}
@@ -100,7 +100,7 @@ func (s *TerminatorTestSuite) TestBasicUsage() {
 
 	time.Sleep(polling * 2)
 	select {
-	case <-terminator.Terminated():
+	case <-watchCat.Meow():
 		s.FailNow("unexpected terminated")
 	default:
 	}
@@ -111,12 +111,12 @@ func (s *TerminatorTestSuite) TestBasicUsage() {
 
 	time.Sleep(polling * 2)
 	select {
-	case <-terminator.Terminated():
+	case <-watchCat.Meow():
 	default:
 		s.FailNow("expecting terminated")
 	}
 }
 
-func TestTerminator(t *testing.T) {
-	suite.Run(t, new(TerminatorTestSuite))
+func TestWatchCat(t *testing.T) {
+	suite.Run(t, new(WatchCatTestSuite))
 }

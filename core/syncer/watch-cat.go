@@ -31,108 +31,115 @@ type configReader interface {
 	Configuration(round uint64) *types.Config
 }
 
-// Terminator is reponsible for signaling if syncer object should be terminated.
-type Terminator struct {
+// WatchCat is reponsible for signaling if syncer object should be terminated.
+type WatchCat struct {
 	recovery     core.Recovery
 	configReader configReader
-	ping         chan types.Position
+	pat          chan types.Position
 	polling      time.Duration
 	ctx          context.Context
 	cancel       context.CancelFunc
 	logger       common.Logger
 }
 
-// NewTerminator creats a new terminator object.
-func NewTerminator(
+// NewWatchCat creats a new WatchCat 🐱 object.
+func NewWatchCat(
 	recovery core.Recovery,
 	configReader configReader,
 	polling time.Duration,
-	logger common.Logger) *Terminator {
-	tt := &Terminator{
+	logger common.Logger) *WatchCat {
+	wc := &WatchCat{
 		recovery:     recovery,
 		configReader: configReader,
-		ping:         make(chan types.Position),
+		pat:          make(chan types.Position),
 		polling:      polling,
 		logger:       logger,
 	}
-	return tt
+	return wc
 }
 
-// Ping the terminator so it won't produce the termination signal.
-func (tt *Terminator) Ping(position types.Position) {
-	tt.ping <- position
+// Feed the WatchCat so it won't produce the termination signal.
+func (wc *WatchCat) Feed(position types.Position) {
+	wc.pat <- position
 }
 
-// Start the terminator.
-func (tt *Terminator) Start(timeout time.Duration) {
-	tt.Stop()
-	tt.ctx, tt.cancel = context.WithCancel(context.Background())
+// Start the WatchCat.
+func (wc *WatchCat) Start(timeout time.Duration) {
+	wc.Stop()
+	wc.ctx, wc.cancel = context.WithCancel(context.Background())
 	go func() {
 		var lastPos types.Position
 	MonitorLoop:
 		for {
 			select {
-			case <-tt.ctx.Done():
+			case <-wc.ctx.Done():
 				return
 			default:
 			}
 			select {
-			case <-tt.ctx.Done():
+			case <-wc.ctx.Done():
 				return
-			case pos := <-tt.ping:
+			case pos := <-wc.pat:
 				if !pos.Newer(lastPos) {
-					tt.logger.Warn("Ping with older height",
+					wc.logger.Warn("Feed with older height",
 						"pos", pos, "lastPos", lastPos)
 					continue
 				}
 				lastPos = pos
 			case <-time.After(timeout):
-				tt.logger.Info("Calling Recovery.ProposeSkipBlock",
-					"height", lastPos.Height)
-				tt.recovery.ProposeSkipBlock(lastPos.Height)
 				break MonitorLoop
 			}
 		}
 		go func() {
 			for {
 				select {
-				case <-tt.ctx.Done():
+				case <-wc.ctx.Done():
 					return
-				case <-tt.ping:
+				case <-wc.pat:
 				}
 			}
 		}()
-		defer tt.cancel()
+		defer wc.cancel()
+		proposed := false
 		threshold := uint64(
-			utils.GetConfigWithPanic(tt.configReader, lastPos.Round, tt.logger).
+			utils.GetConfigWithPanic(wc.configReader, lastPos.Round, wc.logger).
 				NotarySetSize / 2)
-		tt.logger.Info("Threshold for recovery", "votes", threshold)
+		wc.logger.Info("Threshold for recovery", "votes", threshold)
 	ResetLoop:
 		for {
-			votes, err := tt.recovery.Votes(lastPos.Height)
+			if !proposed {
+				wc.logger.Info("Calling Recovery.ProposeSkipBlock",
+					"height", lastPos.Height)
+				if err := wc.recovery.ProposeSkipBlock(lastPos.Height); err != nil {
+					wc.logger.Warn("Failed to proposeSkipBlock", "height", lastPos.Height, "error", err)
+				} else {
+					proposed = true
+				}
+			}
+			votes, err := wc.recovery.Votes(lastPos.Height)
 			if err != nil {
-				tt.logger.Error("Failed to get recovery votes", "height", lastPos.Height)
+				wc.logger.Error("Failed to get recovery votes", "height", lastPos.Height, "error", err)
 			} else if votes > threshold {
-				tt.logger.Info("Threshold for recovery reached!")
+				wc.logger.Info("Threshold for recovery reached!")
 				break ResetLoop
 			}
 			select {
-			case <-tt.ctx.Done():
+			case <-wc.ctx.Done():
 				return
-			case <-time.After(tt.polling):
+			case <-time.After(wc.polling):
 			}
 		}
 	}()
 }
 
-// Stop the terminator.
-func (tt *Terminator) Stop() {
-	if tt.cancel != nil {
-		tt.cancel()
+// Stop the WatchCat.
+func (wc *WatchCat) Stop() {
+	if wc.cancel != nil {
+		wc.cancel()
 	}
 }
 
-// Terminated return a closed channel if syncer should be terminated.
-func (tt *Terminator) Terminated() <-chan struct{} {
-	return tt.ctx.Done()
+// Meow return a closed channel if syncer should be terminated.
+func (wc *WatchCat) Meow() <-chan struct{} {
+	return wc.ctx.Done()
 }
