@@ -90,6 +90,11 @@ func (g *Governance) Configuration(round uint64) *types.Config {
 	return g.configs[round]
 }
 
+// GetRoundHeight returns the begin height of a round.
+func (g *Governance) GetRoundHeight(round uint64) uint64 {
+	return 0
+}
+
 // CRS returns the CRS for a given round.
 func (g *Governance) CRS(round uint64) common.Hash {
 	return g.stateModule.CRS(round)

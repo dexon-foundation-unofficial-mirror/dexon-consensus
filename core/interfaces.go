@@ -116,6 +116,9 @@ type Governance interface {
 	// Return the genesis node set if round == 0.
 	NodeSet(round uint64) []crypto.PublicKey
 
+	// Get the begin height of a round.
+	GetRoundHeight(round uint64) uint64
+
 	//// DKG-related methods.
 
 	// AddDKGComplaint adds a DKGComplaint.
