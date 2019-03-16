@@ -60,22 +60,23 @@ func (rec *recovery) Votes(height uint64) (uint64, error) {
 }
 
 func (s *WatchCatTestSuite) newWatchCat(
-	notarySetSize uint32, polling time.Duration) (*WatchCat, *recovery) {
+	notarySetSize uint32, polling, timeout time.Duration) (*WatchCat, *recovery) {
 	cfg := &testConfigAccessor{
 		notarySetSize: notarySetSize,
 	}
 	recovery := &recovery{
 		votes: make(map[uint64]uint64),
 	}
-	return NewWatchCat(recovery, cfg, polling, &common.NullLogger{}), recovery
+	wc := NewWatchCat(recovery, cfg, polling, timeout, &common.NullLogger{})
+	return wc, recovery
 }
 
 func (s *WatchCatTestSuite) TestBasicUsage() {
 	polling := 50 * time.Millisecond
 	timeout := 50 * time.Millisecond
 	notarySet := uint32(24)
-	watchCat, rec := s.newWatchCat(notarySet, polling)
-	watchCat.Start(timeout)
+	watchCat, rec := s.newWatchCat(notarySet, polling, timeout)
+	watchCat.Start()
 	defer watchCat.Stop()
 	pos := types.Position{
 		Height: 10,
