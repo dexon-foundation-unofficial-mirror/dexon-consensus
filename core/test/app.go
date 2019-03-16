@@ -109,11 +109,13 @@ func NewApp(initRound uint64, gov *Governance, rEvt *utils.RoundEvent) (
 	}
 	if rEvt != nil {
 		app.hEvt.RegisterHeight(
-			utils.GetNextRoundCheckpoint(rEvt.LastPeriod()), func(h uint64) {
+			utils.GetNextRoundValidationHeight(rEvt.LastPeriod()),
+			func(h uint64) {
 				rEvt.ValidateNextRound(h)
 			})
 		rEvt.Register(func(evts []utils.RoundEventParam) {
-			app.hEvt.RegisterHeight(evts[len(evts)-1].NextRoundCheckpoint(),
+			app.hEvt.RegisterHeight(
+				evts[len(evts)-1].NextRoundValidationHeight(),
 				func(h uint64) {
 					rEvt.ValidateNextRound(h)
 				})

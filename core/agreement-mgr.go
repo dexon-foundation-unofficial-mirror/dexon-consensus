@@ -90,8 +90,6 @@ func newAgreementMgrConfig(prev agreementMgrConfig, config *types.Config,
 
 type baRoundSetting struct {
 	notarySet map[types.NodeID]struct{}
-	agr       *agreement
-	recv      *consensusBAReceiver
 	ticker    Ticker
 	crs       common.Hash
 }
@@ -111,6 +109,7 @@ type agreementMgr struct {
 	initRound         uint64
 	configs           []agreementMgrConfig
 	baModule          *agreement
+	recv              *consensusBAReceiver
 	processedBAResult map[types.Position]struct{}
 	voteFilter        *utils.VoteFilter
 	waitGroup         sync.WaitGroup
@@ -136,15 +135,17 @@ func newAgreementMgr(con *Consensus, initRound uint64,
 		configs:           []agreementMgrConfig{initConfig},
 		voteFilter:        utils.NewVoteFilter(),
 	}
-	recv := &consensusBAReceiver{
-		consensus:     con,
-		restartNotary: make(chan types.Position, 1),
-		roundValue:    &atomic.Value{},
+	mgr.recv = &consensusBAReceiver{
+		consensus:               con,
+		restartNotary:           make(chan types.Position, 1),
+		roundValue:              &atomic.Value{},
+		changeNotaryHeightValue: &atomic.Value{},
 	}
-	recv.roundValue.Store(uint64(0))
+	mgr.recv.roundValue.Store(uint64(0))
+	mgr.recv.changeNotaryHeightValue.Store(uint64(0))
 	agr := newAgreement(
 		mgr.ID,
-		recv,
+		mgr.recv,
 		newLeaderSelector(genValidLeader(mgr), mgr.logger),
 		mgr.signer,
 		mgr.logger)
@@ -156,7 +157,7 @@ func newAgreementMgr(con *Consensus, initRound uint64,
 	agr.notarySet = nodes.GetSubSet(
 		int(initConfig.notarySetSize), types.NewNotarySetTarget(initConfig.crs))
 	// Hacky way to make agreement module self contained.
-	recv.agreementModule = agr
+	mgr.recv.agreementModule = agr
 	mgr.baModule = agr
 	return
 }
@@ -188,15 +189,43 @@ func (mgr *agreementMgr) config(round uint64) *agreementMgrConfig {
 	return &mgr.configs[roundIndex]
 }
 
-func (mgr *agreementMgr) appendConfig(
-	round uint64, config *types.Config, crs common.Hash) (err error) {
+func (mgr *agreementMgr) notifyRoundEvents(evts []utils.RoundEventParam) error {
 	mgr.lock.Lock()
 	defer mgr.lock.Unlock()
-	if round != uint64(len(mgr.configs))+mgr.initRound {
-		return ErrRoundNotIncreasing
+	apply := func(e utils.RoundEventParam) error {
+		if len(mgr.configs) > 0 {
+			lastCfg := mgr.configs[len(mgr.configs)-1]
+			if e.BeginHeight != lastCfg.RoundEndHeight() {
+				return ErrInvalidBlockHeight
+			}
+			if lastCfg.RoundID() == e.Round {
+				mgr.configs[len(mgr.configs)-1].ExtendLength()
+				// It's not an atomic operation to update an atomic value based
+				// on another. However, it's the best way so far to extend
+				// length of round without refactoring.
+				if mgr.recv.round() == e.Round {
+					mgr.recv.changeNotaryHeightValue.Store(
+						mgr.configs[len(mgr.configs)-1].RoundEndHeight())
+				}
+			} else if lastCfg.RoundID()+1 == e.Round {
+				mgr.configs = append(mgr.configs, newAgreementMgrConfig(
+					lastCfg, e.Config, e.CRS))
+			} else {
+				return ErrInvalidRoundID
+			}
+		} else {
+			c := agreementMgrConfig{}
+			c.from(e.Round, e.Config, e.CRS)
+			c.SetRoundBeginHeight(e.BeginHeight)
+			mgr.configs = append(mgr.configs, c)
+		}
+		return nil
 	}
-	mgr.configs = append(mgr.configs, newAgreementMgrConfig(
-		mgr.configs[len(mgr.configs)-1], config, crs))
+	for _, e := range evts {
+		if err := apply(e); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -252,7 +281,7 @@ func (mgr *agreementMgr) processAgreementResult(
 		}
 	} else if result.Position.Newer(aID) {
 		mgr.logger.Info("Fast syncing BA", "position", result.Position)
-		nodes, err := mgr.cache.GetNodeSet(result.Position.Round)
+		nIDs, err := mgr.cache.GetNotarySet(result.Position.Round)
 		if err != nil {
 			return err
 		}
@@ -261,10 +290,6 @@ func (mgr *agreementMgr) processAgreementResult(
 		mgr.network.PullBlocks(common.Hashes{result.BlockHash})
 		mgr.logger.Debug("Calling Governance.CRS", "round", result.Position.Round)
 		crs := utils.GetCRSWithPanic(mgr.gov, result.Position.Round, mgr.logger)
-		nIDs := nodes.GetSubSet(
-			int(utils.GetConfigWithPanic(
-				mgr.gov, result.Position.Round, mgr.logger).NotarySetSize),
-			types.NewNotarySetTarget(crs))
 		for key := range result.Votes {
 			if err := mgr.baModule.processVote(&result.Votes[key]); err != nil {
 				return err
@@ -296,10 +321,7 @@ func (mgr *agreementMgr) runBA(initRound uint64) {
 		currentRound uint64
 		nextRound    = initRound
 		curConfig    = mgr.config(initRound)
-		setting      = baRoundSetting{
-			agr:  mgr.baModule,
-			recv: mgr.baModule.data.recv.(*consensusBAReceiver),
-		}
+		setting      = baRoundSetting{}
 		tickDuration time.Duration
 	)
 
@@ -353,12 +375,12 @@ Loop:
 			break Loop
 		default:
 		}
-		setting.recv.isNotary = checkRound()
+		mgr.recv.isNotary = checkRound()
 		// Run BA for this round.
-		setting.recv.roundValue.Store(currentRound)
-		setting.recv.changeNotaryHeight = curConfig.RoundEndHeight()
-		setting.recv.restartNotary <- types.Position{
-			Round:  setting.recv.round(),
+		mgr.recv.roundValue.Store(currentRound)
+		mgr.recv.changeNotaryHeightValue.Store(curConfig.RoundEndHeight())
+		mgr.recv.restartNotary <- types.Position{
+			Round:  mgr.recv.round(),
 			Height: math.MaxUint64,
 		}
 		mgr.voteFilter = utils.NewVoteFilter()
@@ -373,8 +395,8 @@ Loop:
 
 func (mgr *agreementMgr) baRoutineForOneRound(
 	setting *baRoundSetting) (err error) {
-	agr := setting.agr
-	recv := setting.recv
+	agr := mgr.baModule
+	recv := mgr.recv
 	oldPos := agr.agreementID()
 	restart := func(restartPos types.Position) (breakLoop bool, err error) {
 		if !isStop(restartPos) {

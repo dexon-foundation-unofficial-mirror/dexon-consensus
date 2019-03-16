@@ -221,6 +221,35 @@ func (s *RoundEventTestSuite) TestLastPeriod() {
 	s.Require().Equal(length, uint64(200))
 }
 
+func (s *RoundEventTestSuite) TestTriggerInitEvent() {
+	gov := s.prepareGov()
+	s.Require().NoError(gov.State().RequestChange(test.StateChangeRoundLength,
+		uint64(100)))
+	gov.CatchUpWithRound(0)
+	s.Require().NoError(gov.State().RequestChange(test.StateChangeRoundLength,
+		uint64(200)))
+	gov.CatchUpWithRound(1)
+	// Prepare utils.RoundEvent, starts from genesis.
+	rEvt, err := utils.NewRoundEvent(
+		context.Background(), gov, s.logger, 0, 0, 0, core.ConfigRoundShift)
+	s.Require().NoError(err)
+	// Register a handler to collects triggered events.
+	var evts []evtParamToCheck
+	rEvt.Register(func(params []utils.RoundEventParam) {
+		for _, p := range params {
+			evts = append(evts, evtParamToCheck{
+				round:  p.Round,
+				reset:  p.Reset,
+				height: p.BeginHeight,
+				crs:    p.CRS,
+			})
+		}
+	})
+	rEvt.TriggerInitEvent()
+	s.Require().Len(evts, 1)
+	s.Require().Equal(evts[0], evtParamToCheck{0, 0, 0, gov.CRS(0)})
+}
+
 func TestRoundEvent(t *testing.T) {
 	suite.Run(t, new(RoundEventTestSuite))
 }

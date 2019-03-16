@@ -128,24 +128,27 @@ func (s *BlockChainTestSuite) newRandomnessFromBlock(
 }
 
 func (s *BlockChainTestSuite) newBlockChain(initB *types.Block,
-	roundLength uint64) *blockChain {
+	roundLength uint64) (bc *blockChain) {
 	initRound := uint64(0)
 	if initB != nil {
 		initRound = initB.Position.Round
 	}
-	initConfig := blockChainConfig{}
-	initConfig.fromConfig(initRound, &types.Config{
-		MinBlockInterval: s.blockInterval,
-		RoundLength:      roundLength,
-	})
+	initHeight := uint64(0)
 	if initB != nil {
-		initConfig.SetRoundBeginHeight(initB.Position.Height)
-	} else {
-		initConfig.SetRoundBeginHeight(0)
+		initHeight = initB.Position.Height
 	}
-	return newBlockChain(s.nID, s.dMoment, initB, initConfig,
-		test.NewApp(0, nil, nil), &testTSigVerifierGetter{}, s.signer,
-		&common.NullLogger{})
+	bc = newBlockChain(s.nID, s.dMoment, initB, test.NewApp(0, nil, nil),
+		&testTSigVerifierGetter{}, s.signer, &common.NullLogger{})
+	s.Require().NoError(bc.notifyRoundEvents([]utils.RoundEventParam{
+		utils.RoundEventParam{
+			Round:       initRound,
+			Reset:       0,
+			BeginHeight: initHeight,
+			Config: &types.Config{
+				MinBlockInterval: s.blockInterval,
+				RoundLength:      roundLength,
+			}}}))
+	return
 }
 
 func (s *BlockChainTestSuite) newRoundOneInitBlock() *types.Block {
@@ -330,13 +333,32 @@ func (s *BlockChainTestSuite) TestSanityCheck() {
 	s.Require().NoError(bc.sanityCheck(b4))
 }
 
-func (s *BlockChainTestSuite) TestAppendConfig() {
-	bc := s.newBlockChain(nil, 10)
-	s.Require().Equal(ErrRoundNotIncreasing.Error(),
-		bc.appendConfig(0, &types.Config{}).Error())
-	s.Require().Equal(ErrRoundNotIncreasing.Error(),
-		bc.appendConfig(2, &types.Config{}).Error())
-	s.Require().NoError(bc.appendConfig(1, &types.Config{}))
+func (s *BlockChainTestSuite) TestNotifyRoundEvents() {
+	roundLength := uint64(10)
+	bc := s.newBlockChain(nil, roundLength)
+	newEvent := func(round, reset, height uint64) []utils.RoundEventParam {
+		return []utils.RoundEventParam{
+			utils.RoundEventParam{
+				Round:       round,
+				Reset:       reset,
+				BeginHeight: height,
+				CRS:         common.Hash{},
+				Config:      &types.Config{RoundLength: roundLength},
+			}}
+	}
+	s.Require().Equal(ErrInvalidRoundID.Error(),
+		bc.notifyRoundEvents(newEvent(2, 0, roundLength)).Error())
+	s.Require().NoError(bc.notifyRoundEvents(newEvent(1, 0, roundLength)))
+	// Make sure new config is appended when new round is ready.
+	s.Require().Len(bc.configs, 2)
+	s.Require().Equal(ErrInvalidRoundID.Error(),
+		bc.notifyRoundEvents(newEvent(3, 1, roundLength*2)).Error())
+	s.Require().Equal(ErrInvalidBlockHeight.Error(),
+		bc.notifyRoundEvents(newEvent(1, 1, roundLength)).Error())
+	s.Require().NoError(bc.notifyRoundEvents(newEvent(1, 1, roundLength*2)))
+	// Make sure roundEndHeight is extended when DKG reset.
+	s.Require().Equal(bc.configs[len(bc.configs)-1].RoundEndHeight(),
+		roundLength*3)
 }
 
 func (s *BlockChainTestSuite) TestConfirmed() {
@@ -354,10 +376,16 @@ func (s *BlockChainTestSuite) TestConfirmed() {
 func (s *BlockChainTestSuite) TestNextBlockAndTipRound() {
 	var roundLength uint64 = 3
 	bc := s.newBlockChain(nil, roundLength)
-	s.Require().NoError(bc.appendConfig(1, &types.Config{
-		MinBlockInterval: s.blockInterval,
-		RoundLength:      roundLength,
-	}))
+	s.Require().NoError(bc.notifyRoundEvents([]utils.RoundEventParam{
+		utils.RoundEventParam{
+			Round:       1,
+			Reset:       0,
+			BeginHeight: roundLength,
+			CRS:         common.Hash{},
+			Config: &types.Config{
+				MinBlockInterval: s.blockInterval,
+				RoundLength:      roundLength,
+			}}}))
 	blocks := s.newBlocks(3, nil)
 	nextH, nextT := bc.nextBlock()
 	s.Require().Equal(nextH, uint64(0))

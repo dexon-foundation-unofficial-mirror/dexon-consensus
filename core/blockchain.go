@@ -41,7 +41,6 @@ var (
 	ErrNotFollowTipPosition           = errors.New("not follow tip position")
 	ErrDuplicatedPendingBlock         = errors.New("duplicated pending block")
 	ErrRetrySanityCheckLater          = errors.New("retry sanity check later")
-	ErrRoundNotIncreasing             = errors.New("round not increasing")
 	ErrRoundNotSwitch                 = errors.New("round not switch")
 	ErrIncorrectBlockRandomnessResult = errors.New(
 		"incorrect block randomness result")
@@ -142,19 +141,8 @@ type blockChain struct {
 }
 
 func newBlockChain(nID types.NodeID, dMoment time.Time, initBlock *types.Block,
-	initConfig blockChainConfig, app Application, vGetter tsigVerifierGetter,
-	signer *utils.Signer, logger common.Logger) *blockChain {
-	if initBlock != nil {
-		if initConfig.RoundID() != initBlock.Position.Round {
-			panic(fmt.Errorf("incompatible config/block %s %d",
-				initBlock, initConfig.RoundID()))
-		}
-	} else {
-		if initConfig.RoundID() != 0 {
-			panic(fmt.Errorf("genesis config should from round 0 %d",
-				initConfig.RoundID()))
-		}
-	}
+	app Application, vGetter tsigVerifierGetter, signer *utils.Signer,
+	logger common.Logger) *blockChain {
 	return &blockChain{
 		ID:            nID,
 		lastConfirmed: initBlock,
@@ -163,23 +151,58 @@ func newBlockChain(nID types.NodeID, dMoment time.Time, initBlock *types.Block,
 		vGetter:       vGetter,
 		app:           app,
 		logger:        logger,
-		configs:       []blockChainConfig{initConfig},
 		dMoment:       dMoment,
 		pendingRandomnesses: make(
 			map[types.Position]*types.BlockRandomnessResult),
 	}
 }
 
-func (bc *blockChain) appendConfig(round uint64, config *types.Config) error {
-	expectedRound := uint64(len(bc.configs))
-	if bc.lastConfirmed != nil {
-		expectedRound += bc.lastConfirmed.Position.Round
+func (bc *blockChain) notifyRoundEvents(evts []utils.RoundEventParam) error {
+	bc.lock.Lock()
+	defer bc.lock.Unlock()
+	apply := func(e utils.RoundEventParam) error {
+		if len(bc.configs) > 0 {
+			lastCfg := bc.configs[len(bc.configs)-1]
+			if e.BeginHeight != lastCfg.RoundEndHeight() {
+				return ErrInvalidBlockHeight
+			}
+			if lastCfg.RoundID() == e.Round {
+				bc.configs[len(bc.configs)-1].ExtendLength()
+			} else if lastCfg.RoundID()+1 == e.Round {
+				bc.configs = append(bc.configs, newBlockChainConfig(
+					lastCfg, e.Config))
+			} else {
+				return ErrInvalidRoundID
+			}
+		} else {
+			c := blockChainConfig{}
+			c.fromConfig(e.Round, e.Config)
+			c.SetRoundBeginHeight(e.BeginHeight)
+			if bc.lastConfirmed == nil {
+				if c.RoundID() != 0 {
+					panic(fmt.Errorf("genesis config should from round 0 %d",
+						c.RoundID()))
+				}
+			} else {
+				if c.RoundID() != bc.lastConfirmed.Position.Round {
+					panic(fmt.Errorf("incompatible config/block %s %d",
+						bc.lastConfirmed, c.RoundID()))
+				}
+				if !c.Contains(bc.lastConfirmed.Position.Height) {
+					panic(fmt.Errorf(
+						"unmatched round-event with block %s %d %d %d",
+						bc.lastConfirmed, e.Round, e.Reset, e.BeginHeight))
+				}
+			}
+			bc.configs = append(bc.configs, c)
+		}
+		return nil
 	}
-	if round != expectedRound {
-		return ErrRoundNotIncreasing
+	for _, e := range evts {
+		if err := apply(e); err != nil {
+			return err
+		}
 	}
-	bc.configs = append(bc.configs, newBlockChainConfig(
-		bc.configs[len(bc.configs)-1], config))
 	return nil
 }
 

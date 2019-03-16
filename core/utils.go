@@ -236,13 +236,13 @@ func checkWithCancel(parentCtx context.Context, interval time.Duration,
 	defer cancel()
 Loop:
 	for {
+		if ret = checker(); ret {
+			return
+		}
 		select {
 		case <-ctx.Done():
 			break Loop
 		case <-time.After(interval):
-		}
-		if ret = checker(); ret {
-			return
 		}
 	}
 	return

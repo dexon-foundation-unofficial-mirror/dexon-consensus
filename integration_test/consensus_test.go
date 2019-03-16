@@ -180,7 +180,7 @@ func (s *ConsensusTestSuite) syncBlocksWithSomeNode(
 		}
 		syncerHeight = b.Finalization.Height + 1
 		compactionChainBlocks = append(compactionChainBlocks, &b)
-		if len(compactionChainBlocks) >= 100 {
+		if len(compactionChainBlocks) >= 20 {
 			if syncBlocks() {
 				break
 			}
@@ -340,9 +340,9 @@ func (s *ConsensusTestSuite) TestSync() {
 		req        = s.Require()
 		peerCount  = 4
 		dMoment    = time.Now().UTC()
-		untilRound = uint64(5)
-		stopRound  = uint64(3)
-		aliveRound = uint64(1)
+		untilRound = uint64(7)
+		stopRound  = uint64(5)
+		aliveRound = uint64(4)
 		errChan    = make(chan error, 100)
 	)
 	prvKeys, pubKeys, err := test.NewKeys(peerCount)
@@ -442,7 +442,7 @@ ReachAlive:
 			select {
 			case <-runnerCtx.Done():
 				break SyncLoop
-			case <-time.After(2 * time.Second):
+			case <-time.After(4 * time.Second):
 			}
 		}
 	}()

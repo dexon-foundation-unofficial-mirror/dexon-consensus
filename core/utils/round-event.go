@@ -28,15 +28,15 @@ import (
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
 )
 
-// ErrUnmatchedBlockHeightWithGov is for invalid parameters for NewRoundEvent.
-type ErrUnmatchedBlockHeightWithGov struct {
+// ErrUnmatchedBlockHeightWithConfig is for invalid parameters for NewRoundEvent.
+type ErrUnmatchedBlockHeightWithConfig struct {
 	round       uint64
 	reset       uint64
 	blockHeight uint64
 }
 
-func (e ErrUnmatchedBlockHeightWithGov) Error() string {
-	return fmt.Sprintf("unsynced block height and gov: round:%d reset:%d h:%d",
+func (e ErrUnmatchedBlockHeightWithConfig) Error() string {
+	return fmt.Sprintf("unsynced block height and cfg: round:%d reset:%d h:%d",
 		e.round, e.reset, e.blockHeight)
 }
 
@@ -56,9 +56,41 @@ type RoundEventParam struct {
 	CRS common.Hash
 }
 
-// NextRoundCheckpoint returns the height to check if the next round is ready.
-func (e RoundEventParam) NextRoundCheckpoint() uint64 {
+// NextRoundValidationHeight returns the height to check if the next round is
+// ready.
+func (e RoundEventParam) NextRoundValidationHeight() uint64 {
+	return e.BeginHeight + e.Config.RoundLength*9/10
+}
+
+// NextCRSProposingHeight returns the height to propose CRS for next round.
+func (e RoundEventParam) NextCRSProposingHeight() uint64 {
+	return e.BeginHeight + e.Config.RoundLength/2
+}
+
+// NextDKGPreparationHeight returns the height to prepare DKG set for next
+// round.
+func (e RoundEventParam) NextDKGPreparationHeight() uint64 {
+	return e.BeginHeight + e.Config.RoundLength*2/3
+}
+
+// NextRoundHeight returns the height of the beginning of next round.
+func (e RoundEventParam) NextRoundHeight() uint64 {
+	return e.BeginHeight + e.Config.RoundLength
+}
+
+// NextTouchNodeSetCacheHeight returns the height to touch the node set cache.
+func (e RoundEventParam) NextTouchNodeSetCacheHeight() uint64 {
+	return e.BeginHeight + e.Config.RoundLength*9/10
+}
+
+// NextDKGResetHeight returns the height to reset DKG for next period.
+func (e RoundEventParam) NextDKGResetHeight() uint64 {
 	return e.BeginHeight + e.Config.RoundLength*8/10
+}
+
+// NextDKGRegisterHeight returns the height to register DKG.
+func (e RoundEventParam) NextDKGRegisterHeight() uint64 {
+	return e.BeginHeight + e.Config.RoundLength/2
 }
 
 // roundEventFn defines the fingerprint of handlers of round events.
@@ -131,7 +163,7 @@ func NewRoundEvent(parentCtx context.Context, gov governanceAccessor,
 		e.config.ExtendLength()
 	}
 	if !e.config.Contains(initBlockHeight) {
-		return nil, ErrUnmatchedBlockHeightWithGov{
+		return nil, ErrUnmatchedBlockHeightWithConfig{
 			round:       initRound,
 			reset:       resetCount,
 			blockHeight: initBlockHeight,
@@ -147,6 +179,22 @@ func (e *RoundEvent) Register(h roundEventFn) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	e.handlers = append(e.handlers, h)
+}
+
+// TriggerInitEvent triggers event from the initial setting.
+func (e *RoundEvent) TriggerInitEvent() {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	events := []RoundEventParam{RoundEventParam{
+		Round:       e.lastTriggeredRound,
+		Reset:       e.lastTriggeredResetCount,
+		BeginHeight: e.config.LastPeriodBeginHeight(),
+		CRS:         GetCRSWithPanic(e.gov, e.lastTriggeredRound, e.logger),
+		Config:      GetConfigWithPanic(e.gov, e.lastTriggeredRound, e.logger),
+	}}
+	for _, h := range e.handlers {
+		h(events)
+	}
 }
 
 // ValidateNextRound validate if the DKG set for next round is ready to go or
@@ -225,14 +273,6 @@ func (e *RoundEvent) check(blockHeight, startRound uint64, lastDKGCheck bool) (
 			"crs", param.CRS.String()[:6],
 		)
 	}()
-	// Make sure current last config covers the blockHeight.
-	if !e.config.Contains(blockHeight) {
-		panic(ErrUnmatchedBlockHeightWithGov{
-			round:       e.lastTriggeredRound,
-			reset:       e.lastTriggeredResetCount,
-			blockHeight: blockHeight,
-		})
-	}
 	nextRound := e.lastTriggeredRound + 1
 	if nextRound >= startRound+e.roundShift {
 		// Avoid access configuration newer than last confirmed one over
