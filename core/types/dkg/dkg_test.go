@@ -61,6 +61,7 @@ func (s *DKGTestSuite) TestRLPEncodeDecode() {
 	d := MasterPublicKey{
 		ProposerID:      types.NodeID{Hash: common.Hash{1, 2, 3}},
 		Round:           10,
+		Reset:           11,
 		DKGID:           dID,
 		PublicKeyShares: *pubShare,
 		Signature: crypto.Signature{
@@ -89,6 +90,7 @@ func (s *DKGTestSuite) TestRLPEncodeDecode() {
 	p := PrivateShare{
 		ProposerID:   types.NodeID{Hash: common.Hash{1, 3, 5}},
 		Round:        10,
+		Reset:        11,
 		PrivateShare: *cryptoDKG.NewPrivateKey(),
 		Signature: crypto.Signature{
 			Type:      "123",
@@ -115,9 +117,11 @@ func (s *DKGTestSuite) TestRLPEncodeDecode() {
 	c := Complaint{
 		ProposerID: d.ProposerID,
 		Round:      10,
+		Reset:      11,
 		PrivateShare: PrivateShare{
 			ProposerID: p.ProposerID,
 			Round:      10,
+			Reset:      11,
 		},
 		Signature: crypto.Signature{
 			Type:      "123",
@@ -145,6 +149,7 @@ func (s *DKGTestSuite) TestRLPEncodeDecode() {
 	c = Complaint{
 		ProposerID:   d.ProposerID,
 		Round:        10,
+		Reset:        11,
 		PrivateShare: p,
 		Signature: crypto.Signature{
 			Type:      "123",
@@ -174,6 +179,7 @@ func (s *DKGTestSuite) TestMasterPublicKeyEquality() {
 	master1 := &MasterPublicKey{
 		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
 		Round:      1234,
+		Reset:      5678,
 		DKGID:      s.genID(),
 		Signature: crypto.Signature{
 			Signature: s.genRandomBytes(),
@@ -193,6 +199,10 @@ func (s *DKGTestSuite) TestMasterPublicKeyEquality() {
 	master2.Round = 2345
 	req.False(master1.Equal(master2))
 	master2.Round = 1234
+	// Change reset.
+	master2.Reset = 6789
+	req.False(master1.Equal(master2))
+	master2.Reset = 5678
 	// Change proposerID.
 	master2.ProposerID = types.NodeID{Hash: common.NewRandomHash()}
 	req.False(master1.Equal(master2))
@@ -218,6 +228,7 @@ func (s *DKGTestSuite) TestPrivateShareEquality() {
 		ProposerID:   types.NodeID{Hash: common.NewRandomHash()},
 		ReceiverID:   types.NodeID{Hash: common.NewRandomHash()},
 		Round:        1,
+		Reset:        2,
 		PrivateShare: *cryptoDKG.NewPrivateKey(),
 		Signature: crypto.Signature{
 			Signature: s.genRandomBytes(),
@@ -239,6 +250,10 @@ func (s *DKGTestSuite) TestPrivateShareEquality() {
 	share2.Round = share1.Round + 1
 	req.False(share1.Equal(share2))
 	share2.Round = share1.Round
+	// Change reset.
+	share2.Reset = share1.Reset + 1
+	req.False(share1.Equal(share2))
+	share2.Reset = share1.Reset
 	// Change signature.
 	share2.Signature = crypto.Signature{
 		Signature: s.genRandomBytes(),
@@ -258,10 +273,12 @@ func (s *DKGTestSuite) TestComplaintEquality() {
 	comp1 := &Complaint{
 		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
 		Round:      1,
+		Reset:      2,
 		PrivateShare: PrivateShare{
 			ProposerID:   types.NodeID{Hash: common.NewRandomHash()},
 			ReceiverID:   types.NodeID{Hash: common.NewRandomHash()},
 			Round:        2,
+			Reset:        3,
 			PrivateShare: *cryptoDKG.NewPrivateKey(),
 			Signature: crypto.Signature{
 				Signature: s.genRandomBytes(),
@@ -283,6 +300,10 @@ func (s *DKGTestSuite) TestComplaintEquality() {
 	comp2.Round = comp1.Round + 1
 	req.False(comp1.Equal(comp2))
 	comp2.Round = comp1.Round
+	// Change reset.
+	comp2.Reset = comp1.Reset + 1
+	req.False(comp1.Equal(comp2))
+	comp2.Reset = comp1.Reset
 	// Change signature.
 	comp2.Signature = crypto.Signature{
 		Signature: s.genRandomBytes(),
@@ -293,6 +314,10 @@ func (s *DKGTestSuite) TestComplaintEquality() {
 	comp2.PrivateShare.Round = comp1.PrivateShare.Round + 1
 	req.False(comp1.Equal(comp2))
 	comp2.PrivateShare.Round = comp1.PrivateShare.Round
+	// Change share's reset.
+	comp2.PrivateShare.Reset = comp1.PrivateShare.Reset + 1
+	req.False(comp1.Equal(comp2))
+	comp2.PrivateShare.Reset = comp1.PrivateShare.Reset
 	// After changing every field back, should be equal.
 	req.True(comp1.Equal(comp2))
 }
@@ -302,6 +327,7 @@ func (s *DKGTestSuite) TestMPKReadyEquality() {
 	ready1 := &MPKReady{
 		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
 		Round:      1,
+		Reset:      2,
 		Signature: crypto.Signature{
 			Signature: s.genRandomBytes(),
 		},
@@ -318,6 +344,10 @@ func (s *DKGTestSuite) TestMPKReadyEquality() {
 	ready2.Round = ready1.Round + 1
 	req.False(ready1.Equal(ready2))
 	ready2.Round = ready1.Round
+	// Change reset.
+	ready2.Reset = ready1.Reset + 1
+	req.False(ready1.Equal(ready2))
+	ready2.Reset = ready1.Reset
 	// Change signature.
 	ready2.Signature = crypto.Signature{
 		Signature: s.genRandomBytes(),
@@ -333,6 +363,7 @@ func (s *DKGTestSuite) TestFinalizeEquality() {
 	final1 := &Finalize{
 		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
 		Round:      1,
+		Reset:      2,
 		Signature: crypto.Signature{
 			Signature: s.genRandomBytes(),
 		},
@@ -349,6 +380,10 @@ func (s *DKGTestSuite) TestFinalizeEquality() {
 	final2.Round = final1.Round + 1
 	req.False(final1.Equal(final2))
 	final2.Round = final1.Round
+	// Change reset.
+	final2.Reset = final1.Reset + 1
+	req.False(final1.Equal(final2))
+	final2.Reset = final1.Reset
 	// Change signature.
 	final2.Signature = crypto.Signature{
 		Signature: s.genRandomBytes(),

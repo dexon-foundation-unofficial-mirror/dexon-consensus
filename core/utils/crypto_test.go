@@ -160,6 +160,7 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	prvShare := &typesDKG.PrivateShare{
 		ProposerID:   nID,
 		Round:        5,
+		Reset:        6,
 		PrivateShare: *dkg.NewPrivateKey(),
 	}
 	prvShare.Signature, err = prv.Sign(hashDKGPrivateShare(prvShare))
@@ -171,12 +172,19 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	ok, err = VerifyDKGPrivateShareSignature(prvShare)
 	s.Require().NoError(err)
 	s.False(ok)
+	prvShare.Round--
+	prvShare.Reset++
+	ok, err = VerifyDKGPrivateShareSignature(prvShare)
+	s.Require().NoError(err)
+	s.False(ok)
+	prvShare.Reset--
 
 	id := dkg.NewID([]byte{13})
 	_, pkShare := dkg.NewPrivateKeyShares(1)
 	mpk := &typesDKG.MasterPublicKey{
 		ProposerID:      nID,
 		Round:           5,
+		Reset:           6,
 		DKGID:           id,
 		PublicKeyShares: *pkShare,
 	}
@@ -185,17 +193,25 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	ok, err = VerifyDKGMasterPublicKeySignature(mpk)
 	s.Require().NoError(err)
 	s.True(ok)
+	// Test incorrect round.
 	mpk.Round++
 	ok, err = VerifyDKGMasterPublicKeySignature(mpk)
 	s.Require().NoError(err)
 	s.False(ok)
+	mpk.Round--
+	// Test incorrect reset.
+	mpk.Reset++
+	ok, err = VerifyDKGMasterPublicKeySignature(mpk)
+	s.Require().NoError(err)
+	s.False(ok)
+	mpk.Reset--
 
-	prvShare.Round = 5
 	prvShare.Signature, err = prv.Sign(hashDKGPrivateShare(prvShare))
 	s.Require().NoError(err)
 	complaint := &typesDKG.Complaint{
 		ProposerID:   nID,
 		Round:        5,
+		Reset:        6,
 		PrivateShare: *prvShare,
 	}
 	complaint.Signature, err = prv.Sign(hashDKGComplaint(complaint))
@@ -208,14 +224,23 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	ok, err = VerifyDKGComplaintSignature(complaint)
 	s.Require().NoError(err)
 	s.False(ok)
-	// Test mismatch round.
 	complaint.Round--
+	// Test mismatch round.
 	complaint.PrivateShare.Round++
 	complaint.Signature, err = prv.Sign(hashDKGComplaint(complaint))
 	s.Require().NoError(err)
 	ok, err = VerifyDKGComplaintSignature(complaint)
 	s.Require().NoError(err)
 	s.False(ok)
+	complaint.PrivateShare.Round--
+	// Test mismatch reset.
+	complaint.PrivateShare.Reset++
+	complaint.Signature, err = prv.Sign(hashDKGComplaint(complaint))
+	s.Require().NoError(err)
+	ok, err = VerifyDKGComplaintSignature(complaint)
+	s.Require().NoError(err)
+	s.False(ok)
+	complaint.PrivateShare.Reset--
 	// Test incorrect private share signature.
 	complaint.PrivateShare.Round--
 	complaint.PrivateShare.ReceiverID = types.NodeID{Hash: common.NewRandomHash()}
@@ -243,30 +268,48 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	ready := &typesDKG.MPKReady{
 		ProposerID: nID,
 		Round:      5,
+		Reset:      6,
 	}
 	ready.Signature, err = prv.Sign(hashDKGMPKReady(ready))
 	s.Require().NoError(err)
 	ok, err = VerifyDKGMPKReadySignature(ready)
 	s.Require().NoError(err)
 	s.True(ok)
+	// Test incorrect round.
 	ready.Round++
 	ok, err = VerifyDKGMPKReadySignature(ready)
 	s.Require().NoError(err)
 	s.False(ok)
+	ready.Round--
+	// Test incorrect reset.
+	ready.Reset++
+	ok, err = VerifyDKGMPKReadySignature(ready)
+	s.Require().NoError(err)
+	s.False(ok)
+	ready.Reset--
 
 	final := &typesDKG.Finalize{
 		ProposerID: nID,
 		Round:      5,
+		Reset:      6,
 	}
 	final.Signature, err = prv.Sign(hashDKGFinalize(final))
 	s.Require().NoError(err)
 	ok, err = VerifyDKGFinalizeSignature(final)
 	s.Require().NoError(err)
 	s.True(ok)
+	// Test incorrect round.
 	final.Round++
 	ok, err = VerifyDKGFinalizeSignature(final)
 	s.Require().NoError(err)
 	s.False(ok)
+	final.Round--
+	// Test incorrect reset.
+	final.Reset++
+	ok, err = VerifyDKGFinalizeSignature(final)
+	s.Require().NoError(err)
+	s.False(ok)
+	final.Reset--
 }
 
 func TestCrypto(t *testing.T) {

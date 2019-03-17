@@ -60,6 +60,30 @@ var (
 		"self privateShare does not match mpk registered")
 )
 
+// ErrUnexpectedDKGResetCount represents receiving a DKG message with unexpected
+// DKG reset count.
+type ErrUnexpectedDKGResetCount struct {
+	expect, actual uint64
+	proposerID     types.NodeID
+}
+
+func (e ErrUnexpectedDKGResetCount) Error() string {
+	return fmt.Sprintf(
+		"unexpected DKG reset count, from:%s expect:%d actual:%d",
+		e.proposerID.String()[:6], e.expect, e.actual)
+}
+
+// ErrUnexpectedRound represents receiving a DKG message with unexpected round.
+type ErrUnexpectedRound struct {
+	expect, actual uint64
+	proposerID     types.NodeID
+}
+
+func (e ErrUnexpectedRound) Error() string {
+	return fmt.Sprintf("unexpected round, from:%s expect:%d actual:%d",
+		e.proposerID.String()[:6], e.expect, e.actual)
+}
+
 type dkgReceiver interface {
 	// ProposeDKGComplaint proposes a DKGComplaint.
 	ProposeDKGComplaint(complaint *typesDKG.Complaint)
@@ -84,6 +108,7 @@ type dkgProtocol struct {
 	ID                 types.NodeID
 	recv               dkgReceiver
 	round              uint64
+	reset              uint64
 	threshold          int
 	idMap              map[types.NodeID]dkg.ID
 	mpkMap             map[types.NodeID]*dkg.PublicKeyShares
@@ -140,12 +165,14 @@ func newDKGProtocol(
 	ID types.NodeID,
 	recv dkgReceiver,
 	round uint64,
+	reset uint64,
 	threshold int) *dkgProtocol {
 
 	prvShare, pubShare := dkg.NewPrivateKeyShares(threshold)
 
 	recv.ProposeDKGMasterPublicKey(&typesDKG.MasterPublicKey{
 		Round:           round,
+		Reset:           reset,
 		DKGID:           typesDKG.NewID(ID),
 		PublicKeyShares: *pubShare,
 	})
@@ -154,6 +181,7 @@ func newDKGProtocol(
 		ID:                    ID,
 		recv:                  recv,
 		round:                 round,
+		reset:                 reset,
 		threshold:             threshold,
 		idMap:                 make(map[types.NodeID]dkg.ID),
 		mpkMap:                make(map[types.NodeID]*dkg.PublicKeyShares),
@@ -176,13 +204,17 @@ func recoverDKGProtocol(
 		if err == db.ErrDKGMasterPrivateSharesDoesNotExist {
 			return nil, nil
 		}
-
 		return nil, err
 	}
+	// TODO(mission): taken resetCount into consideration, we should keep
+	//                reset count of private shares from DB, and use it to init
+	//                DKG protocol instance.
+	reset := uint64(0)
 	return &dkgProtocol{
 		ID:                    ID,
 		recv:                  recv,
 		round:                 round,
+		reset:                 reset,
 		threshold:             threshold,
 		idMap:                 make(map[types.NodeID]dkg.ID),
 		mpkMap:                make(map[types.NodeID]*dkg.PublicKeyShares),
@@ -201,6 +233,13 @@ func (d *dkgProtocol) processMasterPublicKeys(
 	d.prvSharesReceived = make(map[types.NodeID]struct{}, len(mpks))
 	ids := make(dkg.IDs, len(mpks))
 	for i := range mpks {
+		if mpks[i].Reset != d.reset {
+			return ErrUnexpectedDKGResetCount{
+				expect:     d.reset,
+				actual:     mpks[i].Reset,
+				proposerID: mpks[i].ProposerID,
+			}
+		}
 		nID := mpks[i].ProposerID
 		d.idMap[nID] = mpks[i].DKGID
 		d.mpkMap[nID] = &mpks[i].PublicKeyShares
@@ -219,6 +258,7 @@ func (d *dkgProtocol) processMasterPublicKeys(
 		d.recv.ProposeDKGPrivateShare(&typesDKG.PrivateShare{
 			ReceiverID:   mpk.ProposerID,
 			Round:        d.round,
+			Reset:        d.reset,
 			PrivateShare: *share,
 		})
 	}
@@ -252,9 +292,11 @@ func (d *dkgProtocol) proposeNackComplaints() {
 		}
 		d.recv.ProposeDKGComplaint(&typesDKG.Complaint{
 			Round: d.round,
+			Reset: d.reset,
 			PrivateShare: typesDKG.PrivateShare{
 				ProposerID: nID,
 				Round:      d.round,
+				Reset:      d.reset,
 			},
 		})
 	}
@@ -267,6 +309,9 @@ func (d *dkgProtocol) processNackComplaints(complaints []*typesDKG.Complaint) (
 	}
 	for _, complaint := range complaints {
 		if !complaint.IsNack() {
+			continue
+		}
+		if complaint.Reset != d.reset {
 			continue
 		}
 		if complaint.PrivateShare.ProposerID != d.ID {
@@ -286,6 +331,7 @@ func (d *dkgProtocol) processNackComplaints(complaints []*typesDKG.Complaint) (
 			ProposerID:   d.ID,
 			ReceiverID:   complaint.ProposerID,
 			Round:        d.round,
+			Reset:        d.reset,
 			PrivateShare: *share,
 		})
 	}
@@ -295,6 +341,9 @@ func (d *dkgProtocol) processNackComplaints(complaints []*typesDKG.Complaint) (
 func (d *dkgProtocol) enforceNackComplaints(complaints []*typesDKG.Complaint) {
 	for _, complaint := range complaints {
 		if !complaint.IsNack() {
+			continue
+		}
+		if complaint.Reset != d.reset {
 			continue
 		}
 		to := complaint.PrivateShare.ProposerID
@@ -311,9 +360,11 @@ func (d *dkgProtocol) enforceNackComplaints(complaints []*typesDKG.Complaint) {
 			d.antiComplaintReceived[from][to]; !exist {
 			d.recv.ProposeDKGComplaint(&typesDKG.Complaint{
 				Round: d.round,
+				Reset: d.reset,
 				PrivateShare: typesDKG.PrivateShare{
 					ProposerID: to,
 					Round:      d.round,
+					Reset:      d.reset,
 				},
 			})
 		}
@@ -321,6 +372,20 @@ func (d *dkgProtocol) enforceNackComplaints(complaints []*typesDKG.Complaint) {
 }
 
 func (d *dkgProtocol) sanityCheck(prvShare *typesDKG.PrivateShare) error {
+	if d.round != prvShare.Round {
+		return ErrUnexpectedRound{
+			expect:     d.round,
+			actual:     prvShare.Round,
+			proposerID: prvShare.ProposerID,
+		}
+	}
+	if d.reset != prvShare.Reset {
+		return ErrUnexpectedDKGResetCount{
+			expect:     d.reset,
+			actual:     prvShare.Reset,
+			proposerID: prvShare.ProposerID,
+		}
+	}
 	if _, exist := d.idMap[prvShare.ProposerID]; !exist {
 		return ErrNotDKGParticipant
 	}
@@ -336,9 +401,6 @@ func (d *dkgProtocol) sanityCheck(prvShare *typesDKG.PrivateShare) error {
 
 func (d *dkgProtocol) processPrivateShare(
 	prvShare *typesDKG.PrivateShare) error {
-	if d.round != prvShare.Round {
-		return nil
-	}
 	receiverID, exist := d.idMap[prvShare.ReceiverID]
 	// This node is not a DKG participant, ignore the private share.
 	if !exist {
@@ -361,6 +423,7 @@ func (d *dkgProtocol) processPrivateShare(
 		}
 		complaint := &typesDKG.Complaint{
 			Round:        d.round,
+			Reset:        d.reset,
 			PrivateShare: *prvShare,
 		}
 		d.nodeComplained[prvShare.ProposerID] = struct{}{}
@@ -387,6 +450,7 @@ func (d *dkgProtocol) proposeMPKReady() {
 	d.recv.ProposeDKGMPKReady(&typesDKG.MPKReady{
 		ProposerID: d.ID,
 		Round:      d.round,
+		Reset:      d.reset,
 	})
 }
 
@@ -394,6 +458,7 @@ func (d *dkgProtocol) proposeFinalize() {
 	d.recv.ProposeDKGFinalize(&typesDKG.Finalize{
 		ProposerID: d.ID,
 		Round:      d.round,
+		Reset:      d.reset,
 	})
 }
 

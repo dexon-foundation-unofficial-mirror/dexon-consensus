@@ -740,7 +740,7 @@ func (con *Consensus) prepare(
 			con.logger.Info("Selected as DKG set", "round", nextRound)
 			nextConfig := utils.GetConfigWithPanic(con.gov, nextRound,
 				con.logger)
-			con.cfgModule.registerDKG(nextRound, utils.GetDKGThreshold(
+			con.cfgModule.registerDKG(nextRound, e.Reset, utils.GetDKGThreshold(
 				nextConfig))
 			con.event.RegisterHeight(e.NextDKGPreparationHeight(),
 				func(uint64) {
@@ -749,7 +749,7 @@ func (con *Consensus) prepare(
 						defer con.dkgReady.L.Unlock()
 						con.dkgRunning = 0
 					}()
-					con.runDKG(nextRound, nextConfig)
+					con.runDKG(nextRound, e.Reset, nextConfig)
 				})
 		})
 	})
@@ -805,7 +805,7 @@ func (con *Consensus) Run() {
 }
 
 // runDKG starts running DKG protocol.
-func (con *Consensus) runDKG(round uint64, config *types.Config) {
+func (con *Consensus) runDKG(round, reset uint64, config *types.Config) {
 	con.dkgReady.L.Lock()
 	defer con.dkgReady.L.Unlock()
 	if con.dkgRunning != 0 {
@@ -819,7 +819,7 @@ func (con *Consensus) runDKG(round uint64, config *types.Config) {
 			con.dkgReady.Broadcast()
 			con.dkgRunning = 2
 		}()
-		if err := con.cfgModule.runDKG(round); err != nil {
+		if err := con.cfgModule.runDKG(round, reset); err != nil {
 			con.logger.Error("Failed to runDKG", "error", err)
 		}
 	}()
@@ -841,8 +841,7 @@ func (con *Consensus) runCRS(round uint64, hash common.Hash) {
 			"hash", psig.Hash)
 		con.network.BroadcastDKGPartialSignature(psig)
 		con.logger.Debug("Calling Governance.CRS", "round", round)
-		crs, err := con.cfgModule.runCRSTSig(
-			round, utils.GetCRSWithPanic(con.gov, round, con.logger))
+		crs, err := con.cfgModule.runCRSTSig(round, hash)
 		if err != nil {
 			con.logger.Error("Failed to run CRS Tsig", "error", err)
 		} else {

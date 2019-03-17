@@ -86,7 +86,7 @@ func newConfigurationChain(
 	}
 }
 
-func (cc *configurationChain) registerDKG(round uint64, threshold int) {
+func (cc *configurationChain) registerDKG(round, reset uint64, threshold int) {
 	cc.dkgLock.Lock()
 	defer cc.dkgLock.Unlock()
 	if cc.dkg != nil {
@@ -105,7 +105,9 @@ func (cc *configurationChain) registerDKG(round uint64, threshold int) {
 		cc.ID,
 		cc.recv,
 		round,
+		reset,
 		threshold)
+	// TODO(mission): should keep DKG resetCount along with DKG private share.
 	err = cc.db.PutOrUpdateDKGMasterPrivateShares(round, *cc.dkg.prvShares)
 	if err != nil {
 		cc.logger.Error("Error put or update DKG master private shares", "error",
@@ -122,19 +124,21 @@ func (cc *configurationChain) registerDKG(round uint64, threshold int) {
 	}()
 }
 
-func (cc *configurationChain) runDKG(round uint64) error {
+func (cc *configurationChain) runDKG(round, reset uint64) error {
 	// Check if corresponding DKG signer is ready.
 	if _, _, err := cc.getDKGInfo(round); err == nil {
 		return nil
 	}
 	cc.dkgLock.Lock()
 	defer cc.dkgLock.Unlock()
-	if cc.dkg == nil || cc.dkg.round != round {
-		if cc.dkg != nil && cc.dkg.round > round {
-			cc.logger.Warn("DKG canceled", "round", round)
-			return nil
-		}
+	if cc.dkg == nil ||
+		cc.dkg.round < round ||
+		(cc.dkg.round == round && cc.dkg.reset < reset) {
 		return ErrDKGNotRegistered
+	}
+	if cc.dkg.round != round || cc.dkg.reset != reset {
+		cc.logger.Warn("DKG canceled", "round", round, "reset", reset)
+		return nil
 	}
 	cc.logger.Debug("Calling Governance.IsDKGFinal", "round", round)
 	if cc.gov.IsDKGFinal(round) {
@@ -144,7 +148,9 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	cc.logger.Debug("Calling Governance.IsDKGMPKReady", "round", round)
 	for !cc.gov.IsDKGMPKReady(round) {
 		cc.logger.Debug("DKG MPKs are not ready yet. Try again later...",
-			"nodeID", cc.ID)
+			"nodeID", cc.ID.String()[:6],
+			"round", round,
+			"reset", reset)
 		cc.dkgLock.Unlock()
 		time.Sleep(500 * time.Millisecond)
 		cc.dkgLock.Lock()
@@ -165,18 +171,24 @@ func (cc *configurationChain) runDKG(round uint64) error {
 		}
 	}
 	if !inProtocol {
-		cc.logger.Warn("Failed to join DKG protocol", "round", round)
+		cc.logger.Warn("Failed to join DKG protocol",
+			"round", round,
+			"reset", reset)
 		return nil
 	}
 	// Phase 2(T = 0): Exchange DKG secret key share.
 	if err := cc.dkg.processMasterPublicKeys(mpks); err != nil {
 		cc.logger.Error("Failed to process master public key",
+			"round", round,
+			"reset", reset,
 			"error", err)
 	}
 	cc.mpkReady = true
 	for _, prvShare := range cc.pendingPrvShare {
 		if err := cc.dkg.processPrivateShare(prvShare); err != nil {
 			cc.logger.Error("Failed to process private share",
+				"round", round,
+				"reset", reset,
 				"error", err)
 		}
 	}
@@ -195,6 +207,8 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	complaints := cc.gov.DKGComplaints(round)
 	if err := cc.dkg.processNackComplaints(complaints); err != nil {
 		cc.logger.Error("Failed to process NackComplaint",
+			"round", round,
+			"reset", reset,
 			"error", err)
 	}
 	cc.dkgLock.Unlock()
@@ -222,7 +236,9 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	cc.logger.Debug("Calling Governance.IsDKGFinal", "round", round)
 	for !cc.gov.IsDKGFinal(round) {
 		cc.logger.Debug("DKG is not ready yet. Try again later...",
-			"nodeID", cc.ID)
+			"nodeID", cc.ID.String()[:6],
+			"round", round,
+			"reset", reset)
 		time.Sleep(500 * time.Millisecond)
 	}
 	cc.logger.Debug("Calling Governance.DKGMasterPublicKeys", "round", round)
@@ -241,10 +257,13 @@ func (cc *configurationChain) runDKG(round uint64) error {
 	cc.logger.Info("Qualify Nodes",
 		"nodeID", cc.ID,
 		"round", round,
+		"reset", reset,
 		"count", len(npks.QualifyIDs),
 		"qualifies", qualifies)
 	if _, exist := npks.QualifyNodeIDs[cc.ID]; !exist {
-		cc.logger.Warn("Self is not in Qualify Nodes")
+		cc.logger.Warn("Self is not in Qualify Nodes",
+			"round", round,
+			"reset", reset)
 		return nil
 	}
 	signer, err := cc.dkg.recoverShareSecret(npks.QualifyIDs)

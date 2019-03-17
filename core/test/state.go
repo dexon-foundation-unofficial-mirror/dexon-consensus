@@ -74,6 +74,12 @@ var (
 	// ErrStatePendingChangesNotEqual means pending change requests of two
 	// states are not equal.
 	ErrStatePendingChangesNotEqual = errors.New("pending changes not equal")
+	// ErrChangeWontApply means the state change won't be applied for some
+	// reason.
+	ErrChangeWontApply = errors.New("change won't apply")
+	// ErrUnmatchedResetCount means an DKG message attempt to apply is not
+	// the latest reset count in State module.
+	ErrUnmatchedResetCount = errors.New("unmatched reset count of DKG message")
 	// ErrNotInRemoteMode means callers attempts to call functions for remote
 	// mode when the State instance is still in local mode.
 	ErrNotInRemoteMode = errors.New(
@@ -628,20 +634,33 @@ func (s *State) PackOwnRequests() (b []byte, err error) {
 }
 
 // isValidRequest checks if this request is valid to proceed or not.
-func (s *State) isValidRequest(req *StateChangeRequest) (err error) {
+func (s *State) isValidRequest(req *StateChangeRequest) error {
 	// NOTE: there would be no lock in this helper, callers should be
 	//       responsible for acquiring appropriate lock.
 	switch req.Type {
+	case StateAddDKGMPKReady:
+		ready := req.Payload.(*typesDKG.MPKReady)
+		if ready.Reset != s.dkgResetCount[ready.Round] {
+			return ErrUnmatchedResetCount
+		}
+	case StateAddDKGFinal:
+		final := req.Payload.(*typesDKG.Finalize)
+		if final.Reset != s.dkgResetCount[final.Round] {
+			return ErrUnmatchedResetCount
+		}
 	case StateAddDKGMasterPublicKey:
 		mpk := req.Payload.(*typesDKG.MasterPublicKey)
+		if mpk.Reset != s.dkgResetCount[mpk.Round] {
+			return ErrUnmatchedResetCount
+		}
 		// If we've received identical MPK, ignore it.
 		mpkForRound, exists := s.dkgMasterPublicKeys[mpk.Round]
 		if exists {
 			if oldMpk, exists := mpkForRound[mpk.ProposerID]; exists {
 				if !oldMpk.Equal(mpk) {
-					err = ErrDuplicatedChange
+					return ErrDuplicatedChange
 				}
-				return
+				return ErrChangeWontApply
 			}
 		}
 		// If we've received MPK from that proposer, we would ignore
@@ -651,6 +670,9 @@ func (s *State) isValidRequest(req *StateChangeRequest) (err error) {
 		}
 	case StateAddDKGComplaint:
 		comp := req.Payload.(*typesDKG.Complaint)
+		if comp.Reset != s.dkgResetCount[comp.Round] {
+			return ErrUnmatchedResetCount
+		}
 		// If we've received DKG final from that proposer, we would ignore
 		// its complaint.
 		if _, exists := s.dkgFinals[comp.Round][comp.ProposerID]; exists {
@@ -687,6 +709,8 @@ func (s *State) isValidRequest(req *StateChangeRequest) (err error) {
 		if s.crs[len(s.crs)-1].Equal(newCRS) {
 			return ErrDuplicatedChange
 		}
+		// TODO(mission): find a smart way to make sure the caller call request
+		//                this change with correct resetCount.
 	}
 	return nil
 }

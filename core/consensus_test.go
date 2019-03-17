@@ -235,7 +235,7 @@ func (s *ConsensusTestSuite) TestRegisteredDKGRecover() {
 
 	s.Require().Nil(con.cfgModule.dkg)
 
-	con.cfgModule.registerDKG(0, 10)
+	con.cfgModule.registerDKG(0, 0, 10)
 
 	_, newCon := s.prepareConsensusWithDB(dMoment, gov, prvKeys[0], conn, dbInst)
 
@@ -269,7 +269,7 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 	}
 	time.Sleep(gov.Configuration(0).MinBlockInterval * 4)
 	for _, con := range cons {
-		go con.runDKG(0, gov.Configuration(0))
+		go con.runDKG(0, 0, gov.Configuration(0))
 	}
 	for _, con := range cons {
 		func() {

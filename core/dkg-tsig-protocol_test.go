@@ -119,7 +119,23 @@ func (s *DKGTSIGProtocolTestSuite) setupDKGParticipants(n int) {
 	}
 }
 
-func (s *DKGTSIGProtocolTestSuite) newProtocols(k, n int, round uint64) (
+func (s *DKGTSIGProtocolTestSuite) newGov(
+	pubKeys []crypto.PublicKey,
+	round, reset uint64) *test.Governance {
+	// NOTE: this method doesn't make the tip round in governance to the input
+	//       one.
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
+		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
+	s.Require().NoError(err)
+	for i := uint64(0); i < reset; i++ {
+		s.Require().NoError(gov.State().RequestChange(test.StateResetDKG,
+			common.NewRandomHash()))
+	}
+	s.Require().Equal(gov.DKGResetCount(round), reset)
+	return gov
+}
+
+func (s *DKGTSIGProtocolTestSuite) newProtocols(k, n int, round, reset uint64) (
 	map[types.NodeID]*testDKGReceiver, map[types.NodeID]*dkgProtocol) {
 	s.setupDKGParticipants(n)
 
@@ -131,6 +147,7 @@ func (s *DKGTSIGProtocolTestSuite) newProtocols(k, n int, round uint64) (
 			nID,
 			receivers[nID],
 			round,
+			reset,
 			k,
 		)
 		s.Require().NotNil(receivers[nID].mpk)
@@ -146,13 +163,12 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 	k := 2
 	n := 10
 	round := uint64(1)
+	reset := uint64(3)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
-		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
-	s.Require().NoError(err)
+	gov := s.newGov(pubKeys, round, reset)
 
-	receivers, protocols := s.newProtocols(k, n, round)
+	receivers, protocols := s.newProtocols(k, n, round, reset)
 
 	for _, receiver := range receivers {
 		gov.AddDKGMasterPublicKey(round, receiver.mpk)
@@ -259,13 +275,12 @@ func (s *DKGTSIGProtocolTestSuite) TestErrMPKRegistered() {
 	k := 2
 	n := 10
 	round := uint64(1)
+	reset := uint64(2)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
-		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
-	s.Require().NoError(err)
+	gov := s.newGov(pubKeys, round, reset)
 
-	receivers, protocols := s.newProtocols(k, n, round)
+	receivers, protocols := s.newProtocols(k, n, round, reset)
 	notRegisterID := s.nIDs[0]
 	errRegisterID := s.nIDs[1]
 
@@ -277,6 +292,7 @@ func (s *DKGTSIGProtocolTestSuite) TestErrMPKRegistered() {
 			_, mpk := dkg.NewPrivateKeyShares(k)
 			receiver.ProposeDKGMasterPublicKey(&typesDKG.MasterPublicKey{
 				Round:           round,
+				Reset:           reset,
 				DKGID:           typesDKG.NewID(ID),
 				PublicKeyShares: *mpk,
 			})
@@ -389,13 +405,12 @@ func (s *DKGTSIGProtocolTestSuite) TestNackComplaint() {
 	k := 3
 	n := 10
 	round := uint64(1)
+	reset := uint64(3)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
-		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
-	s.Require().NoError(err)
+	gov := s.newGov(pubKeys, round, reset)
 
-	receivers, protocols := s.newProtocols(k, n, round)
+	receivers, protocols := s.newProtocols(k, n, round, reset)
 
 	byzantineID := s.nIDs[0]
 
@@ -436,13 +451,12 @@ func (s *DKGTSIGProtocolTestSuite) TestComplaint() {
 	k := 3
 	n := 10
 	round := uint64(1)
+	reset := uint64(3)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
-		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
-	s.Require().NoError(err)
+	gov := s.newGov(pubKeys, round, reset)
 
-	receivers, protocols := s.newProtocols(k, n, round)
+	receivers, protocols := s.newProtocols(k, n, round, reset)
 
 	byzantineID := s.nIDs[0]
 	targetID := s.nIDs[1]
@@ -463,12 +477,14 @@ func (s *DKGTSIGProtocolTestSuite) TestComplaint() {
 		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
 		ReceiverID: targetID,
 		Round:      round,
+		Reset:      reset,
 	})
 	s.Equal(ErrNotDKGParticipant, err)
 	receivers[byzantineID].ProposeDKGPrivateShare(&typesDKG.PrivateShare{
 		ProposerID: byzantineID,
 		ReceiverID: targetID,
 		Round:      round,
+		Reset:      reset,
 	})
 	invalidShare := receivers[byzantineID].prvShare[targetID]
 	invalidShare.ReceiverID = s.nIDs[2]
@@ -481,6 +497,7 @@ func (s *DKGTSIGProtocolTestSuite) TestComplaint() {
 		ProposerID:   byzantineID,
 		ReceiverID:   targetID,
 		Round:        round,
+		Reset:        reset,
 		PrivateShare: *dkg.NewPrivateKey(),
 	})
 	invalidShare = receivers[byzantineID].prvShare[targetID]
@@ -501,13 +518,12 @@ func (s *DKGTSIGProtocolTestSuite) TestDuplicateComplaint() {
 	k := 3
 	n := 10
 	round := uint64(1)
+	reset := uint64(3)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
-		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
-	s.Require().NoError(err)
+	gov := s.newGov(pubKeys, round, reset)
 
-	receivers, _ := s.newProtocols(k, n, round)
+	receivers, _ := s.newProtocols(k, n, round, reset)
 
 	byzantineID := s.nIDs[0]
 	victomID := s.nIDs[1]
@@ -522,9 +538,11 @@ func (s *DKGTSIGProtocolTestSuite) TestDuplicateComplaint() {
 		complaints[i] = &typesDKG.Complaint{
 			ProposerID: byzantineID,
 			Round:      round,
+			Reset:      reset,
 			PrivateShare: typesDKG.PrivateShare{
 				ProposerID: victomID,
 				Round:      round,
+				Reset:      reset,
 			},
 		}
 		s.Require().True(complaints[i].IsNack())
@@ -544,13 +562,12 @@ func (s *DKGTSIGProtocolTestSuite) TestAntiComplaint() {
 	k := 3
 	n := 10
 	round := uint64(1)
+	reset := uint64(3)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
-		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
-	s.Require().NoError(err)
+	gov := s.newGov(pubKeys, round, reset)
 
-	receivers, protocols := s.newProtocols(k, n, round)
+	receivers, protocols := s.newProtocols(k, n, round, reset)
 
 	byzantineID := s.nIDs[0]
 	targetID := s.nIDs[1]
@@ -602,13 +619,12 @@ func (s *DKGTSIGProtocolTestSuite) TestEncorceNackComplaint() {
 	k := 3
 	n := 10
 	round := uint64(1)
+	reset := uint64(3)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
-		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
-	s.Require().NoError(err)
+	gov := s.newGov(pubKeys, round, reset)
 
-	receivers, protocols := s.newProtocols(k, n, round)
+	receivers, protocols := s.newProtocols(k, n, round, reset)
 
 	byzantineID := s.nIDs[0]
 	targetID := s.nIDs[1]
@@ -657,13 +673,12 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 	k := 3
 	n := 10
 	round := uint64(1)
+	reset := uint64(3)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
-		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
-	s.Require().NoError(err)
+	gov := s.newGov(pubKeys, round, reset)
 
-	receivers, _ := s.newProtocols(k, n, round)
+	receivers, _ := s.newProtocols(k, n, round, reset)
 
 	byzantineID := s.nIDs[0]
 
@@ -678,9 +693,11 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 		complaints[i] = &typesDKG.Complaint{
 			ProposerID: nID,
 			Round:      round,
+			Reset:      reset,
 			PrivateShare: typesDKG.PrivateShare{
 				ProposerID: byzantineID,
 				Round:      round,
+				Reset:      reset,
 			},
 		}
 		s.Require().True(complaints[i].IsNack())
@@ -723,13 +740,12 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 	k := 3
 	n := 10
 	round := uint64(1)
+	reset := uint64(3)
 	_, pubKeys, err := test.NewKeys(5)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
-		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
-	s.Require().NoError(err)
+	gov := s.newGov(pubKeys, round, reset)
 
-	receivers, protocols := s.newProtocols(k, n, round)
+	receivers, protocols := s.newProtocols(k, n, round, reset)
 
 	byzantineID := s.nIDs[0]
 
@@ -835,13 +851,14 @@ func (s *DKGTSIGProtocolTestSuite) TestProposeReady() {
 	s.Require().NoError(err)
 	recv := newTestDKGReceiver(s, utils.NewSigner(prvKey))
 	nID := types.NewNodeID(prvKey.PublicKey())
-	protocol := newDKGProtocol(nID, recv, 1, 2)
+	protocol := newDKGProtocol(nID, recv, 1, 3, 2)
 	protocol.proposeMPKReady()
 	s.Require().Len(recv.ready, 1)
 	ready := recv.ready[0]
 	s.Equal(&typesDKG.MPKReady{
 		ProposerID: nID,
 		Round:      1,
+		Reset:      3,
 	}, ready)
 }
 
@@ -850,28 +867,29 @@ func (s *DKGTSIGProtocolTestSuite) TestProposeFinalize() {
 	s.Require().NoError(err)
 	recv := newTestDKGReceiver(s, utils.NewSigner(prvKey))
 	nID := types.NewNodeID(prvKey.PublicKey())
-	protocol := newDKGProtocol(nID, recv, 1, 2)
+	protocol := newDKGProtocol(nID, recv, 1, 3, 2)
 	protocol.proposeFinalize()
 	s.Require().Len(recv.final, 1)
 	final := recv.final[0]
 	s.Equal(&typesDKG.Finalize{
 		ProposerID: nID,
 		Round:      1,
+		Reset:      3,
 	}, final)
 }
 
 func (s *DKGTSIGProtocolTestSuite) TestTSigVerifierCache() {
 	k := 3
 	n := 10
+	round := uint64(10)
+	reset := uint64(0)
 	_, pubKeys, err := test.NewKeys(n)
 	s.Require().NoError(err)
-	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
-		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
-	s.Require().NoError(err)
-	gov.CatchUpWithRound(10)
+	gov := s.newGov(pubKeys, round, reset)
+	gov.CatchUpWithRound(round)
 	for i := 0; i < 10; i++ {
 		round := uint64(i + 1)
-		receivers, protocols := s.newProtocols(k, n, round)
+		receivers, protocols := s.newProtocols(k, n, round, reset)
 
 		for _, receiver := range receivers {
 			gov.AddDKGMasterPublicKey(round, receiver.mpk)
@@ -939,6 +957,48 @@ func (s *DKGTSIGProtocolTestSuite) TestTSigVerifierCache() {
 
 }
 
+func (s *DKGTSIGProtocolTestSuite) TestUnexpectedDKGResetCount() {
+	// MPKs and private shares from unexpected reset count should be ignored.
+	k := 2
+	n := 10
+	round := uint64(1)
+	reset := uint64(3)
+	receivers, protocols := s.newProtocols(k, n, round, reset)
+	var sourceID, targetID types.NodeID
+	for sourceID = range receivers {
+		break
+	}
+	for targetID = range receivers {
+		break
+	}
+	// Test private share
+	s.Require().NoError(protocols[targetID].processMasterPublicKeys(
+		[]*typesDKG.MasterPublicKey{
+			receivers[targetID].mpk,
+			receivers[sourceID].mpk}))
+	receivers[sourceID].ProposeDKGPrivateShare(&typesDKG.PrivateShare{
+		ProposerID:   sourceID,
+		ReceiverID:   targetID,
+		Round:        round,
+		Reset:        reset + 1,
+		PrivateShare: *dkg.NewPrivateKey(),
+	})
+	err := protocols[targetID].processPrivateShare(
+		receivers[sourceID].prvShare[targetID])
+	s.Require().IsType(ErrUnexpectedDKGResetCount{}, err)
+	// Test MPK.
+	_, mpk := dkg.NewPrivateKeyShares(k)
+	receivers[sourceID].ProposeDKGMasterPublicKey(&typesDKG.MasterPublicKey{
+		Round:           round,
+		Reset:           reset + 1,
+		DKGID:           typesDKG.NewID(sourceID),
+		PublicKeyShares: *mpk,
+	})
+	err = protocols[sourceID].processMasterPublicKeys(
+		[]*typesDKG.MasterPublicKey{receivers[sourceID].mpk})
+	s.Require().IsType(ErrUnexpectedDKGResetCount{}, err)
+}
+
 func TestDKGTSIGProtocol(t *testing.T) {
 	suite.Run(t, new(DKGTSIGProtocolTestSuite))
 }
@@ -950,6 +1010,7 @@ func BenchmarkGPK81_121(b *testing.B) { benchmarkDKGGroupPubliKey(81, 121, b) }
 
 func benchmarkDKGGroupPubliKey(k, n int, b *testing.B) {
 	round := uint64(1)
+	reset := uint64(0)
 	_, pubKeys, err := test.NewKeys(n)
 	if err != nil {
 		panic(err)
@@ -965,6 +1026,7 @@ func benchmarkDKGGroupPubliKey(k, n int, b *testing.B) {
 		gov.AddDKGMasterPublicKey(round, &typesDKG.MasterPublicKey{
 			ProposerID:      types.NewNodeID(pk),
 			Round:           round,
+			Reset:           reset,
 			DKGID:           typesDKG.NewID(types.NewNodeID(pk)),
 			PublicKeyShares: *pubShare,
 		})
@@ -993,6 +1055,7 @@ func BenchmarkNPKs81_121(b *testing.B) { benchmarkDKGNodePubliKeys(81, 121, b) }
 
 func benchmarkDKGNodePubliKeys(k, n int, b *testing.B) {
 	round := uint64(1)
+	reset := uint64(0)
 	_, pubKeys, err := test.NewKeys(n)
 	if err != nil {
 		panic(err)
@@ -1008,6 +1071,7 @@ func benchmarkDKGNodePubliKeys(k, n int, b *testing.B) {
 		gov.AddDKGMasterPublicKey(round, &typesDKG.MasterPublicKey{
 			ProposerID:      types.NewNodeID(pk),
 			Round:           round,
+			Reset:           reset,
 			DKGID:           typesDKG.NewID(types.NewNodeID(pk)),
 			PublicKeyShares: *pubShare,
 		})

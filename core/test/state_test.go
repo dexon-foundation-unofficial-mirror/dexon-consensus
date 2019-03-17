@@ -37,7 +37,7 @@ type StateTestSuite struct {
 }
 
 func (s *StateTestSuite) newDKGMasterPublicKey(
-	round uint64) *typesDKG.MasterPublicKey {
+	round uint64, reset uint64) *typesDKG.MasterPublicKey {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
 	pubKey := prvKey.PublicKey()
@@ -48,21 +48,25 @@ func (s *StateTestSuite) newDKGMasterPublicKey(
 	return &typesDKG.MasterPublicKey{
 		ProposerID:      nodeID,
 		Round:           round,
+		Reset:           reset,
 		DKGID:           dID,
 		PublicKeyShares: *pubShare,
 	}
 }
 
-func (s *StateTestSuite) newDKGComplaint(round uint64) *typesDKG.Complaint {
+func (s *StateTestSuite) newDKGComplaint(
+	round uint64, reset uint64) *typesDKG.Complaint {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
 	nodeID := types.NewNodeID(prvKey.PublicKey())
 	comp := &typesDKG.Complaint{
 		Round: round,
+		Reset: reset,
 		PrivateShare: typesDKG.PrivateShare{
 			ProposerID:   nodeID,
 			ReceiverID:   nodeID,
 			Round:        round,
+			Reset:        reset,
 			PrivateShare: *dkg.NewPrivateKey(),
 		},
 	}
@@ -73,17 +77,19 @@ func (s *StateTestSuite) newDKGComplaint(round uint64) *typesDKG.Complaint {
 	return comp
 }
 
-func (s *StateTestSuite) newDKGMPKReady(round uint64) *typesDKG.MPKReady {
+func (s *StateTestSuite) newDKGMPKReady(
+	round uint64, reset uint64) *typesDKG.MPKReady {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
-	ready := &typesDKG.MPKReady{Round: round}
+	ready := &typesDKG.MPKReady{Round: round, Reset: reset}
 	s.Require().NoError(utils.NewSigner(prvKey).SignDKGMPKReady(ready))
 	return ready
 }
-func (s *StateTestSuite) newDKGFinal(round uint64) *typesDKG.Finalize {
+func (s *StateTestSuite) newDKGFinal(
+	round uint64, reset uint64) *typesDKG.Finalize {
 	prvKey, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
-	final := &typesDKG.Finalize{Round: round}
+	final := &typesDKG.Finalize{Round: round, Reset: reset}
 	s.Require().NoError(utils.NewSigner(prvKey).SignDKGFinalize(final))
 	return final
 }
@@ -128,10 +134,11 @@ func (s *StateTestSuite) makeDKGChanges(
 	ready *typesDKG.MPKReady,
 	complaint *typesDKG.Complaint,
 	final *typesDKG.Finalize) {
-	st.RequestChange(StateAddDKGMasterPublicKey, masterPubKey)
-	st.RequestChange(StateAddDKGMPKReady, ready)
-	st.RequestChange(StateAddDKGComplaint, complaint)
-	st.RequestChange(StateAddDKGFinal, final)
+	s.Require().NoError(st.RequestChange(StateAddDKGMasterPublicKey,
+		masterPubKey))
+	s.Require().NoError(st.RequestChange(StateAddDKGMPKReady, ready))
+	s.Require().NoError(st.RequestChange(StateAddDKGComplaint, complaint))
+	s.Require().NoError(st.RequestChange(StateAddDKGFinal, final))
 }
 
 func (s *StateTestSuite) makeConfigChanges(st *State) {
@@ -173,39 +180,39 @@ func (s *StateTestSuite) TestEqual() {
 	st2 := st.Clone()
 	req.NoError(st.Equal(st2))
 	s.makeConfigChanges(st)
-	req.Equal(st.Equal(st2), ErrStateConfigNotEqual)
+	req.EqualError(ErrStateConfigNotEqual, st.Equal(st2).Error())
 	req.NoError(st.ProposeCRS(2, common.NewRandomHash()))
 	req.NoError(st.RequestChange(StateResetDKG, common.NewRandomHash()))
-	masterPubKey := s.newDKGMasterPublicKey(2)
-	ready := s.newDKGMPKReady(2)
-	comp := s.newDKGComplaint(2)
-	final := s.newDKGFinal(2)
+	masterPubKey := s.newDKGMasterPublicKey(2, 1)
+	ready := s.newDKGMPKReady(2, 1)
+	comp := s.newDKGComplaint(2, 1)
+	final := s.newDKGFinal(2, 1)
 	s.makeDKGChanges(st, masterPubKey, ready, comp, final)
 	// Remove dkg complaints from cloned one to check if equal.
 	st3 := st.Clone()
 	req.NoError(st.Equal(st3))
 	delete(st3.dkgComplaints, uint64(2))
-	req.Equal(st.Equal(st3), ErrStateDKGComplaintsNotEqual)
+	req.EqualError(ErrStateDKGComplaintsNotEqual, st.Equal(st3).Error())
 	// Remove dkg master public key from cloned one to check if equal.
 	st4 := st.Clone()
 	req.NoError(st.Equal(st4))
 	delete(st4.dkgMasterPublicKeys, uint64(2))
-	req.Equal(st.Equal(st4), ErrStateDKGMasterPublicKeysNotEqual)
+	req.EqualError(ErrStateDKGMasterPublicKeysNotEqual, st.Equal(st4).Error())
 	// Remove dkg ready from cloned one to check if equal.
 	st4a := st.Clone()
 	req.NoError(st.Equal(st4a))
 	delete(st4a.dkgReadys, uint64(2))
-	req.Equal(st.Equal(st4a), ErrStateDKGMPKReadysNotEqual)
+	req.EqualError(ErrStateDKGMPKReadysNotEqual, st.Equal(st4a).Error())
 	// Remove dkg finalize from cloned one to check if equal.
 	st5 := st.Clone()
 	req.NoError(st.Equal(st5))
 	delete(st5.dkgFinals, uint64(2))
-	req.Equal(st.Equal(st5), ErrStateDKGFinalsNotEqual)
+	req.EqualError(ErrStateDKGFinalsNotEqual, st.Equal(st5).Error())
 	// Remove dkgResetCount from cloned one to check if equal.
 	st6 := st.Clone()
 	req.NoError(st.Equal(st6))
 	delete(st6.dkgResetCount, uint64(2))
-	req.Equal(st.Equal(st6), ErrStateDKGResetCountNotEqual)
+	req.EqualError(ErrStateDKGResetCountNotEqual, st.Equal(st6).Error())
 
 	// Switch to remote mode.
 	st.SwitchToRemoteMode()
@@ -218,7 +225,7 @@ func (s *StateTestSuite) TestEqual() {
 	for k := range str.ownRequests {
 		delete(str.ownRequests, k)
 	}
-	req.Error(ErrStatePendingChangesNotEqual, st.Equal(str))
+	req.EqualError(ErrStatePendingChangesNotEqual, st.Equal(str).Error())
 }
 
 func (s *StateTestSuite) TestPendingChangesEqual() {
@@ -235,10 +242,10 @@ func (s *StateTestSuite) TestPendingChangesEqual() {
 	s.makeConfigChanges(st)
 	crs := common.NewRandomHash()
 	req.NoError(st.ProposeCRS(2, crs))
-	masterPubKey := s.newDKGMasterPublicKey(2)
-	ready := s.newDKGMPKReady(2)
-	comp := s.newDKGComplaint(2)
-	final := s.newDKGFinal(2)
+	masterPubKey := s.newDKGMasterPublicKey(2, 0)
+	ready := s.newDKGMPKReady(2, 0)
+	comp := s.newDKGComplaint(2, 0)
+	final := s.newDKGFinal(2, 0)
 	s.makeDKGChanges(st, masterPubKey, ready, comp, final)
 }
 
@@ -282,10 +289,10 @@ func (s *StateTestSuite) TestLocalMode() {
 	req.Empty(st.DKGComplaints(2))
 	req.False(st.IsDKGFinal(2, 0))
 	// Add DKG stuffs.
-	masterPubKey := s.newDKGMasterPublicKey(2)
-	ready := s.newDKGMPKReady(2)
-	comp := s.newDKGComplaint(2)
-	final := s.newDKGFinal(2)
+	masterPubKey := s.newDKGMasterPublicKey(2, 0)
+	ready := s.newDKGMPKReady(2, 0)
+	comp := s.newDKGComplaint(2, 0)
+	final := s.newDKGFinal(2, 0)
 	s.makeDKGChanges(st, masterPubKey, ready, comp, final)
 	// Check DKGMasterPublicKeys.
 	masterKeyForRound := st.DKGMasterPublicKeys(2)
@@ -342,10 +349,10 @@ func (s *StateTestSuite) TestPacking() {
 	pubKey := prvKey.PublicKey()
 	st.RequestChange(StateAddNode, pubKey)
 	// Add DKG stuffs.
-	masterPubKey := s.newDKGMasterPublicKey(2)
-	ready := s.newDKGMPKReady(2)
-	comp := s.newDKGComplaint(2)
-	final := s.newDKGFinal(2)
+	masterPubKey := s.newDKGMasterPublicKey(2, 0)
+	ready := s.newDKGMPKReady(2, 0)
+	comp := s.newDKGComplaint(2, 0)
+	final := s.newDKGFinal(2, 0)
 	s.makeDKGChanges(st, masterPubKey, ready, comp, final)
 	// Make sure everything is empty before changed.
 	req.Empty(st.DKGMasterPublicKeys(2))
@@ -383,7 +390,6 @@ func (s *StateTestSuite) TestPacking() {
 	req.False(st.IsDKGMPKReady(2, 0))
 	req.Empty(st.DKGComplaints(2))
 	req.False(st.IsDKGFinal(2, 0))
-
 }
 
 func (s *StateTestSuite) TestRequestBroadcastAndPack() {
@@ -414,10 +420,10 @@ func (s *StateTestSuite) TestRequestBroadcastAndPack() {
 	pubKey := prvKey.PublicKey()
 	st.RequestChange(StateAddNode, pubKey)
 	// Add DKG stuffs.
-	masterPubKey := s.newDKGMasterPublicKey(2)
-	ready := s.newDKGMPKReady(2)
-	comp := s.newDKGComplaint(2)
-	final := s.newDKGFinal(2)
+	masterPubKey := s.newDKGMasterPublicKey(2, 0)
+	ready := s.newDKGMPKReady(2, 0)
+	comp := s.newDKGComplaint(2, 0)
+	final := s.newDKGFinal(2, 0)
 	s.makeDKGChanges(st, masterPubKey, ready, comp, final)
 	// Pack those changes into a byte stream, and pass it to other State
 	// instance.
@@ -446,6 +452,42 @@ func (s *StateTestSuite) TestRequestBroadcastAndPack() {
 	applyChangesForRemoteState(st1)
 	// They should be equal after applying those changes.
 	req.NoError(st.Equal(st1))
+}
+
+func (s *StateTestSuite) TestUnmatchedResetCount() {
+	_, genesisNodes, err := NewKeys(20)
+	s.Require().NoError(err)
+	st := NewState(1, genesisNodes, 100*time.Millisecond,
+		&common.NullLogger{}, true)
+	// Make sure the case in older version without reset won't fail.
+	mpk := s.newDKGMasterPublicKey(1, 0)
+	ready := s.newDKGMPKReady(1, 0)
+	comp := s.newDKGComplaint(1, 0)
+	final := s.newDKGFinal(1, 0)
+	s.Require().NoError(st.RequestChange(StateAddDKGMasterPublicKey, mpk))
+	s.Require().NoError(st.RequestChange(StateAddDKGMPKReady, ready))
+	s.Require().NoError(st.RequestChange(StateAddDKGComplaint, comp))
+	s.Require().NoError(st.RequestChange(StateAddDKGFinal, final))
+	// Make round 1 reset twice.
+	s.Require().NoError(st.RequestChange(StateResetDKG, common.NewRandomHash()))
+	s.Require().NoError(st.RequestChange(StateResetDKG, common.NewRandomHash()))
+	s.Require().Equal(st.dkgResetCount[1], uint64(2))
+	s.Require().EqualError(ErrUnmatchedResetCount, st.RequestChange(
+		StateAddDKGMasterPublicKey, mpk).Error())
+	s.Require().EqualError(ErrUnmatchedResetCount, st.RequestChange(
+		StateAddDKGMPKReady, ready).Error())
+	s.Require().EqualError(ErrUnmatchedResetCount, st.RequestChange(
+		StateAddDKGComplaint, comp).Error())
+	s.Require().EqualError(ErrUnmatchedResetCount, st.RequestChange(
+		StateAddDKGFinal, final).Error())
+	mpk = s.newDKGMasterPublicKey(1, 2)
+	ready = s.newDKGMPKReady(1, 2)
+	comp = s.newDKGComplaint(1, 2)
+	final = s.newDKGFinal(1, 2)
+	s.Require().NoError(st.RequestChange(StateAddDKGMasterPublicKey, mpk))
+	s.Require().NoError(st.RequestChange(StateAddDKGMPKReady, ready))
+	s.Require().NoError(st.RequestChange(StateAddDKGComplaint, comp))
+	s.Require().NoError(st.RequestChange(StateAddDKGFinal, final))
 }
 
 func TestState(t *testing.T) {

@@ -148,11 +148,14 @@ func hashPosition(position types.Position) common.Hash {
 func hashDKGPrivateShare(prvShare *typesDKG.PrivateShare) common.Hash {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, prvShare.Round)
+	binaryReset := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryReset, prvShare.Reset)
 
 	return crypto.Keccak256Hash(
 		prvShare.ProposerID.Hash[:],
 		prvShare.ReceiverID.Hash[:],
 		binaryRound,
+		binaryReset,
 		prvShare.PrivateShare.Bytes(),
 	)
 }
@@ -175,12 +178,15 @@ func VerifyDKGPrivateShareSignature(
 func hashDKGMasterPublicKey(mpk *typesDKG.MasterPublicKey) common.Hash {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, mpk.Round)
+	binaryReset := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryReset, mpk.Reset)
 
 	return crypto.Keccak256Hash(
 		mpk.ProposerID.Hash[:],
 		mpk.DKGID.GetLittleEndian(),
 		mpk.PublicKeyShares.MasterKeyBytes(),
 		binaryRound,
+		binaryReset,
 	)
 }
 
@@ -201,12 +207,15 @@ func VerifyDKGMasterPublicKeySignature(
 func hashDKGComplaint(complaint *typesDKG.Complaint) common.Hash {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, complaint.Round)
+	binaryReset := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryReset, complaint.Reset)
 
 	hashPrvShare := hashDKGPrivateShare(&complaint.PrivateShare)
 
 	return crypto.Keccak256Hash(
 		complaint.ProposerID.Hash[:],
 		binaryRound,
+		binaryReset,
 		hashPrvShare[:],
 	)
 }
@@ -215,6 +224,9 @@ func hashDKGComplaint(complaint *typesDKG.Complaint) common.Hash {
 func VerifyDKGComplaintSignature(
 	complaint *typesDKG.Complaint) (bool, error) {
 	if complaint.Round != complaint.PrivateShare.Round {
+		return false, nil
+	}
+	if complaint.Reset != complaint.PrivateShare.Reset {
 		return false, nil
 	}
 	hash := hashDKGComplaint(complaint)
@@ -261,10 +273,13 @@ func VerifyDKGPartialSignatureSignature(
 func hashDKGMPKReady(ready *typesDKG.MPKReady) common.Hash {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, ready.Round)
+	binaryReset := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryReset, ready.Reset)
 
 	return crypto.Keccak256Hash(
 		ready.ProposerID.Hash[:],
 		binaryRound,
+		binaryReset,
 	)
 }
 
@@ -285,10 +300,13 @@ func VerifyDKGMPKReadySignature(
 func hashDKGFinalize(final *typesDKG.Finalize) common.Hash {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, final.Round)
+	binaryReset := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryReset, final.Reset)
 
 	return crypto.Keccak256Hash(
 		final.ProposerID.Hash[:],
 		binaryRound,
+		binaryReset,
 	)
 }
 

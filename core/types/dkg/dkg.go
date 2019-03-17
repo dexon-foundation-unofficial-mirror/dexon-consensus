@@ -47,6 +47,7 @@ type PrivateShare struct {
 	ProposerID   types.NodeID         `json:"proposer_id"`
 	ReceiverID   types.NodeID         `json:"receiver_id"`
 	Round        uint64               `json:"round"`
+	Reset        uint64               `json:"reset"`
 	PrivateShare cryptoDKG.PrivateKey `json:"private_share"`
 	Signature    crypto.Signature     `json:"signature"`
 }
@@ -56,6 +57,7 @@ func (p *PrivateShare) Equal(other *PrivateShare) bool {
 	return p.ProposerID.Equal(other.ProposerID) &&
 		p.ReceiverID.Equal(other.ReceiverID) &&
 		p.Round == other.Round &&
+		p.Reset == other.Reset &&
 		p.Signature.Type == other.Signature.Type &&
 		bytes.Compare(p.Signature.Signature, other.Signature.Signature) == 0 &&
 		bytes.Compare(
@@ -66,21 +68,24 @@ func (p *PrivateShare) Equal(other *PrivateShare) bool {
 type MasterPublicKey struct {
 	ProposerID      types.NodeID              `json:"proposer_id"`
 	Round           uint64                    `json:"round"`
+	Reset           uint64                    `json:"reset"`
 	DKGID           cryptoDKG.ID              `json:"dkg_id"`
 	PublicKeyShares cryptoDKG.PublicKeyShares `json:"public_key_shares"`
 	Signature       crypto.Signature          `json:"signature"`
 }
 
 func (d *MasterPublicKey) String() string {
-	return fmt.Sprintf("MasterPublicKey{KP:%s Round:%d}",
+	return fmt.Sprintf("MasterPublicKey{KP:%s Round:%d Reset:%d}",
 		d.ProposerID.String()[:6],
-		d.Round)
+		d.Round,
+		d.Reset)
 }
 
 // Equal check equality of two DKG master public keys.
 func (d *MasterPublicKey) Equal(other *MasterPublicKey) bool {
 	return d.ProposerID.Equal(other.ProposerID) &&
 		d.Round == other.Round &&
+		d.Reset == other.Reset &&
 		d.DKGID.GetHexString() == other.DKGID.GetHexString() &&
 		d.PublicKeyShares.Equal(&other.PublicKeyShares) &&
 		d.Signature.Type == other.Signature.Type &&
@@ -90,6 +95,7 @@ func (d *MasterPublicKey) Equal(other *MasterPublicKey) bool {
 type rlpMasterPublicKey struct {
 	ProposerID      types.NodeID
 	Round           uint64
+	Reset           uint64
 	DKGID           []byte
 	PublicKeyShares *cryptoDKG.PublicKeyShares
 	Signature       crypto.Signature
@@ -100,6 +106,7 @@ func (d *MasterPublicKey) EncodeRLP(w io.Writer) error {
 	return rlp.Encode(w, rlpMasterPublicKey{
 		ProposerID:      d.ProposerID,
 		Round:           d.Round,
+		Reset:           d.Reset,
 		DKGID:           d.DKGID.GetLittleEndian(),
 		PublicKeyShares: &d.PublicKeyShares,
 		Signature:       d.Signature,
@@ -121,6 +128,7 @@ func (d *MasterPublicKey) DecodeRLP(s *rlp.Stream) error {
 	*d = MasterPublicKey{
 		ProposerID:      dec.ProposerID,
 		Round:           dec.Round,
+		Reset:           dec.Reset,
 		DKGID:           id,
 		PublicKeyShares: *dec.PublicKeyShares,
 		Signature:       dec.Signature,
@@ -146,24 +154,26 @@ func (d *MasterPublicKey) UnmarshalJSON(data []byte) error {
 type Complaint struct {
 	ProposerID   types.NodeID     `json:"proposer_id"`
 	Round        uint64           `json:"round"`
+	Reset        uint64           `json:"reset"`
 	PrivateShare PrivateShare     `json:"private_share"`
 	Signature    crypto.Signature `json:"signature"`
 }
 
 func (c *Complaint) String() string {
 	if c.IsNack() {
-		return fmt.Sprintf("DKGNackComplaint{CP:%s Round:%d PSP:%s}",
-			c.ProposerID.String()[:6], c.Round,
+		return fmt.Sprintf("DKGNackComplaint{CP:%s Round:%d Reset %d PSP:%s}",
+			c.ProposerID.String()[:6], c.Round, c.Reset,
 			c.PrivateShare.ProposerID.String()[:6])
 	}
-	return fmt.Sprintf("DKGComplaint{CP:%s Round:%d PrivateShare:%v}",
-		c.ProposerID.String()[:6], c.Round, c.PrivateShare)
+	return fmt.Sprintf("DKGComplaint{CP:%s Round:%d Reset %d PrivateShare:%v}",
+		c.ProposerID.String()[:6], c.Round, c.Reset, c.PrivateShare)
 }
 
 // Equal checks equality between two Complaint instances.
 func (c *Complaint) Equal(other *Complaint) bool {
 	return c.ProposerID.Equal(other.ProposerID) &&
 		c.Round == other.Round &&
+		c.Reset == other.Reset &&
 		c.PrivateShare.Equal(&other.PrivateShare) &&
 		c.Signature.Type == other.Signature.Type &&
 		bytes.Compare(c.Signature.Signature, other.Signature.Signature) == 0
@@ -172,6 +182,7 @@ func (c *Complaint) Equal(other *Complaint) bool {
 type rlpComplaint struct {
 	ProposerID   types.NodeID
 	Round        uint64
+	Reset        uint64
 	IsNack       bool
 	PrivateShare []byte
 	Signature    crypto.Signature
@@ -183,6 +194,7 @@ func (c *Complaint) EncodeRLP(w io.Writer) error {
 		return rlp.Encode(w, rlpComplaint{
 			ProposerID:   c.ProposerID,
 			Round:        c.Round,
+			Reset:        c.Reset,
 			IsNack:       true,
 			PrivateShare: c.PrivateShare.ProposerID.Hash[:],
 			Signature:    c.Signature,
@@ -195,6 +207,7 @@ func (c *Complaint) EncodeRLP(w io.Writer) error {
 	return rlp.Encode(w, rlpComplaint{
 		ProposerID:   c.ProposerID,
 		Round:        c.Round,
+		Reset:        c.Reset,
 		IsNack:       false,
 		PrivateShare: prvShare,
 		Signature:    c.Signature,
@@ -212,6 +225,7 @@ func (c *Complaint) DecodeRLP(s *rlp.Stream) error {
 	if dec.IsNack {
 		copy(prvShare.ProposerID.Hash[:], dec.PrivateShare)
 		prvShare.Round = dec.Round
+		prvShare.Reset = dec.Reset
 	} else {
 		if err := rlp.DecodeBytes(dec.PrivateShare, &prvShare); err != nil {
 			return err
@@ -221,6 +235,7 @@ func (c *Complaint) DecodeRLP(s *rlp.Stream) error {
 	*c = Complaint{
 		ProposerID:   dec.ProposerID,
 		Round:        dec.Round,
+		Reset:        dec.Reset,
 		PrivateShare: prvShare,
 		Signature:    dec.Signature,
 	}
@@ -240,19 +255,22 @@ type PartialSignature struct {
 type MPKReady struct {
 	ProposerID types.NodeID     `json:"proposer_id"`
 	Round      uint64           `json:"round"`
+	Reset      uint64           `json:"reset"`
 	Signature  crypto.Signature `json:"signature"`
 }
 
 func (ready *MPKReady) String() string {
-	return fmt.Sprintf("DKGMPKReady{RP:%s Round:%d}",
+	return fmt.Sprintf("DKGMPKReady{RP:%s Round:%d Reset:%d}",
 		ready.ProposerID.String()[:6],
-		ready.Round)
+		ready.Round,
+		ready.Reset)
 }
 
 // Equal check equality of two MPKReady instances.
 func (ready *MPKReady) Equal(other *MPKReady) bool {
 	return ready.ProposerID.Equal(other.ProposerID) &&
 		ready.Round == other.Round &&
+		ready.Reset == other.Reset &&
 		ready.Signature.Type == other.Signature.Type &&
 		bytes.Compare(ready.Signature.Signature, other.Signature.Signature) == 0
 }
@@ -261,19 +279,22 @@ func (ready *MPKReady) Equal(other *MPKReady) bool {
 type Finalize struct {
 	ProposerID types.NodeID     `json:"proposer_id"`
 	Round      uint64           `json:"round"`
+	Reset      uint64           `json:"reset"`
 	Signature  crypto.Signature `json:"signature"`
 }
 
 func (final *Finalize) String() string {
-	return fmt.Sprintf("DKGFinal{FP:%s Round:%d}",
+	return fmt.Sprintf("DKGFinal{FP:%s Round:%d Reset:%d}",
 		final.ProposerID.String()[:6],
-		final.Round)
+		final.Round,
+		final.Reset)
 }
 
 // Equal check equality of two Finalize instances.
 func (final *Finalize) Equal(other *Finalize) bool {
 	return final.ProposerID.Equal(other.ProposerID) &&
 		final.Round == other.Round &&
+		final.Reset == other.Reset &&
 		final.Signature.Type == other.Signature.Type &&
 		bytes.Compare(final.Signature.Signature, other.Signature.Signature) == 0
 }
