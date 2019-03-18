@@ -263,11 +263,14 @@ func (con *Consensus) ForceSync(skip bool) {
 	con.setupConfigsUntilRound(block.Position.Round + core.ConfigRoundShift - 1)
 	con.syncedLastBlock = &block
 	con.stopBuffering()
-	con.dummyCancel, con.dummyFinished = utils.LaunchDummyReceiver(
-		context.Background(), con.network.ReceiveChan(),
-		func(msg interface{}) {
-			con.dummyMsgBuffer = append(con.dummyMsgBuffer, msg)
-		})
+	// We might call stopBuffering without calling assureBuffering.
+	if con.dummyCancel == nil {
+		con.dummyCancel, con.dummyFinished = utils.LaunchDummyReceiver(
+			context.Background(), con.network.ReceiveChan(),
+			func(msg interface{}) {
+				con.dummyMsgBuffer = append(con.dummyMsgBuffer, msg)
+			})
+	}
 	con.syncedSkipNext = skip
 }
 
