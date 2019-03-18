@@ -563,11 +563,6 @@ func newConsensusForRound(
 		logger:       logger,
 	}
 	cfgModule := newConfigurationChain(ID, recv, gov, nodeSetCache, db, logger)
-	dkg, err := recoverDKGProtocol(ID, recv, initRound, utils.GetDKGThreshold(initConfig), db)
-	if err != nil {
-		panic(err)
-	}
-	cfgModule.dkg = dkg
 	recv.cfgModule = cfgModule
 	appModule := app
 	if usingNonBlocking {
@@ -598,6 +593,7 @@ func newConsensusForRound(
 		processBlockChan:         make(chan *types.Block, 1024),
 	}
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
+	var err error
 	if con.roundEvent, err = utils.NewRoundEvent(con.ctx, gov, logger, initRound,
 		initRoundBeginHeight, initBlockHeight, ConfigRoundShift); err != nil {
 		panic(err)

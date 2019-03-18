@@ -20,6 +20,7 @@ package db
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/dkg"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
+	"github.com/dexon-foundation/dexon/rlp"
 )
 
 type LevelDBTestSuite struct {
@@ -185,7 +187,7 @@ func (s *LevelDBTestSuite) TestDKGPrivateKey() {
 	s.Require().Equal(bytes.Compare(p.Bytes(), tmpPrv.Bytes()), 0)
 }
 
-func (s *LevelDBTestSuite) TestDKGMasterPrivateShares() {
+func (s *LevelDBTestSuite) TestDKGProtocol() {
 	dbName := fmt.Sprintf("test-db-%v-dkg-master-prv-shares.db", time.Now().UTC())
 	dbInst, err := NewLevelDBBackedDB(dbName)
 	s.Require().NoError(err)
@@ -196,31 +198,82 @@ func (s *LevelDBTestSuite) TestDKGMasterPrivateShares() {
 		s.NoError(err)
 	}(dbName)
 
-	exists, err := dbInst.HasDKGMasterPrivateSharesKey(1)
+	_, err = dbInst.GetDKGProtocol()
+	s.Require().Equal(err.Error(), ErrDKGProtocolDoesNotExist.Error())
+
+	s.Require().NoError(dbInst.PutOrUpdateDKGProtocol(DKGProtocolInfo{}))
+}
+
+func (s *LevelDBTestSuite) TestNodeIDToNodeIDsRLPEncodeDecode() {
+	m := NodeIDToNodeIDs{
+		types.NodeID{Hash: common.Hash{0x01}}: map[types.NodeID]struct{}{
+			types.NodeID{Hash: common.Hash{0x02}}: {},
+		},
+		types.NodeID{Hash: common.Hash{0x03}}: map[types.NodeID]struct{}{
+			types.NodeID{Hash: common.Hash{0x04}}: {},
+		},
+	}
+
+	b, err := rlp.EncodeToBytes(&m)
 	s.Require().NoError(err)
-	s.Require().False(exists)
 
-	_, err = dbInst.GetDKGMasterPrivateShares(1)
-	s.Require().Equal(err.Error(), ErrDKGMasterPrivateSharesDoesNotExist.Error())
-
-	privShares, _ := dkg.NewPrivateKeyShares(10)
-
-	s.Require().NoError(dbInst.PutOrUpdateDKGMasterPrivateShares(1, *privShares))
-
-	tmpShares, err := dbInst.GetDKGMasterPrivateShares(1)
+	newM := NodeIDToNodeIDs{}
+	err = rlp.DecodeBytes(b, &newM)
 	s.Require().NoError(err)
-	s.Require().True(tmpShares.Equal(privShares))
 
-	newPrivShares, _ := dkg.NewPrivateKeyShares(10)
+	s.Require().True(reflect.DeepEqual(m, newM))
+}
 
-	// This privShare will override the old noe.
-	s.Require().NoError(dbInst.PutOrUpdateDKGMasterPrivateShares(1, *newPrivShares))
+func (s *LevelDBTestSuite) TestNodeIDRLPEncodeDecode() {
+	m := NodeID{
+		types.NodeID{Hash: common.Hash{0x01}}: struct{}{},
+		types.NodeID{Hash: common.Hash{0x02}}: struct{}{},
+	}
 
-	newTmpShares, err := dbInst.GetDKGMasterPrivateShares(1)
+	b, err := rlp.EncodeToBytes(&m)
 	s.Require().NoError(err)
-	s.Require().True(newTmpShares.Equal(newPrivShares))
 
-	s.Require().False(newTmpShares.Equal(&tmpShares))
+	newM := NodeID{}
+	err = rlp.DecodeBytes(b, &newM)
+	s.Require().NoError(err)
+
+	s.Require().True(reflect.DeepEqual(m, newM))
+}
+
+func (s *LevelDBTestSuite) TestNodeIDToPubSharesRLPEncodeDecode() {
+	m := NodeIDToPubShares{
+		types.NodeID{Hash: common.Hash{0x01}}: &dkg.PublicKeyShares{},
+		types.NodeID{Hash: common.Hash{0x02}}: &dkg.PublicKeyShares{},
+	}
+
+	b, err := rlp.EncodeToBytes(&m)
+	s.Require().NoError(err)
+
+	newM := NodeIDToPubShares{}
+	err = rlp.DecodeBytes(b, &newM)
+	s.Require().NoError(err)
+
+	for k, v := range m {
+		newV, exist := newM[k]
+		s.Require().True(exist)
+		s.Require().True(newV.Equal(v))
+	}
+}
+
+func (s *LevelDBTestSuite) TestNodeIDToDKGIDRLPEncodeDecode() {
+	m := NodeIDToDKGID{
+		types.NodeID{Hash: common.Hash{0x01}}: dkg.ID{},
+		types.NodeID{Hash: common.Hash{0x02}}: dkg.ID{},
+	}
+
+	b, err := rlp.EncodeToBytes(&m)
+	s.Require().NoError(err)
+
+	newM := NodeIDToDKGID{}
+	err = rlp.DecodeBytes(b, &newM)
+	s.Require().NoError(err)
+
+	s.Require().True(reflect.DeepEqual(m, newM))
 }
 
 func TestLevelDB(t *testing.T) {

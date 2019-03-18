@@ -239,6 +239,8 @@ func (s *ConsensusTestSuite) TestRegisteredDKGRecover() {
 
 	_, newCon := s.prepareConsensusWithDB(dMoment, gov, prvKeys[0], conn, dbInst)
 
+	newCon.cfgModule.registerDKG(0, 0, 10)
+
 	s.Require().NotNil(newCon.cfgModule.dkg)
 	s.Require().True(newCon.cfgModule.dkg.prvShares.Equal(con.cfgModule.dkg.prvShares))
 }

@@ -583,6 +583,19 @@ func (s *ConfigurationChainTestSuite) TestDKGSignerRecoverFromDB() {
 	}
 }
 
+func (s *ConfigurationChainTestSuite) TestDKGPhasesSnapShot() {
+	k := 2
+	n := 7
+	round := DKGDelayRound
+	cfgChains := s.runDKG(k, n, round, 0)
+
+	for _, cfgChain := range cfgChains {
+		info, err := cfgChain.db.GetDKGProtocol()
+		s.Require().NoError(err)
+		s.Require().Equal(uint64(7), info.Step)
+	}
+}
+
 func TestConfigurationChain(t *testing.T) {
 	suite.Run(t, new(ConfigurationChainTestSuite))
 }

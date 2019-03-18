@@ -38,6 +38,7 @@ var (
 		"tsig is already running")
 	ErrDKGNotReady = fmt.Errorf(
 		"DKG is not ready")
+	ErrSkipButNoError = fmt.Errorf("skip but no error")
 )
 
 type configurationChain struct {
@@ -45,6 +46,7 @@ type configurationChain struct {
 	recv            dkgReceiver
 	gov             Governance
 	dkg             *dkgProtocol
+	dkgRunPhases    []func(round uint64, reset uint64) error
 	logger          common.Logger
 	dkgLock         sync.RWMutex
 	dkgSigner       map[uint64]*dkgShareSecret
@@ -70,7 +72,7 @@ func newConfigurationChain(
 	cache *utils.NodeSetCache,
 	dbInst db.Database,
 	logger common.Logger) *configurationChain {
-	return &configurationChain{
+	configurationChain := &configurationChain{
 		ID:          ID,
 		recv:        recv,
 		gov:         gov,
@@ -84,6 +86,8 @@ func newConfigurationChain(
 		db:          dbInst,
 		pendingPsig: make(map[common.Hash][]*typesDKG.PartialSignature),
 	}
+	configurationChain.initDKGPhasesFunc()
+	return configurationChain
 }
 
 func (cc *configurationChain) registerDKG(round, reset uint64, threshold int) {
@@ -101,19 +105,27 @@ func (cc *configurationChain) registerDKG(round, reset uint64, threshold int) {
 	cc.dkgSet = dkgSet
 	cc.pendingPrvShare = make(map[types.NodeID]*typesDKG.PrivateShare)
 	cc.mpkReady = false
-	cc.dkg = newDKGProtocol(
-		cc.ID,
-		cc.recv,
-		round,
-		reset,
-		threshold)
-	// TODO(mission): should keep DKG resetCount along with DKG private share.
-	err = cc.db.PutOrUpdateDKGMasterPrivateShares(round, *cc.dkg.prvShares)
+	cc.dkg, err = recoverDKGProtocol(cc.ID, cc.recv, round, reset, cc.db)
 	if err != nil {
-		cc.logger.Error("Error put or update DKG master private shares", "error",
-			err)
-		return
+		panic(err)
 	}
+
+	if cc.dkg == nil {
+		cc.dkg = newDKGProtocol(
+			cc.ID,
+			cc.recv,
+			round,
+			reset,
+			threshold)
+
+		err = cc.db.PutOrUpdateDKGProtocol(cc.dkg.toDKGProtocolInfo())
+		if err != nil {
+			cc.logger.Error("Error put or update DKG protocol", "error",
+				err)
+			return
+		}
+	}
+
 	go func() {
 		ticker := newTicker(cc.gov, round, TickerDKG)
 		defer ticker.Stop()
@@ -124,42 +136,33 @@ func (cc *configurationChain) registerDKG(round, reset uint64, threshold int) {
 	}()
 }
 
-func (cc *configurationChain) runDKG(round, reset uint64) error {
-	// Check if corresponding DKG signer is ready.
-	if _, _, err := cc.getDKGInfo(round); err == nil {
-		return nil
-	}
-	cc.dkgLock.Lock()
-	defer cc.dkgLock.Unlock()
-	if cc.dkg == nil ||
-		cc.dkg.round < round ||
+func (cc *configurationChain) runDKGPhaseOne(round uint64, reset uint64) error {
+	if cc.dkg.round < round ||
 		(cc.dkg.round == round && cc.dkg.reset < reset) {
 		return ErrDKGNotRegistered
 	}
 	if cc.dkg.round != round || cc.dkg.reset != reset {
 		cc.logger.Warn("DKG canceled", "round", round, "reset", reset)
-		return nil
+		return ErrSkipButNoError
 	}
 	cc.logger.Debug("Calling Governance.IsDKGFinal", "round", round)
 	if cc.gov.IsDKGFinal(round) {
 		cc.logger.Warn("DKG already final", "round", round)
-		return nil
+		return ErrSkipButNoError
 	}
 	cc.logger.Debug("Calling Governance.IsDKGMPKReady", "round", round)
 	for !cc.gov.IsDKGMPKReady(round) {
 		cc.logger.Debug("DKG MPKs are not ready yet. Try again later...",
-			"nodeID", cc.ID.String()[:6],
-			"round", round,
-			"reset", reset)
+			"nodeID", cc.ID)
 		cc.dkgLock.Unlock()
 		time.Sleep(500 * time.Millisecond)
 		cc.dkgLock.Lock()
 	}
-	ticker := newTicker(cc.gov, round, TickerDKG)
-	defer ticker.Stop()
-	cc.dkgLock.Unlock()
-	<-ticker.Tick()
-	cc.dkgLock.Lock()
+
+	return nil
+}
+
+func (cc *configurationChain) runDKGPhaseTwoAndThree(round uint64, reset uint64) error {
 	// Check if this node successfully join the protocol.
 	cc.logger.Debug("Calling Governance.DKGMasterPublicKeys", "round", round)
 	mpks := cc.gov.DKGMasterPublicKeys(round)
@@ -174,7 +177,7 @@ func (cc *configurationChain) runDKG(round, reset uint64) error {
 		cc.logger.Warn("Failed to join DKG protocol",
 			"round", round,
 			"reset", reset)
-		return nil
+		return ErrSkipButNoError
 	}
 	// Phase 2(T = 0): Exchange DKG secret key share.
 	if err := cc.dkg.processMasterPublicKeys(mpks); err != nil {
@@ -192,16 +195,18 @@ func (cc *configurationChain) runDKG(round, reset uint64) error {
 				"error", err)
 		}
 	}
+
 	// Phase 3(T = 0~λ): Propose complaint.
 	// Propose complaint is done in `processMasterPublicKeys`.
-	cc.dkgLock.Unlock()
-	<-ticker.Tick()
-	cc.dkgLock.Lock()
+	return nil
+}
+
+func (cc *configurationChain) runDKGPhaseFour() {
 	// Phase 4(T = λ): Propose nack complaints.
 	cc.dkg.proposeNackComplaints()
-	cc.dkgLock.Unlock()
-	<-ticker.Tick()
-	cc.dkgLock.Lock()
+}
+
+func (cc *configurationChain) runDKGPhaseFiveAndSix(round uint64, reset uint64) {
 	// Phase 5(T = 2λ): Propose Anti nack complaint.
 	cc.logger.Debug("Calling Governance.DKGComplaints", "round", round)
 	complaints := cc.gov.DKGComplaints(round)
@@ -211,26 +216,24 @@ func (cc *configurationChain) runDKG(round, reset uint64) error {
 			"reset", reset,
 			"error", err)
 	}
-	cc.dkgLock.Unlock()
-	<-ticker.Tick()
-	cc.dkgLock.Lock()
+
 	// Phase 6(T = 3λ): Rebroadcast anti nack complaint.
 	// Rebroadcast is done in `processPrivateShare`.
-	cc.dkgLock.Unlock()
-	<-ticker.Tick()
-	cc.dkgLock.Lock()
+}
+
+func (cc *configurationChain) runDKGPhaseSeven(complaints []*typesDKG.Complaint) {
 	// Phase 7(T = 4λ): Enforce complaints and nack complaints.
 	cc.dkg.enforceNackComplaints(complaints)
 	// Enforce complaint is done in `processPrivateShare`.
+}
+
+func (cc *configurationChain) runDKGPhaseEight() {
 	// Phase 8(T = 5λ): DKG finalize.
-	cc.dkgLock.Unlock()
-	<-ticker.Tick()
-	cc.dkgLock.Lock()
 	cc.dkg.proposeFinalize()
+}
+
+func (cc *configurationChain) runDKGPhaseNine(round uint64, reset uint64) error {
 	// Phase 9(T = 6λ): DKG is ready.
-	cc.dkgLock.Unlock()
-	<-ticker.Tick()
-	cc.dkgLock.Lock()
 	// Normally, IsDKGFinal would return true here. Use this for in case of
 	// unexpected network fluctuation and ensure the robustness of DKG protocol.
 	cc.logger.Debug("Calling Governance.IsDKGFinal", "round", round)
@@ -278,6 +281,93 @@ func (cc *configurationChain) runDKG(round, reset uint64) error {
 	defer cc.dkgResult.Unlock()
 	cc.dkgSigner[round] = signer
 	cc.npks[round] = npks
+	return nil
+}
+
+func (cc *configurationChain) runTick(ticker Ticker) {
+	cc.dkgLock.Unlock()
+	<-ticker.Tick()
+	cc.dkgLock.Lock()
+}
+
+func (cc *configurationChain) initDKGPhasesFunc() {
+	cc.dkgRunPhases = []func(round uint64, reset uint64) error{
+		func(round uint64, reset uint64) error {
+			return cc.runDKGPhaseOne(round, reset)
+		},
+		func(round uint64, reset uint64) error {
+			return cc.runDKGPhaseTwoAndThree(round, reset)
+		},
+		func(round uint64, reset uint64) error {
+			cc.runDKGPhaseFour()
+			return nil
+		},
+		func(round uint64, reset uint64) error {
+			cc.runDKGPhaseFiveAndSix(round, reset)
+			return nil
+		},
+		func(round uint64, reset uint64) error {
+			complaints := cc.gov.DKGComplaints(round)
+			cc.runDKGPhaseSeven(complaints)
+			return nil
+		},
+		func(round uint64, reset uint64) error {
+			cc.runDKGPhaseEight()
+			return nil
+		},
+		func(round uint64, reset uint64) error {
+			return cc.runDKGPhaseNine(round, reset)
+		},
+	}
+}
+
+func (cc *configurationChain) runDKG(round uint64, reset uint64) error {
+	// Check if corresponding DKG signer is ready.
+	if _, _, err := cc.getDKGInfo(round); err == nil {
+		return ErrSkipButNoError
+	}
+	cc.dkgLock.Lock()
+	defer cc.dkgLock.Unlock()
+
+	tickStartAt := 1
+	var ticker Ticker
+	defer func() {
+		if ticker != nil {
+			ticker.Stop()
+		}
+	}()
+
+	if cc.dkg == nil {
+		return ErrDKGNotRegistered
+	}
+
+	for i := cc.dkg.step; i < len(cc.dkgRunPhases); i++ {
+		if i >= tickStartAt && ticker == nil {
+			ticker = newTicker(cc.gov, round, TickerDKG)
+		}
+
+		if ticker != nil {
+			cc.runTick(ticker)
+		}
+
+		switch err := cc.dkgRunPhases[i](round, reset); err {
+		case ErrSkipButNoError, nil:
+			cc.dkg.step = i + 1
+			err := cc.db.PutOrUpdateDKGProtocol(cc.dkg.toDKGProtocolInfo())
+			if err != nil {
+				return fmt.Errorf("put or update DKG protocol error: %v", err)
+			}
+
+			if err == nil {
+				continue
+			} else {
+				return nil
+			}
+		default:
+			return err
+		}
+	}
+
 	return nil
 }
 

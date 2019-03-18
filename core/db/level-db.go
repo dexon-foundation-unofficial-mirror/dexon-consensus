@@ -19,6 +19,7 @@ package db
 
 import (
 	"encoding/binary"
+	"io"
 
 	"github.com/syndtr/goleveldb/leveldb"
 
@@ -29,15 +30,221 @@ import (
 )
 
 var (
-	blockKeyPrefix               = []byte("b-")
-	compactionChainTipInfoKey    = []byte("cc-tip")
-	dkgPrivateKeyKeyPrefix       = []byte("dkg-prvs")
-	dkgMasterPrivateSharesPrefix = []byte("dkg-master-private-shares")
+	blockKeyPrefix            = []byte("b-")
+	compactionChainTipInfoKey = []byte("cc-tip")
+	dkgPrivateKeyKeyPrefix    = []byte("dkg-prvs")
+	dkgProtocolInfoKeyPrefix  = []byte("dkg-protocol-info")
 )
 
 type compactionChainTipInfo struct {
 	Height uint64      `json:"height"`
 	Hash   common.Hash `json:"hash"`
+}
+
+// DKGProtocolInfo DKG protocol info.
+type DKGProtocolInfo struct {
+	ID                        types.NodeID
+	Round                     uint64
+	Threshold                 uint64
+	IDMap                     NodeIDToDKGID
+	MpkMap                    NodeIDToPubShares
+	MasterPrivateShare        dkg.PrivateKeyShares
+	IsMasterPrivateShareEmpty bool
+	PrvShares                 dkg.PrivateKeyShares
+	IsPrvSharesEmpty          bool
+	PrvSharesReceived         NodeID
+	NodeComplained            NodeID
+	AntiComplaintReceived     NodeIDToNodeIDs
+	Step                      uint64
+	Reset                     uint64
+}
+
+// NodeIDToNodeIDs the map with NodeID to NodeIDs.
+type NodeIDToNodeIDs map[types.NodeID]map[types.NodeID]struct{}
+
+// EncodeRLP implements rlp.Encoder
+func (m NodeIDToNodeIDs) EncodeRLP(w io.Writer) error {
+	var allBytes [][][]byte
+	for k, v := range m {
+		kBytes, err := k.MarshalText()
+		if err != nil {
+			return err
+		}
+		allBytes = append(allBytes, [][]byte{kBytes})
+
+		var vBytes [][]byte
+		for subK := range v {
+			bytes, err := subK.MarshalText()
+			if err != nil {
+				return err
+			}
+			vBytes = append(vBytes, bytes)
+		}
+		allBytes = append(allBytes, vBytes)
+	}
+
+	return rlp.Encode(w, allBytes)
+}
+
+// DecodeRLP implements rlp.Encoder
+func (m NodeIDToNodeIDs) DecodeRLP(s *rlp.Stream) error {
+	var dec [][][]byte
+	if err := s.Decode(&dec); err != nil {
+		return err
+	}
+
+	for i := 0; i < len(dec); i += 2 {
+		key := types.NodeID{}
+		err := key.UnmarshalText(dec[i][0])
+		if err != nil {
+			return err
+		}
+
+		valueMap := map[types.NodeID]struct{}{}
+		for _, v := range dec[i+1] {
+			value := types.NodeID{}
+			err := value.UnmarshalText(v)
+			if err != nil {
+				return err
+			}
+
+			valueMap[value] = struct{}{}
+		}
+
+		m[key] = valueMap
+	}
+
+	return nil
+}
+
+// NodeID the map with NodeID.
+type NodeID map[types.NodeID]struct{}
+
+// EncodeRLP implements rlp.Encoder
+func (m NodeID) EncodeRLP(w io.Writer) error {
+	var allBytes [][]byte
+	for k := range m {
+		kBytes, err := k.MarshalText()
+		if err != nil {
+			return err
+		}
+		allBytes = append(allBytes, kBytes)
+	}
+
+	return rlp.Encode(w, allBytes)
+}
+
+// DecodeRLP implements rlp.Encoder
+func (m NodeID) DecodeRLP(s *rlp.Stream) error {
+	var dec [][]byte
+	if err := s.Decode(&dec); err != nil {
+		return err
+	}
+
+	for i := 0; i < len(dec); i++ {
+		key := types.NodeID{}
+		err := key.UnmarshalText(dec[i])
+		if err != nil {
+			return err
+		}
+
+		m[key] = struct{}{}
+	}
+
+	return nil
+}
+
+// NodeIDToPubShares the map with NodeID to PublicKeyShares.
+type NodeIDToPubShares map[types.NodeID]*dkg.PublicKeyShares
+
+// EncodeRLP implements rlp.Encoder
+func (m NodeIDToPubShares) EncodeRLP(w io.Writer) error {
+	var allBytes [][]byte
+	for k, v := range m {
+		kBytes, err := k.MarshalText()
+		if err != nil {
+			return err
+		}
+		allBytes = append(allBytes, kBytes)
+
+		bytes, err := rlp.EncodeToBytes(v)
+		if err != nil {
+			return err
+		}
+		allBytes = append(allBytes, bytes)
+	}
+
+	return rlp.Encode(w, allBytes)
+}
+
+// DecodeRLP implements rlp.Encoder
+func (m NodeIDToPubShares) DecodeRLP(s *rlp.Stream) error {
+	var dec [][]byte
+	if err := s.Decode(&dec); err != nil {
+		return err
+	}
+
+	for i := 0; i < len(dec); i += 2 {
+		key := types.NodeID{}
+		err := key.UnmarshalText(dec[i])
+		if err != nil {
+			return err
+		}
+
+		value := dkg.PublicKeyShares{}
+		err = rlp.DecodeBytes(dec[i+1], &value)
+		if err != nil {
+			return err
+		}
+
+		m[key] = &value
+	}
+
+	return nil
+}
+
+// NodeIDToDKGID the map with NodeID to DKGID.
+type NodeIDToDKGID map[types.NodeID]dkg.ID
+
+// EncodeRLP implements rlp.Encoder
+func (m NodeIDToDKGID) EncodeRLP(w io.Writer) error {
+	var allBytes [][]byte
+	for k, v := range m {
+		kBytes, err := k.MarshalText()
+		if err != nil {
+			return err
+		}
+		allBytes = append(allBytes, kBytes)
+		allBytes = append(allBytes, v.GetLittleEndian())
+	}
+
+	return rlp.Encode(w, allBytes)
+}
+
+// DecodeRLP implements rlp.Encoder
+func (m NodeIDToDKGID) DecodeRLP(s *rlp.Stream) error {
+	var dec [][]byte
+	if err := s.Decode(&dec); err != nil {
+		return err
+	}
+
+	for i := 0; i < len(dec); i += 2 {
+		key := types.NodeID{}
+		err := key.UnmarshalText(dec[i])
+		if err != nil {
+			return err
+		}
+
+		value := dkg.ID{}
+		err = value.SetLittleEndian(dec[i+1])
+		if err != nil {
+			return err
+		}
+
+		m[key] = value
+	}
+
+	return nil
 }
 
 // LevelDBBackedDB is a leveldb backed DB implementation.
@@ -189,11 +396,6 @@ func (lvl *LevelDBBackedDB) HasDKGPrivateKey(round uint64) (bool, error) {
 	return lvl.db.Has(lvl.getDKGPrivateKeyKey(round), nil)
 }
 
-// HasDKGMasterPrivateSharesKey check existence of DKG master private shares of one round.
-func (lvl *LevelDBBackedDB) HasDKGMasterPrivateSharesKey(round uint64) (bool, error) {
-	return lvl.db.Has(lvl.getDKGMasterPrivateSharesKey(round), nil)
-}
-
 // GetDKGPrivateKey get DKG private key of one round.
 func (lvl *LevelDBBackedDB) GetDKGPrivateKey(round uint64) (
 	prv dkg.PrivateKey, err error) {
@@ -227,30 +429,28 @@ func (lvl *LevelDBBackedDB) PutDKGPrivateKey(
 		lvl.getDKGPrivateKeyKey(round), marshaled, nil)
 }
 
-// GetDKGMasterPrivateShares get DKG master private shares of one round.
-func (lvl *LevelDBBackedDB) GetDKGMasterPrivateShares(round uint64) (
-	shares dkg.PrivateKeyShares, err error) {
-	queried, err := lvl.db.Get(lvl.getDKGMasterPrivateSharesKey(round), nil)
+// GetDKGProtocol get DKG protocol.
+func (lvl *LevelDBBackedDB) GetDKGProtocol() (
+	info DKGProtocolInfo, err error) {
+	queried, err := lvl.db.Get(lvl.getDKGProtocolInfoKey(), nil)
 	if err != nil {
 		if err == leveldb.ErrNotFound {
-			err = ErrDKGMasterPrivateSharesDoesNotExist
+			err = ErrDKGProtocolDoesNotExist
 		}
 		return
 	}
 
-	err = rlp.DecodeBytes(queried, &shares)
+	err = rlp.DecodeBytes(queried, &info)
 	return
 }
 
-// PutOrUpdateDKGMasterPrivateShares save DKG master private shares of one round.
-func (lvl *LevelDBBackedDB) PutOrUpdateDKGMasterPrivateShares(
-	round uint64, shares dkg.PrivateKeyShares) error {
-	marshaled, err := rlp.EncodeToBytes(&shares)
+// PutOrUpdateDKGProtocol save DKG protocol.
+func (lvl *LevelDBBackedDB) PutOrUpdateDKGProtocol(info DKGProtocolInfo) error {
+	marshaled, err := rlp.EncodeToBytes(&info)
 	if err != nil {
 		return err
 	}
-	return lvl.db.Put(
-		lvl.getDKGMasterPrivateSharesKey(round), marshaled, nil)
+	return lvl.db.Put(lvl.getDKGProtocolInfoKey(), marshaled, nil)
 }
 
 func (lvl *LevelDBBackedDB) getBlockKey(hash common.Hash) (ret []byte) {
@@ -269,9 +469,8 @@ func (lvl *LevelDBBackedDB) getDKGPrivateKeyKey(
 	return
 }
 
-func (lvl *LevelDBBackedDB) getDKGMasterPrivateSharesKey(round uint64) (ret []byte) {
-	ret = make([]byte, len(dkgMasterPrivateSharesPrefix)+8)
-	copy(ret, dkgMasterPrivateSharesPrefix)
-	binary.LittleEndian.PutUint64(ret[len(dkgMasterPrivateSharesPrefix):], round)
+func (lvl *LevelDBBackedDB) getDKGProtocolInfoKey() (ret []byte) {
+	ret = make([]byte, len(dkgProtocolInfoKeyPrefix)+8)
+	copy(ret, dkgProtocolInfoKeyPrefix)
 	return
 }

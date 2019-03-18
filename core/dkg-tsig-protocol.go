@@ -118,6 +118,62 @@ type dkgProtocol struct {
 	nodeComplained     map[types.NodeID]struct{}
 	// Complaint[from][to]'s anti is saved to antiComplaint[from][to].
 	antiComplaintReceived map[types.NodeID]map[types.NodeID]struct{}
+	// The completed step in `runDKG`.
+	step int
+}
+
+func (d *dkgProtocol) convertFromInfo(info db.DKGProtocolInfo) {
+	d.ID = info.ID
+	d.idMap = info.IDMap
+	d.round = info.Round
+	d.threshold = int(info.Threshold)
+	d.idMap = info.IDMap
+	d.mpkMap = info.MpkMap
+	d.prvSharesReceived = info.PrvSharesReceived
+	d.nodeComplained = info.NodeComplained
+	d.antiComplaintReceived = info.AntiComplaintReceived
+	d.step = int(info.Step)
+	d.reset = info.Reset
+	if info.IsMasterPrivateShareEmpty {
+		d.masterPrivateShare = nil
+	} else {
+		d.masterPrivateShare = &info.MasterPrivateShare
+	}
+
+	if info.IsPrvSharesEmpty {
+		d.prvShares = nil
+	} else {
+		d.prvShares = &info.PrvShares
+	}
+}
+
+func (d *dkgProtocol) toDKGProtocolInfo() db.DKGProtocolInfo {
+	info := db.DKGProtocolInfo{
+		ID:                    d.ID,
+		Round:                 d.round,
+		Threshold:             uint64(d.threshold),
+		IDMap:                 d.idMap,
+		MpkMap:                d.mpkMap,
+		PrvSharesReceived:     d.prvSharesReceived,
+		NodeComplained:        d.nodeComplained,
+		AntiComplaintReceived: d.antiComplaintReceived,
+		Step:                  uint64(d.step),
+		Reset:                 d.reset,
+	}
+
+	if d.masterPrivateShare != nil {
+		info.MasterPrivateShare = *d.masterPrivateShare
+	} else {
+		info.IsMasterPrivateShareEmpty = true
+	}
+
+	if d.prvShares != nil {
+		info.PrvShares = *d.prvShares
+	} else {
+		info.IsPrvSharesEmpty = true
+	}
+
+	return info
 }
 
 type dkgShareSecret struct {
@@ -197,33 +253,26 @@ func recoverDKGProtocol(
 	ID types.NodeID,
 	recv dkgReceiver,
 	round uint64,
-	threshold int,
+	reset uint64,
 	coreDB db.Database) (*dkgProtocol, error) {
-	shares, err := coreDB.GetDKGMasterPrivateShares(round)
+	dkgProtocolInfo, err := coreDB.GetDKGProtocol()
 	if err != nil {
-		if err == db.ErrDKGMasterPrivateSharesDoesNotExist {
+		if err == db.ErrDKGProtocolDoesNotExist {
 			return nil, nil
 		}
 		return nil, err
 	}
-	// TODO(mission): taken resetCount into consideration, we should keep
-	//                reset count of private shares from DB, and use it to init
-	//                DKG protocol instance.
-	reset := uint64(0)
-	return &dkgProtocol{
-		ID:                    ID,
-		recv:                  recv,
-		round:                 round,
-		reset:                 reset,
-		threshold:             threshold,
-		idMap:                 make(map[types.NodeID]dkg.ID),
-		mpkMap:                make(map[types.NodeID]*dkg.PublicKeyShares),
-		masterPrivateShare:    &shares,
-		prvShares:             dkg.NewEmptyPrivateKeyShares(),
-		prvSharesReceived:     make(map[types.NodeID]struct{}),
-		nodeComplained:        make(map[types.NodeID]struct{}),
-		antiComplaintReceived: make(map[types.NodeID]map[types.NodeID]struct{}),
-	}, nil
+
+	dkgProtocol := dkgProtocol{
+		recv: recv,
+	}
+	dkgProtocol.convertFromInfo(dkgProtocolInfo)
+
+	if dkgProtocol.ID != ID || dkgProtocol.round != round || dkgProtocol.reset != reset {
+		return nil, nil
+	}
+
+	return &dkgProtocol, nil
 }
 
 func (d *dkgProtocol) processMasterPublicKeys(

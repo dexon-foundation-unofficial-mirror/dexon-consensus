@@ -42,27 +42,26 @@ func (seq *blockSeqIterator) NextBlock() (types.Block, error) {
 
 // MemBackedDB is a memory backed DB implementation.
 type MemBackedDB struct {
-	blocksLock                 sync.RWMutex
-	blockHashSequence          common.Hashes
-	blocksByHash               map[common.Hash]*types.Block
-	compactionChainTipLock     sync.RWMutex
-	compactionChainTipHash     common.Hash
-	compactionChainTipHeight   uint64
-	dkgPrivateKeysLock         sync.RWMutex
-	dkgPrivateKeys             map[uint64]*dkg.PrivateKey
-	dkgMasterPrivateSharesLock sync.RWMutex
-	dkgMasterPrivateShares     map[uint64]*dkg.PrivateKeyShares
-	persistantFilePath         string
+	blocksLock               sync.RWMutex
+	blockHashSequence        common.Hashes
+	blocksByHash             map[common.Hash]*types.Block
+	compactionChainTipLock   sync.RWMutex
+	compactionChainTipHash   common.Hash
+	compactionChainTipHeight uint64
+	dkgPrivateKeysLock       sync.RWMutex
+	dkgPrivateKeys           map[uint64]*dkg.PrivateKey
+	dkgProtocolLock          sync.RWMutex
+	dkgProtocolInfo          *DKGProtocolInfo
+	persistantFilePath       string
 }
 
 // NewMemBackedDB initialize a memory-backed database.
 func NewMemBackedDB(persistantFilePath ...string) (
 	dbInst *MemBackedDB, err error) {
 	dbInst = &MemBackedDB{
-		blockHashSequence:      common.Hashes{},
-		blocksByHash:           make(map[common.Hash]*types.Block),
-		dkgPrivateKeys:         make(map[uint64]*dkg.PrivateKey),
-		dkgMasterPrivateShares: make(map[uint64]*dkg.PrivateKeyShares),
+		blockHashSequence: common.Hashes{},
+		blocksByHash:      make(map[common.Hash]*types.Block),
+		dkgPrivateKeys:    make(map[uint64]*dkg.PrivateKey),
 	}
 	if len(persistantFilePath) == 0 || len(persistantFilePath[0]) == 0 {
 		return
@@ -200,31 +199,23 @@ func (m *MemBackedDB) PutDKGPrivateKey(
 	return nil
 }
 
-// HasDKGMasterPrivateShares check existence of DKG master private shares of one round.
-func (m *MemBackedDB) HasDKGMasterPrivateShares(round uint64) (bool, error) {
-	m.dkgMasterPrivateSharesLock.RLock()
-	defer m.dkgMasterPrivateSharesLock.RUnlock()
-	_, exists := m.dkgMasterPrivateShares[round]
-	return exists, nil
-}
-
-// GetDKGMasterPrivateShares get DKG master private shares of one round.
-func (m *MemBackedDB) GetDKGMasterPrivateShares(round uint64) (
-	dkg.PrivateKeyShares, error) {
-	m.dkgMasterPrivateSharesLock.RLock()
-	defer m.dkgMasterPrivateSharesLock.RUnlock()
-	if shares, exists := m.dkgMasterPrivateShares[round]; exists {
-		return *shares, nil
+// GetDKGProtocol get DKG protocol.
+func (m *MemBackedDB) GetDKGProtocol() (
+	DKGProtocolInfo, error) {
+	m.dkgProtocolLock.RLock()
+	defer m.dkgProtocolLock.RUnlock()
+	if m.dkgProtocolInfo == nil {
+		return DKGProtocolInfo{}, ErrDKGProtocolDoesNotExist
 	}
-	return dkg.PrivateKeyShares{}, ErrDKGMasterPrivateSharesDoesNotExist
+
+	return *m.dkgProtocolInfo, nil
 }
 
-// PutOrUpdateDKGMasterPrivateShares save DKG master private shares of one round.
-func (m *MemBackedDB) PutOrUpdateDKGMasterPrivateShares(
-	round uint64, shares dkg.PrivateKeyShares) error {
-	m.dkgMasterPrivateSharesLock.Lock()
-	defer m.dkgMasterPrivateSharesLock.Unlock()
-	m.dkgMasterPrivateShares[round] = &shares
+// PutOrUpdateDKGProtocol save DKG protocol.
+func (m *MemBackedDB) PutOrUpdateDKGProtocol(dkgProtocol DKGProtocolInfo) error {
+	m.dkgProtocolLock.Lock()
+	defer m.dkgProtocolLock.Unlock()
+	m.dkgProtocolInfo = &dkgProtocol
 	return nil
 }
 
