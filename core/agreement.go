@@ -533,6 +533,10 @@ func (a *agreement) done() <-chan struct{} {
 func (a *agreement) confirmed() bool {
 	a.lock.RLock()
 	defer a.lock.RUnlock()
+	return a.confirmedNoLock()
+}
+
+func (a *agreement) confirmedNoLock() bool {
 	return a.hasOutput
 }
 
@@ -555,6 +559,8 @@ func (a *agreement) processBlock(block *types.Block) error {
 			block:        block,
 			receivedTime: time.Now().UTC(),
 		})
+		return nil
+	} else if a.confirmedNoLock() {
 		return nil
 	}
 	if b, exist := a.data.blocks[block.ProposerID]; exist {
