@@ -260,8 +260,8 @@ CleanChannelLoop:
 	if block.Position.Height > changeNotaryHeight &&
 		block.Position.Round <= currentRound {
 		panic(fmt.Errorf(
-			"round not switch when confirmig: %s, %d, should switch at %d",
-			block, currentRound, changeNotaryHeight))
+			"round not switch when confirmig: %s, %d, should switch at %d, %s",
+			block, currentRound, changeNotaryHeight, newPos))
 	}
 	recv.restartNotary <- newPos
 }

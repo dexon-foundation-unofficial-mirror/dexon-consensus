@@ -537,21 +537,21 @@ ReachStop:
 		}
 	}
 
-	var latestPos types.Position
+	var latestHeight uint64
 	var latestNodeID types.NodeID
 	for _, n := range nodes {
 		n.con.Stop()
 		time.Sleep(1 * time.Second)
 	}
 	for nID, n := range nodes {
-		pos := n.app.GetLatestDeliveredPosition()
-		if pos.Newer(latestPos) {
-			fmt.Println("Newe position", nID, pos)
+		_, height := n.db.GetCompactionChainTipInfo()
+		if height > latestHeight {
+			fmt.Println("Newer height", nID, height)
 			latestNodeID = nID
-			latestPos = pos
+			latestHeight = height
 		}
 	}
-	fmt.Println("Latest node", latestNodeID, &latestPos)
+	fmt.Println("Latest node", latestNodeID, latestHeight)
 	for nID, node := range nodes {
 		if nID == latestNodeID {
 			continue
@@ -573,19 +573,15 @@ ReachStop:
 			&common.NullLogger{},
 		)
 	}
-
 	targetNode := nodes[latestNodeID]
 	for nID, node := range nodes {
-		if nID == latestNodeID {
-			continue
-		}
 		syncedHeight := node.app.GetLatestDeliveredPosition().Height + 1
 		// FinalizationHeight = Height + 1
 		syncedHeight++
 		var err error
 		for {
 			fmt.Println("Syncing", nID, syncedHeight)
-			if syncedHeight >= latestPos.Height {
+			if syncedHeight >= latestHeight {
 				break
 			}
 			_, syncedHeight, err = s.syncBlocksWithSomeNode(
@@ -593,11 +589,19 @@ ReachStop:
 			if err != nil {
 				panic(err)
 			}
-			fmt.Println("Syncing", nID, syncedHeight)
+			fmt.Println("Syncing after", nID, syncedHeight)
 		}
 		fmt.Println("Synced", nID, syncedHeight)
 	}
-
+	// Make sure all nodes are synced in db and app.
+	_, latestHeight = targetNode.db.GetCompactionChainTipInfo()
+	latestPos := targetNode.app.GetLatestDeliveredPosition()
+	for _, node := range nodes {
+		_, height := node.db.GetCompactionChainTipInfo()
+		s.Require().Equal(height, latestHeight)
+		pos := node.app.GetLatestDeliveredPosition()
+		s.Require().Equal(latestPos, pos)
+	}
 	for _, con := range syncerCon {
 		con.ForceSync(true)
 	}

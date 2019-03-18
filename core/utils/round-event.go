@@ -135,6 +135,7 @@ type RoundEvent struct {
 	roundShift              uint64
 	ctx                     context.Context
 	ctxCancel               context.CancelFunc
+	retryInterval           time.Duration
 }
 
 // NewRoundEvent creates an RoundEvent instance.
@@ -144,16 +145,17 @@ func NewRoundEvent(parentCtx context.Context, gov governanceAccessor,
 	roundShift uint64) (*RoundEvent, error) {
 	// We need to generate valid ending block height of this round (taken
 	// DKG reset count into consideration).
+	initConfig := GetConfigWithPanic(gov, initRound, logger)
 	e := &RoundEvent{
 		gov:                gov,
 		logger:             logger,
 		lastTriggeredRound: initRound,
 		roundShift:         roundShift,
+		retryInterval:      initConfig.LambdaBA,
 	}
 	e.ctx, e.ctxCancel = context.WithCancel(parentCtx)
 	e.config = RoundBasedConfig{}
-	e.config.SetupRoundBasedFields(initRound, GetConfigWithPanic(
-		gov, initRound, logger))
+	e.config.SetupRoundBasedFields(initRound, initConfig)
 	e.config.SetRoundBeginHeight(initRoundBeginHeight)
 	// Make sure the DKG reset count in current governance can cover the initial
 	// block height.
@@ -245,7 +247,7 @@ func (e *RoundEvent) ValidateNextRound(blockHeight uint64) {
 		select {
 		case <-e.ctx.Done():
 			return
-		case <-time.After(500 * time.Millisecond):
+		case <-time.After(e.retryInterval):
 		}
 	}
 }

@@ -238,7 +238,7 @@ func (s *TransportTestSuite) TestFake() {
 func (s *TransportTestSuite) TestTCPLocal() {
 
 	var (
-		peerCount  = 25
+		peerCount  = 13
 		req        = s.Require()
 		peers      = make(map[types.NodeID]*testPeer)
 		prvKeys    = GenerateRandomPrivateKeys(peerCount)

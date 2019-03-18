@@ -432,6 +432,13 @@ func (mgr *agreementMgr) baRoutineForOneRound(
 		var nextHeight uint64
 		var nextTime time.Time
 		for {
+			// Make sure we are stoppable.
+			select {
+			case <-mgr.ctx.Done():
+				breakLoop = true
+				return
+			default:
+			}
 			nextHeight, nextTime = mgr.bcModule.nextBlock()
 			if isStop(oldPos) && nextHeight == 0 {
 				break
