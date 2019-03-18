@@ -534,6 +534,13 @@ func (t *TCPTransport) listenerRoutine(listener *net.TCPListener) {
 // we only utilize the write part for simplicity.
 func (t *TCPTransport) buildConnectionsToPeers() (err error) {
 	var wg sync.WaitGroup
+	var errs []error
+	var errsLock sync.Mutex
+	addErr := func(err error) {
+		errsLock.Lock()
+		defer errsLock.Unlock()
+		errs = append(errs, err)
+	}
 	for nID, rec := range t.peers {
 		if nID == t.nID {
 			continue
@@ -541,30 +548,31 @@ func (t *TCPTransport) buildConnectionsToPeers() (err error) {
 		wg.Add(1)
 		go func(nID types.NodeID, addr string) {
 			defer wg.Done()
-
 			conn, localErr := net.Dial("tcp", addr)
 			if localErr != nil {
-				// Propagate this error to outside, at least one error
-				// could be returned to caller.
-				err = localErr
+				addErr(localErr)
 				return
 			}
-			serverID, e := t.clientHandshake(conn)
-			if e != nil {
-				err = e
+			serverID, localErr := t.clientHandshake(conn)
+			if localErr != nil {
+				addErr(localErr)
 				return
 			}
 			if nID != serverID {
-				err = ErrConnectToUnexpectedPeer
+				addErr(ErrConnectToUnexpectedPeer)
 				return
 			}
 			t.peersLock.Lock()
 			defer t.peersLock.Unlock()
-
 			t.peers[nID].sendChannel = t.connWriter(conn)
 		}(nID, rec.conn)
 	}
 	wg.Wait()
+	if len(errs) > 0 {
+		// Propagate this error to outside, at least one error
+		// could be returned to caller.
+		err = errs[0]
+	}
 	return
 }
 
