@@ -171,7 +171,7 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 	receivers, protocols := s.newProtocols(k, n, round, reset)
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(round, receiver.mpk)
+		gov.AddDKGMasterPublicKey(receiver.mpk)
 	}
 
 	for _, protocol := range protocols {
@@ -196,7 +196,7 @@ func (s *DKGTSIGProtocolTestSuite) TestDKGTSIGProtocol() {
 
 	for _, receiver := range receivers {
 		for _, complaint := range receiver.complaints {
-			gov.AddDKGComplaint(round, complaint)
+			gov.AddDKGComplaint(complaint)
 		}
 	}
 
@@ -297,7 +297,7 @@ func (s *DKGTSIGProtocolTestSuite) TestErrMPKRegistered() {
 				PublicKeyShares: *mpk,
 			})
 		}
-		gov.AddDKGMasterPublicKey(round, receiver.mpk)
+		gov.AddDKGMasterPublicKey(receiver.mpk)
 	}
 
 	for ID, protocol := range protocols {
@@ -341,7 +341,7 @@ func (s *DKGTSIGProtocolTestSuite) TestErrMPKRegistered() {
 
 	for _, receiver := range receivers {
 		for _, complaint := range receiver.complaints {
-			gov.AddDKGComplaint(round, complaint)
+			gov.AddDKGComplaint(complaint)
 		}
 	}
 
@@ -415,7 +415,7 @@ func (s *DKGTSIGProtocolTestSuite) TestNackComplaint() {
 	byzantineID := s.nIDs[0]
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(round, receiver.mpk)
+		gov.AddDKGMasterPublicKey(receiver.mpk)
 	}
 
 	for _, protocol := range protocols {
@@ -464,7 +464,7 @@ func (s *DKGTSIGProtocolTestSuite) TestComplaint() {
 	protocol := protocols[targetID]
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(round, receiver.mpk)
+		gov.AddDKGMasterPublicKey(receiver.mpk)
 	}
 
 	for _, protocol := range protocols {
@@ -529,7 +529,7 @@ func (s *DKGTSIGProtocolTestSuite) TestDuplicateComplaint() {
 	victomID := s.nIDs[1]
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(round, receiver.mpk)
+		gov.AddDKGMasterPublicKey(receiver.mpk)
 	}
 
 	// Test for nack complaints.
@@ -574,7 +574,7 @@ func (s *DKGTSIGProtocolTestSuite) TestAntiComplaint() {
 	thirdPerson := s.nIDs[2]
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(round, receiver.mpk)
+		gov.AddDKGMasterPublicKey(receiver.mpk)
 	}
 
 	for _, protocol := range protocols {
@@ -631,7 +631,7 @@ func (s *DKGTSIGProtocolTestSuite) TestEncorceNackComplaint() {
 	thirdPerson := s.nIDs[2]
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(round, receiver.mpk)
+		gov.AddDKGMasterPublicKey(receiver.mpk)
 	}
 
 	for _, protocol := range protocols {
@@ -683,7 +683,7 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 	byzantineID := s.nIDs[0]
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(round, receiver.mpk)
+		gov.AddDKGMasterPublicKey(receiver.mpk)
 	}
 
 	// Test for nack complaints.
@@ -750,7 +750,7 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 	byzantineID := s.nIDs[0]
 
 	for _, receiver := range receivers {
-		gov.AddDKGMasterPublicKey(round, receiver.mpk)
+		gov.AddDKGMasterPublicKey(receiver.mpk)
 	}
 
 	for _, protocol := range protocols {
@@ -776,7 +776,7 @@ func (s *DKGTSIGProtocolTestSuite) TestPartialSignature() {
 		s.Require().Len(recv.complaints, 1)
 		complaint, exist := recv.complaints[byzantineID]
 		s.Require().True(exist)
-		gov.AddDKGComplaint(round, complaint)
+		gov.AddDKGComplaint(complaint)
 	}
 
 	// DKG is fininished.
@@ -892,7 +892,7 @@ func (s *DKGTSIGProtocolTestSuite) TestTSigVerifierCache() {
 		receivers, protocols := s.newProtocols(k, n, round, reset)
 
 		for _, receiver := range receivers {
-			gov.AddDKGMasterPublicKey(round, receiver.mpk)
+			gov.AddDKGMasterPublicKey(receiver.mpk)
 		}
 
 		for _, protocol := range protocols {
@@ -900,7 +900,7 @@ func (s *DKGTSIGProtocolTestSuite) TestTSigVerifierCache() {
 		}
 		for _, recv := range receivers {
 			s.Require().Len(recv.ready, 1)
-			gov.AddDKGMPKReady(recv.ready[0].Round, recv.ready[0])
+			gov.AddDKGMPKReady(recv.ready[0])
 		}
 		s.Require().True(gov.IsDKGMPKReady(round))
 
@@ -910,7 +910,7 @@ func (s *DKGTSIGProtocolTestSuite) TestTSigVerifierCache() {
 
 		for _, recv := range receivers {
 			s.Require().Len(recv.final, 1)
-			gov.AddDKGFinalize(recv.final[0].Round, recv.final[0])
+			gov.AddDKGFinalize(recv.final[0])
 		}
 		s.Require().True(gov.IsDKGFinal(round))
 	}
@@ -1023,7 +1023,7 @@ func benchmarkDKGGroupPubliKey(k, n int, b *testing.B) {
 
 	for _, pk := range pubKeys {
 		_, pubShare := dkg.NewPrivateKeyShares(k)
-		gov.AddDKGMasterPublicKey(round, &typesDKG.MasterPublicKey{
+		gov.AddDKGMasterPublicKey(&typesDKG.MasterPublicKey{
 			ProposerID:      types.NewNodeID(pk),
 			Round:           round,
 			Reset:           reset,
@@ -1068,7 +1068,7 @@ func benchmarkDKGNodePubliKeys(k, n int, b *testing.B) {
 
 	for _, pk := range pubKeys {
 		_, pubShare := dkg.NewPrivateKeyShares(k)
-		gov.AddDKGMasterPublicKey(round, &typesDKG.MasterPublicKey{
+		gov.AddDKGMasterPublicKey(&typesDKG.MasterPublicKey{
 			ProposerID:      types.NewNodeID(pk),
 			Round:           round,
 			Reset:           reset,

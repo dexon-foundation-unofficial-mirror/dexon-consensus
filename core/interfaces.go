@@ -122,25 +122,25 @@ type Governance interface {
 	//// DKG-related methods.
 
 	// AddDKGComplaint adds a DKGComplaint.
-	AddDKGComplaint(round uint64, complaint *typesDKG.Complaint)
+	AddDKGComplaint(complaint *typesDKG.Complaint)
 
 	// DKGComplaints gets all the DKGComplaints of round.
 	DKGComplaints(round uint64) []*typesDKG.Complaint
 
 	// AddDKGMasterPublicKey adds a DKGMasterPublicKey.
-	AddDKGMasterPublicKey(round uint64, masterPublicKey *typesDKG.MasterPublicKey)
+	AddDKGMasterPublicKey(masterPublicKey *typesDKG.MasterPublicKey)
 
 	// DKGMasterPublicKeys gets all the DKGMasterPublicKey of round.
 	DKGMasterPublicKeys(round uint64) []*typesDKG.MasterPublicKey
 
 	// AddDKGMPKReady adds a DKG ready message.
-	AddDKGMPKReady(round uint64, ready *typesDKG.MPKReady)
+	AddDKGMPKReady(ready *typesDKG.MPKReady)
 
 	// IsDKGMPKReady checks if DKG's master public key preparation is ready.
 	IsDKGMPKReady(round uint64) bool
 
 	// AddDKGFinalize adds a DKG finalize message.
-	AddDKGFinalize(round uint64, final *typesDKG.Finalize)
+	AddDKGFinalize(final *typesDKG.Finalize)
 
 	// IsDKGFinal checks if DKG is final.
 	IsDKGFinal(round uint64) bool

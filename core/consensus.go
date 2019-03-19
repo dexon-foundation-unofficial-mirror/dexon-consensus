@@ -302,7 +302,7 @@ func (recv *consensusDKGReceiver) ProposeDKGComplaint(
 	}
 	recv.logger.Debug("Calling Governace.AddDKGComplaint",
 		"complaint", complaint)
-	recv.gov.AddDKGComplaint(complaint.Round, complaint)
+	recv.gov.AddDKGComplaint(complaint)
 }
 
 // ProposeDKGMasterPublicKey propose a DKGMasterPublicKey.
@@ -313,7 +313,7 @@ func (recv *consensusDKGReceiver) ProposeDKGMasterPublicKey(
 		return
 	}
 	recv.logger.Debug("Calling Governance.AddDKGMasterPublicKey", "key", mpk)
-	recv.gov.AddDKGMasterPublicKey(mpk.Round, mpk)
+	recv.gov.AddDKGMasterPublicKey(mpk)
 }
 
 // ProposeDKGPrivateShare propose a DKGPrivateShare.
@@ -362,7 +362,7 @@ func (recv *consensusDKGReceiver) ProposeDKGMPKReady(ready *typesDKG.MPKReady) {
 		return
 	}
 	recv.logger.Debug("Calling Governance.AddDKGMPKReady", "ready", ready)
-	recv.gov.AddDKGMPKReady(ready.Round, ready)
+	recv.gov.AddDKGMPKReady(ready)
 }
 
 // ProposeDKGFinalize propose a DKGFinalize message.
@@ -372,7 +372,7 @@ func (recv *consensusDKGReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
 		return
 	}
 	recv.logger.Debug("Calling Governance.AddDKGFinalize", "final", final)
-	recv.gov.AddDKGFinalize(final.Round, final)
+	recv.gov.AddDKGFinalize(final)
 }
 
 // Consensus implements DEXON Consensus algorithm.

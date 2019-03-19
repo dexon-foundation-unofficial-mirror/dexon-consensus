@@ -65,14 +65,14 @@ func newTestCCGlobalReceiver(
 func (r *testCCGlobalReceiver) ProposeDKGComplaint(
 	complaint *typesDKG.Complaint) {
 	for _, gov := range r.govs {
-		gov.AddDKGComplaint(complaint.Round, test.CloneDKGComplaint(complaint))
+		gov.AddDKGComplaint(test.CloneDKGComplaint(complaint))
 	}
 }
 
 func (r *testCCGlobalReceiver) ProposeDKGMasterPublicKey(
 	mpk *typesDKG.MasterPublicKey) {
 	for _, gov := range r.govs {
-		gov.AddDKGMasterPublicKey(mpk.Round, test.CloneDKGMasterPublicKey(mpk))
+		gov.AddDKGMasterPublicKey(test.CloneDKGMasterPublicKey(mpk))
 	}
 }
 
@@ -103,13 +103,13 @@ func (r *testCCGlobalReceiver) ProposeDKGAntiNackComplaint(
 
 func (r *testCCGlobalReceiver) ProposeDKGMPKReady(ready *typesDKG.MPKReady) {
 	for _, gov := range r.govs {
-		gov.AddDKGMPKReady(ready.Round, test.CloneDKGMPKReady(ready))
+		gov.AddDKGMPKReady(test.CloneDKGMPKReady(ready))
 	}
 }
 
 func (r *testCCGlobalReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
 	for _, gov := range r.govs {
-		gov.AddDKGFinalize(final.Round, test.CloneDKGFinalize(final))
+		gov.AddDKGFinalize(test.CloneDKGFinalize(final))
 	}
 }
 

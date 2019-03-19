@@ -121,7 +121,7 @@ func (s *GovernanceTestSuite) TestProhibit() {
 			PublicKeyShares: *pubShare,
 		}
 		s.Require().NoError(signer.SignDKGMasterPublicKey(mpk))
-		gov.AddDKGMasterPublicKey(round, mpk)
+		gov.AddDKGMasterPublicKey(mpk)
 	}
 	proposeMPK(prvKeys[0])
 	s.Require().Len(gov.DKGMasterPublicKeys(round), 1)
@@ -139,7 +139,7 @@ func (s *GovernanceTestSuite) TestProhibit() {
 			Round:      round,
 		}
 		s.Require().NoError(signer.SignDKGComplaint(comp))
-		gov.AddDKGComplaint(round, comp)
+		gov.AddDKGComplaint(comp)
 	}
 	proposeComplaint(prvKeys[0])
 	s.Require().Len(gov.DKGComplaints(round), 1)
@@ -157,7 +157,7 @@ func (s *GovernanceTestSuite) TestProhibit() {
 			ProposerID: types.NewNodeID(k.PublicKey()),
 		}
 		s.Require().NoError(signer.SignDKGFinalize(final))
-		gov.AddDKGFinalize(round, final)
+		gov.AddDKGFinalize(final)
 	}
 	gov.Prohibit(StateAddDKGFinal)
 	for _, k := range prvKeys {

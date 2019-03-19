@@ -85,7 +85,7 @@ func (s *AppTestSuite) proposeMPK(
 			PublicKeyShares: *pubShare,
 		}
 		s.Require().NoError(s.signers[idx].SignDKGMasterPublicKey(mpk))
-		gov.AddDKGMasterPublicKey(round, mpk)
+		gov.AddDKGMasterPublicKey(mpk)
 	}
 }
 
@@ -100,7 +100,7 @@ func (s *AppTestSuite) proposeFinalize(
 			Reset:      reset,
 		}
 		s.Require().NoError(s.signers[idx].SignDKGFinalize(final))
-		gov.AddDKGFinalize(round, final)
+		gov.AddDKGFinalize(final)
 	}
 }
 

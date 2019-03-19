@@ -145,12 +145,8 @@ func (g *Governance) ProposeCRS(round uint64, signedCRS []byte) {
 }
 
 // AddDKGComplaint add a DKGComplaint.
-func (g *Governance) AddDKGComplaint(
-	round uint64, complaint *typesDKG.Complaint) {
+func (g *Governance) AddDKGComplaint(complaint *typesDKG.Complaint) {
 	if g.isProhibited(StateAddDKGComplaint) {
-		return
-	}
-	if round != complaint.Round {
 		return
 	}
 	if g.IsDKGFinal(complaint.Round) {
@@ -169,12 +165,8 @@ func (g *Governance) DKGComplaints(round uint64) []*typesDKG.Complaint {
 }
 
 // AddDKGMasterPublicKey adds a DKGMasterPublicKey.
-func (g *Governance) AddDKGMasterPublicKey(
-	round uint64, masterPublicKey *typesDKG.MasterPublicKey) {
+func (g *Governance) AddDKGMasterPublicKey(masterPublicKey *typesDKG.MasterPublicKey) {
 	if g.isProhibited(StateAddDKGMasterPublicKey) {
-		return
-	}
-	if round != masterPublicKey.Round {
 		return
 	}
 	if g.IsDKGMPKReady(masterPublicKey.Round) {
@@ -194,10 +186,7 @@ func (g *Governance) DKGMasterPublicKeys(
 }
 
 // AddDKGMPKReady adds a DKG ready message.
-func (g *Governance) AddDKGMPKReady(round uint64, ready *typesDKG.MPKReady) {
-	if round != ready.Round {
-		return
-	}
+func (g *Governance) AddDKGMPKReady(ready *typesDKG.MPKReady) {
 	if err := g.stateModule.RequestChange(StateAddDKGMPKReady, ready); err != nil {
 		panic(err)
 	}
@@ -220,11 +209,8 @@ func (g *Governance) IsDKGMPKReady(round uint64) bool {
 }
 
 // AddDKGFinalize adds a DKG finalize message.
-func (g *Governance) AddDKGFinalize(round uint64, final *typesDKG.Finalize) {
+func (g *Governance) AddDKGFinalize(final *typesDKG.Finalize) {
 	if g.isProhibited(StateAddDKGFinal) {
-		return
-	}
-	if round != final.Round {
 		return
 	}
 	if err := g.stateModule.RequestChange(StateAddDKGFinal, final); err != nil {
