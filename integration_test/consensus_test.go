@@ -509,7 +509,7 @@ func (s *ConsensusTestSuite) TestForceSync() {
 		core.ConfigRoundShift)
 	req.NoError(err)
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeRoundLength, uint64(60)))
+		test.StateChangeRoundLength, uint64(100)))
 	seedGov.CatchUpWithRound(0)
 	seedGov.CatchUpWithRound(1)
 	// A short round interval.

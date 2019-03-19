@@ -225,13 +225,13 @@ func (e *RoundEvent) ValidateNextRound(blockHeight uint64) {
 			h(events)
 		}
 	}()
-	startRound := e.lastTriggeredRound
+	var (
+		dkgFailed, triggered bool
+		param                RoundEventParam
+		beginHeight          = blockHeight
+		startRound           = e.lastTriggeredRound
+	)
 	for {
-		var (
-			dkgFailed, triggered bool
-			param                RoundEventParam
-			beginHeight          = blockHeight
-		)
 		for {
 			param, dkgFailed, triggered = e.check(beginHeight, startRound,
 				dkgFailed)

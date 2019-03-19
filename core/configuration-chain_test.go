@@ -596,6 +596,50 @@ func (s *ConfigurationChainTestSuite) TestDKGPhasesSnapShot() {
 	}
 }
 
+func (s *ConfigurationChainTestSuite) TestDKGAbort() {
+	n := 4
+	k := 1
+	round := DKGDelayRound
+	reset := uint64(0)
+	s.setupNodes(n)
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
+		s.pubKeys, 100*time.Millisecond, &common.NullLogger{}, true,
+	), ConfigRoundShift)
+	s.Require().NoError(err)
+	cache := utils.NewNodeSetCache(gov)
+	dbInst, err := db.NewMemBackedDB()
+	s.Require().NoError(err)
+	recv := newTestCCGlobalReceiver(s)
+	nID := s.nIDs[0]
+	cc := newConfigurationChain(nID,
+		newTestCCReceiver(nID, recv), gov, cache, dbInst,
+		&common.NullLogger{})
+	recv.nodes[nID] = cc
+	recv.govs[nID] = gov
+	// The first register should not be blocked.
+	cc.registerDKG(round, reset, k)
+	// We should be blocked because DKGReady is not enough.
+	errs := make(chan error, 1)
+	go func() {
+		errs <- cc.runDKG(round, reset)
+	}()
+	// The second register shouldn't be blocked, too.
+	randHash := common.NewRandomHash()
+	gov.ResetDKG(randHash[:])
+	cc.registerDKG(round, reset+1, k)
+	err = <-errs
+	s.Require().EqualError(ErrDKGAborted, err.Error())
+	go func() {
+		errs <- cc.runDKG(round, reset+1)
+	}()
+	// The third register shouldn't be blocked, too
+	randHash = common.NewRandomHash()
+	gov.ProposeCRS(round+1, randHash[:])
+	cc.registerDKG(round+1, reset, k)
+	err = <-errs
+	s.Require().EqualError(ErrDKGAborted, err.Error())
+}
+
 func TestConfigurationChain(t *testing.T) {
 	suite.Run(t, new(ConfigurationChainTestSuite))
 }
