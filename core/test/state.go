@@ -77,9 +77,6 @@ var (
 	// ErrChangeWontApply means the state change won't be applied for some
 	// reason.
 	ErrChangeWontApply = errors.New("change won't apply")
-	// ErrUnmatchedResetCount means an DKG message attempt to apply is not
-	// the latest reset count in State module.
-	ErrUnmatchedResetCount = errors.New("unmatched reset count of DKG message")
 	// ErrNotInRemoteMode means callers attempts to call functions for remote
 	// mode when the State instance is still in local mode.
 	ErrNotInRemoteMode = errors.New(
@@ -641,17 +638,17 @@ func (s *State) isValidRequest(req *StateChangeRequest) error {
 	case StateAddDKGMPKReady:
 		ready := req.Payload.(*typesDKG.MPKReady)
 		if ready.Reset != s.dkgResetCount[ready.Round] {
-			return ErrUnmatchedResetCount
+			return ErrChangeWontApply
 		}
 	case StateAddDKGFinal:
 		final := req.Payload.(*typesDKG.Finalize)
 		if final.Reset != s.dkgResetCount[final.Round] {
-			return ErrUnmatchedResetCount
+			return ErrChangeWontApply
 		}
 	case StateAddDKGMasterPublicKey:
 		mpk := req.Payload.(*typesDKG.MasterPublicKey)
 		if mpk.Reset != s.dkgResetCount[mpk.Round] {
-			return ErrUnmatchedResetCount
+			return ErrChangeWontApply
 		}
 		// If we've received identical MPK, ignore it.
 		mpkForRound, exists := s.dkgMasterPublicKeys[mpk.Round]
@@ -671,7 +668,7 @@ func (s *State) isValidRequest(req *StateChangeRequest) error {
 	case StateAddDKGComplaint:
 		comp := req.Payload.(*typesDKG.Complaint)
 		if comp.Reset != s.dkgResetCount[comp.Round] {
-			return ErrUnmatchedResetCount
+			return ErrChangeWontApply
 		}
 		// If we've received DKG final from that proposer, we would ignore
 		// its complaint.

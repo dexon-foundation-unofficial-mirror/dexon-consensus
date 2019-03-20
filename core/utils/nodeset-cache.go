@@ -59,6 +59,9 @@ type NodeSetCacheInterface interface {
 }
 
 // NodeSetCache caches node set information.
+//
+// NOTE: this module doesn't handle DKG resetting and can only be used along
+//       with utils.RoundEvent.
 type NodeSetCache struct {
 	lock    sync.RWMutex
 	nsIntf  NodeSetCacheInterface
@@ -163,6 +166,23 @@ func (cache *NodeSetCache) GetLeaderNode(pos types.Position) (
 		}
 	}
 	return IDs.leaderNode[pos.Height], nil
+}
+
+// Purge a specific round.
+func (cache *NodeSetCache) Purge(rID uint64) {
+	cache.lock.Lock()
+	defer cache.lock.Unlock()
+	nIDs, exist := cache.rounds[rID]
+	if !exist {
+		return
+	}
+	for nID := range nIDs.nodeSet.IDs {
+		rec := cache.keyPool[nID]
+		if rec.refCnt--; rec.refCnt == 0 {
+			delete(cache.keyPool, nID)
+		}
+	}
+	delete(cache.rounds, rID)
 }
 
 // Touch updates the internal cache of round.

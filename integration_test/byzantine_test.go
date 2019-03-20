@@ -80,9 +80,16 @@ func (s *ByzantineTestSuite) setupNodes(
 		gov := seedGov.Clone()
 		gov.SwitchToRemoteMode(networkModule)
 		gov.NotifyRound(0)
-		networkModule.AddNodeSetCache(utils.NewNodeSetCache(gov))
+		networkModule.AttachNodeSetCache(utils.NewNodeSetCache(gov))
 		app := test.NewApp(1, gov, nil)
-		nodes[nID] = &node{nID, nil, app, gov, dbInst, networkModule}
+		nodes[nID] = &node{
+			ID:      nID,
+			app:     app,
+			gov:     gov,
+			db:      dbInst,
+			network: networkModule,
+			logger:  &common.NullLogger{},
+		}
 		go func() {
 			defer wg.Done()
 			s.Require().NoError(networkModule.Setup(serverChannel))
@@ -102,7 +109,7 @@ func (s *ByzantineTestSuite) setupNodes(
 			node.db,
 			node.network,
 			k,
-			&common.NullLogger{},
+			node.logger,
 		)
 	}
 	return nodes
@@ -144,7 +151,7 @@ func (s *ByzantineTestSuite) TestOneSlowNodeOneDeadNode() {
 		core.ConfigRoundShift)
 	req.NoError(err)
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeRoundLength, uint64(60)))
+		test.StateChangeRoundLength, uint64(100)))
 	slowNodeID := types.NewNodeID(pubKeys[0])
 	deadNodeID := types.NewNodeID(pubKeys[1])
 	s.directLatencyModel[slowNodeID] = &test.FixedLatencyModel{

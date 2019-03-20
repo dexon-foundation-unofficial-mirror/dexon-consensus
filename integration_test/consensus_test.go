@@ -46,8 +46,22 @@ type node struct {
 	con     *core.Consensus
 	app     *test.App
 	gov     *test.Governance
+	rEvt    *utils.RoundEvent
 	db      db.Database
 	network *test.Network
+	logger  common.Logger
+}
+
+func prohibitDKG(gov *test.Governance) {
+	gov.Prohibit(test.StateAddDKGMasterPublicKey)
+	gov.Prohibit(test.StateAddDKGFinal)
+	gov.Prohibit(test.StateAddDKGComplaint)
+}
+
+func unprohibitDKG(gov *test.Governance) {
+	gov.Unprohibit(test.StateAddDKGMasterPublicKey)
+	gov.Unprohibit(test.StateAddDKGFinal)
+	gov.Unprohibit(test.StateAddDKGComplaint)
 }
 
 func (s *ConsensusTestSuite) setupNodes(
@@ -55,7 +69,8 @@ func (s *ConsensusTestSuite) setupNodes(
 	prvKeys []crypto.PrivateKey,
 	seedGov *test.Governance) map[types.NodeID]*node {
 	var (
-		wg sync.WaitGroup
+		wg        sync.WaitGroup
+		initRound uint64
 	)
 	// Setup peer server at transport layer.
 	server := test.NewFakeTransportServer()
@@ -76,11 +91,22 @@ func (s *ConsensusTestSuite) setupNodes(
 		)
 		gov := seedGov.Clone()
 		gov.SwitchToRemoteMode(networkModule)
-		gov.NotifyRound(0)
-		networkModule.AddNodeSetCache(utils.NewNodeSetCache(gov))
-		app := test.NewApp(1, gov, nil)
+		gov.NotifyRound(initRound)
+		networkModule.AttachNodeSetCache(utils.NewNodeSetCache(gov))
+		logger := &common.NullLogger{}
+		rEvt, err := utils.NewRoundEvent(context.Background(), gov, logger, 0,
+			0, 0, core.ConfigRoundShift)
+		s.Require().NoError(err)
 		nID := types.NewNodeID(k.PublicKey())
-		nodes[nID] = &node{nID, nil, app, gov, dbInst, networkModule}
+		nodes[nID] = &node{
+			ID:      nID,
+			app:     test.NewApp(initRound+1, gov, rEvt),
+			gov:     gov,
+			db:      dbInst,
+			logger:  logger,
+			rEvt:    rEvt,
+			network: networkModule,
+		}
 		go func() {
 			defer wg.Done()
 			s.Require().NoError(networkModule.Setup(serverChannel))
@@ -100,7 +126,7 @@ func (s *ConsensusTestSuite) setupNodes(
 			node.db,
 			node.network,
 			k,
-			&common.NullLogger{},
+			node.logger,
 		)
 	}
 	return nodes
@@ -215,7 +241,7 @@ func (s *ConsensusTestSuite) TestSimple() {
 		core.ConfigRoundShift)
 	req.NoError(err)
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeRoundLength, uint64(60)))
+		test.StateChangeRoundLength, uint64(100)))
 	// A short round interval.
 	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
 	for _, n := range nodes {
@@ -244,7 +270,7 @@ func (s *ConsensusTestSuite) TestSetSizeChange() {
 		req        = s.Require()
 		peerCount  = 7
 		dMoment    = time.Now().UTC()
-		untilRound = uint64(6)
+		untilRound = uint64(5)
 	)
 	if testing.Short() {
 		// Short test won't test configuration change packed as payload of
@@ -259,7 +285,7 @@ func (s *ConsensusTestSuite) TestSetSizeChange() {
 		core.ConfigRoundShift)
 	req.NoError(err)
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeRoundLength, uint64(60)))
+		test.StateChangeRoundLength, uint64(100)))
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeNotarySetSize, uint32(4)))
 	req.NoError(seedGov.State().RequestChange(
@@ -267,7 +293,7 @@ func (s *ConsensusTestSuite) TestSetSizeChange() {
 	seedGov.CatchUpWithRound(0)
 	// Setup configuration for round 0 and round 1.
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeRoundLength, uint64(85)))
+		test.StateChangeRoundLength, uint64(100)))
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeNotarySetSize, uint32(5)))
 	req.NoError(seedGov.State().RequestChange(
@@ -275,7 +301,7 @@ func (s *ConsensusTestSuite) TestSetSizeChange() {
 	seedGov.CatchUpWithRound(1)
 	// Setup configuration for round 2.
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeRoundLength, uint64(85)))
+		test.StateChangeRoundLength, uint64(100)))
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeNotarySetSize, uint32(6)))
 	req.NoError(seedGov.State().RequestChange(
@@ -283,7 +309,7 @@ func (s *ConsensusTestSuite) TestSetSizeChange() {
 	seedGov.CatchUpWithRound(2)
 	// Setup configuration for round 3.
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeRoundLength, uint64(60)))
+		test.StateChangeRoundLength, uint64(100)))
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeNotarySetSize, uint32(4)))
 	req.NoError(seedGov.State().RequestChange(
@@ -298,18 +324,11 @@ func (s *ConsensusTestSuite) TestSetSizeChange() {
 	}
 	// Register configuration changes for round 4.
 	req.NoError(pickedNode.gov.RegisterConfigChange(
-		4, test.StateChangeRoundLength, uint64(80)))
+		4, test.StateChangeRoundLength, uint64(100)))
 	req.NoError(pickedNode.gov.RegisterConfigChange(
 		4, test.StateChangeNotarySetSize, uint32(5)))
 	req.NoError(pickedNode.gov.RegisterConfigChange(
 		4, test.StateChangeDKGSetSize, uint32(5)))
-	// Register configuration changes for round 5.
-	req.NoError(pickedNode.gov.RegisterConfigChange(
-		5, test.StateChangeRoundLength, uint64(60)))
-	req.NoError(pickedNode.gov.RegisterConfigChange(
-		5, test.StateChangeNotarySetSize, uint32(4)))
-	req.NoError(pickedNode.gov.RegisterConfigChange(
-		5, test.StateChangeDKGSetSize, uint32(4)))
 	// Run test.
 	for _, n := range nodes {
 		go n.con.Run()
@@ -340,9 +359,11 @@ func (s *ConsensusTestSuite) TestSync() {
 		req        = s.Require()
 		peerCount  = 4
 		dMoment    = time.Now().UTC()
-		untilRound = uint64(7)
-		stopRound  = uint64(5)
-		aliveRound = uint64(4)
+		untilRound = uint64(6)
+		stopRound  = uint64(4)
+		// aliveRound should be large enough to test round event handling in
+		// syncer.
+		aliveRound = uint64(3)
 		errChan    = make(chan error, 100)
 	)
 	prvKeys, pubKeys, err := test.NewKeys(peerCount)
@@ -355,7 +376,7 @@ func (s *ConsensusTestSuite) TestSync() {
 		core.ConfigRoundShift)
 	req.NoError(err)
 	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeRoundLength, uint64(60)))
+		test.StateChangeRoundLength, uint64(100)))
 	seedGov.CatchUpWithRound(0)
 	seedGov.CatchUpWithRound(1)
 	// A short round interval.
@@ -447,29 +468,30 @@ ReachAlive:
 		}
 	}()
 	// Wait until all nodes reach 'untilRound'.
+	var stoppedRound uint64
 	go func() {
 		n, pos := stoppedNode, stoppedNode.app.GetLatestDeliveredPosition()
 	ReachFinished:
 		for {
 			fmt.Println("latestPos", n.ID, &pos)
 			time.Sleep(5 * time.Second)
-			for _, n = range nodes {
+			if stoppedNode.con != nil {
 				pos = n.app.GetLatestDeliveredPosition()
-				if n.ID == stoppedNode.ID {
-					if n.con == nil {
-						continue
-					}
-					if pos.Round < stopRound {
-						continue ReachFinished
-					}
+				if pos.Round >= stopRound {
 					// Stop a node, we should still be able to proceed.
 					stoppedNode.con.Stop()
 					stoppedNode.con = nil
+					stoppedRound = pos.Round
 					fmt.Println("one node stopped", stoppedNode.ID)
 					utils.LaunchDummyReceiver(
 						runnerCtx, stoppedNode.network.ReceiveChan(), nil)
+				}
+			}
+			for _, n = range nodes {
+				if n.ID == stoppedNode.ID {
 					continue
 				}
+				pos = n.app.GetLatestDeliveredPosition()
 				if pos.Round < untilRound {
 					continue ReachFinished
 				}
@@ -485,6 +507,7 @@ ReachAlive:
 	case <-runnerCtx.Done():
 		// This test passed.
 	}
+	s.Require().Equal(stoppedRound, stopRound)
 }
 
 func (s *ConsensusTestSuite) TestForceSync() {
@@ -630,6 +653,100 @@ Loop:
 		break
 	}
 	s.verifyNodes(nodes)
+}
+
+func (s *ConsensusTestSuite) TestResetDKG() {
+	var (
+		req        = s.Require()
+		peerCount  = 5
+		dMoment    = time.Now().UTC()
+		untilRound = uint64(3)
+	)
+	prvKeys, pubKeys, err := test.NewKeys(peerCount)
+	req.NoError(err)
+	// Setup seed governance instance. Give a short latency to make this test
+	// run faster.
+	seedGov, err := test.NewGovernance(
+		test.NewState(core.DKGDelayRound,
+			pubKeys, 100*time.Millisecond, &common.NullLogger{}, true),
+		core.ConfigRoundShift)
+	req.NoError(err)
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeRoundLength, uint64(100)))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeNotarySetSize, uint32(4)))
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeDKGSetSize, uint32(4)))
+	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
+	// A round event handler to purge utils.NodeSetCache in test.Network.
+	purgeHandlerGen := func(n *test.Network) func([]utils.RoundEventParam) {
+		return func(evts []utils.RoundEventParam) {
+			for _, e := range evts {
+				if e.Reset == 0 {
+					continue
+				}
+				n.PurgeNodeSetCache(e.Round + 1)
+			}
+		}
+	}
+	// Round Height reference table:
+	// - Round:1 Reset:0 -- 100
+	// - Round:1 Reset:1 -- 200
+	// - Round:1 Reset:2 -- 300
+	// - Round:2 Reset:0 -- 400
+	// - Round:2 Reset:1 -- 500
+	// - Round:3 Reset:0 -- 600
+	// Register round event handler to prohibit/unprohibit DKG operation to
+	// governance.
+	roundHandlerGen := func(g *test.Governance) func([]utils.RoundEventParam) {
+		return func(evts []utils.RoundEventParam) {
+			trigger := func(e utils.RoundEventParam) {
+				// Make round 2 reseted until resetCount == 2.
+				if e.Round == 1 && e.Reset == 0 {
+					prohibitDKG(g)
+				}
+				if e.Round == 1 && e.Reset == 2 {
+					unprohibitDKG(g)
+				}
+				// Make round 3 reseted until resetCount == 1.
+				if e.Round == 2 && e.Reset == 0 {
+					// Allow DKG final this time.
+					g.Prohibit(test.StateAddDKGMasterPublicKey)
+					g.Prohibit(test.StateAddDKGComplaint)
+				}
+				if e.Round == 2 && e.Reset == 1 {
+					unprohibitDKG(g)
+				}
+			}
+			for _, e := range evts {
+				trigger(e)
+			}
+		}
+	}
+	for _, n := range nodes {
+		n.rEvt.Register(purgeHandlerGen(n.network))
+		n.rEvt.Register(roundHandlerGen(n.gov))
+		go n.con.Run()
+	}
+Loop:
+	for {
+		<-time.After(5 * time.Second)
+		for _, n := range nodes {
+			latestPos := n.app.GetLatestDeliveredPosition()
+			fmt.Println("latestPos", n.ID, &latestPos)
+			if latestPos.Round < untilRound {
+				continue Loop
+			}
+		}
+		// Oh ya.
+		break
+	}
+	s.verifyNodes(nodes)
+	for _, n := range nodes {
+		n.con.Stop()
+		req.Equal(n.gov.DKGResetCount(2), uint64(2))
+		req.Equal(n.gov.DKGResetCount(3), uint64(1))
+	}
 }
 
 func TestConsensus(t *testing.T) {

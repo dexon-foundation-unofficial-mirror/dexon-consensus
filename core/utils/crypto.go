@@ -323,3 +323,12 @@ func VerifyDKGFinalizeSignature(
 	}
 	return true, nil
 }
+
+// Rehash hashes the hash again and again and again...
+func Rehash(hash common.Hash, count uint) common.Hash {
+	result := hash
+	for i := uint(0); i < count; i++ {
+		result = crypto.Keccak256Hash(result[:])
+	}
+	return result
+}

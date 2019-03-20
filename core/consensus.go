@@ -630,8 +630,40 @@ func (con *Consensus) prepare(
 			panic("not implemented yet")
 		}
 	}
+	// Measure time elapse for each handler of round events.
+	elapse := func(what string, lastE utils.RoundEventParam) func() {
+		start := time.Now()
+		con.logger.Info("handle round event",
+			"what", what,
+			"event", lastE)
+		return func() {
+			con.logger.Info("finish round event",
+				"what", what,
+				"event", lastE,
+				"elapse", time.Since(start))
+		}
+	}
+	// Register round event handler to purge cached node set. To make sure each
+	// modules see the up-to-date node set, we need to make sure this action
+	// should be taken as the first one.
+	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
+		defer elapse("purge node set", evts[len(evts)-1])()
+		for _, e := range evts {
+			if e.Reset == 0 {
+				continue
+			}
+			con.nodeSetCache.Purge(e.Round + 1)
+		}
+	})
+	// Register round event handler to abort previous running DKG if any.
+	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
+		e := evts[len(evts)-1]
+		defer elapse("abort DKG", e)()
+		con.cfgModule.abortDKG(e.Round+1, e.Reset)
+	})
 	// Register round event handler to update BA and BC modules.
 	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
+		defer elapse("append config", evts[len(evts)-1])()
 		// Always updates newer configs to the later modules first in the flow.
 		if err := con.bcModule.notifyRoundEvents(evts); err != nil {
 			panic(err)
@@ -643,11 +675,62 @@ func (con *Consensus) prepare(
 			}
 		}
 	})
+	// Register round event handler to reset DKG if the DKG set for next round
+	// failed to setup.
+	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
+		e := evts[len(evts)-1]
+		defer elapse("reset DKG", e)()
+		nextRound := e.Round + 1
+		if nextRound < DKGDelayRound {
+			return
+		}
+		curDKGSet, err := con.nodeSetCache.GetDKGSet(e.Round)
+		if err != nil {
+			con.logger.Error("Error getting DKG set when proposing CRS",
+				"round", e.Round,
+				"error", err)
+			return
+		}
+		if _, exist := curDKGSet[con.ID]; !exist {
+			return
+		}
+		isDKGValid := func() bool {
+			nextConfig := utils.GetConfigWithPanic(con.gov, nextRound,
+				con.logger)
+			if !con.gov.IsDKGFinal(nextRound) {
+				con.logger.Error("Next DKG is not final, reset it",
+					"round", e.Round,
+					"reset", e.Reset)
+				return false
+			}
+			if _, err := typesDKG.NewGroupPublicKey(
+				nextRound,
+				con.gov.DKGMasterPublicKeys(nextRound),
+				con.gov.DKGComplaints(nextRound),
+				utils.GetDKGThreshold(nextConfig)); err != nil {
+				con.logger.Error("Next DKG failed to prepare, reset it",
+					"round", e.Round,
+					"reset", e.Reset,
+					"error", err)
+				return false
+			}
+			return true
+		}
+		con.event.RegisterHeight(e.NextDKGResetHeight(), func(uint64) {
+			if isDKGValid() {
+				return
+			}
+			// Aborting all previous running DKG protocol instance if any.
+			con.cfgModule.abortDKG(nextRound, e.Reset)
+			con.runCRS(e.Round, utils.Rehash(e.CRS, uint(e.Reset+1)), true)
+		})
+	})
 	// Register round event handler to propose new CRS.
 	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
 		// We don't have to propose new CRS during DKG reset, the reset of DKG
 		// would be done by the DKG set in previous round.
 		e := evts[len(evts)-1]
+		defer elapse("propose CRS", e)()
 		if e.Reset != 0 || e.Round < DKGDelayRound {
 			return
 		}
@@ -667,13 +750,14 @@ func (con *Consensus) prepare(
 					con.logger.Debug("CRS already proposed", "round", e.Round+1)
 					return
 				}
-				con.runCRS(e.Round, e.CRS)
+				con.runCRS(e.Round, e.CRS, false)
 			})
 		}
 	})
 	// Touch nodeSetCache for next round.
 	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
 		e := evts[len(evts)-1]
+		defer elapse("touch node set cache", e)()
 		if e.Reset != 0 {
 			return
 		}
@@ -702,6 +786,7 @@ func (con *Consensus) prepare(
 	// Trigger round validation method for next period.
 	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
 		e := evts[len(evts)-1]
+		defer elapse("next round", e)()
 		// Register a routine to trigger round events.
 		con.event.RegisterHeight(e.NextRoundValidationHeight(), func(
 			blockHeight uint64) {
@@ -711,7 +796,9 @@ func (con *Consensus) prepare(
 		con.event.RegisterHeight(e.NextDKGRegisterHeight(), func(uint64) {
 			nextRound := e.Round + 1
 			if nextRound < DKGDelayRound {
-				con.logger.Info("Skip runDKG for round", "round", nextRound)
+				con.logger.Info("Skip runDKG for round",
+					"round", nextRound,
+					"reset", e.Reset)
 				return
 			}
 			// Normally, gov.CRS would return non-nil. Use this for in case of
@@ -719,21 +806,27 @@ func (con *Consensus) prepare(
 			if !checkWithCancel(
 				con.ctx, 500*time.Millisecond, checkCRS(nextRound)) {
 				con.logger.Debug("unable to prepare CRS for DKG set",
-					"round", nextRound)
+					"round", nextRound,
+					"reset", e.Reset)
 				return
 			}
 			nextDkgSet, err := con.nodeSetCache.GetDKGSet(nextRound)
 			if err != nil {
 				con.logger.Error("Error getting DKG set for next round",
 					"round", nextRound,
+					"reset", e.Reset,
 					"error", err)
 				return
 			}
 			if _, exist := nextDkgSet[con.ID]; !exist {
-				con.logger.Info("Not selected as DKG set", "round", nextRound)
+				con.logger.Info("Not selected as DKG set",
+					"round", nextRound,
+					"reset", e.Reset)
 				return
 			}
-			con.logger.Info("Selected as DKG set", "round", nextRound)
+			con.logger.Info("Selected as DKG set",
+				"round", nextRound,
+				"reset", e.Reset)
 			nextConfig := utils.GetConfigWithPanic(con.gov, nextRound,
 				con.logger)
 			con.cfgModule.registerDKG(nextRound, e.Reset, utils.GetDKGThreshold(
@@ -821,7 +914,7 @@ func (con *Consensus) runDKG(round, reset uint64, config *types.Config) {
 	}()
 }
 
-func (con *Consensus) runCRS(round uint64, hash common.Hash) {
+func (con *Consensus) runCRS(round uint64, hash common.Hash, reset bool) {
 	// Start running next round CRS.
 	psig, err := con.cfgModule.preparePartialSignature(round, hash)
 	if err != nil {
@@ -841,10 +934,17 @@ func (con *Consensus) runCRS(round uint64, hash common.Hash) {
 		if err != nil {
 			con.logger.Error("Failed to run CRS Tsig", "error", err)
 		} else {
-			con.logger.Debug("Calling Governance.ProposeCRS",
-				"round", round+1,
-				"crs", hex.EncodeToString(crs))
-			con.gov.ProposeCRS(round+1, crs)
+			if reset {
+				con.logger.Debug("Calling Governance.ResetDKG",
+					"round", round+1,
+					"crs", hex.EncodeToString(crs))
+				con.gov.ResetDKG(crs)
+			} else {
+				con.logger.Debug("Calling Governance.ProposeCRS",
+					"round", round+1,
+					"crs", hex.EncodeToString(crs))
+				con.gov.ProposeCRS(round+1, crs)
+			}
 		}
 	}
 }

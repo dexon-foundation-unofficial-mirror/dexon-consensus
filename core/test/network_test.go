@@ -289,7 +289,7 @@ func (s *NetworkTestSuite) TestBroadcastToSet() {
 	req.NotNil(nerd)
 	req.NotNil(dkgNode)
 	req.NotNil(notaryNode)
-	nerd.AddNodeSetCache(cache)
+	nerd.AttachNodeSetCache(cache)
 	// Try broadcasting with datum from round 0, and make sure only node belongs
 	// to that set receiving the message.
 	nerd.BroadcastVote(&types.Vote{VoteHeader: types.VoteHeader{

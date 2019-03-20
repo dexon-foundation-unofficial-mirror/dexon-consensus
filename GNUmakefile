@@ -44,11 +44,11 @@ else
 endif
 endef
 
-GO_TEST_TIMEOUT := 20m
+GO_TEST_TIMEOUT := 33m
 
 TEST_TARGET := go list ./... | grep -v 'vendor'
 ifeq ($(NO_INTEGRATION_TEST), true)
-	GO_TEST_TIMEOUT := 15m
+	GO_TEST_TIMEOUT := 25m
 	TEST_TARGET := $(TEST_TARGET) | grep -v 'integration_test'
 else ifeq ($(ONLY_INTEGRATION_TEST), true)
 	TEST_TARGET := $(TEST_TARGET) | grep 'integration_test'

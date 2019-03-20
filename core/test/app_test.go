@@ -309,15 +309,15 @@ func (s *AppTestSuite) TestAttachedWithRoundEvent() {
 		1900, 2019, core.ConfigRoundShift)
 	s.Require().NoError(err)
 	// Register a handler to collects triggered events.
-	var evts []evtParamToCheck
+	evts := make(chan evtParamToCheck, 2)
 	rEvt.Register(func(params []utils.RoundEventParam) {
 		for _, p := range params {
-			evts = append(evts, evtParamToCheck{
+			evts <- evtParamToCheck{
 				round:  p.Round,
 				reset:  p.Reset,
 				height: p.BeginHeight,
 				crs:    p.CRS,
-			})
+			}
 		}
 	})
 	// Setup App instance.
@@ -336,18 +336,16 @@ func (s *AppTestSuite) TestAttachedWithRoundEvent() {
 	// Deliver blocks from height=2020 to height=2081.
 	deliver(0, 0, 2019)
 	deliver(19, 2020, 2091)
-	s.Require().Len(evts, 2)
-	s.Require().Equal(evts[0], evtParamToCheck{19, 2, 2100, gov.CRS(19)})
-	s.Require().Equal(evts[1], evtParamToCheck{20, 0, 2200, gov.CRS(20)})
+	s.Require().Equal(<-evts, evtParamToCheck{19, 2, 2100, gov.CRS(19)})
+	s.Require().Equal(<-evts, evtParamToCheck{20, 0, 2200, gov.CRS(20)})
 	// Deliver blocks from height=2082 to height=2281.
 	deliver(19, 2092, 2199)
 	deliver(20, 2200, 2291)
-	s.Require().Len(evts, 3)
-	s.Require().Equal(evts[2], evtParamToCheck{21, 0, 2300, gov.CRS(21)})
+	s.Require().Equal(<-evts, evtParamToCheck{21, 0, 2300, gov.CRS(21)})
 	// Deliver blocks from height=2282 to height=2381.
 	deliver(20, 2292, 2299)
 	deliver(21, 2300, 2391)
-	s.Require().Equal(evts[3], evtParamToCheck{22, 0, 2400, gov.CRS(22)})
+	s.Require().Equal(<-evts, evtParamToCheck{22, 0, 2400, gov.CRS(22)})
 }
 
 func TestApp(t *testing.T) {

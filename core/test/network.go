@@ -498,12 +498,17 @@ func (n *Network) addStateModule(s *State) {
 	n.stateModule = s
 }
 
-// AddNodeSetCache attaches an utils.NodeSetCache to this module. Once attached
+// AttachNodeSetCache attaches an utils.NodeSetCache to this module. Once attached
 // The behavior of Broadcast-X methods would be switched to broadcast to correct
 // set of peers, instead of all peers.
-func (n *Network) AddNodeSetCache(cache *utils.NodeSetCache) {
+func (n *Network) AttachNodeSetCache(cache *utils.NodeSetCache) {
 	// This variable should be attached before run, no lock to protect it.
 	n.cache = cache
+}
+
+// PurgeNodeSetCache purges cache of some round in attached utils.NodeSetCache.
+func (n *Network) PurgeNodeSetCache(round uint64) {
+	n.cache.Purge(round)
 }
 
 func (n *Network) pullBlocksAsync(hashes common.Hashes) {

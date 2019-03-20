@@ -154,7 +154,9 @@ func (g *Governance) AddDKGComplaint(complaint *typesDKG.Complaint) {
 	}
 	if err := g.stateModule.RequestChange(
 		StateAddDKGComplaint, complaint); err != nil {
-		panic(err)
+		if err != ErrChangeWontApply {
+			panic(err)
+		}
 	}
 	g.broadcastPendingStateChanges()
 }
@@ -174,7 +176,9 @@ func (g *Governance) AddDKGMasterPublicKey(masterPublicKey *typesDKG.MasterPubli
 	}
 	if err := g.stateModule.RequestChange(
 		StateAddDKGMasterPublicKey, masterPublicKey); err != nil {
-		panic(err)
+		if err != ErrChangeWontApply {
+			panic(err)
+		}
 	}
 	g.broadcastPendingStateChanges()
 }
@@ -187,8 +191,11 @@ func (g *Governance) DKGMasterPublicKeys(
 
 // AddDKGMPKReady adds a DKG ready message.
 func (g *Governance) AddDKGMPKReady(ready *typesDKG.MPKReady) {
-	if err := g.stateModule.RequestChange(StateAddDKGMPKReady, ready); err != nil {
-		panic(err)
+	if err := g.stateModule.RequestChange(
+		StateAddDKGMPKReady, ready); err != nil {
+		if err != ErrChangeWontApply {
+			panic(err)
+		}
 	}
 	g.broadcastPendingStateChanges()
 }
@@ -214,7 +221,9 @@ func (g *Governance) AddDKGFinalize(final *typesDKG.Finalize) {
 		return
 	}
 	if err := g.stateModule.RequestChange(StateAddDKGFinal, final); err != nil {
-		panic(err)
+		if err != ErrChangeWontApply {
+			panic(err)
+		}
 	}
 	g.broadcastPendingStateChanges()
 }
@@ -341,6 +350,11 @@ func (g *Governance) Clone() *Governance {
 		}
 		copiedNodeSets = append(copiedNodeSets, copiedNodeSet)
 	}
+	// Clone prohibited flag.
+	copiedProhibitedTypes := make(map[StateChangeType]struct{})
+	for t := range g.prohibitedTypes {
+		copiedProhibitedTypes[t] = struct{}{}
+	}
 	// Clone pending changes.
 	return &Governance{
 		roundShift:           g.roundShift,
@@ -348,6 +362,7 @@ func (g *Governance) Clone() *Governance {
 		stateModule:          copiedState,
 		nodeSets:             copiedNodeSets,
 		pendingConfigChanges: copiedPendingChanges,
+		prohibitedTypes:      copiedProhibitedTypes,
 	}
 }
 
@@ -367,6 +382,10 @@ func (g *Governance) Equal(other *Governance, checkState bool) bool {
 	}
 	// Check pending changes.
 	if !reflect.DeepEqual(g.pendingConfigChanges, other.pendingConfigChanges) {
+		return false
+	}
+	// Check prohibited types.
+	if !reflect.DeepEqual(g.prohibitedTypes, other.prohibitedTypes) {
 		return false
 	}
 	getSortedKeys := func(keys []crypto.PublicKey) (encoded []string) {

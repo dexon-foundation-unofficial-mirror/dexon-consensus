@@ -265,7 +265,7 @@ func (app *App) BlockDelivered(blockHash common.Hash, pos types.Position,
 			}
 		}
 	}()
-	app.hEvt.NotifyHeight(result.Height)
+	go app.hEvt.NotifyHeight(result.Height)
 }
 
 // GetLatestDeliveredPosition would return the latest position of delivered

@@ -472,13 +472,13 @@ func (s *StateTestSuite) TestUnmatchedResetCount() {
 	s.Require().NoError(st.RequestChange(StateResetDKG, common.NewRandomHash()))
 	s.Require().NoError(st.RequestChange(StateResetDKG, common.NewRandomHash()))
 	s.Require().Equal(st.dkgResetCount[1], uint64(2))
-	s.Require().EqualError(ErrUnmatchedResetCount, st.RequestChange(
+	s.Require().EqualError(ErrChangeWontApply, st.RequestChange(
 		StateAddDKGMasterPublicKey, mpk).Error())
-	s.Require().EqualError(ErrUnmatchedResetCount, st.RequestChange(
+	s.Require().EqualError(ErrChangeWontApply, st.RequestChange(
 		StateAddDKGMPKReady, ready).Error())
-	s.Require().EqualError(ErrUnmatchedResetCount, st.RequestChange(
+	s.Require().EqualError(ErrChangeWontApply, st.RequestChange(
 		StateAddDKGComplaint, comp).Error())
-	s.Require().EqualError(ErrUnmatchedResetCount, st.RequestChange(
+	s.Require().EqualError(ErrChangeWontApply, st.RequestChange(
 		StateAddDKGFinal, final).Error())
 	mpk = s.newDKGMasterPublicKey(1, 2)
 	ready = s.newDKGMPKReady(1, 2)

@@ -90,7 +90,7 @@ func (c *RoundBasedConfig) RoundEndHeight() uint64 {
 	return c.roundEndHeight
 }
 
-// AppendTo a config in previous round.
+// AppendTo a config from previous round.
 func (c *RoundBasedConfig) AppendTo(other RoundBasedConfig) {
 	if c.roundID != other.roundID+1 {
 		panic(fmt.Errorf("round IDs of configs not continuous: %d %d",

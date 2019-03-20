@@ -93,6 +93,13 @@ func (e RoundEventParam) NextDKGRegisterHeight() uint64 {
 	return e.BeginHeight + e.Config.RoundLength/2
 }
 
+func (e RoundEventParam) String() string {
+	return fmt.Sprintf("roundEvtParam{Round:%d Reset:%d Height:%d}",
+		e.Round,
+		e.Reset,
+		e.BeginHeight)
+}
+
 // roundEventFn defines the fingerprint of handlers of round events.
 type roundEventFn func([]RoundEventParam)
 
@@ -177,6 +184,8 @@ func NewRoundEvent(parentCtx context.Context, gov governanceAccessor,
 
 // Register a handler to be called when new round is confirmed or new DKG reset
 // is detected.
+//
+// The earlier registered handler has higher priority.
 func (e *RoundEvent) Register(h roundEventFn) {
 	e.lock.Lock()
 	defer e.lock.Unlock()

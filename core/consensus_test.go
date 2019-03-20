@@ -285,7 +285,7 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 	crsFinish := make(chan struct{})
 	for _, con := range cons {
 		go func(con *Consensus) {
-			con.runCRS(0, gov.CRS(0))
+			con.runCRS(0, gov.CRS(0), false)
 			crsFinish <- struct{}{}
 		}(con)
 	}

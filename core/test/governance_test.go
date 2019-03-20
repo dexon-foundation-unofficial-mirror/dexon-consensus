@@ -70,6 +70,13 @@ func (s *GovernanceTestSuite) TestEqual() {
 	// Change its roundShift
 	g5.roundShift = 3
 	req.False(g1.Equal(g5, true))
+	// Prohibit some change.
+	g1.Prohibit(StateAddDKGFinal)
+	// Make a clone and should be equal.
+	g6 := g1.Clone()
+	req.True(g1.Equal(g6, true))
+	g6.Unprohibit(StateAddDKGFinal)
+	req.False(g1.Equal(g6, true))
 }
 
 func (s *GovernanceTestSuite) TestRegisterChange() {
