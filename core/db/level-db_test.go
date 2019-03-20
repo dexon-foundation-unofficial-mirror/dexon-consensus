@@ -204,6 +204,42 @@ func (s *LevelDBTestSuite) TestDKGProtocol() {
 	s.Require().NoError(dbInst.PutOrUpdateDKGProtocol(DKGProtocolInfo{}))
 }
 
+func (s *LevelDBTestSuite) TestDKGProtocolInfoRLPEncodeDecode() {
+	protocol := DKGProtocolInfo{
+		ID:        types.NodeID{Hash: common.Hash{0x11}},
+		Round:     5,
+		Threshold: 10,
+		IDMap: NodeIDToDKGID{
+			types.NodeID{Hash: common.Hash{0x01}}: dkg.ID{},
+			types.NodeID{Hash: common.Hash{0x02}}: dkg.ID{},
+		},
+		MpkMap: NodeIDToPubShares{
+			types.NodeID{Hash: common.Hash{0x01}}: &dkg.PublicKeyShares{},
+			types.NodeID{Hash: common.Hash{0x02}}: &dkg.PublicKeyShares{},
+		},
+		AntiComplaintReceived: NodeIDToNodeIDs{
+			types.NodeID{Hash: common.Hash{0x01}}: map[types.NodeID]struct{}{
+				types.NodeID{Hash: common.Hash{0x02}}: {},
+			},
+			types.NodeID{Hash: common.Hash{0x03}}: map[types.NodeID]struct{}{
+				types.NodeID{Hash: common.Hash{0x04}}: {},
+			},
+		},
+		PrvSharesReceived: NodeID{
+			types.NodeID{Hash: common.Hash{0x01}}: struct{}{},
+		},
+	}
+
+	b, err := rlp.EncodeToBytes(&protocol)
+	s.Require().NoError(err)
+
+	newProtocol := DKGProtocolInfo{}
+	err = rlp.DecodeBytes(b, &newProtocol)
+	s.Require().NoError(err)
+
+	s.Require().True(protocol.Equal(&newProtocol))
+}
+
 func (s *LevelDBTestSuite) TestNodeIDToNodeIDsRLPEncodeDecode() {
 	m := NodeIDToNodeIDs{
 		types.NodeID{Hash: common.Hash{0x01}}: map[types.NodeID]struct{}{

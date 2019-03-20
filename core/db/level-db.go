@@ -59,6 +59,91 @@ type DKGProtocolInfo struct {
 	Reset                     uint64
 }
 
+// Equal compare with target DKGProtocolInfo.
+func (info *DKGProtocolInfo) Equal(target *DKGProtocolInfo) bool {
+	if !info.ID.Equal(target.ID) ||
+		info.Round != target.Round ||
+		info.Threshold != target.Threshold ||
+		info.IsMasterPrivateShareEmpty != target.IsMasterPrivateShareEmpty ||
+		info.IsPrvSharesEmpty != target.IsPrvSharesEmpty ||
+		info.Step != target.Step ||
+		info.Reset != target.Reset ||
+		!info.MasterPrivateShare.Equal(&target.MasterPrivateShare) ||
+		!info.PrvShares.Equal(&target.PrvShares) {
+		return false
+	}
+
+	if len(info.IDMap) != len(target.IDMap) {
+		return false
+	}
+	for k, v := range info.IDMap {
+		tV, exist := target.IDMap[k]
+		if !exist {
+			return false
+		}
+
+		if !v.IsEqual(&tV) {
+			return false
+		}
+	}
+
+	if len(info.MpkMap) != len(target.MpkMap) {
+		return false
+	}
+	for k, v := range info.MpkMap {
+		tV, exist := target.MpkMap[k]
+		if !exist {
+			return false
+		}
+
+		if !v.Equal(tV) {
+			return false
+		}
+	}
+
+	if len(info.PrvSharesReceived) != len(target.PrvSharesReceived) {
+		return false
+	}
+	for k := range info.PrvSharesReceived {
+		_, exist := target.PrvSharesReceived[k]
+		if !exist {
+			return false
+		}
+	}
+
+	if len(info.NodeComplained) != len(target.NodeComplained) {
+		return false
+	}
+	for k := range info.NodeComplained {
+		_, exist := target.NodeComplained[k]
+		if !exist {
+			return false
+		}
+	}
+
+	if len(info.AntiComplaintReceived) != len(target.AntiComplaintReceived) {
+		return false
+	}
+	for k, v := range info.AntiComplaintReceived {
+		tV, exist := target.AntiComplaintReceived[k]
+		if !exist {
+			return false
+		}
+
+		if len(v) != len(tV) {
+			return false
+		}
+		for kk := range v {
+			_, exist := tV[kk]
+			if !exist {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
 // NodeIDToNodeIDs the map with NodeID to NodeIDs.
 type NodeIDToNodeIDs map[types.NodeID]map[types.NodeID]struct{}
 
@@ -87,7 +172,8 @@ func (m NodeIDToNodeIDs) EncodeRLP(w io.Writer) error {
 }
 
 // DecodeRLP implements rlp.Encoder
-func (m NodeIDToNodeIDs) DecodeRLP(s *rlp.Stream) error {
+func (m *NodeIDToNodeIDs) DecodeRLP(s *rlp.Stream) error {
+	*m = make(NodeIDToNodeIDs)
 	var dec [][][]byte
 	if err := s.Decode(&dec); err != nil {
 		return err
@@ -111,7 +197,7 @@ func (m NodeIDToNodeIDs) DecodeRLP(s *rlp.Stream) error {
 			valueMap[value] = struct{}{}
 		}
 
-		m[key] = valueMap
+		(*m)[key] = valueMap
 	}
 
 	return nil
@@ -135,7 +221,8 @@ func (m NodeID) EncodeRLP(w io.Writer) error {
 }
 
 // DecodeRLP implements rlp.Encoder
-func (m NodeID) DecodeRLP(s *rlp.Stream) error {
+func (m *NodeID) DecodeRLP(s *rlp.Stream) error {
+	*m = make(NodeID)
 	var dec [][]byte
 	if err := s.Decode(&dec); err != nil {
 		return err
@@ -148,7 +235,7 @@ func (m NodeID) DecodeRLP(s *rlp.Stream) error {
 			return err
 		}
 
-		m[key] = struct{}{}
+		(*m)[key] = struct{}{}
 	}
 
 	return nil
@@ -178,7 +265,8 @@ func (m NodeIDToPubShares) EncodeRLP(w io.Writer) error {
 }
 
 // DecodeRLP implements rlp.Encoder
-func (m NodeIDToPubShares) DecodeRLP(s *rlp.Stream) error {
+func (m *NodeIDToPubShares) DecodeRLP(s *rlp.Stream) error {
+	*m = make(NodeIDToPubShares)
 	var dec [][]byte
 	if err := s.Decode(&dec); err != nil {
 		return err
@@ -197,7 +285,7 @@ func (m NodeIDToPubShares) DecodeRLP(s *rlp.Stream) error {
 			return err
 		}
 
-		m[key] = &value
+		(*m)[key] = &value
 	}
 
 	return nil
@@ -222,7 +310,8 @@ func (m NodeIDToDKGID) EncodeRLP(w io.Writer) error {
 }
 
 // DecodeRLP implements rlp.Encoder
-func (m NodeIDToDKGID) DecodeRLP(s *rlp.Stream) error {
+func (m *NodeIDToDKGID) DecodeRLP(s *rlp.Stream) error {
+	*m = make(NodeIDToDKGID)
 	var dec [][]byte
 	if err := s.Decode(&dec); err != nil {
 		return err
@@ -241,7 +330,7 @@ func (m NodeIDToDKGID) DecodeRLP(s *rlp.Stream) error {
 			return err
 		}
 
-		m[key] = value
+		(*m)[key] = value
 	}
 
 	return nil
