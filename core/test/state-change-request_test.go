@@ -42,7 +42,7 @@ func (s *StateChangeRequestTestSuite) TestEqual() {
 
 func (s *StateChangeRequestTestSuite) TestClone() {
 	// The cloned one should be no error when compared with 'Equal' method.
-	st00 := NewStateChangeRequest(StateChangeDKGSetSize, uint32(7))
+	st00 := NewStateChangeRequest(StateChangeNotarySetSize, uint32(7))
 	s.NoError(st00.Equal(st00.Clone()))
 	st10 := NewStateChangeRequest(
 		StateAddDKGMasterPublicKey, typesDKG.NewMasterPublicKey())

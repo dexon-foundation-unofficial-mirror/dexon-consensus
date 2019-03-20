@@ -22,6 +22,7 @@ import (
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
+	cryptoDKG "github.com/dexon-foundation/dexon-consensus/core/crypto/dkg"
 )
 
 // VoteType is the type of vote.
@@ -61,8 +62,9 @@ type VoteHeader struct {
 
 // Vote is the vote structure defined in Crypto Shuffle Algorithm.
 type Vote struct {
-	VoteHeader `json:"header"`
-	Signature  crypto.Signature `json:"signature"`
+	VoteHeader       `json:"header"`
+	PartialSignature cryptoDKG.PartialSignature `json:"partial_signature"`
+	Signature        crypto.Signature           `json:"signature"`
 }
 
 func (v *Vote) String() string {
@@ -91,6 +93,8 @@ func (v *Vote) Clone() *Vote {
 			Period:     v.Period,
 			Position:   v.Position,
 		},
+		PartialSignature: cryptoDKG.PartialSignature(
+			crypto.Signature(v.PartialSignature).Clone()),
 		Signature: v.Signature.Clone(),
 	}
 }

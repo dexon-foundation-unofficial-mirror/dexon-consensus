@@ -47,7 +47,6 @@ const (
 	StateChangeRoundLength
 	StateChangeMinBlockInterval
 	StateChangeNotarySetSize
-	StateChangeDKGSetSize
 	// Node set related.
 	StateAddNode
 )
@@ -76,8 +75,6 @@ func (t StateChangeType) String() string {
 		return "ChangeMinBlockInterval"
 	case StateChangeNotarySetSize:
 		return "ChangeNotarySetSize"
-	case StateChangeDKGSetSize:
-		return "ChangeDKGSetSize"
 	case StateAddNode:
 		return "AddNode"
 	}
@@ -194,8 +191,6 @@ func (req *StateChangeRequest) String() (ret string) {
 	case StateChangeMinBlockInterval:
 		ret += fmt.Sprintf("%v", time.Duration(req.Payload.(uint64)))
 	case StateChangeNotarySetSize:
-		ret += fmt.Sprintf("%v", req.Payload.(uint32))
-	case StateChangeDKGSetSize:
 		ret += fmt.Sprintf("%v", req.Payload.(uint32))
 	case StateAddNode:
 		ret += fmt.Sprintf(

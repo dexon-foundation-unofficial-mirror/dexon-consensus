@@ -67,12 +67,6 @@ func (n *network) BroadcastAgreementResult(
 	n.conn.broadcast(n.nID, randRequest)
 }
 
-// BroadcastRandomnessResult broadcasts rand request to Notary set.
-func (n *network) BroadcastRandomnessResult(
-	randResult *types.BlockRandomnessResult) {
-	n.conn.broadcast(n.nID, randResult)
-}
-
 // SendDKGPrivateShare sends PrivateShare to a DKG participant.
 func (n *network) SendDKGPrivateShare(
 	recv crypto.PublicKey, prvShare *typesDKG.PrivateShare) {
@@ -158,8 +152,6 @@ func (nc *networkConnection) setCon(nID types.NodeID, con *Consensus) {
 				err = con.ProcessVote(val)
 			case *types.AgreementResult:
 				err = con.ProcessAgreementResult(val)
-			case *types.BlockRandomnessResult:
-				err = con.ProcessBlockRandomnessResult(val, true)
 			case *typesDKG.PrivateShare:
 				err = con.cfgModule.processPrivateShare(val)
 			case *typesDKG.PartialSignature:
@@ -236,10 +228,14 @@ func (s *ConsensusTestSuite) TestRegisteredDKGRecover() {
 	s.Require().Nil(con.cfgModule.dkg)
 
 	con.cfgModule.registerDKG(con.ctx, 0, 0, 10)
+	con.cfgModule.dkgLock.Lock()
+	defer con.cfgModule.dkgLock.Unlock()
 
 	_, newCon := s.prepareConsensusWithDB(dMoment, gov, prvKeys[0], conn, dbInst)
 
 	newCon.cfgModule.registerDKG(newCon.ctx, 0, 0, 10)
+	newCon.cfgModule.dkgLock.Lock()
+	defer newCon.cfgModule.dkgLock.Unlock()
 
 	s.Require().NotNil(newCon.cfgModule.dkg)
 	s.Require().True(newCon.cfgModule.dkg.prvShares.Equal(con.cfgModule.dkg.prvShares))
@@ -377,7 +373,6 @@ func (s *ConsensusTestSuite) TestInitialHeightEventTriggered() {
 		network,
 		prvKey,
 		[]*types.Block(nil),
-		[]*types.BlockRandomnessResult(nil),
 		[]interface{}(nil),
 		&common.NullLogger{},
 	)

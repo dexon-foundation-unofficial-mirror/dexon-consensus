@@ -896,8 +896,6 @@ func (t *TCPTransport) handleThroughputData(msg interface{}, payload []byte) {
 		recordType = "agreement_result"
 	case *dkg.PartialSignature:
 		recordType = "partial_sig"
-	case *types.BlockRandomnessResult:
-		recordType = "block_random"
 	}
 	if len(recordType) > 0 {
 		t.throughputRecords = append(t.throughputRecords, ThroughputRecord{

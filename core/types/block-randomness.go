@@ -26,27 +26,20 @@ import (
 
 // AgreementResult describes an agremeent result.
 type AgreementResult struct {
-	BlockHash    common.Hash `json:"block_hash"`
-	Position     Position    `json:"position"`
-	Votes        []Vote      `json:"votes"`
-	IsEmptyBlock bool        `json:"is_empty_block"`
+	BlockHash common.Hash `json:"block_hash"`
+	Position  Position    `json:"position"`
+	// TODO(jimmy): remove Votes
+	Votes        []Vote `json:"votes"`
+	IsEmptyBlock bool   `json:"is_empty_block"`
+	Randomness   []byte `json:"randomness"`
 }
 
 func (r *AgreementResult) String() string {
-	return fmt.Sprintf("agreementResult{Hash:%s %s}",
-		r.BlockHash.String()[:6], r.Position)
-}
-
-// BlockRandomnessResult describes a block randomness result
-type BlockRandomnessResult struct {
-	BlockHash  common.Hash `json:"block_hash"`
-	Position   Position    `json:"position"`
-	Randomness []byte      `json:"randomness"`
-}
-
-func (r *BlockRandomnessResult) String() string {
-	return fmt.Sprintf("blockRandomness{Block:%s Pos:%s Rand:%s}",
+	if len(r.Randomness) == 0 {
+		return fmt.Sprintf("agreementResult{Block:%s Pos:%s}",
+			r.BlockHash.String()[:6], r.Position)
+	}
+	return fmt.Sprintf("agreementResult{Block:%s Pos:%s Rand:%s}",
 		r.BlockHash.String()[:6], r.Position,
-		hex.EncodeToString(r.Randomness)[:6],
-	)
+		hex.EncodeToString(r.Randomness)[:6])
 }

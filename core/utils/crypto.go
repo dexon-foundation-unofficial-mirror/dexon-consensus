@@ -36,7 +36,7 @@ func hashWitness(witness *types.Witness) (common.Hash, error) {
 
 // HashBlock generates hash of a types.Block.
 func HashBlock(block *types.Block) (common.Hash, error) {
-	hashPosition := hashPosition(block.Position)
+	hashPosition := HashPosition(block.Position)
 	binaryTimestamp, err := block.Timestamp.UTC().MarshalBinary()
 	if err != nil {
 		return common.Hash{}, err
@@ -88,13 +88,14 @@ func HashVote(vote *types.Vote) common.Hash {
 	binaryPeriod := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryPeriod, vote.Period)
 
-	hashPosition := hashPosition(vote.Position)
+	hashPosition := HashPosition(vote.Position)
 
 	hash := crypto.Keccak256Hash(
 		vote.ProposerID.Hash[:],
 		vote.BlockHash[:],
 		binaryPeriod,
 		hashPosition[:],
+		vote.PartialSignature.Signature[:],
 		[]byte{byte(vote.Type)},
 	)
 	return hash
@@ -114,7 +115,7 @@ func VerifyVoteSignature(vote *types.Vote) (bool, error) {
 }
 
 func hashCRS(block *types.Block, crs common.Hash) common.Hash {
-	hashPos := hashPosition(block.Position)
+	hashPos := HashPosition(block.Position)
 	return crypto.Keccak256Hash(crs[:], hashPos[:])
 }
 
@@ -132,7 +133,8 @@ func VerifyCRSSignature(block *types.Block, crs common.Hash) (
 	return true, nil
 }
 
-func hashPosition(position types.Position) common.Hash {
+// HashPosition generates hash of a types.Position.
+func HashPosition(position types.Position) common.Hash {
 	binaryRound := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRound, position.Round)
 

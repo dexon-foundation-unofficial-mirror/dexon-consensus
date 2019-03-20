@@ -206,7 +206,6 @@ func (n *node) prepareConfigs() {
 	cConfig := n.cfg.Node.Consensus
 	n.gov.State().RequestChange(
 		test.StateChangeNotarySetSize, cConfig.NotarySetSize) // #nosec G104
-	n.gov.State().RequestChange(test.StateChangeDKGSetSize, cConfig.DKGSetSize) // #nosec G104
 	n.gov.State().RequestChange(test.StateChangeLambdaBA, time.Duration(
 		cConfig.LambdaBA)*time.Millisecond) // #nosec G104
 	n.gov.State().RequestChange(test.StateChangeLambdaDKG, time.Duration(

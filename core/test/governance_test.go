@@ -92,16 +92,16 @@ func (s *GovernanceTestSuite) TestRegisterChange() {
 	req.NoError(g.State().RequestChange(StateChangeRoundLength,
 		uint64(roundLength)))
 	// Unable to register change for genesis round.
-	req.Error(g.RegisterConfigChange(0, StateChangeDKGSetSize, uint32(32)))
+	req.Error(g.RegisterConfigChange(0, StateChangeNotarySetSize, uint32(32)))
 	// Make some round prepared.
 	g.CatchUpWithRound(4)
-	req.Equal(g.Configuration(4).DKGSetSize, uint32(20))
+	req.Equal(g.Configuration(4).NotarySetSize, uint32(20))
 	// Unable to register change for prepared round.
-	req.Error(g.RegisterConfigChange(4, StateChangeDKGSetSize, uint32(32)))
+	req.Error(g.RegisterConfigChange(4, StateChangeNotarySetSize, uint32(32)))
 	// It's ok to make some change when condition is met.
-	req.NoError(g.RegisterConfigChange(5, StateChangeDKGSetSize, uint32(32)))
-	req.NoError(g.RegisterConfigChange(6, StateChangeDKGSetSize, uint32(32)))
-	req.NoError(g.RegisterConfigChange(7, StateChangeDKGSetSize, uint32(40)))
+	req.NoError(g.RegisterConfigChange(5, StateChangeNotarySetSize, uint32(32)))
+	req.NoError(g.RegisterConfigChange(6, StateChangeNotarySetSize, uint32(32)))
+	req.NoError(g.RegisterConfigChange(7, StateChangeNotarySetSize, uint32(40)))
 	// In local mode, state for round 6 would be ready after notified with
 	// round 2.
 	g.NotifyRound(2, roundLength*2)
@@ -111,8 +111,8 @@ func (s *GovernanceTestSuite) TestRegisterChange() {
 	g.NotifyRound(4, roundLength*4)
 	// Notify governance to take a snapshot for round 7's configuration.
 	g.NotifyRound(5, roundLength*5)
-	req.Equal(g.Configuration(6).DKGSetSize, uint32(32))
-	req.Equal(g.Configuration(7).DKGSetSize, uint32(40))
+	req.Equal(g.Configuration(6).NotarySetSize, uint32(32))
+	req.Equal(g.Configuration(7).NotarySetSize, uint32(40))
 }
 
 func (s *GovernanceTestSuite) TestProhibit() {
