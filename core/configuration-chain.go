@@ -76,7 +76,7 @@ type configurationChain struct {
 	tsigReady       *sync.Cond
 	cache           *utils.NodeSetCache
 	db              db.Database
-	dkgSet          map[types.NodeID]struct{}
+	notarySet       map[types.NodeID]struct{}
 	mpkReady        bool
 	pendingPrvShare map[types.NodeID]*typesDKG.PrivateShare
 	// TODO(jimmy-dexon): add timeout to pending psig.
@@ -167,12 +167,12 @@ func (cc *configurationChain) registerDKG(round, reset uint64, threshold int) {
 			})
 		}
 	}
-	dkgSet, err := cc.cache.GetDKGSet(round)
+	notarySet, err := cc.cache.GetNotarySet(round)
 	if err != nil {
-		cc.logger.Error("Error getting DKG set from cache", "error", err)
+		cc.logger.Error("Error getting notary set from cache", "error", err)
 		return
 	}
-	cc.dkgSet = dkgSet
+	cc.notarySet = notarySet
 	cc.pendingPrvShare = make(map[types.NodeID]*typesDKG.PrivateShare)
 	cc.mpkReady = false
 	cc.dkg, err = recoverDKGProtocol(cc.ID, cc.recv, round, reset, cc.db)
@@ -427,7 +427,7 @@ func (cc *configurationChain) initDKGPhasesFunc() {
 
 func (cc *configurationChain) runDKG(round uint64, reset uint64) (err error) {
 	// Check if corresponding DKG signer is ready.
-	if _, _, err = cc.getDKGInfo(round); err == nil {
+	if _, _, err = cc.getDKGInfo(round, false); err == nil {
 		return ErrSkipButNoError
 	}
 	cc.dkgLock.Lock()
@@ -504,12 +504,13 @@ func (cc *configurationChain) isDKGFinal(round uint64) bool {
 	if !cc.gov.IsDKGFinal(round) {
 		return false
 	}
-	_, _, err := cc.getDKGInfo(round)
+	_, _, err := cc.getDKGInfo(round, false)
 	return err == nil
 }
 
 func (cc *configurationChain) getDKGInfo(
-	round uint64) (*typesDKG.NodePublicKeys, *dkgShareSecret, error) {
+	round uint64, ignoreSigner bool) (
+	*typesDKG.NodePublicKeys, *dkgShareSecret, error) {
 	getFromCache := func() (*typesDKG.NodePublicKeys, *dkgShareSecret) {
 		cc.dkgResult.RLock()
 		defer cc.dkgResult.RUnlock()
@@ -518,19 +519,20 @@ func (cc *configurationChain) getDKGInfo(
 		return npks, signer
 	}
 	npks, signer := getFromCache()
-	if npks == nil || signer == nil {
-		if err := cc.recoverDKGInfo(round); err != nil {
+	if npks == nil || (!ignoreSigner && signer == nil) {
+		if err := cc.recoverDKGInfo(round, ignoreSigner); err != nil {
 			return nil, nil, err
 		}
 		npks, signer = getFromCache()
 	}
-	if npks == nil || signer == nil {
+	if npks == nil || (!ignoreSigner && signer == nil) {
 		return nil, nil, ErrDKGNotReady
 	}
 	return npks, signer, nil
 }
 
-func (cc *configurationChain) recoverDKGInfo(round uint64) error {
+func (cc *configurationChain) recoverDKGInfo(
+	round uint64, ignoreSigner bool) error {
 	var npksExists, signerExists bool
 	func() {
 		cc.dkgResult.Lock()
@@ -568,7 +570,7 @@ func (cc *configurationChain) recoverDKGInfo(round uint64) error {
 			cc.npks[round] = npks
 		}()
 	}
-	if !signerExists {
+	if !signerExists && !ignoreSigner {
 		// Check if we have private shares in DB.
 		prvKey, err := cc.db.GetDKGPrivateKey(round)
 		if err != nil {
@@ -589,7 +591,7 @@ func (cc *configurationChain) recoverDKGInfo(round uint64) error {
 
 func (cc *configurationChain) preparePartialSignature(
 	round uint64, hash common.Hash) (*typesDKG.PartialSignature, error) {
-	_, signer, _ := cc.getDKGInfo(round)
+	_, signer, _ := cc.getDKGInfo(round, false)
 	if signer == nil {
 		return nil, ErrDKGNotReady
 	}
@@ -618,7 +620,7 @@ func (cc *configurationChain) untouchTSigHash(hash common.Hash) {
 func (cc *configurationChain) runTSig(
 	round uint64, hash common.Hash) (
 	crypto.Signature, error) {
-	npks, _, _ := cc.getDKGInfo(round)
+	npks, _, _ := cc.getDKGInfo(round, false)
 	if npks == nil {
 		return crypto.Signature{}, ErrDKGNotReady
 	}
@@ -683,7 +685,7 @@ func (cc *configurationChain) processPrivateShare(
 	if cc.dkg == nil {
 		return nil
 	}
-	if _, exist := cc.dkgSet[prvShare.ProposerID]; !exist {
+	if _, exist := cc.notarySet[prvShare.ProposerID]; !exist {
 		return ErrNotDKGParticipant
 	}
 	if !cc.mpkReady {

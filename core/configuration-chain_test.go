@@ -426,10 +426,17 @@ func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 			errs <- cc.runDKG(round, reset)
 		}(cc)
 	}
+	complaints := -1
 	go func() {
 		// Node 0 proposes NackComplaint to all others at 3λ but they should
-		// be ignored because NackComplaint shoould be proposed before 2λ.
+		// be ignored because NackComplaint should be proposed before 2λ.
 		time.Sleep(lambdaDKG * 3)
+		for _, gov := range recv.govs {
+			if complaints == -1 {
+				complaints = len(gov.DKGComplaints(round))
+			}
+			s.Require().Len(gov.DKGComplaints(round), complaints)
+		}
 		nID := s.nIDs[0]
 		for _, targetNode := range s.nIDs {
 			if targetNode == nID {
@@ -445,15 +452,19 @@ func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 		}
 	}()
 	wg.Wait()
+	complaints += len(s.nIDs) - 1
+	for _, gov := range recv.govs {
+		s.Require().Len(gov.DKGComplaints(round), complaints)
+	}
 	for range cfgChains {
 		s.Require().NoError(<-errs)
 	}
 	for nID, cc := range cfgChains {
 		if _, exist := cc.npks[round]; !exist {
-			s.FailNow("Should be qualifyied")
+			s.FailNow("Should be qualified")
 		}
 		if _, exist := cc.npks[round].QualifyNodeIDs[nID]; !exist {
-			s.FailNow("Should be qualifyied")
+			s.FailNow("Should be qualified")
 		}
 	}
 }

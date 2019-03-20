@@ -37,7 +37,6 @@ type nsIntf struct {
 func (g *nsIntf) Configuration(round uint64) (cfg *types.Config) {
 	return &types.Config{
 		NotarySetSize:    7,
-		DKGSetSize:       7,
 		RoundLength:      60,
 		LambdaBA:         250 * time.Millisecond,
 		MinBlockInterval: 1 * time.Second,
@@ -91,9 +90,6 @@ func (s *NodeSetCacheTestSuite) TestBasicUsage() {
 	notarySet, err := cache.GetNotarySet(0)
 	req.NoError(err)
 	chk(cache, 0, notarySet)
-	dkgSet, err := cache.GetDKGSet(0)
-	req.NoError(err)
-	chk(cache, 0, dkgSet)
 	leaderNode, err := cache.GetLeaderNode(types.Position{
 		Round:  uint64(0),
 		Height: uint64(10),

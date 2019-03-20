@@ -141,7 +141,7 @@ func newAgreementMgr(con *Consensus, initRound uint64,
 		roundValue:              &atomic.Value{},
 		changeNotaryHeightValue: &atomic.Value{},
 	}
-	mgr.recv.roundValue.Store(uint64(0))
+	mgr.recv.updateRound(uint64(0))
 	mgr.recv.changeNotaryHeightValue.Store(uint64(0))
 	agr := newAgreement(
 		mgr.ID,
@@ -377,7 +377,7 @@ Loop:
 		}
 		mgr.recv.isNotary = checkRound()
 		// Run BA for this round.
-		mgr.recv.roundValue.Store(currentRound)
+		mgr.recv.updateRound(currentRound)
 		mgr.recv.changeNotaryHeightValue.Store(curConfig.RoundEndHeight())
 		mgr.recv.restartNotary <- types.Position{
 			Round:  mgr.recv.round(),

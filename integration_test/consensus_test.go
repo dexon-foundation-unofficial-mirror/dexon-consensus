@@ -20,6 +20,8 @@ package integration
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -79,7 +81,7 @@ func (s *ConsensusTestSuite) setupNodes(
 	// setup nodes.
 	nodes := make(map[types.NodeID]*node)
 	wg.Add(len(prvKeys))
-	for _, k := range prvKeys {
+	for i, k := range prvKeys {
 		dbInst, err := db.NewMemBackedDB()
 		s.Require().NoError(err)
 		// Prepare essential modules: app, gov, db.
@@ -93,7 +95,11 @@ func (s *ConsensusTestSuite) setupNodes(
 		gov.SwitchToRemoteMode(networkModule)
 		gov.NotifyRound(initRound)
 		networkModule.AttachNodeSetCache(utils.NewNodeSetCache(gov))
-		logger := &common.NullLogger{}
+		f, err := os.Create(fmt.Sprintf("log.%d.log", i))
+		if err != nil {
+			panic(err)
+		}
+		logger := common.NewCustomLogger(log.New(f, "", log.LstdFlags|log.Lmicroseconds))
 		rEvt, err := utils.NewRoundEvent(context.Background(), gov, logger, 0,
 			0, 0, core.ConfigRoundShift)
 		s.Require().NoError(err)
@@ -288,32 +294,24 @@ func (s *ConsensusTestSuite) TestSetSizeChange() {
 		test.StateChangeRoundLength, uint64(100)))
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeNotarySetSize, uint32(4)))
-	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeDKGSetSize, uint32(4)))
 	seedGov.CatchUpWithRound(0)
 	// Setup configuration for round 0 and round 1.
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeRoundLength, uint64(100)))
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeNotarySetSize, uint32(5)))
-	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeDKGSetSize, uint32(6)))
 	seedGov.CatchUpWithRound(1)
 	// Setup configuration for round 2.
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeRoundLength, uint64(100)))
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeNotarySetSize, uint32(6)))
-	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeDKGSetSize, uint32(5)))
 	seedGov.CatchUpWithRound(2)
 	// Setup configuration for round 3.
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeRoundLength, uint64(100)))
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeNotarySetSize, uint32(4)))
-	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeDKGSetSize, uint32(4)))
 	seedGov.CatchUpWithRound(3)
 	// Setup nodes.
 	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
@@ -327,8 +325,11 @@ func (s *ConsensusTestSuite) TestSetSizeChange() {
 		4, test.StateChangeRoundLength, uint64(100)))
 	req.NoError(pickedNode.gov.RegisterConfigChange(
 		4, test.StateChangeNotarySetSize, uint32(5)))
+	// Register configuration changes for round 5.
 	req.NoError(pickedNode.gov.RegisterConfigChange(
-		4, test.StateChangeDKGSetSize, uint32(5)))
+		5, test.StateChangeRoundLength, uint64(60)))
+	req.NoError(pickedNode.gov.RegisterConfigChange(
+		5, test.StateChangeNotarySetSize, uint32(4)))
 	// Run test.
 	for _, n := range nodes {
 		go n.con.Run()
@@ -426,6 +427,11 @@ ReachAlive:
 	// Initiate Syncer.
 	runnerCtx, runnerCtxCancel := context.WithCancel(context.Background())
 	defer runnerCtxCancel()
+	f, err := os.Create("log.sync.log")
+	if err != nil {
+		panic(err)
+	}
+	logger := common.NewCustomLogger(log.New(f, "", log.LstdFlags|log.Lmicroseconds))
 	syncerObj := syncer.NewConsensus(
 		dMoment,
 		syncNode.app,
@@ -433,7 +439,7 @@ ReachAlive:
 		syncNode.db,
 		syncNode.network,
 		prvKeys[0],
-		&common.NullLogger{},
+		logger,
 	)
 	// Initialize communication channel, it's not recommended to assertion in
 	// another go routine.
@@ -583,7 +589,12 @@ ReachStop:
 		node.app.ClearUndeliveredBlocks()
 	}
 	syncerCon := make(map[types.NodeID]*syncer.Consensus, len(nodes))
-	for _, prvKey := range prvKeys {
+	for i, prvKey := range prvKeys {
+		f, err := os.Create(fmt.Sprintf("log.sync.%d.log", i))
+		if err != nil {
+			panic(err)
+		}
+		logger := common.NewCustomLogger(log.New(f, "", log.LstdFlags|log.Lmicroseconds))
 		nID := types.NewNodeID(prvKey.PublicKey())
 		node := nodes[nID]
 		syncerCon[nID] = syncer.NewConsensus(
@@ -593,7 +604,7 @@ ReachStop:
 			node.db,
 			node.network,
 			prvKey,
-			&common.NullLogger{},
+			logger,
 		)
 	}
 	targetNode := nodes[latestNodeID]
@@ -675,8 +686,6 @@ func (s *ConsensusTestSuite) TestResetDKG() {
 		test.StateChangeRoundLength, uint64(100)))
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeNotarySetSize, uint32(4)))
-	req.NoError(seedGov.State().RequestChange(
-		test.StateChangeDKGSetSize, uint32(4)))
 	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
 	// A round event handler to purge utils.NodeSetCache in test.Network.
 	purgeHandlerGen := func(n *test.Network) func([]utils.RoundEventParam) {

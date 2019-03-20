@@ -67,12 +67,6 @@ func (n *network) BroadcastAgreementResult(
 	n.conn.broadcast(n.nID, randRequest)
 }
 
-// BroadcastRandomnessResult broadcasts rand request to Notary set.
-func (n *network) BroadcastRandomnessResult(
-	randResult *types.BlockRandomnessResult) {
-	n.conn.broadcast(n.nID, randResult)
-}
-
 // SendDKGPrivateShare sends PrivateShare to a DKG participant.
 func (n *network) SendDKGPrivateShare(
 	recv crypto.PublicKey, prvShare *typesDKG.PrivateShare) {
@@ -158,8 +152,6 @@ func (nc *networkConnection) setCon(nID types.NodeID, con *Consensus) {
 				err = con.ProcessVote(val)
 			case *types.AgreementResult:
 				err = con.ProcessAgreementResult(val)
-			case *types.BlockRandomnessResult:
-				err = con.ProcessBlockRandomnessResult(val, true)
 			case *typesDKG.PrivateShare:
 				err = con.cfgModule.processPrivateShare(val)
 			case *typesDKG.PartialSignature:

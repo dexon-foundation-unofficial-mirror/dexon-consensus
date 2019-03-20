@@ -94,7 +94,6 @@ type State struct {
 	lambdaBA         time.Duration
 	lambdaDKG        time.Duration
 	notarySetSize    uint32
-	dkgSetSize       uint32
 	roundInterval    uint64
 	minBlockInterval time.Duration
 	// Nodes
@@ -145,7 +144,6 @@ func NewState(
 		crs:              crs,
 		nodes:            nodes,
 		notarySetSize:    uint32(len(nodes)),
-		dkgSetSize:       uint32(len(nodes)),
 		ownRequests:      make(map[common.Hash]*StateChangeRequest),
 		globalRequests:   make(map[common.Hash]*StateChangeRequest),
 		dkgReadys: make(
@@ -183,7 +181,6 @@ func (s *State) Snapshot() (*types.Config, []crypto.PublicKey) {
 		LambdaBA:         s.lambdaBA,
 		LambdaDKG:        s.lambdaDKG,
 		NotarySetSize:    s.notarySetSize,
-		DKGSetSize:       s.dkgSetSize,
 		RoundLength:      s.roundInterval,
 		MinBlockInterval: s.minBlockInterval,
 	}
@@ -238,10 +235,6 @@ func (s *State) unpackPayload(
 		var tmp uint32
 		err = rlp.DecodeBytes(raw.Payload, &tmp)
 		v = tmp
-	case StateChangeDKGSetSize:
-		var tmp uint32
-		err = rlp.DecodeBytes(raw.Payload, &tmp)
-		v = tmp
 	case StateAddNode:
 		var tmp []byte
 		err = rlp.DecodeBytes(raw.Payload, &tmp)
@@ -283,7 +276,6 @@ func (s *State) Equal(other *State) error {
 	configEqual := s.lambdaBA == other.lambdaBA &&
 		s.lambdaDKG == other.lambdaDKG &&
 		s.notarySetSize == other.notarySetSize &&
-		s.dkgSetSize == other.dkgSetSize &&
 		s.roundInterval == other.roundInterval &&
 		s.minBlockInterval == other.minBlockInterval
 	if !configEqual {
@@ -452,7 +444,6 @@ func (s *State) Clone() (copied *State) {
 		lambdaBA:         s.lambdaBA,
 		lambdaDKG:        s.lambdaDKG,
 		notarySetSize:    s.notarySetSize,
-		dkgSetSize:       s.dkgSetSize,
 		roundInterval:    s.roundInterval,
 		minBlockInterval: s.minBlockInterval,
 		local:            s.local,
@@ -774,8 +765,6 @@ func (s *State) applyRequest(req *StateChangeRequest) error {
 		s.minBlockInterval = time.Duration(req.Payload.(uint64))
 	case StateChangeNotarySetSize:
 		s.notarySetSize = req.Payload.(uint32)
-	case StateChangeDKGSetSize:
-		s.dkgSetSize = req.Payload.(uint32)
 	default:
 		return errors.New("you are definitely kidding me")
 	}

@@ -18,7 +18,6 @@
 package core
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -80,6 +79,9 @@ func (s *BlockChainTestSuite) newBlocks(c uint64, initBlock *types.Block) (
 			Position:   types.Position{Round: initRound, Height: baseHeight + i},
 			Timestamp:  t,
 		}
+		if b.Position.Round >= DKGDelayRound {
+			b.Finalization.Randomness = common.GenerateRandomBytes()
+		}
 		s.Require().NoError(s.signer.SignBlock(b))
 		blocks = append(blocks, b)
 		parentHash = b.Hash
@@ -114,17 +116,11 @@ func (s *BlockChainTestSuite) newBlock(parent *types.Block, round uint64,
 		},
 		Timestamp: parent.Timestamp.Add(blockInterval),
 	}
+	if b.Position.Round >= DKGDelayRound {
+		b.Finalization.Randomness = common.GenerateRandomBytes()
+	}
 	s.Require().NoError(s.signer.SignBlock(b))
 	return b
-}
-
-func (s *BlockChainTestSuite) newRandomnessFromBlock(
-	b *types.Block) *types.BlockRandomnessResult {
-	return &types.BlockRandomnessResult{
-		BlockHash:  b.Hash,
-		Position:   b.Position,
-		Randomness: common.GenerateRandomBytes(),
-	}
 }
 
 func (s *BlockChainTestSuite) newBlockChain(initB *types.Block,
@@ -161,64 +157,6 @@ func (s *BlockChainTestSuite) newRoundOneInitBlock() *types.Block {
 	return initBlock
 }
 
-func (s *BlockChainTestSuite) baseConcurrentAceessTest(initBlock *types.Block,
-	blocks []*types.Block, rands []*types.BlockRandomnessResult) {
-	var (
-		bc        = s.newBlockChain(initBlock, uint64(len(blocks)+1))
-		start     = make(chan struct{})
-		newNotif  = make(chan struct{}, 1)
-		delivered []*types.Block
-	)
-	add := func(v interface{}) {
-		<-start
-		switch val := v.(type) {
-		case *types.Block:
-			if err := bc.addBlock(val); err != nil {
-				// Never assertion in sub routine when testing.
-				panic(err)
-			}
-		case *types.BlockRandomnessResult:
-			if err := bc.addRandomness(val); err != nil {
-				// Never assertion in sub routine when testing.
-				panic(err)
-			}
-		default:
-			panic(fmt.Errorf("unknown type: %v", v))
-		}
-		select {
-		case newNotif <- struct{}{}:
-		default:
-		}
-	}
-	for _, b := range blocks {
-		go add(b)
-	}
-	for _, r := range rands {
-		go add(r)
-	}
-	close(start)
-	for {
-		select {
-		case <-newNotif:
-			delivered = append(delivered, bc.extractBlocks()...)
-		case <-time.After(100 * time.Millisecond):
-			delivered = append(delivered, bc.extractBlocks()...)
-		}
-		if len(delivered) == len(blocks) {
-			break
-		}
-	}
-	// Check result.
-	b := delivered[0]
-	s.Require().Equal(b.Position.Height, uint64(1))
-	s.Require().NotEmpty(b.Finalization.Randomness)
-	for _, bb := range delivered[1:] {
-		s.Require().Equal(b.Position.Height+1, bb.Position.Height)
-		s.Require().NotEmpty(b.Finalization.Randomness)
-		b = bb
-	}
-}
-
 func (s *BlockChainTestSuite) TestBasicUsage() {
 	initBlock := s.newRoundOneInitBlock()
 	bc := s.newBlockChain(initBlock, 10)
@@ -231,20 +169,11 @@ func (s *BlockChainTestSuite) TestBasicUsage() {
 	b5 := &types.Block{
 		ParentHash: b4.Hash,
 		Position:   types.Position{Round: 1, Height: b4.Position.Height + 1},
+		Finalization: types.FinalizationResult{
+			Randomness: common.GenerateRandomBytes(),
+		},
 	}
 	s.Require().NoError(s.signer.SignBlock(b5))
-	r0 := s.newRandomnessFromBlock(b0)
-	r1 := s.newRandomnessFromBlock(b1)
-	r2 := s.newRandomnessFromBlock(b2)
-	r3 := s.newRandomnessFromBlock(b3)
-	r4 := s.newRandomnessFromBlock(b4)
-	r5 := s.newRandomnessFromBlock(b5)
-	// add those datum in reversed order of position.
-	s.Require().NoError(bc.addRandomness(r4))
-	s.Require().NoError(bc.addRandomness(r3))
-	s.Require().NoError(bc.addRandomness(r2))
-	s.Require().NoError(bc.addRandomness(r1))
-	s.Require().NoError(bc.addRandomness(r0))
 	s.Require().NoError(bc.addBlock(b5))
 	emptyB, err := bc.addEmptyBlock(b4.Position)
 	s.Require().Nil(emptyB)
@@ -254,29 +183,10 @@ func (s *BlockChainTestSuite) TestBasicUsage() {
 	s.Require().NoError(bc.addBlock(b1))
 	s.Require().NoError(bc.addBlock(b0))
 	extracted := bc.extractBlocks()
-	s.Require().Len(extracted, 5)
+	s.Require().Len(extracted, 6)
 	s.Require().Equal(extracted[4].Hash, b4.Hash)
-	s.Require().NoError(bc.addRandomness(r5))
 	extracted = bc.extractBlocks()
-	s.Require().Len(extracted, 1)
-	s.Require().Equal(extracted[0].Hash, b5.Hash)
-}
-
-func (s *BlockChainTestSuite) TestConcurrentAccess() {
-	// Raise one go routine for each block and randomness. And let them try to
-	// add to blockChain at the same time. Make sure we can delivered them all.
-	var (
-		retry     = 10
-		initBlock = s.newRoundOneInitBlock()
-		blocks    = s.newBlocks(500, initBlock)
-		rands     = []*types.BlockRandomnessResult{}
-	)
-	for _, b := range blocks {
-		rands = append(rands, s.newRandomnessFromBlock(b))
-	}
-	for i := 0; i < retry; i++ {
-		s.baseConcurrentAceessTest(initBlock, blocks, rands)
-	}
+	s.Require().Len(extracted, 0)
 }
 
 func (s *BlockChainTestSuite) TestSanityCheck() {
@@ -409,20 +319,6 @@ func (s *BlockChainTestSuite) TestNextBlockAndTipRound() {
 	s.Require().Equal(bc.tipRound(), uint64(1))
 }
 
-func (s *BlockChainTestSuite) TestPendingBlocksWithoutRandomness() {
-	initBlock := s.newRoundOneInitBlock()
-	bc := s.newBlockChain(initBlock, 10)
-	blocks := s.newBlocks(4, initBlock)
-	s.Require().NoError(bc.addBlock(blocks[0]))
-	s.Require().NoError(bc.addBlock(blocks[1]))
-	s.Require().NoError(bc.addBlock(blocks[3]))
-	s.Require().Equal(bc.pendingBlocksWithoutRandomness(), common.Hashes{
-		blocks[0].Hash, blocks[1].Hash, blocks[3].Hash})
-	s.Require().NoError(bc.addRandomness(s.newRandomnessFromBlock(blocks[0])))
-	s.Require().Equal(bc.pendingBlocksWithoutRandomness(), common.Hashes{
-		blocks[1].Hash, blocks[3].Hash})
-}
-
 func (s *BlockChainTestSuite) TestLastXBlock() {
 	initBlock := s.newRoundOneInitBlock()
 	bc := s.newBlockChain(initBlock, 10)
@@ -432,7 +328,6 @@ func (s *BlockChainTestSuite) TestLastXBlock() {
 	s.Require().NoError(bc.addBlock(blocks[0]))
 	s.Require().True(bc.lastPendingBlock() == blocks[0])
 	s.Require().True(bc.lastDeliveredBlock() == initBlock)
-	s.Require().NoError(bc.addRandomness(s.newRandomnessFromBlock(blocks[0])))
 	s.Require().Len(bc.extractBlocks(), 1)
 	s.Require().Nil(bc.lastPendingBlock())
 	s.Require().True(bc.lastDeliveredBlock() == blocks[0])
@@ -496,7 +391,7 @@ func (s *BlockChainTestSuite) TestAddEmptyBlockDirectly() {
 	s.Require().NoError(err)
 	// prepare a normal block.
 	pos = types.Position{Height: 3}
-	b3, err := bc.proposeBlock(pos, emptyB2.Timestamp.Add(s.blockInterval))
+	b3, err := bc.proposeBlock(pos, emptyB2.Timestamp.Add(s.blockInterval), false)
 	s.Require().NotNil(b3)
 	s.Require().NoError(err)
 	// Add an empty block far away from current tip.
@@ -521,31 +416,6 @@ func (s *BlockChainTestSuite) TestAddEmptyBlockDirectly() {
 	rec, found := bc.pendingBlocks.searchByHeight(4)
 	s.Require().True(found)
 	s.Require().NotNil(rec.block)
-}
-
-func (s *BlockChainTestSuite) TestShouldAddRandomness() {
-	initBlock := s.newRoundOneInitBlock()
-	bc := s.newBlockChain(initBlock, 10)
-	blocks := s.newBlocks(2, initBlock)
-	b0, b1 := blocks[0], blocks[1]
-	r0 := s.newRandomnessFromBlock(b0)
-	r1 := s.newRandomnessFromBlock(b1)
-
-	// If a block is extracted, the randomness should not be added.
-	s.Require().NoError(bc.addBlock(b0))
-	s.True(bc.shouldAddRandomness(r0))
-	s.Require().NoError(bc.addRandomness(r0))
-	s.False(bc.shouldAddRandomness(r0))
-	s.Require().Len(bc.extractBlocks(), 1)
-	s.Require().Equal(b0.Hash, bc.lastDelivered.Hash)
-
-	// If a block has already have randomness, it should not be added.
-	s.True(bc.shouldAddRandomness(r1))
-	s.Require().NoError(bc.addRandomness(r1))
-	s.Require().Len(bc.pendingRandomnesses, 1)
-	s.False(bc.shouldAddRandomness(r1))
-	s.Require().NoError(bc.addBlock(b1))
-	s.False(bc.shouldAddRandomness(r1))
 }
 
 func TestBlockChain(t *testing.T) {

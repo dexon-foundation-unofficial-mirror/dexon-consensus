@@ -38,9 +38,10 @@ func init() {
 
 // Errors for agreement module.
 var (
-	ErrInvalidVote            = fmt.Errorf("invalid vote")
-	ErrNotInNotarySet         = fmt.Errorf("not in notary set")
-	ErrIncorrectVoteSignature = fmt.Errorf("incorrect vote signature")
+	ErrInvalidVote                   = fmt.Errorf("invalid vote")
+	ErrNotInNotarySet                = fmt.Errorf("not in notary set")
+	ErrIncorrectVoteSignature        = fmt.Errorf("incorrect vote signature")
+	ErrIncorrectVotePartialSignature = fmt.Errorf("incorrect vote psig")
 )
 
 // ErrFork for fork error in agreement.
@@ -83,6 +84,7 @@ type agreementReceiver interface {
 	PullBlocks(common.Hashes)
 	ReportForkVote(v1, v2 *types.Vote)
 	ReportForkBlock(b1, b2 *types.Block)
+	VerifyPartialSignature(vote *types.Vote) bool
 }
 
 type pendingBlock struct {
@@ -331,6 +333,9 @@ func (a *agreement) sanityCheck(vote *types.Vote) error {
 	}
 	if !ok {
 		return ErrIncorrectVoteSignature
+	}
+	if !a.data.recv.VerifyPartialSignature(vote) {
+		return ErrIncorrectVotePartialSignature
 	}
 	return nil
 }

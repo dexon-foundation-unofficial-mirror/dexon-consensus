@@ -53,14 +53,8 @@ func (m *DefaultMarshaller) Unmarshal(
 			break
 		}
 		msg = vote
-	case "block-randomness-request":
-		request := &types.AgreementResult{}
-		if err = json.Unmarshal(payload, request); err != nil {
-			break
-		}
-		msg = request
-	case "block-randomness-result":
-		result := &types.BlockRandomnessResult{}
+	case "agreement-result":
+		result := &types.AgreementResult{}
 		if err = json.Unmarshal(payload, result); err != nil {
 			break
 		}
@@ -128,10 +122,7 @@ func (m *DefaultMarshaller) Marshal(
 		msgType = "vote"
 		payload, err = json.Marshal(msg)
 	case *types.AgreementResult:
-		msgType = "block-randomness-request"
-		payload, err = json.Marshal(msg)
-	case *types.BlockRandomnessResult:
-		msgType = "block-randomness-result"
+		msgType = "agreement-result"
 		payload, err = json.Marshal(msg)
 	case *typesDKG.PrivateShare:
 		msgType = "dkg-private-share"
