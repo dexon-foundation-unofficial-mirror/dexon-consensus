@@ -30,7 +30,6 @@ type Config struct {
 
 	// Set related.
 	NotarySetSize uint32
-	DKGSetSize    uint32
 
 	// Time related.
 	RoundLength      uint64
@@ -43,7 +42,6 @@ func (c *Config) Clone() *Config {
 		LambdaBA:         c.LambdaBA,
 		LambdaDKG:        c.LambdaDKG,
 		NotarySetSize:    c.NotarySetSize,
-		DKGSetSize:       c.DKGSetSize,
 		RoundLength:      c.RoundLength,
 		MinBlockInterval: c.MinBlockInterval,
 	}
@@ -60,8 +58,6 @@ func (c *Config) Bytes() []byte {
 
 	binaryNotarySetSize := make([]byte, 4)
 	binary.LittleEndian.PutUint32(binaryNotarySetSize, c.NotarySetSize)
-	binaryDKGSetSize := make([]byte, 4)
-	binary.LittleEndian.PutUint32(binaryDKGSetSize, c.DKGSetSize)
 
 	binaryRoundLength := make([]byte, 8)
 	binary.LittleEndian.PutUint64(binaryRoundLength, c.RoundLength)
@@ -73,7 +69,6 @@ func (c *Config) Bytes() []byte {
 	enc = append(enc, binaryLambdaBA...)
 	enc = append(enc, binaryLambdaDKG...)
 	enc = append(enc, binaryNotarySetSize...)
-	enc = append(enc, binaryDKGSetSize...)
 	enc = append(enc, binaryRoundLength...)
 	enc = append(enc, binaryMinBlockInterval...)
 	return enc

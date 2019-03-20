@@ -39,7 +39,6 @@ type sets struct {
 	crs        common.Hash
 	nodeSet    *types.NodeSet
 	notarySet  map[types.NodeID]struct{}
-	dkgSet     map[types.NodeID]struct{}
 	leaderNode map[uint64]types.NodeID
 }
 
@@ -132,16 +131,6 @@ func (cache *NodeSetCache) GetNotarySet(
 		return nil, err
 	}
 	return cache.cloneMap(IDs.notarySet), nil
-}
-
-// GetDKGSet returns of DKG set of this round.
-func (cache *NodeSetCache) GetDKGSet(
-	round uint64) (map[types.NodeID]struct{}, error) {
-	IDs, err := cache.getOrUpdate(round)
-	if err != nil {
-		return nil, err
-	}
-	return cache.cloneMap(IDs.dkgSet), nil
 }
 
 // GetLeaderNode returns the BA leader of the position.
@@ -253,10 +242,6 @@ func (cache *NodeSetCache) update(round uint64) (nIDs *sets, err error) {
 		nodeSet:    nodeSet,
 		notarySet:  make(map[types.NodeID]struct{}),
 		leaderNode: make(map[uint64]types.NodeID, cfg.RoundLength),
-	}
-	if round >= dkgDelayRound {
-		nIDs.dkgSet = nodeSet.GetSubSet(
-			int(cfg.DKGSetSize), types.NewDKGSetTarget(crs))
 	}
 	nIDs.notarySet = nodeSet.GetSubSet(
 		int(cfg.NotarySetSize), types.NewNotarySetTarget(crs))

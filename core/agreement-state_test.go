@@ -43,6 +43,10 @@ type agreementStateTestReceiver struct {
 	leader *leaderSelector
 }
 
+func (r *agreementStateTestReceiver) VerifyPartialSignature(*types.Vote) bool {
+	return true
+}
+
 func (r *agreementStateTestReceiver) ProposeVote(vote *types.Vote) {
 	r.s.voteChan <- vote
 }

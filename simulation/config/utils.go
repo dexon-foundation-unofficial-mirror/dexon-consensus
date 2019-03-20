@@ -37,8 +37,6 @@ func StateChangeTypeFromString(s string) test.StateChangeType {
 		return test.StateChangeMinBlockInterval
 	case "notary_set_size":
 		return test.StateChangeNotarySetSize
-	case "dkg_set_size":
-		return test.StateChangeDKGSetSize
 	}
 	panic(fmt.Errorf("unsupported state change type %s", s))
 }
@@ -48,7 +46,7 @@ func StateChangeTypeFromString(s string) test.StateChangeType {
 func StateChangeValueFromString(
 	t test.StateChangeType, v string) interface{} {
 	switch t {
-	case test.StateChangeNotarySetSize, test.StateChangeDKGSetSize:
+	case test.StateChangeNotarySetSize:
 		ret, err := strconv.ParseUint(v, 10, 32)
 		if err != nil {
 			panic(err)

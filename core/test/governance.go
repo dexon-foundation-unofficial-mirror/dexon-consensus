@@ -231,7 +231,7 @@ func (g *Governance) IsDKGMPKReady(round uint64) bool {
 	if round >= uint64(len(g.configs)) {
 		return false
 	}
-	return g.stateModule.IsDKGMPKReady(round, int(g.configs[round].DKGSetSize)/3*2)
+	return g.stateModule.IsDKGMPKReady(round, int(g.configs[round].NotarySetSize)/3*2)
 }
 
 // AddDKGFinalize adds a DKG finalize message.
@@ -259,7 +259,7 @@ func (g *Governance) IsDKGFinal(round uint64) bool {
 	if round >= uint64(len(g.configs)) {
 		return false
 	}
-	return g.stateModule.IsDKGFinal(round, int(g.configs[round].DKGSetSize)/3*2)
+	return g.stateModule.IsDKGFinal(round, int(g.configs[round].NotarySetSize)/3*2)
 }
 
 // ReportForkVote reports a node for forking votes.
@@ -449,7 +449,7 @@ func (g *Governance) Equal(other *Governance, checkState bool) bool {
 // NOTE: this function should be called before running.
 func (g *Governance) RegisterConfigChange(
 	round uint64, t StateChangeType, v interface{}) (err error) {
-	if t < StateAddCRS || t > StateChangeDKGSetSize {
+	if t < StateAddCRS || t > StateChangeNotarySetSize {
 		return fmt.Errorf("state changes to register is not supported: %v", t)
 	}
 	if round < 2 {

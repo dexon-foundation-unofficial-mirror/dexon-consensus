@@ -33,7 +33,6 @@ func (s *ConfigTestSuite) TestClone() {
 		LambdaBA:         1 * time.Millisecond,
 		LambdaDKG:        2 * time.Hour,
 		NotarySetSize:    5,
-		DKGSetSize:       6,
 		RoundLength:      1000,
 		MinBlockInterval: 7 * time.Nanosecond,
 	}

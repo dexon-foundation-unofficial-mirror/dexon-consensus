@@ -40,7 +40,6 @@ type subSetTargetType byte
 
 const (
 	targetNotarySet subSetTargetType = iota
-	targetDKGSet
 	targetNodeLeader
 )
 
@@ -87,11 +86,6 @@ func NewNodeSetFromMap(nodes map[NodeID]struct{}) *NodeSet {
 // NewNotarySetTarget is the target for getting Notary Set.
 func NewNotarySetTarget(crs common.Hash) *SubSetTarget {
 	return newTarget(targetNotarySet, crs[:])
-}
-
-// NewDKGSetTarget is the target for getting DKG Set.
-func NewDKGSetTarget(crs common.Hash) *SubSetTarget {
-	return newTarget(targetDKGSet, crs[:])
 }
 
 // NewNodeLeaderTarget is the target for getting leader of fast BA.

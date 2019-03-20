@@ -147,7 +147,6 @@ func (s *StateTestSuite) makeConfigChanges(st *State) {
 	st.RequestChange(StateChangeRoundLength, uint64(1001))
 	st.RequestChange(StateChangeMinBlockInterval, time.Second)
 	st.RequestChange(StateChangeNotarySetSize, uint32(5))
-	st.RequestChange(StateChangeDKGSetSize, uint32(6))
 }
 
 func (s *StateTestSuite) checkConfigChanges(config *types.Config) {
@@ -157,7 +156,6 @@ func (s *StateTestSuite) checkConfigChanges(config *types.Config) {
 	req.Equal(config.RoundLength, uint64(1001))
 	req.Equal(config.MinBlockInterval, time.Second)
 	req.Equal(config.NotarySetSize, uint32(5))
-	req.Equal(config.DKGSetSize, uint32(6))
 }
 
 func (s *StateTestSuite) TestEqual() {
@@ -265,7 +263,6 @@ func (s *StateTestSuite) TestLocalMode() {
 	req.Equal(config1.LambdaDKG, lambda*10)
 	req.Equal(config1.RoundLength, uint64(1000))
 	req.Equal(config1.NotarySetSize, uint32(len(genesisNodes)))
-	req.Equal(config1.DKGSetSize, uint32(len(genesisNodes)))
 	// Request some changes, every fields for config should be affected.
 	s.makeConfigChanges(st)
 	// Add new node.

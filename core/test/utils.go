@@ -184,13 +184,13 @@ func CloneDKGPrivateShare(prvShare *typesDKG.PrivateShare) (
 	return
 }
 
-func cloneBlockRandomnessResult(rand *types.BlockRandomnessResult) (
-	copied *types.BlockRandomnessResult) {
-	b, err := rlp.EncodeToBytes(rand)
+func cloneAgreementResult(result *types.AgreementResult) (
+	copied *types.AgreementResult) {
+	b, err := rlp.EncodeToBytes(result)
 	if err != nil {
 		panic(err)
 	}
-	copied = &types.BlockRandomnessResult{}
+	copied = &types.AgreementResult{}
 	if err = rlp.DecodeBytes(b, copied); err != nil {
 		panic(err)
 	}

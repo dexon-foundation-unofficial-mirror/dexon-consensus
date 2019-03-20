@@ -63,7 +63,6 @@ type Consensus struct {
 	nodeSetCache *utils.NodeSetCache
 	tsigVerifier *core.TSigVerifierCache
 
-	randomnessResults map[common.Hash]*types.BlockRandomnessResult
 	blocks            types.BlocksByPosition
 	agreementModule   *agreement
 	agreementRoundCut uint64
@@ -100,19 +99,18 @@ func NewConsensus(
 	logger common.Logger) *Consensus {
 
 	con := &Consensus{
-		dMoment:           dMoment,
-		app:               app,
-		gov:               gov,
-		db:                db,
-		network:           network,
-		nodeSetCache:      utils.NewNodeSetCache(gov),
-		tsigVerifier:      core.NewTSigVerifierCache(gov, 7),
-		prv:               prv,
-		logger:            logger,
-		receiveChan:       make(chan *types.Block, 1000),
-		pullChan:          make(chan common.Hash, 1000),
-		randomnessResults: make(map[common.Hash]*types.BlockRandomnessResult),
-		heightEvt:         common.NewEvent(),
+		dMoment:      dMoment,
+		app:          app,
+		gov:          gov,
+		db:           db,
+		network:      network,
+		nodeSetCache: utils.NewNodeSetCache(gov),
+		tsigVerifier: core.NewTSigVerifierCache(gov, 7),
+		prv:          prv,
+		logger:       logger,
+		receiveChan:  make(chan *types.Block, 1000),
+		pullChan:     make(chan common.Hash, 1000),
+		heightEvt:    common.NewEvent(),
 	}
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
 	_, con.initChainTipHeight = db.GetCompactionChainTipInfo()
@@ -360,10 +358,6 @@ func (con *Consensus) GetSyncedConsensus() (*core.Consensus, error) {
 	}
 	// flush all blocks in con.blocks into core.Consensus, and build
 	// core.Consensus from syncer.
-	randomnessResults := []*types.BlockRandomnessResult{}
-	for _, r := range con.randomnessResults {
-		randomnessResults = append(randomnessResults, r)
-	}
 	con.dummyCancel()
 	<-con.dummyFinished
 	var err error
@@ -377,7 +371,6 @@ func (con *Consensus) GetSyncedConsensus() (*core.Consensus, error) {
 		con.network,
 		con.prv,
 		con.blocks,
-		randomnessResults,
 		con.dummyMsgBuffer,
 		con.logger)
 	return con.syncedConsensus, err
@@ -475,55 +468,6 @@ func (con *Consensus) startAgreement() {
 	}()
 }
 
-func (con *Consensus) cacheRandomnessResult(r *types.BlockRandomnessResult) {
-	// There is no block randomness at round-0.
-	if r.Position.Round == 0 {
-		return
-	}
-	// We only have to cache randomness result after cutting round.
-	if func() bool {
-		con.lock.RLock()
-		defer con.lock.RUnlock()
-		if len(con.blocks) > 0 && r.Position.Older(con.blocks[0].Position) {
-			return true
-		}
-		if r.Position.Round > con.latestCRSRound {
-			// We can't process randomness from rounds that its CRS is still
-			// unknown.
-			return true
-		}
-		_, exists := con.randomnessResults[r.BlockHash]
-		return exists
-	}() {
-		return
-	}
-	v, ok, err := con.tsigVerifier.UpdateAndGet(r.Position.Round)
-	if err != nil {
-		con.logger.Error("Unable to get tsig verifier",
-			"hash", r.BlockHash.String()[:6],
-			"position", r.Position,
-			"error", err,
-		)
-		return
-	}
-	if !ok {
-		con.logger.Error("Tsig is not ready", "position", &r.Position)
-		return
-	}
-	if !v.VerifySignature(r.BlockHash, crypto.Signature{
-		Type:      "bls",
-		Signature: r.Randomness}) {
-		con.logger.Info("Block randomness is not valid",
-			"position", r.Position,
-			"hash", r.BlockHash.String()[:6],
-		)
-		return
-	}
-	con.lock.Lock()
-	defer con.lock.Unlock()
-	con.randomnessResults[r.BlockHash] = r
-}
-
 // startNetwork starts network for receiving blocks and agreement results.
 func (con *Consensus) startNetwork() {
 	con.waitGroup.Add(1)
@@ -542,9 +486,6 @@ func (con *Consensus) startNetwork() {
 					if v.Position.Height <= con.initChainTipHeight {
 						continue loop
 					}
-				case *types.BlockRandomnessResult:
-					con.cacheRandomnessResult(v)
-					continue loop
 				default:
 					continue loop
 				}

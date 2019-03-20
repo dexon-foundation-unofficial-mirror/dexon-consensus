@@ -251,35 +251,24 @@ func (s *NetworkTestSuite) TestBroadcastToSet() {
 	gov, err := NewGovernance(NewState(
 		1, pubKeys, time.Second, &common.NullLogger{}, true), 2)
 	req.NoError(err)
-	req.NoError(gov.State().RequestChange(StateChangeDKGSetSize, uint32(1)))
 	req.NoError(gov.State().RequestChange(StateChangeNotarySetSize, uint32(1)))
 	gov.NotifyRound(round, gov.Configuration(0).RoundLength)
 	networks := s.setupNetworks(pubKeys)
 	cache := utils.NewNodeSetCache(gov)
 	// Cache required set of nodeIDs.
-	dkgSet, err := cache.GetDKGSet(round)
-	req.NoError(err)
-	req.Len(dkgSet, 1)
 	notarySet, err := cache.GetNotarySet(round)
 	req.NoError(err)
 	req.Len(notarySet, 1)
 	var (
 		// Some node don't belong to any set.
-		nerd                *Network
-		dkgNode, notaryNode *Network
+		nerd       *Network
+		notaryNode *Network
 	)
 	for nID, n := range networks {
-		if _, exists := dkgSet[nID]; exists {
-			continue
-		}
 		if _, exists := notarySet[nID]; exists {
 			continue
 		}
 		nerd = n
-		break
-	}
-	for nID := range dkgSet {
-		dkgNode = networks[nID]
 		break
 	}
 	for nID := range notarySet {
@@ -287,7 +276,6 @@ func (s *NetworkTestSuite) TestBroadcastToSet() {
 		break
 	}
 	req.NotNil(nerd)
-	req.NotNil(dkgNode)
 	req.NotNil(notaryNode)
 	nerd.AttachNodeSetCache(cache)
 	// Try broadcasting with datum from round 0, and make sure only node belongs
@@ -296,9 +284,9 @@ func (s *NetworkTestSuite) TestBroadcastToSet() {
 		Position: types.Position{Round: round}}})
 	req.IsType(&types.Vote{}, <-notaryNode.ReceiveChan())
 	nerd.BroadcastDKGPrivateShare(&typesDKG.PrivateShare{Round: round})
-	req.IsType(&typesDKG.PrivateShare{}, <-dkgNode.ReceiveChan())
+	req.IsType(&typesDKG.PrivateShare{}, <-notaryNode.ReceiveChan())
 	nerd.BroadcastDKGPartialSignature(&typesDKG.PartialSignature{Round: round})
-	req.IsType(&typesDKG.PartialSignature{}, <-dkgNode.ReceiveChan())
+	req.IsType(&typesDKG.PartialSignature{}, <-notaryNode.ReceiveChan())
 	nerd.BroadcastBlock(&types.Block{Position: types.Position{Round: round}})
 	req.IsType(&types.Block{}, <-notaryNode.ReceiveChan())
 }

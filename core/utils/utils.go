@@ -136,7 +136,7 @@ func LaunchDummyReceiver(
 
 // GetDKGThreshold return expected threshold for given DKG set size.
 func GetDKGThreshold(config *types.Config) int {
-	return int(config.DKGSetSize/3) + 1
+	return int(config.NotarySetSize*2/3) + 1
 }
 
 // GetNextRoundValidationHeight returns the block height to check if the next
