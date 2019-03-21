@@ -197,7 +197,7 @@ func (b *Block) String() string {
 	if len(b.Finalization.Randomness) == 0 {
 		return fmt.Sprintf("Block{Hash:%v %s}", b.Hash.String()[:6], b.Position)
 	}
-	return fmt.Sprintf("Block{Hash:%v %s %s}", b.Hash.String()[:6], b.Position, hex.EncodeToString(r.Randomness)[:6])
+	return fmt.Sprintf("Block{Hash:%v %s %s}", b.Hash.String()[:6], b.Position, hex.EncodeToString(b.Finalization.Randomness)[:6])
 }
 
 // Clone returns a deep copy of a block.
