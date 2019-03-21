@@ -426,10 +426,6 @@ func (cc *configurationChain) initDKGPhasesFunc() {
 }
 
 func (cc *configurationChain) runDKG(round uint64, reset uint64) (err error) {
-	// Check if corresponding DKG signer is ready.
-	if _, _, err = cc.getDKGInfo(round, false); err == nil {
-		return ErrSkipButNoError
-	}
 	cc.dkgLock.Lock()
 	defer cc.dkgLock.Unlock()
 	var (
@@ -454,6 +450,10 @@ func (cc *configurationChain) runDKG(round uint64, reset uint64) (err error) {
 			abortCh <- struct{}{}
 		}
 	}()
+	// Check if corresponding DKG signer is ready.
+	if _, _, err = cc.getDKGInfo(round, false); err == nil {
+		return ErrSkipButNoError
+	}
 	tickStartAt := 1
 
 	if cc.dkg == nil {
