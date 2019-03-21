@@ -639,22 +639,22 @@ func newConsensusForRound(
 		tsigVerifierCache, signer, logger)
 	// Construct Consensus instance.
 	con := &Consensus{
-		ID:                       ID,
-		app:                      appModule,
-		debugApp:                 debugApp,
-		gov:                      gov,
-		db:                       db,
-		network:                  network,
-		baConfirmedBlock:         make(map[common.Hash]chan<- *types.Block),
-		dkgReady:                 sync.NewCond(&sync.Mutex{}),
-		cfgModule:                cfgModule,
-		bcModule:                 bcModule,
-		dMoment:                  dMoment,
-		nodeSetCache:             nodeSetCache,
-		tsigVerifierCache:        tsigVerifierCache,
-		signer:                   signer,
-		event:                    common.NewEvent(),
-		logger:                   logger,
+		ID:                ID,
+		app:               appModule,
+		debugApp:          debugApp,
+		gov:               gov,
+		db:                db,
+		network:           network,
+		baConfirmedBlock:  make(map[common.Hash]chan<- *types.Block),
+		dkgReady:          sync.NewCond(&sync.Mutex{}),
+		cfgModule:         cfgModule,
+		bcModule:          bcModule,
+		dMoment:           dMoment,
+		nodeSetCache:      nodeSetCache,
+		tsigVerifierCache: tsigVerifierCache,
+		signer:            signer,
+		event:             common.NewEvent(),
+		logger:            logger,
 		resetDeliveryGuardTicker: make(chan struct{}),
 		msgChan:                  make(chan interface{}, 1024),
 		processBlockChan:         make(chan *types.Block, 1024),
@@ -720,6 +720,7 @@ func (con *Consensus) prepare(
 				continue
 			}
 			con.nodeSetCache.Purge(e.Round + 1)
+			con.tsigVerifierCache.Purge(e.Round + 1)
 		}
 	})
 	// Register round event handler to abort previous running DKG if any.

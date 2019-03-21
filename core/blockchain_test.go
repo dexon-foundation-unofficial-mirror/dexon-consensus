@@ -43,6 +43,8 @@ func (t *testTSigVerifierGetter) UpdateAndGet(round uint64) (
 	return &testTSigVerifier{}, true, nil
 }
 
+func (t *testTSigVerifierGetter) Purge(_ uint64) {}
+
 type BlockChainTestSuite struct {
 	suite.Suite
 
