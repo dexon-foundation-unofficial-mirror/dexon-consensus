@@ -157,8 +157,8 @@ func (d *dkgProtocol) toDKGProtocolInfo() db.DKGProtocolInfo {
 		PrvSharesReceived:     d.prvSharesReceived,
 		NodeComplained:        d.nodeComplained,
 		AntiComplaintReceived: d.antiComplaintReceived,
-		Step:  uint64(d.step),
-		Reset: d.reset,
+		Step:                  uint64(d.step),
+		Reset:                 d.reset,
 	}
 
 	if d.masterPrivateShare != nil {
