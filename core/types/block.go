@@ -21,6 +21,7 @@ package types
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"time"
@@ -193,7 +194,10 @@ func (b *Block) DecodeRLP(s *rlp.Stream) error {
 }
 
 func (b *Block) String() string {
-	return fmt.Sprintf("Block{Hash:%v %s}", b.Hash.String()[:6], b.Position)
+	if len(b.Finalization.Randomness) == 0 {
+		return fmt.Sprintf("Block{Hash:%v %s}", b.Hash.String()[:6], b.Position)
+	}
+	return fmt.Sprintf("Block{Hash:%v %s %s}", b.Hash.String()[:6], b.Position, hex.EncodeToString(r.Randomness)[:6])
 }
 
 // Clone returns a deep copy of a block.
