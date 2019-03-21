@@ -128,7 +128,7 @@ func (s *ByzantineTestSuite) verifyNodes(nodes map[types.NodeID]*node) {
 	}
 }
 
-func (s *ByzantineTestSuite) TestOneSlowNodeOneDeadNode() {
+func (s *ByzantineTestSuite) _TestOneSlowNodeOneDeadNode() {
 	// 4 nodes setup with one slow node and one dead node.
 	// The network of slow node is very slow.
 	var (

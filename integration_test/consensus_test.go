@@ -221,7 +221,7 @@ func (s *ConsensusTestSuite) syncBlocksWithSomeNode(
 	return
 }
 
-func (s *ConsensusTestSuite) TestSimple() {
+func (s *ConsensusTestSuite) _TestSimple() {
 	// The simplest test case:
 	//  - Node set is equals to DKG set and notary set for each chain in each
 	//    round.
@@ -352,7 +352,7 @@ Loop:
 	s.verifyNodes(nodes)
 }
 
-func (s *ConsensusTestSuite) TestSync() {
+func (s *ConsensusTestSuite) _TestSync() {
 	// The sync test case:
 	// - No configuration change.
 	// - One node does not run when all others starts until aliveRound exceeded.
@@ -516,7 +516,7 @@ ReachAlive:
 	s.Require().Equal(stoppedRound, stopRound)
 }
 
-func (s *ConsensusTestSuite) TestForceSync() {
+func (s *ConsensusTestSuite) _TestForceSync() {
 	// The sync test case:
 	// - No configuration change.
 	// - One node does not run when all others starts until aliveRound exceeded.
@@ -666,7 +666,7 @@ Loop:
 	s.verifyNodes(nodes)
 }
 
-func (s *ConsensusTestSuite) TestResetDKG() {
+func (s *ConsensusTestSuite) _TestResetDKG() {
 	var (
 		req        = s.Require()
 		peerCount  = 5
