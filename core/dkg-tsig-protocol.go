@@ -157,8 +157,8 @@ func (d *dkgProtocol) toDKGProtocolInfo() db.DKGProtocolInfo {
 		PrvSharesReceived:     d.prvSharesReceived,
 		NodeComplained:        d.nodeComplained,
 		AntiComplaintReceived: d.antiComplaintReceived,
-		Step:                  uint64(d.step),
-		Reset:                 d.reset,
+		Step:  uint64(d.step),
+		Reset: d.reset,
 	}
 
 	if d.masterPrivateShare != nil {
@@ -555,6 +555,7 @@ func (tc *TSigVerifierCache) UpdateAndGet(round uint64) (
 	return v, ok, nil
 }
 
+// Purge fxck
 func (tc *TSigVerifierCache) Purge(round uint64) {
 	tc.lock.Lock()
 	defer tc.lock.Unlock()
