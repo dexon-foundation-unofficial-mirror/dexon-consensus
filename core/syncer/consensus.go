@@ -209,16 +209,10 @@ func (con *Consensus) assureBuffering() {
 	})
 	// Register a round event handler to validate next round.
 	con.roundEvt.Register(func(evts []utils.RoundEventParam) {
-		e := evts[len(evts)-1]
-		con.heightEvt.RegisterHeight(e.NextRoundValidationHeight(), func(
-			blockHeight uint64) {
-			select {
-			case <-con.ctx.Done():
-				return
-			default:
-			}
-			con.roundEvt.ValidateNextRound(blockHeight)
-		})
+		con.heightEvt.RegisterHeight(
+			evts[len(evts)-1].NextRoundValidationHeight(),
+			utils.RoundEventRetryHandlerGenerator(con.roundEvt, con.heightEvt),
+		)
 	})
 	con.roundEvt.TriggerInitEvent()
 	con.startAgreement()

@@ -658,8 +658,10 @@ func (con *Consensus) prepare(
 	// Register round event handler to abort previous running DKG if any.
 	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
 		e := evts[len(evts)-1]
-		defer elapse("abort DKG", e)()
-		con.cfgModule.abortDKG(e.Round+1, e.Reset)
+		go func() {
+			defer elapse("abort DKG", e)()
+			con.cfgModule.abortDKG(e.Round+1, e.Reset)
+		}()
 	})
 	// Register round event handler to update BA and BC modules.
 	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
@@ -721,8 +723,10 @@ func (con *Consensus) prepare(
 				return
 			}
 			// Aborting all previous running DKG protocol instance if any.
-			con.cfgModule.abortDKG(nextRound, e.Reset)
-			con.runCRS(e.Round, utils.Rehash(e.CRS, uint(e.Reset+1)), true)
+			go func() {
+				con.cfgModule.abortDKG(nextRound, e.Reset)
+				con.runCRS(e.Round, utils.Rehash(e.CRS, uint(e.Reset+1)), true)
+			}()
 		})
 	})
 	// Register round event handler to propose new CRS.
@@ -750,7 +754,7 @@ func (con *Consensus) prepare(
 					con.logger.Debug("CRS already proposed", "round", e.Round+1)
 					return
 				}
-				con.runCRS(e.Round, e.CRS, false)
+				go con.runCRS(e.Round, e.CRS, false)
 			})
 		}
 	})
@@ -788,10 +792,8 @@ func (con *Consensus) prepare(
 		e := evts[len(evts)-1]
 		defer elapse("next round", e)()
 		// Register a routine to trigger round events.
-		con.event.RegisterHeight(e.NextRoundValidationHeight(), func(
-			blockHeight uint64) {
-			con.roundEvent.ValidateNextRound(blockHeight)
-		})
+		con.event.RegisterHeight(e.NextRoundValidationHeight(),
+			utils.RoundEventRetryHandlerGenerator(con.roundEvent, con.event))
 		// Register a routine to register next DKG.
 		con.event.RegisterHeight(e.NextDKGRegisterHeight(), func(uint64) {
 			nextRound := e.Round + 1
@@ -801,48 +803,53 @@ func (con *Consensus) prepare(
 					"reset", e.Reset)
 				return
 			}
-			// Normally, gov.CRS would return non-nil. Use this for in case of
-			// unexpected network fluctuation and ensure the robustness.
-			if !checkWithCancel(
-				con.ctx, 500*time.Millisecond, checkCRS(nextRound)) {
-				con.logger.Debug("unable to prepare CRS for DKG set",
+			go func() {
+				// Normally, gov.CRS would return non-nil. Use this for in case
+				// of unexpected network fluctuation and ensure the robustness.
+				if !checkWithCancel(
+					con.ctx, 500*time.Millisecond, checkCRS(nextRound)) {
+					con.logger.Debug("unable to prepare CRS for DKG set",
+						"round", nextRound,
+						"reset", e.Reset)
+					return
+				}
+				nextDkgSet, err := con.nodeSetCache.GetDKGSet(nextRound)
+				if err != nil {
+					con.logger.Error("Error getting DKG set for next round",
+						"round", nextRound,
+						"reset", e.Reset,
+						"error", err)
+					return
+				}
+				if _, exist := nextDkgSet[con.ID]; !exist {
+					con.logger.Info("Not selected as DKG set",
+						"round", nextRound,
+						"reset", e.Reset)
+					return
+				}
+				con.logger.Info("Selected as DKG set",
 					"round", nextRound,
 					"reset", e.Reset)
-				return
-			}
-			nextDkgSet, err := con.nodeSetCache.GetDKGSet(nextRound)
-			if err != nil {
-				con.logger.Error("Error getting DKG set for next round",
-					"round", nextRound,
-					"reset", e.Reset,
-					"error", err)
-				return
-			}
-			if _, exist := nextDkgSet[con.ID]; !exist {
-				con.logger.Info("Not selected as DKG set",
-					"round", nextRound,
-					"reset", e.Reset)
-				return
-			}
-			con.logger.Info("Selected as DKG set",
-				"round", nextRound,
-				"reset", e.Reset)
-			nextConfig := utils.GetConfigWithPanic(con.gov, nextRound,
-				con.logger)
-			con.cfgModule.registerDKG(nextRound, e.Reset, utils.GetDKGThreshold(
-				nextConfig))
-			con.event.RegisterHeight(e.NextDKGPreparationHeight(),
-				func(uint64) {
-					func() {
-						con.dkgReady.L.Lock()
-						defer con.dkgReady.L.Unlock()
-						con.dkgRunning = 0
-					}()
-					con.runDKG(nextRound, e.Reset, nextConfig)
-				})
+				nextConfig := utils.GetConfigWithPanic(con.gov, nextRound,
+					con.logger)
+				con.cfgModule.registerDKG(nextRound, e.Reset,
+					utils.GetDKGThreshold(nextConfig))
+				con.event.RegisterHeight(e.NextDKGPreparationHeight(),
+					func(uint64) {
+						func() {
+							con.dkgReady.L.Lock()
+							defer con.dkgReady.L.Unlock()
+							con.dkgRunning = 0
+						}()
+						con.runDKG(nextRound, e.Reset, nextConfig)
+					})
+			}()
 		})
 	})
 	con.roundEvent.TriggerInitEvent()
+	if initBlock != nil {
+		con.event.NotifyHeight(initBlock.Finalization.Height)
+	}
 	return
 }
 
@@ -1289,7 +1296,7 @@ func (con *Consensus) deliverFinalizedBlocksWithoutLock() (err error) {
 		"pending", con.bcModule.lastPendingBlock())
 	for _, b := range deliveredBlocks {
 		con.deliverBlock(b)
-		go con.event.NotifyHeight(b.Finalization.Height)
+		con.event.NotifyHeight(b.Finalization.Height)
 	}
 	return
 }

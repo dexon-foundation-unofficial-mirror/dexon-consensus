@@ -309,7 +309,7 @@ func (s *AppTestSuite) TestAttachedWithRoundEvent() {
 		1900, 2019, core.ConfigRoundShift)
 	s.Require().NoError(err)
 	// Register a handler to collects triggered events.
-	evts := make(chan evtParamToCheck, 2)
+	evts := make(chan evtParamToCheck, 3)
 	rEvt.Register(func(params []utils.RoundEventParam) {
 		for _, p := range params {
 			evts <- evtParamToCheck{
@@ -336,6 +336,7 @@ func (s *AppTestSuite) TestAttachedWithRoundEvent() {
 	// Deliver blocks from height=2020 to height=2081.
 	deliver(0, 0, 2019)
 	deliver(19, 2020, 2091)
+	s.Require().Equal(<-evts, evtParamToCheck{19, 1, 2000, gov.CRS(19)})
 	s.Require().Equal(<-evts, evtParamToCheck{19, 2, 2100, gov.CRS(19)})
 	s.Require().Equal(<-evts, evtParamToCheck{20, 0, 2200, gov.CRS(20)})
 	// Deliver blocks from height=2082 to height=2281.

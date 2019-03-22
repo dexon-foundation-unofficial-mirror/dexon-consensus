@@ -108,18 +108,13 @@ func NewApp(initRound uint64, gov *Governance, rEvt *utils.RoundEvent) (
 		app.state = gov.State()
 	}
 	if rEvt != nil {
-		app.hEvt.RegisterHeight(
-			utils.GetNextRoundValidationHeight(rEvt.LastPeriod()),
-			func(h uint64) {
-				rEvt.ValidateNextRound(h)
-			})
 		rEvt.Register(func(evts []utils.RoundEventParam) {
 			app.hEvt.RegisterHeight(
 				evts[len(evts)-1].NextRoundValidationHeight(),
-				func(h uint64) {
-					rEvt.ValidateNextRound(h)
-				})
+				utils.RoundEventRetryHandlerGenerator(rEvt, app.hEvt),
+			)
 		})
+		rEvt.TriggerInitEvent()
 	}
 	return app
 }
@@ -265,7 +260,7 @@ func (app *App) BlockDelivered(blockHash common.Hash, pos types.Position,
 			}
 		}
 	}()
-	go app.hEvt.NotifyHeight(result.Height)
+	app.hEvt.NotifyHeight(result.Height)
 }
 
 // GetLatestDeliveredPosition would return the latest position of delivered

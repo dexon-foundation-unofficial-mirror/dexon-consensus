@@ -338,6 +338,56 @@ func (s *ConsensusTestSuite) TestSyncBA() {
 	// Negative cases are moved to TestVerifyAgreementResult in utils_test.go.
 }
 
+func (s *ConsensusTestSuite) TestInitialHeightEventTriggered() {
+	// Initial block is the last block of corresponding round, in this case,
+	// we should make sure all height event handlers could be triggered after
+	// returned from Consensus.prepare().
+	prvKeys, pubKeys, err := test.NewKeys(4)
+	s.Require().NoError(err)
+	// Prepare a governance instance, whose DKG-reset-count for round 2 is 1.
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
+		pubKeys, time.Second, &common.NullLogger{}, true), ConfigRoundShift)
+	gov.State().RequestChange(test.StateChangeRoundLength, uint64(100))
+	s.Require().NoError(err)
+	gov.NotifyRound(3)
+	hash := common.NewRandomHash()
+	gov.ProposeCRS(2, hash[:])
+	hash = common.NewRandomHash()
+	gov.ResetDKG(hash[:])
+	s.Require().Equal(gov.DKGResetCount(2), uint64(1))
+	prvKey := prvKeys[0]
+	initBlock := &types.Block{
+		Hash:         common.NewRandomHash(),
+		Position:     types.Position{Round: 1, Height: 199},
+		Finalization: types.FinalizationResult{Height: 200},
+	}
+	dbInst, err := db.NewMemBackedDB()
+	s.Require().NoError(err)
+	nID := types.NewNodeID(prvKey.PublicKey())
+	conn := s.newNetworkConnection()
+	network := conn.newNetwork(nID)
+	con, err := NewConsensusFromSyncer(
+		initBlock,
+		100,
+		false,
+		time.Now().UTC(),
+		test.NewApp(0, nil, nil),
+		gov,
+		dbInst,
+		network,
+		prvKey,
+		[]*types.Block(nil),
+		[]*types.BlockRandomnessResult(nil),
+		[]interface{}(nil),
+		&common.NullLogger{},
+	)
+	s.Require().NoError(err)
+	// Here is the tricky part, check if block chain module can handle the
+	// block with height == 200.
+	s.Require().Equal(con.bcModule.configs[0].RoundID(), uint64(1))
+	s.Require().Equal(con.bcModule.configs[0].RoundEndHeight(), uint64(300))
+}
+
 func TestConsensus(t *testing.T) {
 	suite.Run(t, new(ConsensusTestSuite))
 }

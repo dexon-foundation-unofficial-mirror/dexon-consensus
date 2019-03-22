@@ -136,7 +136,7 @@ func (s *RoundEventTestSuite) TestFromRound0() {
 	gov.ResetDKG([]byte("DKG round 1 reset 2"))
 	s.proposeMPK(gov, 1, 2, 3)
 	s.proposeFinalize(gov, 1, 2, 3)
-	rEvt.ValidateNextRound(80)
+	s.Require().Equal(rEvt.ValidateNextRound(80), uint(3))
 	// Check collected events.
 	s.Require().Len(evts, 3)
 	s.Require().Equal(evts[0], evtParamToCheck{0, 1, 100, gov.CRS(0)})
@@ -184,16 +184,16 @@ func (s *RoundEventTestSuite) TestFromRoundN() {
 		}
 	})
 	// Check for round#19, reset(for round#20)#2 at height=2080.
-	rEvt.ValidateNextRound(2080)
+	s.Require().Equal(rEvt.ValidateNextRound(2080), uint(2))
 	// Check collected events.
 	s.Require().Len(evts, 2)
 	s.Require().Equal(evts[0], evtParamToCheck{19, 2, 2100, gov.CRS(19)})
 	s.Require().Equal(evts[1], evtParamToCheck{20, 0, 2200, gov.CRS(20)})
 	// Round might exceed round-shift limitation would not be triggered.
-	rEvt.ValidateNextRound(2280)
+	s.Require().Equal(rEvt.ValidateNextRound(2280), uint(1))
 	s.Require().Len(evts, 3)
 	s.Require().Equal(evts[2], evtParamToCheck{21, 0, 2300, gov.CRS(21)})
-	rEvt.ValidateNextRound(2380)
+	s.Require().Equal(rEvt.ValidateNextRound(2380), uint(1))
 	s.Require().Equal(evts[3], evtParamToCheck{22, 0, 2400, gov.CRS(22)})
 }
 

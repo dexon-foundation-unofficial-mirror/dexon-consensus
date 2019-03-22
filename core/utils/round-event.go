@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
@@ -127,6 +126,21 @@ type governanceAccessor interface {
 	DKGResetCount(round uint64) uint64
 }
 
+// RoundEventRetryHandlerGenerator generates a handler to common.Event, which
+// would register itself to retry next round validation if round event is not
+// triggered.
+func RoundEventRetryHandlerGenerator(
+	rEvt *RoundEvent, hEvt *common.Event) func(uint64) {
+	var hEvtHandler func(uint64)
+	hEvtHandler = func(h uint64) {
+		if rEvt.ValidateNextRound(h) == 0 {
+			// Retry until at least one round event is triggered.
+			hEvt.RegisterHeight(h+1, hEvtHandler)
+		}
+	}
+	return hEvtHandler
+}
+
 // RoundEvent would be triggered when either:
 // - the next DKG set setup is ready.
 // - the next DKG set setup is failed, and previous DKG set already reset the
@@ -140,9 +154,9 @@ type RoundEvent struct {
 	lastTriggeredRound      uint64
 	lastTriggeredResetCount uint64
 	roundShift              uint64
+	dkgFailed               bool
 	ctx                     context.Context
 	ctxCancel               context.CancelFunc
-	retryInterval           time.Duration
 }
 
 // NewRoundEvent creates an RoundEvent instance.
@@ -158,7 +172,6 @@ func NewRoundEvent(parentCtx context.Context, gov governanceAccessor,
 		logger:             logger,
 		lastTriggeredRound: initRound,
 		roundShift:         roundShift,
-		retryInterval:      initConfig.LambdaBA,
 	}
 	e.ctx, e.ctxCancel = context.WithCancel(parentCtx)
 	e.config = RoundBasedConfig{}
@@ -212,20 +225,20 @@ func (e *RoundEvent) TriggerInitEvent() {
 // failed to setup, all registered handlers would be called once some decision
 // is made on chain.
 //
-// This method would block until at least one event is triggered. Multiple
-// trigger in one call is possible.
-func (e *RoundEvent) ValidateNextRound(blockHeight uint64) {
+// The count of triggered events would be returned.
+func (e *RoundEvent) ValidateNextRound(blockHeight uint64) (count uint) {
 	// To make triggers continuous and sequential, the next validation should
 	// wait for previous one finishing. That's why I use mutex here directly.
 	var events []RoundEventParam
 	e.lock.Lock()
 	defer e.lock.Unlock()
-	e.logger.Info("ValidateNextRound",
+	e.logger.Trace("ValidateNextRound",
 		"height", blockHeight,
 		"round", e.lastTriggeredRound,
 		"count", e.lastTriggeredResetCount)
 	defer func() {
-		if len(events) == 0 {
+		count = uint(len(events))
+		if count == 0 {
 			return
 		}
 		for _, h := range e.handlers {
@@ -235,34 +248,24 @@ func (e *RoundEvent) ValidateNextRound(blockHeight uint64) {
 		}
 	}()
 	var (
-		dkgFailed, triggered bool
-		param                RoundEventParam
-		beginHeight          = blockHeight
-		startRound           = e.lastTriggeredRound
+		triggered   bool
+		param       RoundEventParam
+		beginHeight = blockHeight
+		startRound  = e.lastTriggeredRound
 	)
 	for {
-		for {
-			param, dkgFailed, triggered = e.check(beginHeight, startRound,
-				dkgFailed)
-			if !triggered {
-				break
-			}
-			events = append(events, param)
-			beginHeight = param.BeginHeight
-		}
-		if len(events) > 0 {
+		param, triggered = e.check(beginHeight, startRound)
+		if !triggered {
 			break
 		}
-		select {
-		case <-e.ctx.Done():
-			return
-		case <-time.After(e.retryInterval):
-		}
+		events = append(events, param)
+		beginHeight = param.BeginHeight
 	}
+	return
 }
 
-func (e *RoundEvent) check(blockHeight, startRound uint64, lastDKGCheck bool) (
-	param RoundEventParam, dkgFailed bool, triggered bool) {
+func (e *RoundEvent) check(blockHeight, startRound uint64) (
+	param RoundEventParam, triggered bool) {
 	defer func() {
 		if !triggered {
 			return
@@ -296,14 +299,14 @@ func (e *RoundEvent) check(blockHeight, startRound uint64, lastDKGCheck bool) (
 	if resetCount > e.lastTriggeredResetCount {
 		e.lastTriggeredResetCount++
 		e.config.ExtendLength()
+		e.dkgFailed = false
 		triggered = true
 		return
 	}
-	if lastDKGCheck {
+	if e.dkgFailed {
 		// We know that DKG already failed, now wait for the DKG set from
 		// previous round to reset DKG and don't have to reconstruct the
 		// group public key again.
-		dkgFailed = true
 		return
 	}
 	if nextRound >= dkgDelayRound {
@@ -322,13 +325,14 @@ func (e *RoundEvent) check(blockHeight, startRound uint64, lastDKGCheck bool) (
 				"group public key setup failed, waiting for DKG reset",
 				"round", nextRound,
 				"reset", e.lastTriggeredResetCount)
-			dkgFailed = true
+			e.dkgFailed = true
 			return
 		}
 	}
 	// The DKG set for next round is well prepared.
 	e.lastTriggeredRound = nextRound
 	e.lastTriggeredResetCount = 0
+	e.dkgFailed = false
 	rCfg := RoundBasedConfig{}
 	rCfg.SetupRoundBasedFields(nextRound, nextCfg)
 	rCfg.AppendTo(e.config)
