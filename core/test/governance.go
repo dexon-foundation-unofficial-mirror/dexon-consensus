@@ -40,6 +40,7 @@ type Governance struct {
 	roundShift           uint64
 	configs              []*types.Config
 	nodeSets             [][]crypto.PublicKey
+	roundBeginHeights    []uint64
 	stateModule          *State
 	networkModule        *Network
 	pendingConfigChanges map[uint64]map[StateChangeType]interface{}
@@ -55,6 +56,7 @@ func NewGovernance(state *State, roundShift uint64) (g *Governance, err error) {
 		pendingConfigChanges: make(map[uint64]map[StateChangeType]interface{}),
 		stateModule:          state,
 		prohibitedTypes:      make(map[StateChangeType]struct{}),
+		roundBeginHeights:    []uint64{0},
 	}
 	return
 }
@@ -92,7 +94,13 @@ func (g *Governance) Configuration(round uint64) *types.Config {
 
 // GetRoundHeight returns the begin height of a round.
 func (g *Governance) GetRoundHeight(round uint64) uint64 {
-	return 0
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+	if round >= uint64(len(g.roundBeginHeights)) {
+		panic(fmt.Errorf("round begin height is not ready: %d %d",
+			round, len(g.roundBeginHeights)))
+	}
+	return g.roundBeginHeights[round]
 }
 
 // CRS returns the CRS for a given round.
@@ -102,7 +110,7 @@ func (g *Governance) CRS(round uint64) common.Hash {
 
 // NotifyRound notifies governace contract to snapshot config, and broadcast
 // pending state change requests for next round if any.
-func (g *Governance) NotifyRound(round uint64) {
+func (g *Governance) NotifyRound(round, beginHeight uint64) {
 	// Snapshot configuration for the shifted round, this behavior is synced with
 	// full node's implementation.
 	shiftedRound := round + g.roundShift
@@ -125,6 +133,17 @@ func (g *Governance) NotifyRound(round uint64) {
 		}
 		delete(g.pendingConfigChanges, shiftedRound+1)
 		g.broadcastPendingStateChanges()
+		if round == uint64(len(g.roundBeginHeights)) {
+			g.roundBeginHeights = append(g.roundBeginHeights, beginHeight)
+		} else if round < uint64(len(g.roundBeginHeights)) {
+			if beginHeight != g.roundBeginHeights[round] {
+				panic(fmt.Errorf("mismatched round begin height: %d %d %d",
+					round, beginHeight, g.roundBeginHeights[round]))
+			}
+		} else {
+			panic(fmt.Errorf("discontinuous round begin height: %d %d %d",
+				round, beginHeight, len(g.roundBeginHeights)))
+		}
 	}()
 }
 
@@ -314,6 +333,12 @@ func (g *Governance) CatchUpWithRound(round uint64) {
 		config, nodeSet := g.stateModule.Snapshot()
 		g.configs = append(g.configs, config)
 		g.nodeSets = append(g.nodeSets, nodeSet)
+	}
+	if round >= 1 && len(g.roundBeginHeights) == 1 {
+		// begin height of round 0 and round 1 should be ready, they won't be
+		// afected by DKG reset mechanism.
+		g.roundBeginHeights = append(g.roundBeginHeights,
+			g.configs[0].RoundLength)
 	}
 }
 

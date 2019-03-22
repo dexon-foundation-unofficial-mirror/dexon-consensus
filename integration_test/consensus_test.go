@@ -41,6 +41,32 @@ type ConsensusTestSuite struct {
 	suite.Suite
 }
 
+// A round event handler to purge utils.NodeSetCache in test.Network.
+func purgeHandlerGen(n *test.Network) func([]utils.RoundEventParam) {
+	return func(evts []utils.RoundEventParam) {
+		for _, e := range evts {
+			if e.Reset == 0 {
+				continue
+			}
+			n.PurgeNodeSetCache(e.Round + 1)
+		}
+	}
+}
+
+func govHandlerGen(
+	round, reset uint64,
+	g *test.Governance,
+	doer func(*test.Governance)) func([]utils.RoundEventParam) {
+	return func(evts []utils.RoundEventParam) {
+		for _, e := range evts {
+			if e.Round == round && e.Reset == reset {
+				doer(g)
+			}
+		}
+	}
+
+}
+
 type node struct {
 	ID      types.NodeID
 	con     *core.Consensus
@@ -55,6 +81,11 @@ type node struct {
 func prohibitDKG(gov *test.Governance) {
 	gov.Prohibit(test.StateAddDKGMasterPublicKey)
 	gov.Prohibit(test.StateAddDKGFinal)
+	gov.Prohibit(test.StateAddDKGComplaint)
+}
+
+func prohibitDKGExceptFinalize(gov *test.Governance) {
+	gov.Prohibit(test.StateAddDKGMasterPublicKey)
 	gov.Prohibit(test.StateAddDKGComplaint)
 }
 
@@ -91,11 +122,11 @@ func (s *ConsensusTestSuite) setupNodes(
 		)
 		gov := seedGov.Clone()
 		gov.SwitchToRemoteMode(networkModule)
-		gov.NotifyRound(initRound)
+		gov.NotifyRound(initRound, 0)
 		networkModule.AttachNodeSetCache(utils.NewNodeSetCache(gov))
 		logger := &common.NullLogger{}
 		rEvt, err := utils.NewRoundEvent(context.Background(), gov, logger, 0,
-			0, 0, core.ConfigRoundShift)
+			0, core.ConfigRoundShift)
 		s.Require().NoError(err)
 		nID := types.NewNodeID(k.PublicKey())
 		nodes[nID] = &node{
@@ -251,7 +282,6 @@ func (s *ConsensusTestSuite) TestSimple() {
 Loop:
 	for {
 		<-time.After(5 * time.Second)
-		fmt.Println("check latest position delivered by each node")
 		for _, n := range nodes {
 			latestPos := n.app.GetLatestDeliveredPosition()
 			fmt.Println("latestPos", n.ID, &latestPos)
@@ -337,7 +367,6 @@ func (s *ConsensusTestSuite) TestSetSizeChange() {
 Loop:
 	for {
 		<-time.After(5 * time.Second)
-		fmt.Println("check latest position delivered by each node")
 		for _, n := range nodes {
 			latestPos := n.app.GetLatestDeliveredPosition()
 			fmt.Println("latestPos", n.ID, &latestPos)
@@ -355,6 +384,7 @@ func (s *ConsensusTestSuite) TestSync() {
 	// The sync test case:
 	// - No configuration change.
 	// - One node does not run when all others starts until aliveRound exceeded.
+	// - One DKG reset happened before syncing.
 	var (
 		req        = s.Require()
 		peerCount  = 4
@@ -363,7 +393,7 @@ func (s *ConsensusTestSuite) TestSync() {
 		stopRound  = uint64(4)
 		// aliveRound should be large enough to test round event handling in
 		// syncer.
-		aliveRound = uint64(3)
+		aliveRound = uint64(2)
 		errChan    = make(chan error, 100)
 	)
 	prvKeys, pubKeys, err := test.NewKeys(peerCount)
@@ -388,6 +418,13 @@ func (s *ConsensusTestSuite) TestSync() {
 	// Pick a node to stop when synced.
 	stoppedNode := nodes[types.NewNodeID(pubKeys[1])]
 	for _, n := range nodes {
+		n.rEvt.Register(purgeHandlerGen(n.network))
+		// Round Height reference table:
+		// - Round:1 Reset:0 -- 100
+		// - Round:1 Reset:1 -- 200
+		// - Round:2 Reset:0 -- 300
+		n.rEvt.Register(govHandlerGen(1, 0, n.gov, prohibitDKG))
+		n.rEvt.Register(govHandlerGen(1, 1, n.gov, unprohibitDKG))
 		if n.ID != syncNode.ID {
 			go n.con.Run()
 			if n.ID != stoppedNode.ID {
@@ -641,7 +678,6 @@ ReachStop:
 Loop:
 	for {
 		<-time.After(5 * time.Second)
-		fmt.Println("check latest position delivered by each node")
 		for _, n := range nodes {
 			latestPos := n.app.GetLatestDeliveredPosition()
 			fmt.Println("latestPos", n.ID, &latestPos)
@@ -678,54 +714,19 @@ func (s *ConsensusTestSuite) TestResetDKG() {
 	req.NoError(seedGov.State().RequestChange(
 		test.StateChangeDKGSetSize, uint32(4)))
 	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
-	// A round event handler to purge utils.NodeSetCache in test.Network.
-	purgeHandlerGen := func(n *test.Network) func([]utils.RoundEventParam) {
-		return func(evts []utils.RoundEventParam) {
-			for _, e := range evts {
-				if e.Reset == 0 {
-					continue
-				}
-				n.PurgeNodeSetCache(e.Round + 1)
-			}
-		}
-	}
-	// Round Height reference table:
-	// - Round:1 Reset:0 -- 100
-	// - Round:1 Reset:1 -- 200
-	// - Round:1 Reset:2 -- 300
-	// - Round:2 Reset:0 -- 400
-	// - Round:2 Reset:1 -- 500
-	// - Round:3 Reset:0 -- 600
-	// Register round event handler to prohibit/unprohibit DKG operation to
-	// governance.
-	roundHandlerGen := func(g *test.Governance) func([]utils.RoundEventParam) {
-		return func(evts []utils.RoundEventParam) {
-			trigger := func(e utils.RoundEventParam) {
-				// Make round 2 reseted until resetCount == 2.
-				if e.Round == 1 && e.Reset == 0 {
-					prohibitDKG(g)
-				}
-				if e.Round == 1 && e.Reset == 2 {
-					unprohibitDKG(g)
-				}
-				// Make round 3 reseted until resetCount == 1.
-				if e.Round == 2 && e.Reset == 0 {
-					// Allow DKG final this time.
-					g.Prohibit(test.StateAddDKGMasterPublicKey)
-					g.Prohibit(test.StateAddDKGComplaint)
-				}
-				if e.Round == 2 && e.Reset == 1 {
-					unprohibitDKG(g)
-				}
-			}
-			for _, e := range evts {
-				trigger(e)
-			}
-		}
-	}
 	for _, n := range nodes {
 		n.rEvt.Register(purgeHandlerGen(n.network))
-		n.rEvt.Register(roundHandlerGen(n.gov))
+		// Round Height reference table:
+		// - Round:1 Reset:0 -- 100
+		// - Round:1 Reset:1 -- 200
+		// - Round:1 Reset:2 -- 300
+		// - Round:2 Reset:0 -- 400
+		// - Round:2 Reset:1 -- 500
+		// - Round:3 Reset:0 -- 600
+		n.rEvt.Register(govHandlerGen(1, 0, n.gov, prohibitDKG))
+		n.rEvt.Register(govHandlerGen(1, 2, n.gov, unprohibitDKG))
+		n.rEvt.Register(govHandlerGen(2, 0, n.gov, prohibitDKGExceptFinalize))
+		n.rEvt.Register(govHandlerGen(2, 1, n.gov, unprohibitDKG))
 		go n.con.Run()
 	}
 Loop:

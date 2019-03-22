@@ -429,7 +429,7 @@ func NewConsensus(
 	prv crypto.PrivateKey,
 	logger common.Logger) *Consensus {
 	return newConsensusForRound(
-		nil, 0, dMoment, app, gov, db, network, prv, logger, true)
+		nil, dMoment, app, gov, db, network, prv, logger, true)
 }
 
 // NewConsensusForSimulation creates an instance of Consensus for simulation,
@@ -443,7 +443,7 @@ func NewConsensusForSimulation(
 	prv crypto.PrivateKey,
 	logger common.Logger) *Consensus {
 	return newConsensusForRound(
-		nil, 0, dMoment, app, gov, db, network, prv, logger, false)
+		nil, dMoment, app, gov, db, network, prv, logger, false)
 }
 
 // NewConsensusFromSyncer constructs an Consensus instance from information
@@ -457,7 +457,6 @@ func NewConsensusForSimulation(
 //       their positions, in ascending order.
 func NewConsensusFromSyncer(
 	initBlock *types.Block,
-	initRoundBeginHeight uint64,
 	startWithEmpty bool,
 	dMoment time.Time,
 	app Application,
@@ -470,8 +469,8 @@ func NewConsensusFromSyncer(
 	cachedMessages []interface{},
 	logger common.Logger) (*Consensus, error) {
 	// Setup Consensus instance.
-	con := newConsensusForRound(initBlock, initRoundBeginHeight, dMoment, app,
-		gov, db, networkModule, prv, logger, true)
+	con := newConsensusForRound(initBlock, dMoment, app, gov, db,
+		networkModule, prv, logger, true)
 	// Launch a dummy receiver before we start receiving from network module.
 	con.dummyMsgBuffer = cachedMessages
 	con.dummyCancel, con.dummyFinished = utils.LaunchDummyReceiver(
@@ -525,7 +524,6 @@ func NewConsensusFromSyncer(
 // TODO(mission): remove dMoment, it's no longer one part of consensus.
 func newConsensusForRound(
 	initBlock *types.Block,
-	initRoundBeginHeight uint64,
 	dMoment time.Time,
 	app Application,
 	gov Governance,
@@ -594,18 +592,19 @@ func newConsensusForRound(
 	}
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
 	var err error
-	if con.roundEvent, err = utils.NewRoundEvent(con.ctx, gov, logger, initRound,
-		initRoundBeginHeight, initBlockHeight, ConfigRoundShift); err != nil {
+	con.roundEvent, err = utils.NewRoundEvent(con.ctx, gov, logger, initRound,
+		initBlockHeight, ConfigRoundShift)
+	if err != nil {
 		panic(err)
 	}
 	baConfig := agreementMgrConfig{}
 	baConfig.from(initRound, initConfig, initCRS)
-	baConfig.SetRoundBeginHeight(initRoundBeginHeight)
+	baConfig.SetRoundBeginHeight(gov.GetRoundHeight(initRound))
 	con.baMgr, err = newAgreementMgr(con, initRound, baConfig)
 	if err != nil {
 		panic(err)
 	}
-	if err = con.prepare(initRoundBeginHeight, initBlock); err != nil {
+	if err = con.prepare(initBlock); err != nil {
 		panic(err)
 	}
 	return con
@@ -615,8 +614,7 @@ func newConsensusForRound(
 // 'initBlock' could be either:
 //  - nil
 //  - the last finalized block
-func (con *Consensus) prepare(
-	initRoundBeginHeight uint64, initBlock *types.Block) (err error) {
+func (con *Consensus) prepare(initBlock *types.Block) (err error) {
 	// Trigger the round validation method for the next round of the first
 	// round.
 	// The block past from full node should be delivered already or known by
@@ -671,7 +669,7 @@ func (con *Consensus) prepare(
 			panic(err)
 		}
 		// The init config is provided to baModule when construction.
-		if evts[len(evts)-1].BeginHeight != initRoundBeginHeight {
+		if evts[len(evts)-1].BeginHeight != con.gov.GetRoundHeight(initRound) {
 			if err := con.baMgr.notifyRoundEvents(evts); err != nil {
 				panic(err)
 			}

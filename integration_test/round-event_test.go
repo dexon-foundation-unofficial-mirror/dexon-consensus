@@ -115,7 +115,7 @@ func (s *RoundEventTestSuite) TestFromRound0() {
 	gov.CatchUpWithRound(1)
 	// Prepare utils.RoundEvent, starts from genesis.
 	rEvt, err := utils.NewRoundEvent(
-		context.Background(), gov, s.logger, 0, 0, 0, core.ConfigRoundShift)
+		context.Background(), gov, s.logger, 0, 0, core.ConfigRoundShift)
 	s.Require().NoError(err)
 	// Register a handler to collects triggered events.
 	var evts []evtParamToCheck
@@ -146,13 +146,19 @@ func (s *RoundEventTestSuite) TestFromRound0() {
 
 func (s *RoundEventTestSuite) TestFromRoundN() {
 	// Prepare test.Governance.
-	gov := s.prepareGov()
+	var (
+		gov         = s.prepareGov()
+		roundLength = uint64(100)
+	)
 	s.Require().NoError(gov.State().RequestChange(test.StateChangeRoundLength,
-		uint64(100)))
-	gov.CatchUpWithRound(22)
+		roundLength))
 	for r := uint64(2); r <= uint64(20); r++ {
 		gov.ProposeCRS(r, getCRS(r, 0))
 	}
+	for r := uint64(0); r <= uint64(19); r++ {
+		gov.NotifyRound(r, r*roundLength)
+	}
+	gov.NotifyRound(20, 2200)
 	// Reset round#20 twice, then make it done DKG preparation.
 	gov.ResetDKG(getCRS(20, 1))
 	gov.ResetDKG(getCRS(20, 2))
@@ -169,7 +175,7 @@ func (s *RoundEventTestSuite) TestFromRoundN() {
 	s.proposeFinalize(gov, 22, 0, 3)
 	// Prepare utils.RoundEvent, starts from round#19, reset(for round#20)#1.
 	rEvt, err := utils.NewRoundEvent(context.Background(), gov, s.logger, 19,
-		1900, 2019, core.ConfigRoundShift)
+		2019, core.ConfigRoundShift)
 	s.Require().NoError(err)
 	// Register a handler to collects triggered events.
 	var evts []evtParamToCheck
@@ -207,7 +213,7 @@ func (s *RoundEventTestSuite) TestLastPeriod() {
 	gov.CatchUpWithRound(1)
 	// Prepare utils.RoundEvent, starts from genesis.
 	rEvt, err := utils.NewRoundEvent(
-		context.Background(), gov, s.logger, 0, 0, 0, core.ConfigRoundShift)
+		context.Background(), gov, s.logger, 0, 0, core.ConfigRoundShift)
 	s.Require().NoError(err)
 	begin, length := rEvt.LastPeriod()
 	s.Require().Equal(begin, uint64(0))
@@ -237,7 +243,7 @@ func (s *RoundEventTestSuite) TestTriggerInitEvent() {
 	gov.CatchUpWithRound(1)
 	// Prepare utils.RoundEvent, starts from genesis.
 	rEvt, err := utils.NewRoundEvent(
-		context.Background(), gov, s.logger, 0, 0, 0, core.ConfigRoundShift)
+		context.Background(), gov, s.logger, 0, 0, core.ConfigRoundShift)
 	s.Require().NoError(err)
 	// Register a handler to collects triggered events.
 	var evts []evtParamToCheck

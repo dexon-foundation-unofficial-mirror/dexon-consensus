@@ -253,7 +253,7 @@ func (s *NetworkTestSuite) TestBroadcastToSet() {
 	req.NoError(err)
 	req.NoError(gov.State().RequestChange(StateChangeDKGSetSize, uint32(1)))
 	req.NoError(gov.State().RequestChange(StateChangeNotarySetSize, uint32(1)))
-	gov.NotifyRound(round)
+	gov.NotifyRound(round, gov.Configuration(0).RoundLength)
 	networks := s.setupNetworks(pubKeys)
 	cache := utils.NewNodeSetCache(gov)
 	// Cache required set of nodeIDs.

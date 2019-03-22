@@ -283,13 +283,19 @@ func (s *AppTestSuite) TestAttachedWithRoundEvent() {
 	// integraion.RoundEventTestSuite.TestFromRoundN, the difference is the
 	// calls to utils.RoundEvent.ValidateNextRound is not explicitly called but
 	// triggered by App.BlockDelivered.
-	gov := s.prepareGov()
+	var (
+		gov         = s.prepareGov()
+		roundLength = uint64(100)
+	)
 	s.Require().NoError(gov.State().RequestChange(StateChangeRoundLength,
-		uint64(100)))
-	gov.CatchUpWithRound(22)
+		roundLength))
 	for r := uint64(2); r <= uint64(20); r++ {
 		gov.ProposeCRS(r, getCRS(r, 0))
 	}
+	for r := uint64(0); r <= uint64(19); r++ {
+		gov.NotifyRound(r, r*roundLength)
+	}
+	gov.NotifyRound(20, 2200)
 	// Reset round#20 twice, then make it done DKG preparation.
 	gov.ResetDKG(getCRS(20, 1))
 	gov.ResetDKG(getCRS(20, 2))
@@ -306,7 +312,7 @@ func (s *AppTestSuite) TestAttachedWithRoundEvent() {
 	s.proposeFinalize(gov, 22, 0, 3)
 	// Prepare utils.RoundEvent, starts from round#19, reset(for round#20)#1.
 	rEvt, err := utils.NewRoundEvent(context.Background(), gov, s.logger, 19,
-		1900, 2019, core.ConfigRoundShift)
+		2019, core.ConfigRoundShift)
 	s.Require().NoError(err)
 	// Register a handler to collects triggered events.
 	evts := make(chan evtParamToCheck, 3)
@@ -334,8 +340,10 @@ func (s *AppTestSuite) TestAttachedWithRoundEvent() {
 		}
 	}
 	// Deliver blocks from height=2020 to height=2081.
-	deliver(0, 0, 2019)
-	deliver(19, 2020, 2091)
+	for r := uint64(0); r <= uint64(19); r++ {
+		deliver(r, r*roundLength, (r+1)*roundLength-1)
+	}
+	deliver(19, 2000, 2091)
 	s.Require().Equal(<-evts, evtParamToCheck{19, 1, 2000, gov.CRS(19)})
 	s.Require().Equal(<-evts, evtParamToCheck{19, 2, 2100, gov.CRS(19)})
 	s.Require().Equal(<-evts, evtParamToCheck{20, 0, 2200, gov.CRS(20)})

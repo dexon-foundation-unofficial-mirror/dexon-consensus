@@ -349,7 +349,8 @@ func (s *ConsensusTestSuite) TestInitialHeightEventTriggered() {
 		pubKeys, time.Second, &common.NullLogger{}, true), ConfigRoundShift)
 	gov.State().RequestChange(test.StateChangeRoundLength, uint64(100))
 	s.Require().NoError(err)
-	gov.NotifyRound(3)
+	gov.NotifyRound(2, 200)
+	gov.NotifyRound(3, 300)
 	hash := common.NewRandomHash()
 	gov.ProposeCRS(2, hash[:])
 	hash = common.NewRandomHash()
@@ -368,7 +369,6 @@ func (s *ConsensusTestSuite) TestInitialHeightEventTriggered() {
 	network := conn.newNetwork(nID)
 	con, err := NewConsensusFromSyncer(
 		initBlock,
-		100,
 		false,
 		time.Now().UTC(),
 		test.NewApp(0, nil, nil),

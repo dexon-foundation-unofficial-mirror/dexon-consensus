@@ -79,7 +79,7 @@ func (s *ByzantineTestSuite) setupNodes(
 		)
 		gov := seedGov.Clone()
 		gov.SwitchToRemoteMode(networkModule)
-		gov.NotifyRound(0)
+		gov.NotifyRound(0, 0)
 		networkModule.AttachNodeSetCache(utils.NewNodeSetCache(gov))
 		app := test.NewApp(1, gov, nil)
 		nodes[nID] = &node{

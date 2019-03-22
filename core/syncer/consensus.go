@@ -66,8 +66,6 @@ type Consensus struct {
 	randomnessResults map[common.Hash]*types.BlockRandomnessResult
 	blocks            types.BlocksByPosition
 	agreementModule   *agreement
-	configs           []*types.Config
-	roundBeginHeights []uint64
 	agreementRoundCut uint64
 	heightEvt         *common.Event
 	roundEvt          *utils.RoundEvent
@@ -102,19 +100,15 @@ func NewConsensus(
 	logger common.Logger) *Consensus {
 
 	con := &Consensus{
-		dMoment:      dMoment,
-		app:          app,
-		gov:          gov,
-		db:           db,
-		network:      network,
-		nodeSetCache: utils.NewNodeSetCache(gov),
-		tsigVerifier: core.NewTSigVerifierCache(gov, 7),
-		prv:          prv,
-		logger:       logger,
-		configs: []*types.Config{
-			utils.GetConfigWithPanic(gov, 0, logger),
-		},
-		roundBeginHeights: []uint64{0},
+		dMoment:           dMoment,
+		app:               app,
+		gov:               gov,
+		db:                db,
+		network:           network,
+		nodeSetCache:      utils.NewNodeSetCache(gov),
+		tsigVerifier:      core.NewTSigVerifierCache(gov, 7),
+		prv:               prv,
+		logger:            logger,
 		receiveChan:       make(chan *types.Block, 1000),
 		pullChan:          make(chan common.Hash, 1000),
 		randomnessResults: make(map[common.Hash]*types.BlockRandomnessResult),
@@ -153,13 +147,12 @@ func (con *Consensus) assureBuffering() {
 	)
 	if height == 0 {
 		con.roundEvt, err = utils.NewRoundEvent(con.ctx, con.gov, con.logger,
-			uint64(0), uint64(0), uint64(0), core.ConfigRoundShift)
+			0, 0, core.ConfigRoundShift)
 	} else {
 		var b types.Block
 		if b, err = con.db.GetBlock(blockHash); err == nil {
-			beginHeight := con.roundBeginHeights[b.Position.Round]
 			con.roundEvt, err = utils.NewRoundEvent(con.ctx, con.gov,
-				con.logger, b.Position.Round, beginHeight, beginHeight,
+				con.logger, b.Position.Round, b.Finalization.Height,
 				core.ConfigRoundShift)
 		}
 	}
@@ -198,7 +191,7 @@ func (con *Consensus) assureBuffering() {
 						return false
 					case <-time.After(500 * time.Millisecond):
 						con.logger.Warn(
-							"agreement input channel is full when putting CRS",
+							"agreement input channel is full when notifying new round",
 							"round", e.Round,
 						)
 						return true
@@ -265,7 +258,6 @@ func (con *Consensus) ForceSync(skip bool) {
 		panic(err)
 	}
 	con.logger.Info("Force Sync", "block", &block)
-	con.setupConfigsUntilRound(block.Position.Round + core.ConfigRoundShift - 1)
 	con.syncedLastBlock = &block
 	con.stopBuffering()
 	// We might call stopBuffering without calling assureBuffering.
@@ -324,7 +316,6 @@ func (con *Consensus) SyncBlocks(
 		"len", len(blocks),
 		"latest", latest,
 	)
-	con.setupConfigs(blocks)
 	for _, b := range blocks {
 		if err = con.db.PutBlock(*b); err != nil {
 			// A block might be put into db when confirmed by BA, but not
@@ -340,7 +331,7 @@ func (con *Consensus) SyncBlocks(
 			b.Hash, b.Finalization.Height); err != nil {
 			return
 		}
-		go con.heightEvt.NotifyHeight(b.Finalization.Height)
+		con.heightEvt.NotifyHeight(b.Finalization.Height)
 	}
 	if latest {
 		con.assureBuffering()
@@ -378,7 +369,6 @@ func (con *Consensus) GetSyncedConsensus() (*core.Consensus, error) {
 	var err error
 	con.syncedConsensus, err = core.NewConsensusFromSyncer(
 		con.syncedLastBlock,
-		con.roundBeginHeights[con.syncedLastBlock.Position.Round],
 		con.syncedSkipNext,
 		con.dMoment,
 		con.app,
@@ -448,46 +438,11 @@ func (con *Consensus) isEmptyBlock(b *types.Block) bool {
 
 // buildEmptyBlock builds an empty block in agreement.
 func (con *Consensus) buildEmptyBlock(b *types.Block, parent *types.Block) {
-	cfg := con.configs[b.Position.Round]
+	cfg := utils.GetConfigWithPanic(con.gov, b.Position.Round, con.logger)
 	b.Timestamp = parent.Timestamp.Add(cfg.MinBlockInterval)
 	b.Witness.Height = parent.Witness.Height
 	b.Witness.Data = make([]byte, len(parent.Witness.Data))
 	copy(b.Witness.Data, parent.Witness.Data)
-}
-
-// setupConfigs is called by SyncBlocks with blocks from compaction chain. In
-// the first time, setupConfigs setups from round 0.
-func (con *Consensus) setupConfigs(blocks []*types.Block) {
-	// Find max round in blocks.
-	var maxRound uint64
-	for _, b := range blocks {
-		if b.Position.Round > maxRound {
-			maxRound = b.Position.Round
-		}
-	}
-	// Get configs from governance.
-	//
-	// In fullnode, the notification of new round is yet another TX, which
-	// needs to be executed after corresponding block delivered. Thus, the
-	// configuration for 'maxRound + core.ConfigRoundShift' won't be ready when
-	// seeing this block.
-	con.setupConfigsUntilRound(maxRound + core.ConfigRoundShift - 1)
-}
-
-func (con *Consensus) setupConfigsUntilRound(round uint64) {
-	con.lock.Lock()
-	defer con.lock.Unlock()
-	con.logger.Debug("syncer setupConfigs",
-		"until-round", round,
-		"length", len(con.configs),
-	)
-	for r := uint64(len(con.configs)); r <= round; r++ {
-		cfg := utils.GetConfigWithPanic(con.gov, r, con.logger)
-		con.configs = append(con.configs, cfg)
-		con.roundBeginHeights = append(
-			con.roundBeginHeights,
-			con.roundBeginHeights[r-1]+con.configs[r-1].RoundLength)
-	}
 }
 
 // startAgreement starts agreements for receiving votes and agreements.

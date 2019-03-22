@@ -255,7 +255,7 @@ func (app *App) BlockDelivered(blockHash common.Hash, pos types.Position,
 		}
 		if app.roundToNotify == pos.Round {
 			if app.gov != nil {
-				app.gov.NotifyRound(app.roundToNotify)
+				app.gov.NotifyRound(app.roundToNotify, pos.Height)
 				app.roundToNotify++
 			}
 		}

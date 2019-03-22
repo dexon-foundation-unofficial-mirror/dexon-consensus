@@ -124,6 +124,9 @@ type governanceAccessor interface {
 
 	// DKGResetCount returns the reset count for DKG of given round.
 	DKGResetCount(round uint64) uint64
+
+	// Get the begin height of a round.
+	GetRoundHeight(round uint64) uint64
 }
 
 // RoundEventRetryHandlerGenerator generates a handler to common.Event, which
@@ -162,7 +165,7 @@ type RoundEvent struct {
 // NewRoundEvent creates an RoundEvent instance.
 func NewRoundEvent(parentCtx context.Context, gov governanceAccessor,
 	logger common.Logger, initRound uint64,
-	initRoundBeginHeight, initBlockHeight uint64,
+	initBlockHeight uint64,
 	roundShift uint64) (*RoundEvent, error) {
 	// We need to generate valid ending block height of this round (taken
 	// DKG reset count into consideration).
@@ -176,7 +179,7 @@ func NewRoundEvent(parentCtx context.Context, gov governanceAccessor,
 	e.ctx, e.ctxCancel = context.WithCancel(parentCtx)
 	e.config = RoundBasedConfig{}
 	e.config.SetupRoundBasedFields(initRound, initConfig)
-	e.config.SetRoundBeginHeight(initRoundBeginHeight)
+	e.config.SetRoundBeginHeight(gov.GetRoundHeight(initRound))
 	// Make sure the DKG reset count in current governance can cover the initial
 	// block height.
 	resetCount := gov.DKGResetCount(initRound + 1)

@@ -80,12 +80,17 @@ func (s *GovernanceTestSuite) TestEqual() {
 }
 
 func (s *GovernanceTestSuite) TestRegisterChange() {
-	req := s.Require()
+	var (
+		req                = s.Require()
+		roundLength uint64 = 100
+	)
 	_, genesisNodes, err := NewKeys(20)
 	req.NoError(err)
 	g, err := NewGovernance(NewState(
 		1, genesisNodes, 100*time.Millisecond, &common.NullLogger{}, true), 2)
 	req.NoError(err)
+	req.NoError(g.State().RequestChange(StateChangeRoundLength,
+		uint64(roundLength)))
 	// Unable to register change for genesis round.
 	req.Error(g.RegisterConfigChange(0, StateChangeDKGSetSize, uint32(32)))
 	// Make some round prepared.
@@ -99,13 +104,13 @@ func (s *GovernanceTestSuite) TestRegisterChange() {
 	req.NoError(g.RegisterConfigChange(7, StateChangeDKGSetSize, uint32(40)))
 	// In local mode, state for round 6 would be ready after notified with
 	// round 2.
-	g.NotifyRound(2)
-	g.NotifyRound(3)
+	g.NotifyRound(2, roundLength*2)
+	g.NotifyRound(3, roundLength*3)
 	// In local mode, state for round 7 would be ready after notified with
 	// round 6.
-	g.NotifyRound(4)
+	g.NotifyRound(4, roundLength*4)
 	// Notify governance to take a snapshot for round 7's configuration.
-	g.NotifyRound(5)
+	g.NotifyRound(5, roundLength*5)
 	req.Equal(g.Configuration(6).DKGSetSize, uint32(32))
 	req.Equal(g.Configuration(7).DKGSetSize, uint32(40))
 }
