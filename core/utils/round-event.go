@@ -181,7 +181,7 @@ func NewRoundEvent(parentCtx context.Context, gov governanceAccessor,
 	// block height.
 	resetCount := gov.DKGResetCount(initRound + 1)
 	remains := resetCount
-	for ; resetCount > 0 && !e.config.Contains(initBlockHeight); remains-- {
+	for ; remains > 0 && !e.config.Contains(initBlockHeight); remains-- {
 		e.config.ExtendLength()
 	}
 	if !e.config.Contains(initBlockHeight) {
@@ -272,7 +272,7 @@ func (e *RoundEvent) check(blockHeight, startRound uint64) (
 		}
 		// A simple assertion to make sure we didn't pick the wrong round.
 		if e.config.RoundID() != e.lastTriggeredRound {
-			panic(fmt.Errorf("triggered round not matched: %d, %d",
+			panic(fmt.Errorf("Triggered round not matched: %d, %d",
 				e.config.RoundID(), e.lastTriggeredRound))
 		}
 		param.Round = e.lastTriggeredRound
@@ -280,7 +280,7 @@ func (e *RoundEvent) check(blockHeight, startRound uint64) (
 		param.BeginHeight = e.config.LastPeriodBeginHeight()
 		param.CRS = GetCRSWithPanic(e.gov, e.lastTriggeredRound, e.logger)
 		param.Config = GetConfigWithPanic(e.gov, e.lastTriggeredRound, e.logger)
-		e.logger.Info("new RoundEvent triggered",
+		e.logger.Info("New RoundEvent triggered",
 			"round", e.lastTriggeredRound,
 			"reset", e.lastTriggeredResetCount,
 			"begin-height", e.config.LastPeriodBeginHeight(),
@@ -322,7 +322,7 @@ func (e *RoundEvent) check(blockHeight, startRound uint64) (
 			e.gov.DKGComplaints(nextRound),
 			GetDKGThreshold(nextCfg)); err != nil {
 			e.logger.Debug(
-				"group public key setup failed, waiting for DKG reset",
+				"Group public key setup failed, waiting for DKG reset",
 				"round", nextRound,
 				"reset", e.lastTriggeredResetCount)
 			e.dkgFailed = true

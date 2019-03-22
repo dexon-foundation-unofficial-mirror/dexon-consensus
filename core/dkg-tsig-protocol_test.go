@@ -955,6 +955,9 @@ func (s *DKGTSIGProtocolTestSuite) TestTSigVerifierCache() {
 	s.Require().True(ok)
 	s.Equal(uint64(5), cache.minRound)
 
+	cache.Purge(5)
+	s.Require().Len(cache.verifier, 0)
+	s.Require().Equal(uint64(5), cache.minRound)
 }
 
 func (s *DKGTSIGProtocolTestSuite) TestUnexpectedDKGResetCount() {

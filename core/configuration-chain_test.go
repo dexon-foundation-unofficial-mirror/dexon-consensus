@@ -19,6 +19,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -217,7 +218,7 @@ func (s *ConfigurationChainTestSuite) runDKG(
 	}
 
 	for _, cc := range cfgChains {
-		cc.registerDKG(round, reset, k)
+		cc.registerDKG(context.Background(), round, reset, k)
 	}
 
 	for _, gov := range recv.govs {
@@ -347,10 +348,10 @@ func (s *ConfigurationChainTestSuite) TestDKGMasterPublicKeyDelayAdd() {
 		if nID == delayNode {
 			continue
 		}
-		cc.registerDKG(round, reset, k)
+		cc.registerDKG(context.Background(), round, reset, k)
 	}
 	time.Sleep(lambdaDKG)
-	cfgChains[delayNode].registerDKG(round, reset, k)
+	cfgChains[delayNode].registerDKG(context.Background(), round, reset, k)
 
 	for _, gov := range recv.govs {
 		s.Require().Len(gov.DKGMasterPublicKeys(round), n-1)
@@ -410,7 +411,7 @@ func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 	}
 
 	for _, cc := range cfgChains {
-		cc.registerDKG(round, reset, k)
+		cc.registerDKG(context.Background(), round, reset, k)
 	}
 
 	for _, gov := range recv.govs {
@@ -617,25 +618,30 @@ func (s *ConfigurationChainTestSuite) TestDKGAbort() {
 	recv.nodes[nID] = cc
 	recv.govs[nID] = gov
 	// The first register should not be blocked.
-	cc.registerDKG(round, reset, k)
+	cc.registerDKG(context.Background(), round, reset, k)
 	// We should be blocked because DKGReady is not enough.
 	errs := make(chan error, 1)
+	called := make(chan struct{}, 1)
 	go func() {
+		called <- struct{}{}
 		errs <- cc.runDKG(round, reset)
 	}()
 	// The second register shouldn't be blocked, too.
 	randHash := common.NewRandomHash()
 	gov.ResetDKG(randHash[:])
-	cc.registerDKG(round, reset+1, k)
+	<-called
+	cc.registerDKG(context.Background(), round, reset+1, k)
 	err = <-errs
 	s.Require().EqualError(ErrDKGAborted, err.Error())
 	go func() {
+		called <- struct{}{}
 		errs <- cc.runDKG(round, reset+1)
 	}()
 	// The third register shouldn't be blocked, too
 	randHash = common.NewRandomHash()
 	gov.ProposeCRS(round+1, randHash[:])
-	cc.registerDKG(round+1, reset, k)
+	<-called
+	cc.registerDKG(context.Background(), round+1, reset, k)
 	err = <-errs
 	s.Require().EqualError(ErrDKGAborted, err.Error())
 }

@@ -122,6 +122,7 @@ func newBlockChainConfig(prev blockChainConfig, config *types.Config) (
 
 type tsigVerifierGetter interface {
 	UpdateAndGet(uint64) (TSigVerifier, bool, error)
+	Purge(uint64)
 }
 
 type blockChain struct {
@@ -195,6 +196,9 @@ func (bc *blockChain) notifyRoundEvents(evts []utils.RoundEventParam) error {
 				}
 			}
 			bc.configs = append(bc.configs, c)
+		}
+		if e.Reset != 0 {
+			bc.vGetter.Purge(e.Round + 1)
 		}
 		return nil
 	}

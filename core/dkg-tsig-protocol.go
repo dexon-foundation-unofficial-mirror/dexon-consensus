@@ -555,6 +555,13 @@ func (tc *TSigVerifierCache) UpdateAndGet(round uint64) (
 	return v, ok, nil
 }
 
+// Purge the cache and returns if success.
+func (tc *TSigVerifierCache) Purge(round uint64) {
+	tc.lock.Lock()
+	defer tc.lock.Unlock()
+	delete(tc.verifier, round)
+}
+
 // Update the cache and returns if success.
 func (tc *TSigVerifierCache) Update(round uint64) (bool, error) {
 	tc.lock.Lock()

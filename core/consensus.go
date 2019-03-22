@@ -633,11 +633,11 @@ func (con *Consensus) prepare(
 	// Measure time elapse for each handler of round events.
 	elapse := func(what string, lastE utils.RoundEventParam) func() {
 		start := time.Now()
-		con.logger.Info("handle round event",
+		con.logger.Info("Handle round event",
 			"what", what,
 			"event", lastE)
 		return func() {
-			con.logger.Info("finish round event",
+			con.logger.Info("Finish round event",
 				"what", what,
 				"event", lastE,
 				"elapse", time.Since(start))
@@ -647,7 +647,7 @@ func (con *Consensus) prepare(
 	// modules see the up-to-date node set, we need to make sure this action
 	// should be taken as the first one.
 	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
-		defer elapse("purge node set", evts[len(evts)-1])()
+		defer elapse("purge-node-set", evts[len(evts)-1])()
 		for _, e := range evts {
 			if e.Reset == 0 {
 				continue
@@ -659,13 +659,13 @@ func (con *Consensus) prepare(
 	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
 		e := evts[len(evts)-1]
 		go func() {
-			defer elapse("abort DKG", e)()
-			con.cfgModule.abortDKG(e.Round+1, e.Reset)
+			defer elapse("abort-DKG", e)()
+			con.cfgModule.abortDKG(con.ctx, e.Round+1, e.Reset)
 		}()
 	})
 	// Register round event handler to update BA and BC modules.
 	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
-		defer elapse("append config", evts[len(evts)-1])()
+		defer elapse("append-config", evts[len(evts)-1])()
 		// Always updates newer configs to the later modules first in the flow.
 		if err := con.bcModule.notifyRoundEvents(evts); err != nil {
 			panic(err)
@@ -681,7 +681,7 @@ func (con *Consensus) prepare(
 	// failed to setup.
 	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
 		e := evts[len(evts)-1]
-		defer elapse("reset DKG", e)()
+		defer elapse("reset-DKG", e)()
 		nextRound := e.Round + 1
 		if nextRound < DKGDelayRound {
 			return
@@ -724,7 +724,7 @@ func (con *Consensus) prepare(
 			}
 			// Aborting all previous running DKG protocol instance if any.
 			go func() {
-				con.cfgModule.abortDKG(nextRound, e.Reset)
+				con.cfgModule.abortDKG(con.ctx, nextRound, e.Reset)
 				con.runCRS(e.Round, utils.Rehash(e.CRS, uint(e.Reset+1)), true)
 			}()
 		})
@@ -734,7 +734,7 @@ func (con *Consensus) prepare(
 		// We don't have to propose new CRS during DKG reset, the reset of DKG
 		// would be done by the DKG set in previous round.
 		e := evts[len(evts)-1]
-		defer elapse("propose CRS", e)()
+		defer elapse("propose-CRS", e)()
 		if e.Reset != 0 || e.Round < DKGDelayRound {
 			return
 		}
@@ -761,7 +761,7 @@ func (con *Consensus) prepare(
 	// Touch nodeSetCache for next round.
 	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
 		e := evts[len(evts)-1]
-		defer elapse("touch node set cache", e)()
+		defer elapse("touch-NodeSetCache", e)()
 		if e.Reset != 0 {
 			return
 		}
@@ -790,7 +790,7 @@ func (con *Consensus) prepare(
 	// Trigger round validation method for next period.
 	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
 		e := evts[len(evts)-1]
-		defer elapse("next round", e)()
+		defer elapse("next-round", e)()
 		// Register a routine to trigger round events.
 		con.event.RegisterHeight(e.NextRoundValidationHeight(),
 			utils.RoundEventRetryHandlerGenerator(con.roundEvent, con.event))
@@ -832,7 +832,7 @@ func (con *Consensus) prepare(
 					"reset", e.Reset)
 				nextConfig := utils.GetConfigWithPanic(con.gov, nextRound,
 					con.logger)
-				con.cfgModule.registerDKG(nextRound, e.Reset,
+				con.cfgModule.registerDKG(con.ctx, nextRound, e.Reset,
 					utils.GetDKGThreshold(nextConfig))
 				con.event.RegisterHeight(e.NextDKGPreparationHeight(),
 					func(uint64) {

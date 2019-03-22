@@ -176,6 +176,7 @@ func (con *Consensus) assureBuffering() {
 				continue
 			}
 			con.nodeSetCache.Purge(e.Round + 1)
+			con.tsigVerifier.Purge(e.Round + 1)
 		}
 	})
 	// Register a round event handler to notify CRS to agreementModule.
