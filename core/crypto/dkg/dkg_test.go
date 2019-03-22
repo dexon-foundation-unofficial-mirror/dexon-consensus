@@ -330,6 +330,10 @@ func (s *DKGTestSuite) TestPublicKeySharesRLPEncodeDecode() {
 
 func (s *DKGTestSuite) TestPrivateKeySharesRLPEncodeDecode() {
 	privShares, _ := NewPrivateKeyShares(10)
+	privShares.shares = append(privShares.shares, PrivateKey{})
+	privShares.shareIndex = map[ID]int{
+		ID{}: 0,
+	}
 
 	b, err := rlp.EncodeToBytes(privShares)
 	s.Require().NoError(err)
@@ -342,6 +346,7 @@ func (s *DKGTestSuite) TestPrivateKeySharesRLPEncodeDecode() {
 	s.Require().NoError(err)
 
 	s.Require().True(reflect.DeepEqual(b, bb))
+	s.Require().True(privShares.Equal(&newPrivShares))
 }
 
 func (s *DKGTestSuite) TestPublicKeySharesEquality() {

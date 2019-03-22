@@ -133,27 +133,79 @@ func (prvs *PrivateKeyShares) Equal(other *PrivateKeyShares) bool {
 
 // EncodeRLP implements rlp.Encoder
 func (prvs *PrivateKeyShares) EncodeRLP(w io.Writer) error {
+	data := make([][][]byte, 3)
+	shares := make([][]byte, len(prvs.shares))
+	for i, s := range prvs.shares {
+		shares[i] = s.Bytes()
+	}
+	data[0] = shares
+
+	shareIndex := make([][]byte, 0)
+	for k, v := range prvs.shareIndex {
+		shareIndex = append(shareIndex, k.GetLittleEndian())
+
+		vBytes, err := rlp.EncodeToBytes(uint64(v))
+		if err != nil {
+			return err
+		}
+		shareIndex = append(shareIndex, vBytes)
+	}
+	data[1] = shareIndex
+
 	mpks := make([][]byte, len(prvs.masterPrivateKey))
 	for i, m := range prvs.masterPrivateKey {
 		mpks[i] = m.GetLittleEndian()
 	}
-	return rlp.Encode(w, mpks)
+	data[2] = mpks
+	return rlp.Encode(w, data)
 }
 
 // DecodeRLP implements rlp.Decoder
 func (prvs *PrivateKeyShares) DecodeRLP(s *rlp.Stream) error {
-	var dec [][]byte
+	*prvs = PrivateKeyShares{}
+	var dec [][][]byte
 	if err := s.Decode(&dec); err != nil {
 		return err
 	}
 
-	for _, k := range dec {
-		var key bls.SecretKey
-		if err := key.SetLittleEndian(k); err != nil {
+	var shares []PrivateKey
+	for _, bs := range dec[0] {
+		var key PrivateKey
+		err := key.SetBytes(bs)
+		if err != nil {
 			return err
 		}
-		prvs.masterPrivateKey = append(prvs.masterPrivateKey, key)
+		shares = append(shares, key)
 	}
+	(*prvs).shares = shares
+
+	sharesIndex := map[ID]int{}
+	for i := 0; i < len(dec[1]); i += 2 {
+		var key ID
+		err := key.SetLittleEndian(dec[1][i])
+		if err != nil {
+			return err
+		}
+
+		var value uint64
+		err = rlp.DecodeBytes(dec[1][i+1], &value)
+		if err != nil {
+			return err
+		}
+
+		sharesIndex[key] = int(value)
+	}
+	(*prvs).shareIndex = sharesIndex
+
+	var mpks []bls.SecretKey
+	for _, bs := range dec[2] {
+		var key bls.SecretKey
+		if err := key.SetLittleEndian(bs); err != nil {
+			return err
+		}
+		mpks = append(mpks, key)
+	}
+	(*prvs).masterPrivateKey = mpks
 
 	return nil
 }
