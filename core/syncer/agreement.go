@@ -103,7 +103,7 @@ func (a *agreement) processBlock(b *types.Block) {
 func (a *agreement) processAgreementResult(r *types.AgreementResult) {
 	// Cache those results that CRS is not ready yet.
 	if _, exists := a.confirmedBlocks[r.BlockHash]; exists {
-		a.logger.Trace("agreement result already confirmed", "result", r)
+		a.logger.Trace("Agreement result already confirmed", "result", r)
 		return
 	}
 	if r.Position.Round > a.latestCRSRound {
@@ -113,11 +113,11 @@ func (a *agreement) processAgreementResult(r *types.AgreementResult) {
 			a.pendings[r.Position.Round] = pendingsForRound
 		}
 		pendingsForRound[r.BlockHash] = r
-		a.logger.Trace("agreement result cached", "result", r)
+		a.logger.Trace("Agreement result cached", "result", r)
 		return
 	}
 	if err := core.VerifyAgreementResult(r, a.cache); err != nil {
-		a.logger.Error("agreement result verification failed",
+		a.logger.Error("Agreement result verification failed",
 			"result", r,
 			"error", err)
 		return
@@ -144,12 +144,12 @@ loop:
 		case a.pullChan <- r.BlockHash:
 			break loop
 		case <-a.ctx.Done():
-			a.logger.Error("pull request is not sent",
+			a.logger.Error("Pull request is not sent",
 				"position", &r.Position,
 				"hash", r.BlockHash.String()[:6])
 			return
 		case <-time.After(500 * time.Millisecond):
-			a.logger.Debug("pull request is unable to send",
+			a.logger.Debug("Pull request is unable to send",
 				"position", &r.Position,
 				"hash", r.BlockHash.String()[:6])
 		}
@@ -171,12 +171,12 @@ func (a *agreement) processNewCRS(round uint64) {
 		delete(a.pendings, r)
 		for _, res := range pendingsForRound {
 			if err := core.VerifyAgreementResult(res, a.cache); err != nil {
-				a.logger.Error("invalid agreement result",
+				a.logger.Error("Invalid agreement result",
 					"result", res,
 					"error", err)
 				continue
 			}
-			a.logger.Error("flush agreement result", "result", res)
+			a.logger.Error("Flush agreement result", "result", res)
 			a.processAgreementResult(res)
 			break
 		}
@@ -194,10 +194,10 @@ func (a *agreement) confirm(b *types.Block) {
 			case a.outputChan <- b:
 				break loop
 			case <-a.ctx.Done():
-				a.logger.Error("confirmed block is not sent", "block", b)
+				a.logger.Error("Confirmed block is not sent", "block", b)
 				return
 			case <-time.After(500 * time.Millisecond):
-				a.logger.Debug("agreement output channel is full", "block", b)
+				a.logger.Debug("Agreement output channel is full", "block", b)
 			}
 		}
 		a.confirmedBlocks[b.Hash] = struct{}{}

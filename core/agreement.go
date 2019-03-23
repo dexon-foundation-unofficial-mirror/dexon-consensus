@@ -239,14 +239,14 @@ func (a *agreement) restart(
 
 	for _, block := range replayBlock {
 		if err := a.processBlock(block); err != nil {
-			a.logger.Error("failed to process block when restarting agreement",
+			a.logger.Error("Failed to process block when restarting agreement",
 				"block", block)
 		}
 	}
 
 	for _, vote := range replayVote {
 		if err := a.processVote(vote); err != nil {
-			a.logger.Error("failed to process vote when restarting agreement",
+			a.logger.Error("Failed to process vote when restarting agreement",
 				"vote", vote)
 		}
 	}

@@ -99,7 +99,7 @@ func (recv *consensusBAReceiver) ProposeBlock() common.Hash {
 	}
 	block, err := recv.consensus.proposeBlock(recv.agreementModule.agreementID())
 	if err != nil || block == nil {
-		recv.consensus.logger.Error("unable to propose block", "error", err)
+		recv.consensus.logger.Error("Unable to propose block", "error", err)
 		return types.NullBlockHash
 	}
 	go func() {
@@ -658,7 +658,13 @@ func (con *Consensus) prepare(initBlock *types.Block) (err error) {
 		e := evts[len(evts)-1]
 		go func() {
 			defer elapse("abort-DKG", e)()
-			con.cfgModule.abortDKG(con.ctx, e.Round+1, e.Reset)
+			if e.Reset > 0 {
+				aborted := con.cfgModule.abortDKG(con.ctx, e.Round+1, e.Reset-1)
+				con.logger.Info("DKG aborting result",
+					"round", e.Round+1,
+					"reset", e.Reset-1,
+					"aborted", aborted)
+			}
 		}()
 	})
 	// Register round event handler to update BA and BC modules.
@@ -721,10 +727,7 @@ func (con *Consensus) prepare(initBlock *types.Block) (err error) {
 				return
 			}
 			// Aborting all previous running DKG protocol instance if any.
-			go func() {
-				con.cfgModule.abortDKG(con.ctx, nextRound, e.Reset)
-				con.runCRS(e.Round, utils.Rehash(e.CRS, uint(e.Reset+1)), true)
-			}()
+			go con.runCRS(e.Round, utils.Rehash(e.CRS, uint(e.Reset+1)), true)
 		})
 	})
 	// Register round event handler to propose new CRS.
@@ -1247,8 +1250,8 @@ func (con *Consensus) deliveryGuard() {
 			return
 		case <-con.resetDeliveryGuardTicker:
 		case <-time.After(60 * time.Second):
-			con.logger.Error("no blocks delivered for too long", "ID", con.ID)
-			panic(fmt.Errorf("no blocks delivered for too long"))
+			con.logger.Error("No blocks delivered for too long", "ID", con.ID)
+			panic(fmt.Errorf("No blocks delivered for too long"))
 		}
 	}
 }

@@ -191,7 +191,7 @@ func (con *Consensus) assureBuffering() {
 						return false
 					case <-time.After(500 * time.Millisecond):
 						con.logger.Warn(
-							"agreement input channel is full when notifying new round",
+							"Agreement input channel is full when notifying new round",
 							"round", e.Round,
 						)
 						return true
@@ -217,7 +217,7 @@ func (con *Consensus) checkIfSynced(blocks []*types.Block) (synced bool) {
 	con.lock.RLock()
 	defer con.lock.RUnlock()
 	defer func() {
-		con.logger.Debug("syncer synced status",
+		con.logger.Debug("Syncer synced status",
 			"last-block", blocks[len(blocks)-1],
 			"synced", synced,
 		)
@@ -303,14 +303,14 @@ func (con *Consensus) SyncBlocks(
 	// tip in DB.
 	_, tipHeight := con.db.GetCompactionChainTipInfo()
 	if blocks[0].Finalization.Height != tipHeight+1 {
-		con.logger.Error("mismatched finalization height",
+		con.logger.Error("Mismatched finalization height",
 			"now", blocks[0].Finalization.Height,
 			"expected", tipHeight+1,
 		)
 		err = ErrInvalidSyncingFinalizationHeight
 		return
 	}
-	con.logger.Trace("syncBlocks",
+	con.logger.Trace("SyncBlocks",
 		"position", &blocks[0].Position,
 		"final height", blocks[0].Finalization.Height,
 		"len", len(blocks),
@@ -404,14 +404,14 @@ func (con *Consensus) stopBuffering() {
 			return
 		}
 		con.duringBuffering = false
-		con.logger.Trace("syncer is about to stop")
+		con.logger.Trace("Syncer is about to stop")
 		// Stop network and CRS routines, wait until they are all stoped.
 		con.ctxCancel()
 		return
 	}() {
 		return
 	}
-	con.logger.Trace("stop syncer modules")
+	con.logger.Trace("Stop syncer modules")
 	con.roundEvt.Stop()
 	con.waitGroup.Done()
 	// Wait for all routines depends on con.agreementModule stopped.
@@ -424,9 +424,9 @@ func (con *Consensus) stopBuffering() {
 			con.dummyMsgBuffer = append(con.dummyMsgBuffer, msg)
 		})
 	// Stop agreements.
-	con.logger.Trace("stop syncer agreement modules")
+	con.logger.Trace("Stop syncer agreement modules")
 	con.stopAgreement()
-	con.logger.Trace("syncer stopped")
+	con.logger.Trace("Syncer stopped")
 	return
 }
 

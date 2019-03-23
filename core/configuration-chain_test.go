@@ -607,6 +607,7 @@ func (s *ConfigurationChainTestSuite) TestDKGAbort() {
 		s.pubKeys, 100*time.Millisecond, &common.NullLogger{}, true,
 	), ConfigRoundShift)
 	s.Require().NoError(err)
+	gov.CatchUpWithRound(round + 1)
 	cache := utils.NewNodeSetCache(gov)
 	dbInst, err := db.NewMemBackedDB()
 	s.Require().NoError(err)
@@ -640,10 +641,44 @@ func (s *ConfigurationChainTestSuite) TestDKGAbort() {
 	// The third register shouldn't be blocked, too
 	randHash = common.NewRandomHash()
 	gov.ProposeCRS(round+1, randHash[:])
+	randHash = common.NewRandomHash()
+	gov.ResetDKG(randHash[:])
 	<-called
-	cc.registerDKG(context.Background(), round+1, reset, k)
+	cc.registerDKG(context.Background(), round+1, reset+1, k)
 	err = <-errs
 	s.Require().EqualError(ErrDKGAborted, err.Error())
+	go func() {
+		called <- struct{}{}
+		errs <- cc.runDKG(round+1, reset+1)
+	}()
+	<-called
+	// Abort with older round, shouldn't be aborted.
+	aborted := cc.abortDKG(context.Background(), round, reset+1)
+	s.Require().False(aborted)
+	select {
+	case err = <-errs:
+		// Should not aborted yet.
+		s.Require().False(true)
+	default:
+	}
+	// Abort with older reset, shouldn't be aborted.
+	aborted = cc.abortDKG(context.Background(), round+1, reset)
+	s.Require().False(aborted)
+	select {
+	case err = <-errs:
+		// Should not aborted yet.
+		s.Require().False(true)
+	default:
+	}
+	// Abort with same round/reset, should be aborted.
+	aborted = cc.abortDKG(context.Background(), round+1, reset+1)
+	s.Require().True(aborted)
+	err = <-errs
+	s.Require().EqualError(ErrDKGAborted, err.Error())
+	// Abort while not running yet, should return "aborted".
+	cc.registerDKG(context.Background(), round+1, reset+1, k)
+	aborted = cc.abortDKG(context.Background(), round+1, reset+1)
+	s.Require().True(aborted)
 }
 
 func TestConfigurationChain(t *testing.T) {

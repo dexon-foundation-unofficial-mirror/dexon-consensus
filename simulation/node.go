@@ -149,12 +149,12 @@ readyLoop:
 			break readyLoop
 		case ntfSelectedAsMaster:
 			n.logger.Info(
-				"receive 'selected-as-master' notification from server")
+				"Receive 'selected-as-master' notification from server")
 			for _, c := range n.cfg.Node.Changes {
 				if c.Round <= core.ConfigRoundShift+1 {
 					continue
 				}
-				n.logger.Info("register config change", "change", c)
+				n.logger.Info("Register config change", "change", c)
 				if err := c.RegisterChange(n.gov); err != nil {
 					panic(err)
 				}
@@ -181,11 +181,11 @@ MainLoop:
 		switch val := msg.(type) {
 		case serverNotification:
 			if val == ntfShutdown {
-				n.logger.Info("receive shutdown notification from server")
+				n.logger.Info("Receive shutdown notification from server")
 				break MainLoop
 			}
 		default:
-			panic(fmt.Errorf("unexpected message from server: %v", val))
+			panic(fmt.Errorf("Unexpected message from server: %v", val))
 		}
 	}
 	// Cleanup.
@@ -218,7 +218,7 @@ func (n *node) prepareConfigs() {
 	// These rounds are not safe to be registered as pending state change
 	// requests.
 	for i := uint64(0); i <= core.ConfigRoundShift+1; i++ {
-		n.logger.Info("prepare config", "round", i)
+		n.logger.Info("Prepare config", "round", i)
 		prepareConfigs(i, n.cfg.Node.Changes, n.gov)
 	}
 	// This notification is implictly called in full node.

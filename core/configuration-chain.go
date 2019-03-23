@@ -114,20 +114,21 @@ func newConfigurationChain(
 
 func (cc *configurationChain) abortDKG(
 	parentCtx context.Context,
-	round, reset uint64) {
+	round, reset uint64) bool {
 	cc.dkgLock.Lock()
 	defer cc.dkgLock.Unlock()
 	if cc.dkg != nil {
-		cc.abortDKGNoLock(parentCtx, round, reset)
+		return cc.abortDKGNoLock(parentCtx, round, reset)
 	}
+	return false
 }
 
 func (cc *configurationChain) abortDKGNoLock(
 	ctx context.Context,
 	round, reset uint64) bool {
 	if cc.dkg.round > round ||
-		(cc.dkg.round == round && cc.dkg.reset >= reset) {
-		cc.logger.Error("newer DKG already is registered",
+		(cc.dkg.round == round && cc.dkg.reset > reset) {
+		cc.logger.Error("Newer DKG already is registered",
 			"round", round,
 			"reset", reset)
 		return false
@@ -163,7 +164,7 @@ func (cc *configurationChain) abortDKGNoLock(
 	cc.logger.Error("Previous DKG aborted",
 		"round", round,
 		"reset", reset)
-	return true
+	return cc.dkg == nil
 }
 
 func (cc *configurationChain) registerDKG(
@@ -646,7 +647,7 @@ func (cc *configurationChain) runTSig(
 	go func() {
 		for _, psig := range pendingPsig {
 			if err := cc.processPartialSignature(psig); err != nil {
-				cc.logger.Error("failed to process partial signature",
+				cc.logger.Error("Failed to process partial signature",
 					"nodeID", cc.ID,
 					"error", err)
 			}

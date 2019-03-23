@@ -337,7 +337,7 @@ func (mgr *agreementMgr) runBA(initRound uint64) {
 			if curConfig = mgr.config(nextRound); curConfig != nil {
 				break
 			} else {
-				mgr.logger.Debug("round is not ready", "round", nextRound)
+				mgr.logger.Debug("Round is not ready", "round", nextRound)
 				time.Sleep(1 * time.Second)
 			}
 		}
@@ -350,11 +350,11 @@ func (mgr *agreementMgr) runBA(initRound uint64) {
 		setting.notarySet = notarySet
 		_, isNotary = setting.notarySet[mgr.ID]
 		if isNotary {
-			mgr.logger.Info("selected as notary set",
+			mgr.logger.Info("Selected as notary set",
 				"ID", mgr.ID,
 				"round", nextRound)
 		} else {
-			mgr.logger.Info("not selected as notary set",
+			mgr.logger.Info("Not selected as notary set",
 				"ID", mgr.ID,
 				"round", nextRound)
 		}
