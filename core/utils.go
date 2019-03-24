@@ -163,7 +163,7 @@ func VerifyAgreementResult(
 	if err != nil {
 		return err
 	}
-	if len(res.Votes) < len(notarySet)/3*2+1 {
+	if len(res.Votes) < len(notarySet)*2/3+1 {
 		return ErrNotEnoughVotes
 	}
 	voted := make(map[types.NodeID]struct{}, len(notarySet))

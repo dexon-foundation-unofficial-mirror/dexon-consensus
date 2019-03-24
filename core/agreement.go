@@ -174,7 +174,7 @@ func (a *agreement) restart(
 		a.data.votes[1] = newVoteListMap()
 		a.data.period = 2
 		a.data.blocks = make(map[types.NodeID]*types.Block)
-		a.data.requiredVote = len(notarySet)/3*2 + 1
+		a.data.requiredVote = len(notarySet)*2/3 + 1
 		a.data.leader.restart(crs)
 		a.data.lockValue = types.NullBlockHash
 		a.data.lockIter = 0

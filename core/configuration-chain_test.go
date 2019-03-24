@@ -279,6 +279,9 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 	hash := crypto.Keccak256Hash([]byte("🌚🌝"))
 	psigs := s.preparePartialSignature(hash, round, cfgChains)
 
+	// We only need k partial signatures.
+	psigs = psigs[:k]
+
 	tsigs := make([]crypto.Signature, 0, n)
 	errs := make(chan error, n)
 	tsigChan := make(chan crypto.Signature, n)
