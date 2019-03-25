@@ -304,6 +304,15 @@ func (mgr *agreementMgr) processAgreementResult(
 	return nil
 }
 
+func (mgr *agreementMgr) processFinalizedBlock(block *types.Block) error {
+	aID := mgr.baModule.agreementID()
+	if block.Position.Older(aID) {
+		return nil
+	}
+	mgr.baModule.processFinalizedBlock(block)
+	return nil
+}
+
 func (mgr *agreementMgr) stop() {
 	// Stop all running agreement modules.
 	func() {

@@ -42,6 +42,7 @@ var (
 	ErrNotInNotarySet                = fmt.Errorf("not in notary set")
 	ErrIncorrectVoteSignature        = fmt.Errorf("incorrect vote signature")
 	ErrIncorrectVotePartialSignature = fmt.Errorf("incorrect vote psig")
+	ErrMismatchBlockPosition         = fmt.Errorf("mismatch block position")
 )
 
 // ErrFork for fork error in agreement.
@@ -511,6 +512,25 @@ func (a *agreement) processVote(vote *types.Vote) error {
 		return nil
 	}
 	return nil
+}
+
+func (a *agreement) processFinalizedBlock(block *types.Block) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	if a.hasOutput {
+		return
+	}
+	aID := a.agreementID()
+	if aID.Older(block.Position) {
+		return
+	}
+	a.addCandidateBlockNoLock(block)
+	a.hasOutput = true
+	a.data.recv.ConfirmBlock(block.Hash, nil)
+	if a.doneChan != nil {
+		close(a.doneChan)
+		a.doneChan = nil
+	}
 }
 
 func (a *agreement) done() <-chan struct{} {

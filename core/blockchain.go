@@ -127,19 +127,18 @@ type tsigVerifierGetter interface {
 }
 
 type blockChain struct {
-	lock                sync.RWMutex
-	ID                  types.NodeID
-	lastConfirmed       *types.Block
-	lastDelivered       *types.Block
-	signer              *utils.Signer
-	vGetter             tsigVerifierGetter
-	app                 Application
-	logger              common.Logger
-	pendingRandomnesses map[types.Position]*types.AgreementResult
-	configs             []blockChainConfig
-	pendingBlocks       pendingBlockRecords
-	confirmedBlocks     types.BlocksByPosition
-	dMoment             time.Time
+	lock            sync.RWMutex
+	ID              types.NodeID
+	lastConfirmed   *types.Block
+	lastDelivered   *types.Block
+	signer          *utils.Signer
+	vGetter         tsigVerifierGetter
+	app             Application
+	logger          common.Logger
+	configs         []blockChainConfig
+	pendingBlocks   pendingBlockRecords
+	confirmedBlocks types.BlocksByPosition
+	dMoment         time.Time
 }
 
 func newBlockChain(nID types.NodeID, dMoment time.Time, initBlock *types.Block,
@@ -154,8 +153,6 @@ func newBlockChain(nID types.NodeID, dMoment time.Time, initBlock *types.Block,
 		app:           app,
 		logger:        logger,
 		dMoment:       dMoment,
-		pendingRandomnesses: make(
-			map[types.Position]*types.AgreementResult),
 	}
 }
 
@@ -228,8 +225,6 @@ func (bc *blockChain) extractBlocks() (ret []*types.Block) {
 		//                to single chain.
 		c.Finalization.ParentHash = c.ParentHash
 		c.Finalization.Timestamp = c.Timestamp
-		// It's a workaround, the height for application is one-based.
-		c.Finalization.Height = c.Position.Height + 1
 		ret = append(ret, c)
 		bc.lastDelivered = c
 	}
@@ -290,6 +285,7 @@ func (bc *blockChain) addEmptyBlock(position types.Position) (
 			// to be confirmed.
 			panic(err)
 		}
+		emptyB.Finalization.Height = emptyB.Position.Height + 1
 		bc.confirmBlock(emptyB)
 		bc.checkIfBlocksConfirmed()
 		return emptyB
@@ -445,9 +441,6 @@ func (bc *blockChain) addPendingBlockRecord(p pendingBlockRecord) error {
 			err = nil
 		}
 		return err
-	}
-	if p.block != nil {
-		bc.setRandomnessFromPending(p.block)
 	}
 	return nil
 }
@@ -610,17 +603,6 @@ func (bc *blockChain) confirmBlock(b *types.Block) {
 	bc.logger.Debug("Calling Application.BlockConfirmed", "block", b)
 	bc.app.BlockConfirmed(*b)
 	bc.lastConfirmed = b
-	bc.setRandomnessFromPending(b)
 	bc.confirmedBlocks = append(bc.confirmedBlocks, b)
 	bc.purgeConfig()
-}
-
-func (bc *blockChain) setRandomnessFromPending(b *types.Block) {
-	if r, exist := bc.pendingRandomnesses[b.Position]; exist {
-		if !r.BlockHash.Equal(b.Hash) {
-			panic(fmt.Errorf("mismathed randomness: %s %s", b, r))
-		}
-		b.Finalization.Randomness = r.Randomness
-		delete(bc.pendingRandomnesses, b.Position)
-	}
 }

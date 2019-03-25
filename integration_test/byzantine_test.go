@@ -191,6 +191,72 @@ Loop:
 	s.verifyNodes(nodes)
 }
 
+type voteCensor struct{}
+
+func (vc *voteCensor) Censor(msg interface{}) bool {
+	_, ok := msg.(*types.Vote)
+	return ok
+}
+
+func (s *ByzantineTestSuite) TestOneNodeWithoutVote() {
+	// 4 nodes setup with one node's votes been censored.
+	// so it will always do syncing BA.
+	var (
+		req        = s.Require()
+		peerCount  = 4
+		dMoment    = time.Now().UTC()
+		untilRound = uint64(3)
+		tolerence  = uint64(2)
+	)
+	if testing.Short() {
+		untilRound = 2
+	}
+	prvKeys, pubKeys, err := test.NewKeys(peerCount)
+	req.NoError(err)
+	// Setup seed governance instance. Give a short latency to make this test
+	// run faster.
+	lambda := 100 * time.Millisecond
+	seedGov, err := test.NewGovernance(
+		test.NewState(core.DKGDelayRound,
+			pubKeys, lambda, &common.NullLogger{}, true),
+		core.ConfigRoundShift)
+	req.NoError(err)
+	req.NoError(seedGov.State().RequestChange(
+		test.StateChangeRoundLength, uint64(100)))
+	votelessNodeID := types.NewNodeID(pubKeys[0])
+	nodes := s.setupNodes(dMoment, prvKeys, seedGov)
+	votelessNode := nodes[votelessNodeID]
+	votelessNode.network.SetCensor(&voteCensor{}, &voteCensor{})
+	for _, n := range nodes {
+		go n.con.Run()
+		defer n.con.Stop()
+	}
+Loop:
+	for {
+		<-time.After(5 * time.Second)
+		fmt.Println("check latest position delivered by voteless node")
+		latestPos := votelessNode.app.GetLatestDeliveredPosition()
+		fmt.Println("latestPos", votelessNode.ID, &latestPos)
+		for _, n := range nodes {
+			if n.ID == votelessNodeID {
+				continue
+			}
+			otherPos := n.app.GetLatestDeliveredPosition()
+			if otherPos.Newer(latestPos) {
+				fmt.Println("otherPos", n.ID, &otherPos)
+				s.Require().True(
+					otherPos.Height-latestPos.Height <= tolerence)
+			}
+		}
+		if latestPos.Round < untilRound {
+			continue Loop
+		}
+		// Oh ya.
+		break
+	}
+	s.verifyNodes(nodes)
+}
+
 func TestByzantine(t *testing.T) {
 	suite.Run(t, new(ByzantineTestSuite))
 }

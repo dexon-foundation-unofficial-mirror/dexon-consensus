@@ -115,7 +115,12 @@ func NewConsensus(
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
 	_, con.initChainTipHeight = db.GetCompactionChainTipInfo()
 	con.agreementModule = newAgreement(
-		con.receiveChan, con.pullChan, con.nodeSetCache, con.logger)
+		con.initChainTipHeight,
+		con.receiveChan,
+		con.pullChan,
+		con.nodeSetCache,
+		con.tsigVerifier,
+		con.logger)
 	con.agreementWaitGroup.Add(1)
 	go func() {
 		defer con.agreementWaitGroup.Done()
