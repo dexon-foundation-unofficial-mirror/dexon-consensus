@@ -291,6 +291,81 @@ func (s *NetworkTestSuite) TestBroadcastToSet() {
 	req.IsType(&types.Block{}, <-notaryNode.ReceiveChan())
 }
 
+type testVoteCensor struct{}
+
+func (vc *testVoteCensor) Censor(msg interface{}) bool {
+	if _, ok := msg.(*types.Vote); ok {
+		return true
+	}
+	return false
+}
+
+func (s *NetworkTestSuite) TestCensor() {
+	var (
+		req       = s.Require()
+		peerCount = 5
+	)
+	_, pubKeys, err := NewKeys(peerCount)
+	req.NoError(err)
+	networks := s.setupNetworks(pubKeys)
+	receiveChans := make(map[types.NodeID]<-chan interface{}, peerCount)
+	for nID, node := range networks {
+		receiveChans[nID] = node.ReceiveChan()
+	}
+
+	censor := &testVoteCensor{}
+	vote := &types.Vote{}
+	censorNodeID := types.NewNodeID(pubKeys[0])
+	otherNodeID := types.NewNodeID(pubKeys[1])
+	censorNode := networks[censorNodeID]
+	otherNode := networks[otherNodeID]
+
+	// Censor incomming votes.
+	censorNode.SetCensor(censor, nil)
+	otherNode.BroadcastVote(vote)
+	time.Sleep(50 * time.Millisecond)
+	for nID, receiveChan := range receiveChans {
+		if nID == otherNodeID || nID == censorNodeID {
+			req.Equal(0, len(receiveChan))
+		} else {
+			req.Equal(1, len(receiveChan))
+			req.IsType(&types.Vote{}, <-receiveChan)
+		}
+	}
+
+	// Censor outgoing votes.
+	censorNode.SetCensor(nil, censor)
+	censorNode.BroadcastVote(vote)
+	time.Sleep(50 * time.Millisecond)
+	for _, receiveChan := range receiveChans {
+		req.Equal(0, len(receiveChan))
+	}
+
+	// No censorship.
+	censorNode.SetCensor(nil, nil)
+	otherNode.BroadcastVote(vote)
+	time.Sleep(50 * time.Millisecond)
+	for nID, receiveChan := range receiveChans {
+		if nID == otherNodeID {
+			req.Equal(0, len(receiveChan))
+		} else {
+			req.Equal(1, len(receiveChan))
+			req.IsType(&types.Vote{}, <-receiveChan)
+		}
+	}
+	censorNode.BroadcastVote(vote)
+	time.Sleep(50 * time.Millisecond)
+	for nID, receiveChan := range receiveChans {
+		if nID == censorNodeID {
+			req.Equal(0, len(receiveChan))
+		} else {
+			req.Equal(1, len(receiveChan))
+			req.IsType(&types.Vote{}, <-receiveChan)
+		}
+	}
+
+}
+
 func TestNetwork(t *testing.T) {
 	suite.Run(t, new(NetworkTestSuite))
 }

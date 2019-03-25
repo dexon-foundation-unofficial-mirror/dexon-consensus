@@ -559,6 +559,24 @@ func (s *AgreementTestSuite) TestFindBlockInPendingSet() {
 	s.Require().NotNil(block)
 }
 
+func (s *AgreementTestSuite) TestConfirmWithBlock() {
+	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
+		return true, nil
+	})
+	block := &types.Block{
+		Hash:     common.NewRandomHash(),
+		Position: a.agreementID(),
+		Finalization: types.FinalizationResult{
+			Randomness: []byte{0x1, 0x2, 0x3, 0x4},
+		},
+	}
+	a.processFinalizedBlock(block)
+	s.Require().Len(s.confirmChan, 1)
+	confirm := <-s.confirmChan
+	s.Equal(block.Hash, confirm)
+	s.True(a.confirmed())
+}
+
 func TestAgreement(t *testing.T) {
 	suite.Run(t, new(AgreementTestSuite))
 }

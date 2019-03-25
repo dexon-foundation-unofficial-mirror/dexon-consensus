@@ -54,6 +54,8 @@ var (
 		"Configuration not ready")
 	ErrIncorrectBlockRandomness = fmt.Errorf(
 		"randomness of block is incorrect")
+	ErrCannotVerifyBlockRandomness = fmt.Errorf(
+		"cannot verify block randomness")
 )
 
 // consensusBAReceiver implements agreementReceiver.
@@ -225,44 +227,59 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 		}
 	}
 
-	voteList := make([]types.Vote, 0, len(votes))
-	IDs := make(cryptoDKG.IDs, 0, len(votes))
-	psigs := make([]cryptoDKG.PartialSignature, 0, len(votes))
-	for _, vote := range votes {
-		if vote.BlockHash != hash {
-			continue
-		}
-		if recv.round() >= DKGDelayRound {
-			ID, exist := recv.npks.IDMap[vote.ProposerID]
-			if !exist {
+	if len(votes) == 0 && len(block.Finalization.Randomness) == 0 {
+		recv.consensus.logger.Error("No votes to recover randomness",
+			"block", block)
+	} else if votes != nil {
+		voteList := make([]types.Vote, 0, len(votes))
+		IDs := make(cryptoDKG.IDs, 0, len(votes))
+		psigs := make([]cryptoDKG.PartialSignature, 0, len(votes))
+		for _, vote := range votes {
+			if vote.BlockHash != hash {
 				continue
 			}
-			IDs = append(IDs, ID)
-			psigs = append(psigs, vote.PartialSignature)
+			if recv.round() >= DKGDelayRound {
+				ID, exist := recv.npks.IDMap[vote.ProposerID]
+				if !exist {
+					continue
+				}
+				IDs = append(IDs, ID)
+				psigs = append(psigs, vote.PartialSignature)
+			}
+			voteList = append(voteList, *vote)
 		}
-		voteList = append(voteList, *vote)
-	}
-	if recv.round() >= DKGDelayRound {
-		rand, err := cryptoDKG.RecoverSignature(psigs, IDs)
-		if err != nil {
-			recv.consensus.logger.Warn("Unable to recover randomness",
-				"block", block,
-				"error", err)
-		} else {
-			block.Finalization.Randomness = rand.Signature[:]
+		if recv.round() >= DKGDelayRound {
+			rand, err := cryptoDKG.RecoverSignature(psigs, IDs)
+			if err != nil {
+				recv.consensus.logger.Warn("Unable to recover randomness",
+					"block", block,
+					"error", err)
+			} else {
+				block.Finalization.Randomness = rand.Signature[:]
+			}
 		}
-	}
-	if recv.isNotary {
-		result := &types.AgreementResult{
-			BlockHash:    block.Hash,
-			Position:     block.Position,
-			Votes:        voteList,
-			Randomness:   block.Finalization.Randomness,
-			IsEmptyBlock: isEmptyBlockConfirmed,
+		// It's a workaround, the height for application is one-based.
+		block.Finalization.Height = block.Position.Height + 1
+
+		if recv.isNotary {
+			if block.Position.Round < DKGDelayRound {
+				result := &types.AgreementResult{
+					BlockHash:          block.Hash,
+					Position:           block.Position,
+					Votes:              voteList,
+					FinalizationHeight: block.Finalization.Height,
+					IsEmptyBlock:       isEmptyBlockConfirmed,
+				}
+				recv.consensus.logger.Debug("Propose AgreementResult",
+					"result", result)
+				recv.consensus.msgChan <- result
+			} else {
+				recv.consensus.logger.Debug(
+					"Propose AgreementResult as finalized block",
+					"block", block)
+				recv.consensus.network.BroadcastBlock(block)
+			}
 		}
-		recv.consensus.logger.Debug("Propose AgreementResult",
-			"result", result)
-		recv.consensus.msgChan <- result
 	}
 
 	if block.Position.Height != 0 &&
@@ -300,6 +317,11 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 				recv.consensus.logger.Info("Receive parent block",
 					"parent-hash", block.ParentHash.String()[:6],
 					"cur-position", block.Position)
+				if block.Finalization.Height == 0 {
+					// TODO(jimmy): use a seperate message to pull finalized
+					// block. Here, we pull it again as workaround.
+					continue
+				}
 				recv.consensus.processBlockChan <- block
 				parentHash = block.ParentHash
 				if block.Position.Height == 0 ||
@@ -1135,6 +1157,12 @@ MessageLoop:
 					delete(con.baConfirmedBlock, val.Hash)
 					ch <- val
 				}()
+			} else if val.IsFinalized() {
+				if err := con.processFinalizedBlock(val); err != nil {
+					con.logger.Error("Failed to process finalized block",
+						"block", val,
+						"error", err)
+				}
 			} else {
 				if err := con.preProcessBlock(val); err != nil {
 					con.logger.Error("Failed to pre process block",
@@ -1179,17 +1207,11 @@ func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
 // ProcessAgreementResult processes the randomness request.
 func (con *Consensus) ProcessAgreementResult(
 	rand *types.AgreementResult) error {
-	if !con.baMgr.touchAgreementResult(rand) {
+	if rand.Position.Round >= DKGDelayRound {
 		return nil
 	}
-	// TODO(jimmy): merge tsig check to VerifyAgreementResult
-	ok, err := con.bcModule.verifyRandomness(
-		rand.BlockHash, rand.Position.Round, rand.Randomness)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return ErrIncorrectBlockRandomness
+	if !con.baMgr.touchAgreementResult(rand) {
+		return nil
 	}
 	// Sanity Check.
 	if err := VerifyAgreementResult(rand, con.nodeSetCache); err != nil {
@@ -1211,6 +1233,35 @@ func (con *Consensus) ProcessAgreementResult(
 // preProcessBlock performs Byzantine Agreement on the block.
 func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
 	err = con.baMgr.processBlock(b)
+	if err == nil && con.debugApp != nil {
+		con.debugApp.BlockReceived(b.Hash)
+	}
+	return
+}
+
+func (con *Consensus) processFinalizedBlock(b *types.Block) (err error) {
+	if b.Position.Round < DKGDelayRound {
+		return
+	}
+	if err = utils.VerifyBlockSignature(b); err != nil {
+		return
+	}
+	verifier, ok, err := con.tsigVerifierCache.UpdateAndGet(b.Position.Round)
+	if err != nil {
+		return
+	}
+	if !ok {
+		err = ErrCannotVerifyBlockRandomness
+		return
+	}
+	if !verifier.VerifySignature(b.Hash, crypto.Signature{
+		Type:      "bls",
+		Signature: b.Finalization.Randomness,
+	}) {
+		err = ErrIncorrectBlockRandomness
+		return
+	}
+	err = con.baMgr.processFinalizedBlock(b)
 	if err == nil && con.debugApp != nil {
 		con.debugApp.BlockReceived(b.Hash)
 	}
