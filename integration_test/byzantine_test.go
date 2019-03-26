@@ -20,6 +20,8 @@ package integration
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -60,7 +62,7 @@ func (s *ByzantineTestSuite) setupNodes(
 	// setup nodes.
 	nodes := make(map[types.NodeID]*node)
 	wg.Add(len(prvKeys))
-	for _, k := range prvKeys {
+	for i, k := range prvKeys {
 		dbInst, err := db.NewMemBackedDB()
 		s.Require().NoError(err)
 		nID := types.NewNodeID(k.PublicKey())
@@ -81,6 +83,11 @@ func (s *ByzantineTestSuite) setupNodes(
 		gov.SwitchToRemoteMode(networkModule)
 		gov.NotifyRound(0, 0)
 		networkModule.AttachNodeSetCache(utils.NewNodeSetCache(gov))
+		f, err := os.Create(fmt.Sprintf("log.%d.log", i))
+		if err != nil {
+			panic(err)
+		}
+		logger := common.NewCustomLogger(log.New(f, "", log.LstdFlags|log.Lmicroseconds))
 		app := test.NewApp(1, gov, nil)
 		nodes[nID] = &node{
 			ID:      nID,
@@ -88,7 +95,7 @@ func (s *ByzantineTestSuite) setupNodes(
 			gov:     gov,
 			db:      dbInst,
 			network: networkModule,
-			logger:  &common.NullLogger{},
+			logger:  logger,
 		}
 		go func() {
 			defer wg.Done()

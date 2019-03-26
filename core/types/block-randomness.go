@@ -18,6 +18,7 @@
 package types
 
 import (
+	"encoding/hex"
 	"fmt"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
@@ -30,9 +31,15 @@ type AgreementResult struct {
 	Votes              []Vote      `json:"votes"`
 	IsEmptyBlock       bool        `json:"is_empty_block"`
 	FinalizationHeight uint64      `json:"finalization_height"`
+	Randomness         []byte      `json:"randomness"`
 }
 
 func (r *AgreementResult) String() string {
-	return fmt.Sprintf("agreementResult{Block:%s Pos:%s}",
-		r.BlockHash.String()[:6], r.Position)
+	if len(r.Randomness) == 0 {
+		return fmt.Sprintf("agreementResult{Block:%s Pos:%s}",
+			r.BlockHash.String()[:6], r.Position)
+	}
+	return fmt.Sprintf("agreementResult{Block:%s Pos:%s Rand:%s}",
+		r.BlockHash.String()[:6], r.Position,
+		hex.EncodeToString(r.Randomness)[:6])
 }

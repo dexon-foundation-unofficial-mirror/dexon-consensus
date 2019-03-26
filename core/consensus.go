@@ -227,6 +227,9 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 		}
 	}
 
+	// It's a workaround, the height for application is one-based.
+	block.Finalization.Height = block.Position.Height + 1
+
 	if len(votes) == 0 && len(block.Finalization.Randomness) == 0 {
 		recv.consensus.logger.Error("No votes to recover randomness",
 			"block", block)
@@ -258,24 +261,31 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 				block.Finalization.Randomness = rand.Signature[:]
 			}
 		}
-		// It's a workaround, the height for application is one-based.
-		block.Finalization.Height = block.Position.Height + 1
 
 		if recv.isNotary {
-			if block.Position.Round < DKGDelayRound {
-				result := &types.AgreementResult{
-					BlockHash:          block.Hash,
-					Position:           block.Position,
-					Votes:              voteList,
-					FinalizationHeight: block.Finalization.Height,
-					IsEmptyBlock:       isEmptyBlockConfirmed,
+			result := &types.AgreementResult{
+				BlockHash:          block.Hash,
+				Position:           block.Position,
+				Votes:              voteList,
+				FinalizationHeight: block.Finalization.Height,
+				IsEmptyBlock:       isEmptyBlockConfirmed,
+				Randomness:         block.Finalization.Randomness,
+			}
+			recv.consensus.logger.Debug("Broadcast AgreementResult",
+				"result", result)
+			recv.consensus.network.BroadcastAgreementResult(result)
+			if block.IsEmpty() {
+				if err :=
+					recv.consensus.bcModule.processAgreementResult(
+						result); err != nil {
+					recv.consensus.logger.Warn(
+						"Failed to process agreement result",
+						"result", result)
 				}
-				recv.consensus.logger.Debug("Propose AgreementResult",
-					"result", result)
-				recv.consensus.msgChan <- result
-			} else {
+			}
+			if block.Position.Round >= DKGDelayRound {
 				recv.consensus.logger.Debug(
-					"Propose AgreementResult as finalized block",
+					"Broadcast finalized block",
 					"block", block)
 				recv.consensus.network.BroadcastBlock(block)
 			}
@@ -354,7 +364,7 @@ CleanChannelLoop:
 	if block.Position.Height > changeNotaryHeight &&
 		block.Position.Round <= currentRound {
 		panic(fmt.Errorf(
-			"round not switch when confirmig: %s, %d, should switch at %d, %s",
+			"round not switch when confirming: %s, %d, should switch at %d, %s",
 			block, currentRound, changeNotaryHeight, newPos))
 	}
 	recv.restartNotary <- newPos
@@ -1207,9 +1217,6 @@ func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
 // ProcessAgreementResult processes the randomness request.
 func (con *Consensus) ProcessAgreementResult(
 	rand *types.AgreementResult) error {
-	if rand.Position.Round >= DKGDelayRound {
-		return nil
-	}
 	if !con.baMgr.touchAgreementResult(rand) {
 		return nil
 	}
@@ -1218,12 +1225,15 @@ func (con *Consensus) ProcessAgreementResult(
 		con.baMgr.untouchAgreementResult(rand)
 		return err
 	}
+	if err := con.bcModule.processAgreementResult(rand); err != nil {
+		return err
+	}
 	// Syncing BA Module.
 	if err := con.baMgr.processAgreementResult(rand); err != nil {
 		return err
 	}
 
-	con.logger.Debug("Broadcast AgreementResult",
+	con.logger.Debug("Rebroadcast AgreementResult",
 		"result", rand)
 	con.network.BroadcastAgreementResult(rand)
 

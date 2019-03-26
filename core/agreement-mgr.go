@@ -274,6 +274,9 @@ func (mgr *agreementMgr) processAgreementResult(
 	}
 	if result.Position == aID && !mgr.baModule.confirmed() {
 		mgr.logger.Info("Syncing BA", "position", result.Position)
+		if result.Position.Round >= DKGDelayRound {
+			return mgr.baModule.processAgreementResult(result)
+		}
 		for key := range result.Votes {
 			if err := mgr.baModule.processVote(&result.Votes[key]); err != nil {
 				return err
@@ -285,21 +288,26 @@ func (mgr *agreementMgr) processAgreementResult(
 		if err != nil {
 			return err
 		}
-		mgr.logger.Debug("Calling Network.PullBlocks for fast syncing BA",
-			"hash", result.BlockHash)
-		mgr.network.PullBlocks(common.Hashes{result.BlockHash})
-		mgr.logger.Debug("Calling Governance.CRS", "round", result.Position.Round)
-		crs := utils.GetCRSWithPanic(mgr.gov, result.Position.Round, mgr.logger)
-		for key := range result.Votes {
-			if err := mgr.baModule.processVote(&result.Votes[key]); err != nil {
-				return err
+		if result.Position.Round < DKGDelayRound {
+			mgr.logger.Debug("Calling Network.PullBlocks for fast syncing BA",
+				"hash", result.BlockHash)
+			mgr.network.PullBlocks(common.Hashes{result.BlockHash})
+			for key := range result.Votes {
+				if err := mgr.baModule.processVote(&result.Votes[key]); err != nil {
+					return err
+				}
 			}
 		}
+		mgr.logger.Debug("Calling Governance.CRS", "round", result.Position.Round)
+		crs := utils.GetCRSWithPanic(mgr.gov, result.Position.Round, mgr.logger)
 		leader, err := mgr.cache.GetLeaderNode(result.Position)
 		if err != nil {
 			return err
 		}
 		mgr.baModule.restart(nIDs, result.Position, leader, crs)
+		if result.Position.Round >= DKGDelayRound {
+			return mgr.baModule.processAgreementResult(result)
+		}
 	}
 	return nil
 }
