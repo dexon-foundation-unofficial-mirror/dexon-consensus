@@ -65,6 +65,7 @@ type consensusBAReceiver struct {
 	agreementModule         *agreement
 	changeNotaryHeightValue *atomic.Value
 	roundValue              *atomic.Value
+	emptyBlockHashMap       *sync.Map
 	isNotary                bool
 	restartNotary           chan types.Position
 	npks                    *typesDKG.NodePublicKeys
@@ -77,6 +78,25 @@ func (recv *consensusBAReceiver) round() uint64 {
 
 func (recv *consensusBAReceiver) changeNotaryHeight() uint64 {
 	return recv.changeNotaryHeightValue.Load().(uint64)
+}
+
+func (recv *consensusBAReceiver) emptyBlockHash(pos types.Position) (
+	common.Hash, error) {
+	hashVal, ok := recv.emptyBlockHashMap.Load(pos)
+	if ok {
+		return hashVal.(common.Hash), nil
+	}
+	emptyBlock, err := recv.consensus.bcModule.prepareBlock(
+		pos, time.Time{}, true)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	hash, err := utils.HashBlock(emptyBlock)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	recv.emptyBlockHashMap.Store(pos, hash)
+	return hash, nil
 }
 
 func (recv *consensusBAReceiver) VerifyPartialSignature(vote *types.Vote) bool {
@@ -98,7 +118,15 @@ func (recv *consensusBAReceiver) VerifyPartialSignature(vote *types.Vote) bool {
 			}
 			blockHash := vote.BlockHash
 			if blockHash == types.NullBlockHash {
-				blockHash = utils.HashPosition(vote.Position)
+				var err error
+				blockHash, err = recv.emptyBlockHash(vote.Position)
+				if err != nil {
+					recv.consensus.logger.Error(
+						"Failed to verify vote for empty block",
+						"position", vote.Position,
+						"error", err)
+					return false
+				}
 			}
 			return pubKey.VerifySignature(
 				vote.BlockHash, crypto.Signature(vote.PartialSignature))
@@ -117,8 +145,15 @@ func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {
 				return
 			}
 			if vote.BlockHash == types.NullBlockHash {
-				vote.PartialSignature = recv.psigSigner.sign(
-					utils.HashPosition(vote.Position))
+				hash, err := recv.emptyBlockHash(vote.Position)
+				if err != nil {
+					recv.consensus.logger.Error(
+						"Failed to propose vote for empty block",
+						"position", vote.Position,
+						"error", err)
+					return
+				}
+				vote.PartialSignature = recv.psigSigner.sign(hash)
 			} else {
 				vote.PartialSignature = recv.psigSigner.sign(vote.BlockHash)
 			}
@@ -955,6 +990,8 @@ func (con *Consensus) prepare(initBlock *types.Block) (err error) {
 
 // Run starts running DEXON Consensus.
 func (con *Consensus) Run() {
+	// There may have emptys block in blockchain added by force sync.
+	blocksWithoutRandomness := con.bcModule.pendingBlocksWithoutRandomness()
 	// Launch BA routines.
 	con.baMgr.run()
 	// Launch network handler.
@@ -986,6 +1023,7 @@ func (con *Consensus) Run() {
 		}
 		con.logger.Trace("Finish dumping cached messages")
 	}
+	con.generateBlockRandomness(blocksWithoutRandomness)
 	// Sleep until dMoment come.
 	time.Sleep(con.dMoment.Sub(time.Now().UTC()))
 	// Take some time to bootstrap.
@@ -995,6 +1033,76 @@ func (con *Consensus) Run() {
 	// Block until done.
 	select {
 	case <-con.ctx.Done():
+	}
+}
+
+func (con *Consensus) generateBlockRandomness(blocks []*types.Block) {
+	con.logger.Debug("Start generating block randomness", "blocks", blocks)
+	isNotarySet := make(map[uint64]bool)
+	for _, block := range blocks {
+		if block.Position.Round < DKGDelayRound {
+			continue
+		}
+		doRun, exist := isNotarySet[block.Position.Round]
+		if !exist {
+			curNotarySet, err := con.nodeSetCache.GetNotarySet(block.Position.Round)
+			if err != nil {
+				con.logger.Error("Error getting notary set when generate block tsig",
+					"round", block.Position.Round,
+					"error", err)
+				continue
+			}
+			_, exist := curNotarySet[con.ID]
+			isNotarySet[block.Position.Round] = exist
+			doRun = exist
+		}
+		if !doRun {
+			continue
+		}
+		go func(block *types.Block) {
+			psig, err := con.cfgModule.preparePartialSignature(
+				block.Position.Round, block.Hash)
+			if err != nil {
+				con.logger.Error("Failed to prepare partial signature",
+					"block", block,
+					"error", err)
+			} else if err = con.signer.SignDKGPartialSignature(psig); err != nil {
+				con.logger.Error("Failed to sign DKG partial signature",
+					"block", block,
+					"error", err)
+			} else if err = con.cfgModule.processPartialSignature(psig); err != nil {
+				con.logger.Error("Failed to process partial signature",
+					"block", block,
+					"error", err)
+			} else {
+				con.logger.Debug("Calling Network.BroadcastDKGPartialSignature",
+					"proposer", psig.ProposerID,
+					"block", block)
+				con.network.BroadcastDKGPartialSignature(psig)
+				sig, err := con.cfgModule.runTSig(block.Position.Round, block.Hash)
+				if err != nil {
+					con.logger.Error("Failed to run Block Tsig",
+						"block", block,
+						"error", err)
+					return
+				}
+				result := &types.AgreementResult{
+					BlockHash:  block.Hash,
+					Position:   block.Position,
+					Randomness: sig.Signature[:],
+				}
+				if err := con.bcModule.processAgreementResult(result); err != nil {
+					con.logger.Error("Failed to process BlockRandomness",
+						"result", result,
+						"error", err)
+					return
+				}
+				con.logger.Debug("Broadcast BlockRandomness",
+					"block", block,
+					"result", result)
+				con.network.BroadcastAgreementResult(result)
+			}
+		}(block)
 	}
 }
 
