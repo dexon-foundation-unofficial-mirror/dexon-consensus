@@ -41,6 +41,7 @@ const (
 	maxVoteCache        = 128
 
 	// Gossiping parameter.
+	maxAgreementResultBroadcast  = 3
 	gossipAgreementResultPercent = 33
 )
 
@@ -282,9 +283,11 @@ func (n *Network) BroadcastBlock(block *types.Block) {
 	// Avoid data race in fake transport.
 	block = n.cloneForFake(block).(*types.Block)
 	notarySet := n.getNotarySet(block.Position.Round)
-	if err := n.trans.Broadcast(
-		notarySet, n.config.DirectLatency, block); err != nil {
-		panic(err)
+	if !block.IsFinalized() {
+		if err := n.trans.Broadcast(
+			notarySet, n.config.DirectLatency, block); err != nil {
+			panic(err)
+		}
 	}
 	if err := n.trans.Broadcast(getComplementSet(n.peers, notarySet),
 		n.config.GossipLatency, block); err != nil {
@@ -308,10 +311,10 @@ func (n *Network) BroadcastAgreementResult(
 	n.addBlockFinalizationToCache(
 		result.BlockHash,
 		result.FinalizationHeight,
-		nil,
+		result.Randomness,
 	)
 	notarySet := n.getNotarySet(result.Position.Round)
-	count := len(notarySet)*gossipAgreementResultPercent/100 + 1
+	count := maxAgreementResultBroadcast
 	for nID := range notarySet {
 		if count--; count < 0 {
 			break

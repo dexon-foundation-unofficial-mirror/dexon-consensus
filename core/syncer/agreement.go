@@ -19,6 +19,7 @@ package syncer
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
@@ -155,17 +156,9 @@ func (a *agreement) processFinalizedBlock(block *types.Block) {
 		return
 	}
 	a.confirm(block)
-	if block.Position.Height > a.chainTip+1 {
-		if _, exist := a.confirmedBlocks[block.ParentHash]; !exist {
-			a.pullChan <- block.ParentHash
-		}
-	}
 }
 
 func (a *agreement) processAgreementResult(r *types.AgreementResult) {
-	if r.Position.Round >= core.DKGDelayRound {
-		return
-	}
 	// Cache those results that CRS is not ready yet.
 	if _, exists := a.confirmedBlocks[r.BlockHash]; exists {
 		a.logger.Trace("Agreement result already confirmed", "result", r)
@@ -187,9 +180,32 @@ func (a *agreement) processAgreementResult(r *types.AgreementResult) {
 			"error", err)
 		return
 	}
+	if r.Position.Round >= core.DKGDelayRound {
+		verifier, ok, err := a.tsigVerifierCache.UpdateAndGet(r.Position.Round)
+		if err != nil {
+			a.logger.Error("error verifying agreement result randomness",
+				"result", r,
+				"error", err)
+			return
+		}
+		if !ok {
+			a.logger.Error("cannot verify agreement result randomness", "result", r)
+			return
+		}
+		if !verifier.VerifySignature(r.BlockHash, crypto.Signature{
+			Type:      "bls",
+			Signature: r.Randomness,
+		}) {
+			a.logger.Error("incorrect agreement result randomness", "result", r)
+			return
+		}
+	}
 	if r.IsEmptyBlock {
 		b := &types.Block{
 			Position: r.Position,
+			Finalization: types.FinalizationResult{
+				Randomness: r.Randomness,
+			},
 		}
 		// Empty blocks should be confirmed directly, they won't be sent over
 		// the wire.
@@ -198,6 +214,7 @@ func (a *agreement) processAgreementResult(r *types.AgreementResult) {
 	}
 	if bs, exist := a.blocks[r.Position]; exist {
 		if b, exist := bs[r.BlockHash]; exist {
+			b.Finalization.Randomness = r.Randomness
 			a.confirm(b)
 			return
 		}
@@ -250,6 +267,11 @@ func (a *agreement) processNewCRS(round uint64) {
 
 // confirm notifies consensus the confirmation of a block in BA.
 func (a *agreement) confirm(b *types.Block) {
+	if b.Position.Round >= core.DKGDelayRound &&
+		len(b.Finalization.Randomness) == 0 {
+		panic(fmt.Errorf("confirm a block %s without randomness", b))
+	}
+	b.Finalization.Height = b.Position.Height + 1
 	if _, exist := a.confirmedBlocks[b.Hash]; !exist {
 		delete(a.blocks, b.Position)
 		delete(a.agreementResults, b.Hash)
@@ -266,5 +288,10 @@ func (a *agreement) confirm(b *types.Block) {
 			}
 		}
 		a.confirmedBlocks[b.Hash] = struct{}{}
+	}
+	if b.Position.Height > a.chainTip+1 {
+		if _, exist := a.confirmedBlocks[b.ParentHash]; !exist {
+			a.pullChan <- b.ParentHash
+		}
 	}
 }
