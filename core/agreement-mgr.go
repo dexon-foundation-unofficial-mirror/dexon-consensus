@@ -401,6 +401,7 @@ Loop:
 			Height: math.MaxUint64,
 		}
 		mgr.voteFilter = utils.NewVoteFilter()
+		mgr.recv.emptyBlockHashMap = &sync.Map{}
 		if err := mgr.baRoutineForOneRound(&setting); err != nil {
 			mgr.logger.Error("BA routine failed",
 				"error", err,

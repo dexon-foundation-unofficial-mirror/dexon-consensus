@@ -223,6 +223,11 @@ func (bc *blockChain) extractBlocks() (ret []*types.Block) {
 	defer bc.lock.Unlock()
 	for len(bc.confirmedBlocks) > 0 {
 		c := bc.confirmedBlocks[0]
+		if c.Position.Round >= DKGDelayRound &&
+			len(c.Finalization.Randomness) == 0 &&
+			!bc.setRandomnessFromPending(c) {
+			break
+		}
 		c, bc.confirmedBlocks = bc.confirmedBlocks[0], bc.confirmedBlocks[1:]
 		// TODO(mission): remove these duplicated field if we fully converted
 		//                to single chain.
@@ -385,24 +390,29 @@ func (bc *blockChain) nextBlock() (uint64, time.Time) {
 	return tip.Position.Height + 1, tip.Timestamp.Add(config.minBlockInterval)
 }
 
-func (bc *blockChain) pendingBlocksWithoutRandomness() (hashes common.Hashes) {
+func (bc *blockChain) pendingBlocksWithoutRandomness() []*types.Block {
 	bc.lock.RLock()
 	defer bc.lock.RUnlock()
+	blocks := make([]*types.Block, 0)
 	for _, b := range bc.confirmedBlocks {
-		if b.Position.Round == 0 || len(b.Finalization.Randomness) > 0 {
+		if b.Position.Round < DKGDelayRound ||
+			len(b.Finalization.Randomness) > 0 ||
+			bc.setRandomnessFromPending(b) {
 			continue
 		}
-		hashes = append(hashes, b.Hash)
+		blocks = append(blocks, b)
 	}
 	for _, r := range bc.pendingBlocks {
-		if r.position.Round == 0 {
+		if r.position.Round < DKGDelayRound {
 			continue
 		}
-		if r.block != nil && len(r.block.Finalization.Randomness) == 0 {
-			hashes = append(hashes, r.block.Hash)
+		if r.block != nil &&
+			len(r.block.Finalization.Randomness) == 0 &&
+			!bc.setRandomnessFromPending(r.block) {
+			blocks = append(blocks, r.block)
 		}
 	}
-	return
+	return blocks
 }
 
 func (bc *blockChain) lastDeliveredBlock() *types.Block {
@@ -637,9 +647,9 @@ func (bc *blockChain) processAgreementResult(result *types.AgreementResult) erro
 	if !ok {
 		return ErrIncorrectAgreementResult
 	}
-	bc.lock.RLock()
-	defer bc.lock.RUnlock()
-	if !result.Position.Newer(bc.lastConfirmed.Position) {
+	bc.lock.Lock()
+	defer bc.lock.Unlock()
+	if !result.Position.Newer(bc.lastDelivered.Position) {
 		return nil
 	}
 	bc.pendingRandomnesses[result.Position] = result

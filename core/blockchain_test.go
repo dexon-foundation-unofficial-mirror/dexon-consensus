@@ -18,6 +18,7 @@
 package core
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -125,6 +126,15 @@ func (s *BlockChainTestSuite) newBlock(parent *types.Block, round uint64,
 	return b
 }
 
+func (s *BlockChainTestSuite) newRandomnessFromBlock(
+	b *types.Block) *types.AgreementResult {
+	return &types.AgreementResult{
+		BlockHash:  b.Hash,
+		Position:   b.Position,
+		Randomness: common.GenerateRandomBytes(),
+	}
+}
+
 func (s *BlockChainTestSuite) newBlockChain(initB *types.Block,
 	roundLength uint64) (bc *blockChain) {
 	initRound := uint64(0)
@@ -159,6 +169,64 @@ func (s *BlockChainTestSuite) newRoundOneInitBlock() *types.Block {
 	return initBlock
 }
 
+func (s *BlockChainTestSuite) baseConcurrentAceessTest(initBlock *types.Block,
+	blocks []*types.Block, rands []*types.AgreementResult) {
+	var (
+		bc        = s.newBlockChain(initBlock, uint64(len(blocks)+1))
+		start     = make(chan struct{})
+		newNotif  = make(chan struct{}, 1)
+		delivered []*types.Block
+	)
+	add := func(v interface{}) {
+		<-start
+		switch val := v.(type) {
+		case *types.Block:
+			if err := bc.addBlock(val); err != nil {
+				// Never assertion in sub routine when testing.
+				panic(err)
+			}
+		case *types.AgreementResult:
+			if err := bc.processAgreementResult(val); err != nil {
+				// Never assertion in sub routine when testing.
+				panic(err)
+			}
+		default:
+			panic(fmt.Errorf("unknown type: %v", v))
+		}
+		select {
+		case newNotif <- struct{}{}:
+		default:
+		}
+	}
+	for _, b := range blocks {
+		go add(b)
+	}
+	for _, r := range rands {
+		go add(r)
+	}
+	close(start)
+	for {
+		select {
+		case <-newNotif:
+			delivered = append(delivered, bc.extractBlocks()...)
+		case <-time.After(100 * time.Millisecond):
+			delivered = append(delivered, bc.extractBlocks()...)
+		}
+		if len(delivered) == len(blocks) {
+			break
+		}
+	}
+	// Check result.
+	b := delivered[0]
+	s.Require().Equal(b.Position.Height, uint64(1))
+	s.Require().NotEmpty(b.Finalization.Randomness)
+	for _, bb := range delivered[1:] {
+		s.Require().Equal(b.Position.Height+1, bb.Position.Height)
+		s.Require().NotEmpty(b.Finalization.Randomness)
+		b = bb
+	}
+}
+
 func (s *BlockChainTestSuite) TestBasicUsage() {
 	initBlock := s.newRoundOneInitBlock()
 	bc := s.newBlockChain(initBlock, 10)
@@ -185,10 +253,33 @@ func (s *BlockChainTestSuite) TestBasicUsage() {
 	s.Require().NoError(bc.addBlock(b1))
 	s.Require().NoError(bc.addBlock(b0))
 	extracted := bc.extractBlocks()
-	s.Require().Len(extracted, 6)
-	s.Require().Equal(extracted[4].Hash, b4.Hash)
+	s.Require().Len(extracted, 4)
+	bc.pendingRandomnesses[b4.Position] = &types.AgreementResult{
+		BlockHash:  b4.Hash,
+		Randomness: common.GenerateRandomBytes(),
+	}
+	extracted = bc.extractBlocks()
+	s.Require().Len(extracted, 2)
+	s.Require().Equal(extracted[0].Hash, b4.Hash)
 	extracted = bc.extractBlocks()
 	s.Require().Len(extracted, 0)
+}
+
+func (s *BlockChainTestSuite) TestConcurrentAccess() {
+	// Raise one go routine for each block and randomness. And let them try to
+	// add to blockChain at the same time. Make sure we can delivered them all.
+	var (
+		retry     = 10
+		initBlock = s.newRoundOneInitBlock()
+		blocks    = s.newBlocks(500, initBlock)
+		rands     = []*types.AgreementResult{}
+	)
+	for _, b := range blocks {
+		rands = append(rands, s.newRandomnessFromBlock(b))
+	}
+	for i := 0; i < retry; i++ {
+		s.baseConcurrentAceessTest(initBlock, blocks, rands)
+	}
 }
 
 func (s *BlockChainTestSuite) TestSanityCheck() {
@@ -319,6 +410,22 @@ func (s *BlockChainTestSuite) TestNextBlockAndTipRound() {
 	s.Require().NoError(bc.sanityCheck(b3))
 	s.Require().NoError(bc.addBlock(b3))
 	s.Require().Equal(bc.tipRound(), uint64(1))
+}
+
+func (s *BlockChainTestSuite) TestPendingBlocksWithoutRandomness() {
+	initBlock := s.newRoundOneInitBlock()
+	bc := s.newBlockChain(initBlock, 10)
+	b0, err := bc.addEmptyBlock(types.Position{Round: 1, Height: 1})
+	s.Require().NoError(err)
+	b1, err := bc.addEmptyBlock(types.Position{Round: 1, Height: 2})
+	s.Require().NoError(err)
+	b2, err := bc.addEmptyBlock(types.Position{Round: 1, Height: 3})
+	s.Require().NoError(err)
+	s.Require().Equal(bc.pendingBlocksWithoutRandomness(), []*types.Block{
+		b0, b1, b2})
+	s.Require().NoError(bc.processAgreementResult(s.newRandomnessFromBlock(b0)))
+	s.Require().Equal(bc.pendingBlocksWithoutRandomness(), []*types.Block{
+		b1, b2})
 }
 
 func (s *BlockChainTestSuite) TestLastXBlock() {
