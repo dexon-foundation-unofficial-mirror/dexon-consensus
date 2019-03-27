@@ -176,31 +176,43 @@ func (s *AgreementTestSuite) prepareVote(
 }
 
 func (s *AgreementTestSuite) TestSimpleConfirm() {
-	a, _ := s.newAgreement(4, -1, func(*types.Block) (bool, error) {
+	a, leaderNode := s.newAgreement(4, 0, func(*types.Block) (bool, error) {
 		return true, nil
 	})
+	s.Require().Equal(s.ID, leaderNode)
 	// FastState
 	a.nextState()
 	// FastVoteState
-	a.nextState()
-	// InitialState
-	a.nextState()
-	// PreCommitState
 	s.Require().Len(s.blockChan, 1)
 	blockHash := <-s.blockChan
 	block, exist := s.block[blockHash]
 	s.Require().True(exist)
+	s.Require().Equal(s.ID, block.ProposerID)
 	s.Require().NoError(a.processBlock(block))
+	// Wait some time for go routine in processBlock to finish.
+	time.Sleep(500 * time.Millisecond)
 	s.Require().Len(s.voteChan, 1)
-	vote := <-s.voteChan
-	s.Equal(types.VoteInit, vote.Type)
-	s.Equal(blockHash, vote.BlockHash)
+	fastVote := <-s.voteChan
+	s.Equal(types.VoteFast, fastVote.Type)
+	s.Equal(blockHash, fastVote.BlockHash)
+	s.Require().Len(s.voteChan, 0)
+	a.nextState()
+	// InitialState
+	a.nextState()
+	// PreCommitState
 	a.nextState()
 	// CommitState
 	s.Require().Len(s.voteChan, 1)
-	vote = <-s.voteChan
+	vote := <-s.voteChan
 	s.Equal(types.VotePreCom, vote.Type)
 	s.Equal(blockHash, vote.BlockHash)
+	// Fast-votes should be ignored.
+	for nID := range s.signers {
+		v := s.copyVote(fastVote, nID)
+		s.Require().NoError(a.processVote(v))
+	}
+	s.Require().Len(s.voteChan, 0)
+	s.Equal(uint64(1), a.data.lockIter)
 	for nID := range s.signers {
 		v := s.copyVote(vote, nID)
 		s.Require().NoError(a.processVote(v))

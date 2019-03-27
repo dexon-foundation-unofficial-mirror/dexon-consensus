@@ -132,11 +132,14 @@ func (s *preCommitState) clocks() int               { return 2 }
 func (s *preCommitState) nextState() (agreementState, error) {
 	s.a.lock.RLock()
 	defer s.a.lock.RUnlock()
-	hash := s.a.lockValue
-	if hash == types.NullBlockHash {
-		hash = s.a.leader.leaderBlockHash()
+	if s.a.lockValue == types.SkipBlockHash ||
+		s.a.lockValue == types.NullBlockHash {
+		hash := s.a.leader.leaderBlockHash()
+		s.a.recv.ProposeVote(types.NewVote(types.VotePreCom, hash, s.a.period))
+	} else {
+		s.a.recv.ProposeVote(types.NewVote(
+			types.VotePreCom, s.a.lockValue, s.a.period))
 	}
-	s.a.recv.ProposeVote(types.NewVote(types.VotePreCom, hash, s.a.period))
 	return newCommitState(s.a), nil
 }
 
@@ -154,16 +157,7 @@ func (s *commitState) clocks() int               { return 2 }
 func (s *commitState) nextState() (agreementState, error) {
 	s.a.lock.Lock()
 	defer s.a.lock.Unlock()
-	hash, ok := s.a.countVoteNoLock(s.a.period, types.VotePreCom)
-	if ok && hash != types.SkipBlockHash {
-		if s.a.period > s.a.lockIter {
-			s.a.lockValue = hash
-			s.a.lockIter = s.a.period
-		}
-	} else {
-		hash = types.SkipBlockHash
-	}
-	s.a.recv.ProposeVote(types.NewVote(types.VoteCom, hash, s.a.period))
+	s.a.recv.ProposeVote(types.NewVote(types.VoteCom, s.a.lockValue, s.a.period))
 	return newForwardState(s.a), nil
 }
 

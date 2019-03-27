@@ -93,7 +93,7 @@ func (l *leaderSelector) restart(crs common.Hash) {
 	l.numCRS = numCRS
 	l.hashCRS = crs
 	l.minCRSBlock = maxHash
-	l.minBlockHash = common.Hash{}
+	l.minBlockHash = types.NullBlockHash
 	l.pendingBlocks = make(map[common.Hash]*types.Block)
 }
 

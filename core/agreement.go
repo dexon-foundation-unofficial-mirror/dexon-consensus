@@ -181,7 +181,7 @@ func (a *agreement) restart(
 		a.data.blocks = make(map[types.NodeID]*types.Block)
 		a.data.requiredVote = len(notarySet)*2/3 + 1
 		a.data.leader.restart(crs)
-		a.data.lockValue = types.NullBlockHash
+		a.data.lockValue = types.SkipBlockHash
 		a.data.lockIter = 0
 		a.data.isLeader = a.data.ID == leader
 		if a.doneChan != nil {
@@ -461,11 +461,17 @@ func (a *agreement) processVote(vote *types.Vote) error {
 			hash != types.SkipBlockHash {
 			if vote.Type == types.VoteFast {
 				if !a.hasVoteFast {
-					a.data.recv.ProposeVote(
-						types.NewVote(types.VoteFastCom, hash, vote.Period))
-					a.data.lockValue = hash
-					a.data.lockIter = 1
-					a.hasVoteFast = true
+					if a.state.state() == stateFast ||
+						a.state.state() == stateFastVote {
+						a.data.recv.ProposeVote(
+							types.NewVote(types.VoteFastCom, hash, vote.Period))
+						a.hasVoteFast = true
+
+					}
+					if a.data.lockIter == 0 {
+						a.data.lockValue = hash
+						a.data.lockIter = 1
+					}
 				}
 			} else {
 				a.hasOutput = true
@@ -494,18 +500,12 @@ func (a *agreement) processVote(vote *types.Vote) error {
 		if hash, ok := a.data.countVoteNoLock(vote.Period, vote.Type); ok &&
 			hash != types.SkipBlockHash {
 			// Condition 1.
-			if a.data.period >= vote.Period && vote.Period > a.data.lockIter &&
-				vote.BlockHash != a.data.lockValue {
+			if vote.Period > a.data.lockIter {
 				a.data.lockValue = hash
 				a.data.lockIter = vote.Period
-				return nil
 			}
 			// Condition 2.
 			if vote.Period > a.data.period {
-				if vote.Period > a.data.lockIter {
-					a.data.lockValue = hash
-					a.data.lockIter = vote.Period
-				}
 				a.fastForward <- vote.Period
 				if a.doneChan != nil {
 					close(a.doneChan)

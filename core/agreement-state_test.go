@@ -221,11 +221,22 @@ func (s *AgreementStateTestSuite) TestPreCommitState() {
 	s.Require().Len(s.voteChan, 1)
 	vote := <-s.voteChan
 	s.Equal(types.VotePreCom, vote.Type)
-	s.NotEqual(common.Hash{}, vote.BlockHash)
+	s.NotEqual(types.SkipBlockHash, vote.BlockHash)
+	s.Equal(stateCommit, newState.state())
+
+	// If lockvalue == SKIP, propose preCom-vote for the leader block.
+	a.data.lockValue = types.SkipBlockHash
+	a.data.period = 2
+	newState, err = state.nextState()
+	s.Require().NoError(err)
+	s.Require().Len(s.voteChan, 1)
+	vote = <-s.voteChan
+	s.Equal(types.VotePreCom, vote.Type)
+	s.NotEqual(types.SkipBlockHash, vote.BlockHash)
 	s.Equal(stateCommit, newState.state())
 
 	// Else, preCom-vote on lockValue.
-	a.data.period = 2
+	a.data.period = 3
 	hash := common.NewRandomHash()
 	a.data.lockValue = hash
 	newState, err = state.nextState()
@@ -243,47 +254,15 @@ func (s *AgreementStateTestSuite) TestCommitState() {
 	s.Equal(stateCommit, state.state())
 	s.Equal(2, state.clocks())
 
-	// If there are 2f+1 preCom-votes for block v or null,
-	// propose a com-vote for block v.
+	// Commit on lock value.
 	a.data.period = 1
-	block := s.proposeBlock(a.data.leader)
-	s.Require().NoError(a.processBlock(block))
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePreCom, block.Hash, 1)
-		s.Require().NoError(a.processVote(vote))
-	}
+	a.data.lockValue = common.NewRandomHash()
 	newState, err := state.nextState()
 	s.Require().NoError(err)
 	s.Require().Len(s.voteChan, 1)
-	s.Equal(block.Hash, a.data.lockValue)
-	s.Equal(uint64(1), a.data.lockIter)
 	vote := <-s.voteChan
 	s.Equal(types.VoteCom, vote.Type)
-	s.Equal(block.Hash, vote.BlockHash)
-	s.Equal(stateForward, newState.state())
-
-	// Else, com-vote on SKIP.
-	a.data.period = 2
-	newState, err = state.nextState()
-	s.Require().NoError(err)
-	s.Require().Len(s.voteChan, 1)
-	vote = <-s.voteChan
-	s.Equal(types.VoteCom, vote.Type)
-	s.Equal(types.SkipBlockHash, vote.BlockHash)
-	s.Equal(stateForward, newState.state())
-
-	// If there are 2f+1 preCom-votes for SKIP, it's same as the 'else' condition.
-	a.data.period = 3
-	for nID := range a.notarySet {
-		vote := s.prepareVote(nID, types.VotePreCom, types.SkipBlockHash, 3)
-		s.Require().NoError(a.processVote(vote))
-	}
-	newState, err = state.nextState()
-	s.Require().NoError(err)
-	s.Require().Len(s.voteChan, 1)
-	vote = <-s.voteChan
-	s.Equal(types.VoteCom, vote.Type)
-	s.Equal(types.SkipBlockHash, vote.BlockHash)
+	s.Equal(a.data.lockValue, vote.BlockHash)
 	s.Equal(stateForward, newState.state())
 }
 
