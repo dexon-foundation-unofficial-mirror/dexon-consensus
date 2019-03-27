@@ -18,6 +18,7 @@
 package test
 
 import (
+	"bytes"
 	"fmt"
 	"sync"
 	"time"
@@ -65,6 +66,14 @@ var (
 	// ErrParentBlockNotDelivered raised when the parent block is not seen by
 	// this app.
 	ErrParentBlockNotDelivered = fmt.Errorf("parent block not delivered")
+	// ErrWitnessLowerHeight raised when a block's witness height is lower
+	// than parent's.
+	ErrWitnessLowerHeight = fmt.Errorf(
+		"witness height is lower than parent's")
+	// ErrWitnessDataNotMatchForEmptyBlock raied when a empty block's witness
+	// data is not as same as parent's.
+	ErrWitnessDataNotMatchForEmptyBlock = fmt.Errorf(
+		"witness data of empty block does not match with parent's")
 )
 
 // AppDeliveredRecord caches information when this application received
@@ -217,6 +226,30 @@ func (app *App) ClearUndeliveredBlocks() {
 // BlockDelivered implements Application interface.
 func (app *App) BlockDelivered(blockHash common.Hash, pos types.Position,
 	result types.FinalizationResult) {
+	// Check witness data.
+	func() {
+		app.confirmedLock.RLock()
+		defer app.confirmedLock.RUnlock()
+		block, exist := app.Confirmed[blockHash]
+		if !exist {
+			panic(ErrDeliveredBlockNotConfirmed)
+		}
+		if block.ParentHash == (common.Hash{}) {
+			return
+		}
+		parentBlock, exist := app.Confirmed[blockHash]
+		if !exist {
+			panic(ErrParentBlockNotDelivered)
+		}
+		if block.Witness.Height < parentBlock.Witness.Height {
+			panic(ErrWitnessLowerHeight)
+		}
+		if block.IsEmpty() {
+			if !bytes.Equal(block.Witness.Data, parentBlock.Witness.Data) {
+				panic(ErrWitnessDataNotMatchForEmptyBlock)
+			}
+		}
+	}()
 	func() {
 		app.deliveredLock.Lock()
 		defer app.deliveredLock.Unlock()
