@@ -179,7 +179,8 @@ func NewRoundEvent(parentCtx context.Context, gov governanceAccessor,
 	e.ctx, e.ctxCancel = context.WithCancel(parentCtx)
 	e.config = RoundBasedConfig{}
 	e.config.SetupRoundBasedFields(initRound, initConfig)
-	e.config.SetRoundBeginHeight(gov.GetRoundHeight(initRound))
+	// TODO(jimmy): remove -1 after we match the height with fullnode.
+	e.config.SetRoundBeginHeight(gov.GetRoundHeight(initRound) - 1)
 	// Make sure the DKG reset count in current governance can cover the initial
 	// block height.
 	resetCount := gov.DKGResetCount(initRound + 1)

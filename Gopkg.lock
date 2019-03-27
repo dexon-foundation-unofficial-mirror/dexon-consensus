@@ -122,13 +122,38 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/btcsuite/btcd/btcec",
+    "github.com/davecgh/go-spew/spew",
     "github.com/dexon-foundation/bls/ffi/go/bls",
+    "github.com/dexon-foundation/dexon/common",
+    "github.com/dexon-foundation/dexon/common/hexutil",
+    "github.com/dexon-foundation/dexon/common/math",
     "github.com/dexon-foundation/dexon/crypto",
+    "github.com/dexon-foundation/dexon/crypto/secp256k1",
+    "github.com/dexon-foundation/dexon/crypto/sha3",
     "github.com/dexon-foundation/dexon/log",
     "github.com/dexon-foundation/dexon/rlp",
+    "github.com/go-stack/stack",
+    "github.com/golang/snappy",
+    "github.com/naoina/go-stringutil",
     "github.com/naoina/toml",
+    "github.com/naoina/toml/ast",
+    "github.com/pmezard/go-difflib/difflib",
+    "github.com/stretchr/testify/assert",
+    "github.com/stretchr/testify/require",
     "github.com/stretchr/testify/suite",
     "github.com/syndtr/goleveldb/leveldb",
+    "github.com/syndtr/goleveldb/leveldb/cache",
+    "github.com/syndtr/goleveldb/leveldb/comparer",
+    "github.com/syndtr/goleveldb/leveldb/errors",
+    "github.com/syndtr/goleveldb/leveldb/filter",
+    "github.com/syndtr/goleveldb/leveldb/iterator",
+    "github.com/syndtr/goleveldb/leveldb/journal",
+    "github.com/syndtr/goleveldb/leveldb/memdb",
+    "github.com/syndtr/goleveldb/leveldb/opt",
+    "github.com/syndtr/goleveldb/leveldb/storage",
+    "github.com/syndtr/goleveldb/leveldb/table",
+    "github.com/syndtr/goleveldb/leveldb/util",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

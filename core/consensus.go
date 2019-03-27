@@ -733,7 +733,8 @@ func newConsensusForRound(
 	}
 	baConfig := agreementMgrConfig{}
 	baConfig.from(initRound, initConfig, initCRS)
-	baConfig.SetRoundBeginHeight(gov.GetRoundHeight(initRound))
+	// TODO(jimmy): remove -1 after we match the height with fullnode.
+	baConfig.SetRoundBeginHeight(gov.GetRoundHeight(initRound) - 1)
 	con.baMgr, err = newAgreementMgr(con, baConfig)
 	if err != nil {
 		panic(err)
@@ -809,7 +810,8 @@ func (con *Consensus) prepare(initBlock *types.Block) (err error) {
 			panic(err)
 		}
 		// The init config is provided to baModule when construction.
-		if evts[len(evts)-1].BeginHeight != con.gov.GetRoundHeight(initRound) {
+		// TODO(jimmy): remove -1 after we match the height with fullnode.
+		if evts[len(evts)-1].BeginHeight != con.gov.GetRoundHeight(initRound)-1 {
 			if err := con.baMgr.notifyRoundEvents(evts); err != nil {
 				panic(err)
 			}

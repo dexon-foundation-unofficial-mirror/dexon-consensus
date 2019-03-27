@@ -100,7 +100,8 @@ func (g *Governance) GetRoundHeight(round uint64) uint64 {
 		panic(fmt.Errorf("round begin height is not ready: %d %d",
 			round, len(g.roundBeginHeights)))
 	}
-	return g.roundBeginHeights[round]
+	// TODO(jimmy): remove this workaround.
+	return g.roundBeginHeights[round] + 1
 }
 
 // CRS returns the CRS for a given round.
