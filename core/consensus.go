@@ -734,7 +734,7 @@ func newConsensusForRound(
 	baConfig := agreementMgrConfig{}
 	baConfig.from(initRound, initConfig, initCRS)
 	baConfig.SetRoundBeginHeight(gov.GetRoundHeight(initRound))
-	con.baMgr, err = newAgreementMgr(con, initRound, baConfig)
+	con.baMgr, err = newAgreementMgr(con, baConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -985,6 +985,7 @@ func (con *Consensus) prepare(initBlock *types.Block) (err error) {
 	if initBlock != nil {
 		con.event.NotifyHeight(initBlock.Finalization.Height)
 	}
+	con.baMgr.prepare()
 	return
 }
 
@@ -1334,10 +1335,12 @@ func (con *Consensus) ProcessAgreementResult(
 		return err
 	}
 	if err := con.bcModule.processAgreementResult(rand); err != nil {
+		con.baMgr.untouchAgreementResult(rand)
 		return err
 	}
 	// Syncing BA Module.
 	if err := con.baMgr.processAgreementResult(rand); err != nil {
+		con.baMgr.untouchAgreementResult(rand)
 		return err
 	}
 
