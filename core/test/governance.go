@@ -94,6 +94,9 @@ func (g *Governance) Configuration(round uint64) *types.Config {
 
 // GetRoundHeight returns the begin height of a round.
 func (g *Governance) GetRoundHeight(round uint64) uint64 {
+	if round == 0 {
+		return 0
+	}
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 	if round >= uint64(len(g.roundBeginHeights)) {
