@@ -92,6 +92,11 @@ func (e RoundEventParam) NextDKGRegisterHeight() uint64 {
 	return e.BeginHeight + e.Config.RoundLength/2
 }
 
+// RoundEndHeight returns the round ending height of this round event.
+func (e RoundEventParam) RoundEndHeight() uint64 {
+	return e.BeginHeight + e.Config.RoundLength
+}
+
 func (e RoundEventParam) String() string {
 	return fmt.Sprintf("roundEvtParam{Round:%d Reset:%d Height:%d}",
 		e.Round,

@@ -199,6 +199,11 @@ func (mgr *agreementMgr) notifyRoundEvents(evts []utils.RoundEventParam) error {
 		if len(mgr.configs) > 0 {
 			lastCfg := mgr.configs[len(mgr.configs)-1]
 			if e.BeginHeight != lastCfg.RoundEndHeight() {
+				// the init config of BA part is provided when constructing.
+				if len(mgr.configs) == 1 &&
+					e.BeginHeight == lastCfg.LastPeriodBeginHeight() {
+					return nil
+				}
 				return ErrInvalidBlockHeight
 			}
 			if lastCfg.RoundID() == e.Round {
