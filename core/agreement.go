@@ -171,6 +171,8 @@ func (a *agreement) restart(
 				return false
 			}
 		}
+		a.logger.Debug("Restarting BA",
+			"notarySet", notarySet, "position", aID, "leader", leader)
 		a.data.lock.Lock()
 		defer a.data.lock.Unlock()
 		a.data.blocksLock.Lock()

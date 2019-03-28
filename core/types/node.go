@@ -19,6 +19,7 @@ package types
 
 import (
 	"bytes"
+	"encoding/hex"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
@@ -38,6 +39,10 @@ func NewNodeID(pubKey crypto.PublicKey) NodeID {
 // Equal checks if the hash representation is the same NodeID.
 func (v NodeID) Equal(v2 NodeID) bool {
 	return v.Hash == v2.Hash
+}
+
+func (v NodeID) String() string {
+	return hex.EncodeToString(v.Hash[:])[:6]
 }
 
 // NodeIDs implements sort.Interface for NodeID.

@@ -391,6 +391,7 @@ CleanChannelLoop:
 	}
 	newPos := block.Position
 	if block.Position.Height+1 == recv.changeNotaryHeight() {
+		recv.consensus.logger.Info("Round will change", "block", block)
 		newPos.Round++
 		recv.updateRound(newPos.Round)
 	}
