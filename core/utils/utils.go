@@ -139,6 +139,11 @@ func GetDKGThreshold(config *types.Config) int {
 	return int(config.NotarySetSize*2/3) + 1
 }
 
+// GetDKGValidThreshold return threshold for DKG set to considered valid.
+func GetDKGValidThreshold(config *types.Config) int {
+	return int(config.NotarySetSize * 5 / 6)
+}
+
 // GetNextRoundValidationHeight returns the block height to check if the next
 // round is ready.
 func GetNextRoundValidationHeight(begin, length uint64) uint64 {

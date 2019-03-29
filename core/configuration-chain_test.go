@@ -271,7 +271,7 @@ func (s *ConfigurationChainTestSuite) preparePartialSignature(
 // All participants are good people in this test.
 func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 	k := 4
-	n := 10
+	n := 7
 	round := DKGDelayRound
 	reset := uint64(0)
 	cfgChains := s.runDKG(k, n, round, reset)
@@ -320,7 +320,7 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 
 func (s *ConfigurationChainTestSuite) TestDKGMasterPublicKeyDelayAdd() {
 	k := 4
-	n := 10
+	n := 7
 	round := DKGDelayRound
 	reset := uint64(0)
 	lambdaDKG := 1000 * time.Millisecond
@@ -387,7 +387,7 @@ func (s *ConfigurationChainTestSuite) TestDKGMasterPublicKeyDelayAdd() {
 
 func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 	k := 4
-	n := 10
+	n := 7
 	round := DKGDelayRound
 	reset := uint64(0)
 	lambdaDKG := 1000 * time.Millisecond

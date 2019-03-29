@@ -849,15 +849,19 @@ func (con *Consensus) prepare(initBlock *types.Block) (err error) {
 					"reset", e.Reset)
 				return false
 			}
-			if _, err := typesDKG.NewGroupPublicKey(
+			gpk, err := typesDKG.NewGroupPublicKey(
 				nextRound,
 				con.gov.DKGMasterPublicKeys(nextRound),
 				con.gov.DKGComplaints(nextRound),
-				utils.GetDKGThreshold(nextConfig)); err != nil {
+				utils.GetDKGThreshold(nextConfig))
+			if err != nil {
 				con.logger.Error("Next DKG failed to prepare, reset it",
 					"round", e.Round,
 					"reset", e.Reset,
 					"error", err)
+				return false
+			}
+			if len(gpk.QualifyNodeIDs) < utils.GetDKGValidThreshold(nextConfig) {
 				return false
 			}
 			return true
