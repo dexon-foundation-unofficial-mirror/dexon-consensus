@@ -39,7 +39,7 @@ type agreement struct {
 	outputChan        chan<- *types.Block
 	pullChan          chan<- common.Hash
 	blocks            map[types.Position]map[common.Hash]*types.Block
-	agreementResults  map[common.Hash]struct{}
+	agreementResults  map[common.Hash][]byte
 	latestCRSRound    uint64
 	pendingAgrs       map[uint64]map[common.Hash]*types.AgreementResult
 	pendingBlocks     map[uint64]map[common.Hash]*types.Block
@@ -62,7 +62,7 @@ func newAgreement(chainTip uint64,
 		outputChan:        ch,
 		pullChan:          pullChan,
 		blocks:            make(map[types.Position]map[common.Hash]*types.Block),
-		agreementResults:  make(map[common.Hash]struct{}),
+		agreementResults:  make(map[common.Hash][]byte),
 		logger:            logger,
 		pendingAgrs: make(
 			map[uint64]map[common.Hash]*types.AgreementResult),
@@ -105,7 +105,11 @@ func (a *agreement) processBlock(b *types.Block) {
 	if _, exist := a.confirmedBlocks[b.Hash]; exist {
 		return
 	}
-	if _, exist := a.agreementResults[b.Hash]; exist {
+	if rand, exist := a.agreementResults[b.Hash]; exist {
+		if b.Position.Round >= core.DKGDelayRound &&
+			len(b.Finalization.Randomness) == 0 {
+			b.Finalization.Randomness = rand
+		}
 		a.confirm(b)
 	} else {
 		if _, exist := a.blocks[b.Position]; !exist {
@@ -219,7 +223,7 @@ func (a *agreement) processAgreementResult(r *types.AgreementResult) {
 			return
 		}
 	}
-	a.agreementResults[r.BlockHash] = struct{}{}
+	a.agreementResults[r.BlockHash] = r.Randomness
 loop:
 	for {
 		select {
