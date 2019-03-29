@@ -195,14 +195,50 @@ func (s *ConfigurationChainTestSuite) setupNodes(n int) {
 	}
 }
 
+type testEvent struct {
+	event  *common.Event
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+func newTestEvent() *testEvent {
+	e := &testEvent{
+		event: common.NewEvent(),
+	}
+	return e
+}
+
+func (evt *testEvent) run(interval time.Duration) {
+	evt.ctx, evt.cancel = context.WithCancel(context.Background())
+	go func() {
+		height := uint64(0)
+	Loop:
+		for {
+			select {
+			case <-evt.ctx.Done():
+				break Loop
+			case <-time.After(interval):
+			}
+			evt.event.NotifyHeight(height)
+			height++
+		}
+	}()
+}
+
+func (evt *testEvent) stop() {
+	evt.cancel()
+}
+
 func (s *ConfigurationChainTestSuite) runDKG(
 	k, n int, round, reset uint64) map[types.NodeID]*configurationChain {
 	s.setupNodes(n)
 
+	evts := make(map[types.NodeID]*testEvent)
 	cfgChains := make(map[types.NodeID]*configurationChain)
 	recv := newTestCCGlobalReceiver(s)
 
 	for _, nID := range s.nIDs {
+		evts[nID] = newTestEvent()
 		gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
 			s.pubKeys, 100*time.Millisecond, &common.NullLogger{}, true,
 		), ConfigRoundShift)
@@ -228,11 +264,13 @@ func (s *ConfigurationChainTestSuite) runDKG(
 	errs := make(chan error, n)
 	wg := sync.WaitGroup{}
 	wg.Add(n)
-	for _, cc := range cfgChains {
-		go func(cc *configurationChain) {
+	for nID, cc := range cfgChains {
+		go func(cc *configurationChain, nID types.NodeID) {
 			defer wg.Done()
-			errs <- cc.runDKG(round, reset)
-		}(cc)
+			errs <- cc.runDKG(round, reset, evts[nID].event, 10, 0)
+		}(cc, nID)
+		evts[nID].run(100 * time.Millisecond)
+		defer evts[nID].stop()
 	}
 	wg.Wait()
 	for range cfgChains {
@@ -324,6 +362,7 @@ func (s *ConfigurationChainTestSuite) TestDKGMasterPublicKeyDelayAdd() {
 	round := DKGDelayRound
 	reset := uint64(0)
 	lambdaDKG := 1000 * time.Millisecond
+	minBlockInterval := 100 * time.Millisecond
 	s.setupNodes(n)
 
 	cfgChains := make(map[types.NodeID]*configurationChain)
@@ -337,6 +376,8 @@ func (s *ConfigurationChainTestSuite) TestDKGMasterPublicKeyDelayAdd() {
 		s.Require().NoError(err)
 		s.Require().NoError(state.RequestChange(
 			test.StateChangeLambdaDKG, lambdaDKG))
+		s.Require().NoError(state.RequestChange(
+			test.StateChangeMinBlockInterval, minBlockInterval))
 		cache := utils.NewNodeSetCache(gov)
 		dbInst, err := db.NewMemBackedDB()
 		s.Require().NoError(err)
@@ -364,10 +405,13 @@ func (s *ConfigurationChainTestSuite) TestDKGMasterPublicKeyDelayAdd() {
 	wg := sync.WaitGroup{}
 	wg.Add(n)
 	for _, cc := range cfgChains {
+		evt := newTestEvent()
 		go func(cc *configurationChain) {
 			defer wg.Done()
-			errs <- cc.runDKG(round, reset)
+			errs <- cc.runDKG(round, reset, evt.event, 0, 0)
 		}(cc)
+		evt.run(100 * time.Millisecond)
+		defer evt.stop()
 	}
 	wg.Wait()
 	for range cfgChains {
@@ -391,6 +435,7 @@ func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 	round := DKGDelayRound
 	reset := uint64(0)
 	lambdaDKG := 1000 * time.Millisecond
+	minBlockInterval := 100 * time.Millisecond
 	s.setupNodes(n)
 
 	cfgChains := make(map[types.NodeID]*configurationChain)
@@ -403,6 +448,8 @@ func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 		s.Require().NoError(err)
 		s.Require().NoError(state.RequestChange(
 			test.StateChangeLambdaDKG, lambdaDKG))
+		s.Require().NoError(state.RequestChange(
+			test.StateChangeMinBlockInterval, minBlockInterval))
 		cache := utils.NewNodeSetCache(gov)
 		dbInst, err := db.NewMemBackedDB()
 		s.Require().NoError(err)
@@ -425,10 +472,13 @@ func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 	wg := sync.WaitGroup{}
 	wg.Add(n)
 	for _, cc := range cfgChains {
+		evt := newTestEvent()
 		go func(cc *configurationChain) {
 			defer wg.Done()
-			errs <- cc.runDKG(round, reset)
+			errs <- cc.runDKG(round, reset, evt.event, 0, 0)
 		}(cc)
+		evt.run(minBlockInterval)
+		defer evt.stop()
 	}
 	complaints := -1
 	go func() {
@@ -636,36 +686,54 @@ func (s *ConfigurationChainTestSuite) TestDKGAbort() {
 	cc.registerDKG(context.Background(), round, reset, k)
 	// We should be blocked because DKGReady is not enough.
 	errs := make(chan error, 1)
-	called := make(chan struct{}, 1)
+	evt := newTestEvent()
 	go func() {
-		called <- struct{}{}
-		errs <- cc.runDKG(round, reset)
+		errs <- cc.runDKG(round, reset, evt.event, 0, 0)
 	}()
+	evt.run(100 * time.Millisecond)
+	defer evt.stop()
+
 	// The second register shouldn't be blocked, too.
 	randHash := common.NewRandomHash()
 	gov.ResetDKG(randHash[:])
-	<-called
+	for func() bool {
+		cc.dkgLock.RLock()
+		defer cc.dkgLock.RUnlock()
+		return !cc.dkgRunning
+	}() {
+		time.Sleep(100 * time.Millisecond)
+	}
 	cc.registerDKG(context.Background(), round, reset+1, k)
 	err = <-errs
 	s.Require().EqualError(ErrDKGAborted, err.Error())
 	go func() {
-		called <- struct{}{}
-		errs <- cc.runDKG(round, reset+1)
+		errs <- cc.runDKG(round, reset+1, evt.event, 0, 0)
 	}()
 	// The third register shouldn't be blocked, too
 	randHash = common.NewRandomHash()
 	gov.ProposeCRS(round+1, randHash[:])
 	randHash = common.NewRandomHash()
 	gov.ResetDKG(randHash[:])
-	<-called
+	for func() bool {
+		cc.dkgLock.RLock()
+		defer cc.dkgLock.RUnlock()
+		return !cc.dkgRunning
+	}() {
+		time.Sleep(100 * time.Millisecond)
+	}
 	cc.registerDKG(context.Background(), round+1, reset+1, k)
 	err = <-errs
 	s.Require().EqualError(ErrDKGAborted, err.Error())
 	go func() {
-		called <- struct{}{}
-		errs <- cc.runDKG(round+1, reset+1)
+		errs <- cc.runDKG(round+1, reset+1, evt.event, 0, 0)
 	}()
-	<-called
+	for func() bool {
+		cc.dkgLock.RLock()
+		defer cc.dkgLock.RUnlock()
+		return !cc.dkgRunning
+	}() {
+		time.Sleep(100 * time.Millisecond)
+	}
 	// Abort with older round, shouldn't be aborted.
 	aborted := cc.abortDKG(context.Background(), round, reset+1)
 	s.Require().False(aborted)

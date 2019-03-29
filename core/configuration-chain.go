@@ -406,17 +406,6 @@ func (cc *configurationChain) runDKGPhaseNine(round uint64, reset uint64) error 
 	return nil
 }
 
-func (cc *configurationChain) runTick(ticker Ticker) (aborted bool) {
-	cc.dkgLock.Unlock()
-	defer cc.dkgLock.Lock()
-	select {
-	case <-cc.dkgCtx.Done():
-		aborted = true
-	case <-ticker.Tick():
-	}
-	return
-}
-
 func (cc *configurationChain) initDKGPhasesFunc() {
 	cc.dkgRunPhases = []dkgStepFn{
 		func(round uint64, reset uint64) error {
@@ -448,7 +437,18 @@ func (cc *configurationChain) initDKGPhasesFunc() {
 	}
 }
 
-func (cc *configurationChain) runDKG(round uint64, reset uint64) (err error) {
+func (cc *configurationChain) runDKG(
+	round uint64, reset uint64, event *common.Event,
+	dkgBeginHeight, dkgHeight uint64) (err error) {
+	// Check if corresponding DKG signer is ready.
+	if _, _, err = cc.getDKGInfo(round, false); err == nil {
+		return ErrSkipButNoError
+	}
+	cfg := utils.GetConfigWithPanic(cc.gov, round, cc.logger)
+	phaseHeight := uint64(
+		cfg.LambdaDKG.Nanoseconds() / cfg.MinBlockInterval.Nanoseconds())
+	skipPhase := int(dkgHeight / phaseHeight)
+	cc.logger.Info("Skipping DKG phase", "phase", skipPhase)
 	cc.dkgLock.Lock()
 	defer cc.dkgLock.Unlock()
 	if cc.dkg == nil {
@@ -467,51 +467,70 @@ func (cc *configurationChain) runDKG(round uint64, reset uint64) (err error) {
 		panic(fmt.Errorf("duplicated call to runDKG: %d %d", round, reset))
 	}
 	cc.dkgRunning = true
-	var ticker Ticker
 	defer func() {
-		if ticker != nil {
-			ticker.Stop()
-		}
 		// Here we should hold the cc.dkgLock, reset cc.dkg to nil when done.
 		if cc.dkg != nil {
 			cc.dkg = nil
 		}
 		cc.dkgRunning = false
 	}()
-	// Check if corresponding DKG signer is ready.
-	if _, _, err = cc.getDKGInfo(round, true); err == nil {
-		return ErrSkipButNoError
+	wg := sync.WaitGroup{}
+	var dkgError error
+	// Make a copy of cc.dkgCtx so each phase function can refer to the correct
+	// context.
+	ctx := cc.dkgCtx
+	cc.dkg.step = skipPhase
+	for i := skipPhase; i < len(cc.dkgRunPhases); i++ {
+		wg.Add(1)
+		event.RegisterHeight(dkgBeginHeight+phaseHeight*uint64(i), func(uint64) {
+			go func() {
+				defer wg.Done()
+				cc.dkgLock.Lock()
+				defer cc.dkgLock.Unlock()
+				if dkgError != nil {
+					return
+				}
+				select {
+				case <-ctx.Done():
+					dkgError = ErrDKGAborted
+					return
+				default:
+				}
+
+				err := cc.dkgRunPhases[cc.dkg.step](round, reset)
+				if err == nil || err == ErrSkipButNoError {
+					err = nil
+					cc.dkg.step++
+					err = cc.db.PutOrUpdateDKGProtocol(cc.dkg.toDKGProtocolInfo())
+					if err != nil {
+						cc.logger.Error("Failed to save DKG Protocol",
+							"step", cc.dkg.step,
+							"error", err)
+					}
+				}
+				if err != nil && dkgError == nil {
+					dkgError = err
+				}
+			}()
+		})
 	}
-	tickStartAt := 1
-
-	for i := cc.dkg.step; i < len(cc.dkgRunPhases); i++ {
-		if i >= tickStartAt && ticker == nil {
-			ticker = newTicker(cc.gov, round, TickerDKG)
-		}
-
-		if ticker != nil && cc.runTick(ticker) {
-			return
-		}
-
-		switch err = cc.dkgRunPhases[i](round, reset); err {
-		case ErrSkipButNoError, nil:
-			cc.dkg.step = i + 1
-			err = cc.db.PutOrUpdateDKGProtocol(cc.dkg.toDKGProtocolInfo())
-			if err != nil {
-				return fmt.Errorf("put or update DKG protocol error: %v", err)
-			}
-
-			if err == nil {
-				continue
-			} else {
-				return
-			}
-		default:
-			return
-		}
+	cc.dkgLock.Unlock()
+	wgChan := make(chan struct{}, 1)
+	go func() {
+		wg.Wait()
+		wgChan <- struct{}{}
+	}()
+	select {
+	case <-cc.dkgCtx.Done():
+	case <-wgChan:
 	}
-
-	return nil
+	cc.dkgLock.Lock()
+	select {
+	case <-cc.dkgCtx.Done():
+		return ErrDKGAborted
+	default:
+	}
+	return dkgError
 }
 
 func (cc *configurationChain) isDKGFinal(round uint64) bool {

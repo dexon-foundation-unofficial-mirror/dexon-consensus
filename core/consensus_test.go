@@ -267,7 +267,23 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 	}
 	time.Sleep(gov.Configuration(0).MinBlockInterval * 4)
 	for _, con := range cons {
-		go con.runDKG(0, 0, gov.Configuration(0))
+		go con.runDKG(0, 0, 0, 0)
+	}
+	crsFinish := make(chan struct{}, len(cons))
+	for _, con := range cons {
+		go func(con *Consensus) {
+			height := uint64(0)
+		Loop:
+			for {
+				select {
+				case <-crsFinish:
+					break Loop
+				case <-time.After(lambda):
+				}
+				con.event.NotifyHeight(height)
+				height++
+			}
+		}(con)
 	}
 	for _, con := range cons {
 		func() {
@@ -278,15 +294,11 @@ func (s *ConsensusTestSuite) TestDKGCRS() {
 			}
 		}()
 	}
-	crsFinish := make(chan struct{})
 	for _, con := range cons {
 		go func(con *Consensus) {
 			con.runCRS(0, gov.CRS(0), false)
 			crsFinish <- struct{}{}
 		}(con)
-	}
-	for range cons {
-		<-crsFinish
 	}
 	s.NotNil(gov.CRS(1))
 }
