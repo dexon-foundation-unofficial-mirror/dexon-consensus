@@ -684,8 +684,6 @@ func newConsensusForRound(
 		initRound = initBlock.Position.Round
 		initBlockHeight = initBlock.Position.Height
 	}
-	initConfig := utils.GetConfigWithPanic(gov, initRound, logger)
-	initCRS := utils.GetCRSWithPanic(gov, initRound, logger)
 	// Init configuration chain.
 	ID := types.NewNodeID(prv.PublicKey())
 	recv := &consensusDKGReceiver{
@@ -734,16 +732,7 @@ func newConsensusForRound(
 	if err != nil {
 		panic(err)
 	}
-	baConfig := agreementMgrConfig{}
-	baConfig.from(initRound, initConfig, initCRS)
-	// TODO(jimmy): remove -1 after we match the height with fullnode.
-	roundHeight := gov.GetRoundHeight(initRound)
-	if initRound > 0 {
-		roundHeight--
-	}
-	baConfig.SetRoundBeginHeight(roundHeight)
-	con.baMgr, err = newAgreementMgr(con, baConfig)
-	if err != nil {
+	if con.baMgr, err = newAgreementMgr(con); err != nil {
 		panic(err)
 	}
 	if err = con.prepare(initBlock); err != nil {

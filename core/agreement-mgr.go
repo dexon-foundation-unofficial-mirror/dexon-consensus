@@ -116,8 +116,7 @@ type agreementMgr struct {
 	lock              sync.RWMutex
 }
 
-func newAgreementMgr(con *Consensus,
-	initConfig agreementMgrConfig) (mgr *agreementMgr, err error) {
+func newAgreementMgr(con *Consensus) (mgr *agreementMgr, err error) {
 	mgr = &agreementMgr{
 		con:               con,
 		ID:                con.ID,
@@ -130,7 +129,6 @@ func newAgreementMgr(con *Consensus,
 		bcModule:          con.bcModule,
 		ctx:               con.ctx,
 		processedBAResult: make(map[types.Position]struct{}, maxResultCache),
-		configs:           []agreementMgrConfig{initConfig},
 		voteFilter:        utils.NewVoteFilter(),
 	}
 	mgr.recv = &consensusBAReceiver{
@@ -199,11 +197,6 @@ func (mgr *agreementMgr) notifyRoundEvents(evts []utils.RoundEventParam) error {
 		if len(mgr.configs) > 0 {
 			lastCfg := mgr.configs[len(mgr.configs)-1]
 			if e.BeginHeight != lastCfg.RoundEndHeight() {
-				// the init config of BA part is provided when constructing.
-				if len(mgr.configs) == 1 &&
-					e.BeginHeight == lastCfg.LastPeriodBeginHeight() {
-					return nil
-				}
 				return ErrInvalidBlockHeight
 			}
 			if lastCfg.RoundID() == e.Round {
