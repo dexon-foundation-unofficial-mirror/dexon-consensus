@@ -896,9 +896,6 @@ func (con *Consensus) prepare(initBlock *types.Block) (err error) {
 	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
 		e := evts[len(evts)-1]
 		defer elapse("touch-NodeSetCache", e)()
-		if e.Reset != 0 {
-			return
-		}
 		con.event.RegisterHeight(e.NextTouchNodeSetCacheHeight(), func(uint64) {
 			if err := con.nodeSetCache.Touch(e.Round + 1); err != nil {
 				con.logger.Warn("Failed to update nodeSetCache",
