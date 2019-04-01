@@ -67,8 +67,8 @@ func (s *BlockChainTestSuite) SetupSuite() {
 func (s *BlockChainTestSuite) newBlocks(c uint64, initBlock *types.Block) (
 	blocks []*types.Block) {
 	parentHash := common.Hash{}
-	baseHeight := uint64(0)
-	t := s.dMoment
+	baseHeight := types.GenesisHeight
+	t := s.dMoment.Add(s.blockInterval)
 	initRound := uint64(0)
 	if initBlock != nil {
 		parentHash = initBlock.Hash
@@ -83,7 +83,9 @@ func (s *BlockChainTestSuite) newBlocks(c uint64, initBlock *types.Block) (
 			Timestamp:  t,
 		}
 		if b.Position.Round >= DKGDelayRound {
-			b.Finalization.Randomness = common.GenerateRandomBytes()
+			b.Randomness = common.GenerateRandomBytes()
+		} else {
+			b.Randomness = NoRand
 		}
 		s.Require().NoError(s.signer.SignBlock(b))
 		blocks = append(blocks, b)
@@ -120,7 +122,9 @@ func (s *BlockChainTestSuite) newBlock(parent *types.Block, round uint64,
 		Timestamp: parent.Timestamp.Add(blockInterval),
 	}
 	if b.Position.Round >= DKGDelayRound {
-		b.Finalization.Randomness = common.GenerateRandomBytes()
+		b.Randomness = common.GenerateRandomBytes()
+	} else {
+		b.Randomness = NoRand
 	}
 	s.Require().NoError(s.signer.SignBlock(b))
 	return b
@@ -141,12 +145,13 @@ func (s *BlockChainTestSuite) newBlockChain(initB *types.Block,
 	if initB != nil {
 		initRound = initB.Position.Round
 	}
-	initHeight := uint64(0)
+	initHeight := types.GenesisHeight
 	if initB != nil {
 		initHeight = initB.Position.Height
 	}
 	bc = newBlockChain(s.nID, s.dMoment, initB, test.NewApp(0, nil, nil),
 		&testTSigVerifierGetter{}, s.signer, &common.NullLogger{})
+	// Provide the genesis round event.
 	s.Require().NoError(bc.notifyRoundEvents([]utils.RoundEventParam{
 		utils.RoundEventParam{
 			Round:       initRound,
@@ -219,10 +224,10 @@ func (s *BlockChainTestSuite) baseConcurrentAceessTest(initBlock *types.Block,
 	// Check result.
 	b := delivered[0]
 	s.Require().Equal(b.Position.Height, uint64(1))
-	s.Require().NotEmpty(b.Finalization.Randomness)
+	s.Require().NotEmpty(b.Randomness)
 	for _, bb := range delivered[1:] {
 		s.Require().Equal(b.Position.Height+1, bb.Position.Height)
-		s.Require().NotEmpty(b.Finalization.Randomness)
+		s.Require().NotEmpty(b.Randomness)
 		b = bb
 	}
 }
@@ -239,9 +244,7 @@ func (s *BlockChainTestSuite) TestBasicUsage() {
 	b5 := &types.Block{
 		ParentHash: b4.Hash,
 		Position:   types.Position{Round: 1, Height: b4.Position.Height + 1},
-		Finalization: types.FinalizationResult{
-			Randomness: common.GenerateRandomBytes(),
-		},
+		Randomness: common.GenerateRandomBytes(),
 	}
 	s.Require().NoError(s.signer.SignBlock(b5))
 	s.Require().NoError(bc.addBlock(b5))
@@ -284,10 +287,6 @@ func (s *BlockChainTestSuite) TestConcurrentAccess() {
 
 func (s *BlockChainTestSuite) TestSanityCheck() {
 	bc := s.newBlockChain(nil, 4)
-	// Empty block is not allowed.
-	s.Require().Panics(func() {
-		bc.sanityCheck(&types.Block{})
-	})
 	blocks := s.newBlocks(3, nil)
 	b0, b1, b2 := blocks[0], blocks[1], blocks[2]
 	// ErrNotGenesisBlock
@@ -316,20 +315,22 @@ func (s *BlockChainTestSuite) TestSanityCheck() {
 	s.Require().Equal(
 		ErrRoundNotSwitch.Error(),
 		bc.sanityCheck(s.newBlock(b3, 0, 1*time.Second)).Error())
-	// ErrIncorrectParentHash
 	b4 := &types.Block{
 		ParentHash: b2.Hash,
 		Position: types.Position{
 			Round:  1,
-			Height: 4,
+			Height: 5,
 		},
-		Timestamp: b3.Timestamp.Add(1 * time.Second),
+		Timestamp: b3.Timestamp,
 	}
 	s.Require().NoError(s.signer.SignBlock(b4))
-	s.Require().Equal(
-		ErrIncorrectParentHash.Error(), bc.sanityCheck(b4).Error())
-	// There is no valid signature attached.
+	// ErrIncorrectParentHash
+	s.Require().EqualError(ErrIncorrectParentHash, bc.sanityCheck(b4).Error())
 	b4.ParentHash = b3.Hash
+	// ErrInvalidTimestamp
+	s.Require().EqualError(ErrInvalidTimestamp, bc.sanityCheck(b4).Error())
+	b4.Timestamp = b3.Timestamp.Add(1 * time.Second)
+	// There is no valid signature attached.
 	s.Require().Error(bc.sanityCheck(b4))
 	// OK case.
 	s.Require().NoError(s.signer.SignBlock(b4))
@@ -344,7 +345,7 @@ func (s *BlockChainTestSuite) TestNotifyRoundEvents() {
 			utils.RoundEventParam{
 				Round:       round,
 				Reset:       reset,
-				BeginHeight: height,
+				BeginHeight: types.GenesisHeight + height,
 				CRS:         common.Hash{},
 				Config:      &types.Config{RoundLength: roundLength},
 			}}
@@ -361,7 +362,7 @@ func (s *BlockChainTestSuite) TestNotifyRoundEvents() {
 	s.Require().NoError(bc.notifyRoundEvents(newEvent(1, 1, roundLength*2)))
 	// Make sure roundEndHeight is extended when DKG reset.
 	s.Require().Equal(bc.configs[len(bc.configs)-1].RoundEndHeight(),
-		roundLength*3)
+		types.GenesisHeight+roundLength*3)
 }
 
 func (s *BlockChainTestSuite) TestConfirmed() {
@@ -371,9 +372,9 @@ func (s *BlockChainTestSuite) TestConfirmed() {
 	s.Require().NoError(bc.addBlock(blocks[0]))
 	// Add a pending block.
 	s.Require().NoError(bc.addBlock(blocks[2]))
-	s.Require().True(bc.confirmed(0))
-	s.Require().False(bc.confirmed(1))
-	s.Require().True(bc.confirmed(2))
+	s.Require().True(bc.confirmed(1))
+	s.Require().False(bc.confirmed(2))
+	s.Require().True(bc.confirmed(3))
 }
 
 func (s *BlockChainTestSuite) TestNextBlockAndTipRound() {
@@ -383,7 +384,7 @@ func (s *BlockChainTestSuite) TestNextBlockAndTipRound() {
 		utils.RoundEventParam{
 			Round:       1,
 			Reset:       0,
-			BeginHeight: roundLength,
+			BeginHeight: types.GenesisHeight + roundLength,
 			CRS:         common.Hash{},
 			Config: &types.Config{
 				MinBlockInterval: s.blockInterval,
@@ -391,12 +392,12 @@ func (s *BlockChainTestSuite) TestNextBlockAndTipRound() {
 			}}}))
 	blocks := s.newBlocks(3, nil)
 	nextH, nextT := bc.nextBlock()
-	s.Require().Equal(nextH, uint64(0))
+	s.Require().Equal(nextH, types.GenesisHeight)
 	s.Require().Equal(nextT, s.dMoment)
 	// Add one block.
 	s.Require().NoError(bc.addBlock(blocks[0]))
 	nextH, nextT = bc.nextBlock()
-	s.Require().Equal(nextH, uint64(1))
+	s.Require().Equal(nextH, uint64(2))
 	s.Require().Equal(
 		nextT, blocks[0].Timestamp.Add(bc.configs[0].minBlockInterval))
 	// Add one block, expected to be pending.
@@ -487,24 +488,27 @@ func (s *BlockChainTestSuite) TestAddEmptyBlockDirectly() {
 	blocks := s.newBlocks(1, nil)
 	s.Require().NoError(bc.addBlock(blocks[0]))
 	// Add an empty block after a normal block.
-	pos := types.Position{Height: 1}
+	pos := types.Position{Height: 2}
 	emptyB1, err := bc.addEmptyBlock(pos)
 	s.Require().NotNil(emptyB1)
 	s.Require().True(emptyB1.Position.Equal(pos))
 	s.Require().NoError(err)
 	// Add an empty block after an empty block.
-	pos = types.Position{Height: 2}
+	pos = types.Position{Height: 3}
 	emptyB2, err := bc.addEmptyBlock(pos)
 	s.Require().NotNil(emptyB2)
 	s.Require().True(emptyB2.Position.Equal(pos))
 	s.Require().NoError(err)
 	// prepare a normal block.
-	pos = types.Position{Height: 3}
-	b3, err := bc.proposeBlock(pos, emptyB2.Timestamp.Add(s.blockInterval), false)
+	pos = types.Position{Height: 4}
+	expectedTimestamp := emptyB2.Timestamp.Add(s.blockInterval)
+	b3, err := bc.proposeBlock(pos, expectedTimestamp.Add(-100*time.Second), false)
 	s.Require().NotNil(b3)
 	s.Require().NoError(err)
+	// The timestamp should be refined.
+	s.Require().True(b3.Timestamp.Equal(expectedTimestamp))
 	// Add an empty block far away from current tip.
-	pos = types.Position{Height: 4}
+	pos = types.Position{Height: 5}
 	emptyB4, err := bc.addEmptyBlock(pos)
 	s.Require().Nil(emptyB4)
 	s.Require().NoError(err)
@@ -522,9 +526,83 @@ func (s *BlockChainTestSuite) TestAddEmptyBlockDirectly() {
 	emptyB4.Hash, err = utils.HashBlock(emptyB4)
 	s.Require().NoError(err)
 	s.Require().NoError(bc.addBlock(emptyB4))
-	rec, found := bc.pendingBlocks.searchByHeight(4)
+	rec, found := bc.pendingBlocks.searchByHeight(5)
 	s.Require().True(found)
 	s.Require().NotNil(rec.block)
+}
+
+func (s *BlockChainTestSuite) TestPrepareBlock() {
+	roundLength := uint64(2)
+	bc := s.newBlockChain(nil, roundLength)
+	// Try to propose blocks at height=0.
+	b0, err := bc.prepareBlock(types.Position{Height: types.GenesisHeight + 1},
+		s.dMoment, false)
+	s.Require().Nil(b0)
+	s.Require().EqualError(ErrNotGenesisBlock, err.Error())
+	b0, err = bc.prepareBlock(types.Position{Height: types.GenesisHeight},
+		s.dMoment, false)
+	s.Require().NoError(err)
+	s.Require().Equal(b0.Position, types.Position{Height: types.GenesisHeight})
+	s.Require().True(b0.Timestamp.Equal(s.dMoment.Add(s.blockInterval)))
+	empty0, err := bc.prepareBlock(types.Position{Height: types.GenesisHeight},
+		s.dMoment, true)
+	s.Require().NoError(err)
+	s.Require().Equal(empty0.Position, types.Position{
+		Height: types.GenesisHeight})
+	s.Require().True(empty0.Timestamp.Equal(s.dMoment.Add(s.blockInterval)))
+	// Try to propose blocks at height=1.
+	s.Require().NoError(bc.addBlock(b0))
+	prepare1 := func(empty bool) *types.Block {
+		b, err := bc.prepareBlock(types.Position{Height: types.GenesisHeight},
+			s.dMoment, empty)
+		s.Require().Nil(b)
+		s.Require().EqualError(ErrNotFollowTipPosition, err.Error())
+		b, err = bc.prepareBlock(types.Position{
+			Height: types.GenesisHeight + 2}, s.dMoment, empty)
+		s.Require().Nil(b)
+		s.Require().EqualError(ErrNotFollowTipPosition, err.Error())
+		b, err = bc.prepareBlock(types.Position{
+			Round:  1,
+			Height: types.GenesisHeight + 1}, s.dMoment, empty)
+		s.Require().Nil(b)
+		s.Require().EqualError(ErrInvalidRoundID, err.Error())
+		b, err = bc.prepareBlock(types.Position{
+			Height: types.GenesisHeight + 1}, s.dMoment, empty)
+		s.Require().NoError(err)
+		s.Require().NotNil(b)
+		s.Require().Equal(b.ParentHash, b0.Hash)
+		s.Require().True(b.Timestamp.Equal(b0.Timestamp.Add(s.blockInterval)))
+		return b
+	}
+	b1 := prepare1(false)
+	prepare1(true)
+	// Try to propose blocks at height=2, which should trigger round switch.
+	s.Require().NoError(bc.notifyRoundEvents([]utils.RoundEventParam{
+		utils.RoundEventParam{
+			Round:       1,
+			Reset:       0,
+			BeginHeight: types.GenesisHeight + roundLength,
+			Config: &types.Config{
+				MinBlockInterval: s.blockInterval,
+				RoundLength:      roundLength,
+			}}}))
+	s.Require().NoError(bc.addBlock(b1))
+	prepare2 := func(empty bool) *types.Block {
+		b, err := bc.prepareBlock(types.Position{
+			Height: types.GenesisHeight + 2}, s.dMoment, empty)
+		s.Require().EqualError(ErrRoundNotSwitch, err.Error())
+		s.Require().Nil(b)
+		b, err = bc.prepareBlock(types.Position{
+			Round:  1,
+			Height: types.GenesisHeight + 2}, s.dMoment, empty)
+		s.Require().NoError(err)
+		s.Require().NotNil(b)
+		s.Require().Equal(b.ParentHash, b1.Hash)
+		s.Require().True(b.Timestamp.Equal(b1.Timestamp.Add(s.blockInterval)))
+		return b
+	}
+	prepare2(false)
+	prepare2(true)
 }
 
 func TestBlockChain(t *testing.T) {

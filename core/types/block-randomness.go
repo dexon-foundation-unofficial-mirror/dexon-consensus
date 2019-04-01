@@ -26,12 +26,11 @@ import (
 
 // AgreementResult describes an agremeent result.
 type AgreementResult struct {
-	BlockHash          common.Hash `json:"block_hash"`
-	Position           Position    `json:"position"`
-	Votes              []Vote      `json:"votes"`
-	IsEmptyBlock       bool        `json:"is_empty_block"`
-	FinalizationHeight uint64      `json:"finalization_height"`
-	Randomness         []byte      `json:"randomness"`
+	BlockHash    common.Hash `json:"block_hash"`
+	Position     Position    `json:"position"`
+	Votes        []Vote      `json:"votes"`
+	IsEmptyBlock bool        `json:"is_empty_block"`
+	Randomness   []byte      `json:"randomness"`
 }
 
 func (r *AgreementResult) String() string {

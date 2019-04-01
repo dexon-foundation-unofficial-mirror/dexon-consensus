@@ -30,34 +30,29 @@ type BlockRevealerTestSuite struct {
 	suite.Suite
 }
 
-func (s *BlockRevealerTestSuite) TestCompactionChainBlockReveal() {
+func (s *BlockRevealerTestSuite) TestBlockRevealByPosition() {
 	dbInst, err := db.NewMemBackedDB()
 	s.Require().NoError(err)
-	// Put several blocks with finalization field ready.
+	// Put several blocks with position field ready.
 	b1 := &types.Block{
-		Hash: common.NewRandomHash(),
-		Finalization: types.FinalizationResult{
-			Height: 1,
-		}}
+		Hash:     common.NewRandomHash(),
+		Position: types.Position{Height: 1},
+	}
 	b2 := &types.Block{
-		Hash: common.NewRandomHash(),
-		Finalization: types.FinalizationResult{
-			ParentHash: b1.Hash,
-			Height:     2,
-		}}
+		Hash:     common.NewRandomHash(),
+		Position: types.Position{Height: 2},
+	}
 	b3 := &types.Block{
-		Hash: common.NewRandomHash(),
-		Finalization: types.FinalizationResult{
-			ParentHash: b2.Hash,
-			Height:     3,
-		}}
+		Hash:     common.NewRandomHash(),
+		Position: types.Position{Height: 3},
+	}
 	s.Require().NoError(dbInst.PutBlock(*b1))
 	s.Require().NoError(dbInst.PutBlock(*b3))
 	iter, err := dbInst.GetAllBlocks()
 	s.Require().NoError(err)
 	// The compaction chain is not complete, we can't construct a revealer
 	// instance successfully.
-	r, err := NewCompactionChainBlockRevealer(iter, 0)
+	r, err := NewBlockRevealerByPosition(iter, 0)
 	s.Require().Nil(r)
 	s.Require().Equal(ErrNotValidCompactionChain.Error(), err.Error())
 	// Put a block to make the compaction chain complete.
@@ -65,14 +60,14 @@ func (s *BlockRevealerTestSuite) TestCompactionChainBlockReveal() {
 	// We can construct that revealer now.
 	iter, err = dbInst.GetAllBlocks()
 	s.Require().NoError(err)
-	r, err = NewCompactionChainBlockRevealer(iter, 0)
+	r, err = NewBlockRevealerByPosition(iter, 0)
 	s.Require().NotNil(r)
 	s.Require().NoError(err)
 	// The revealing order should be ok.
 	chk := func(h uint64) {
 		b, err := r.NextBlock()
 		s.Require().NoError(err)
-		s.Require().Equal(b.Finalization.Height, h)
+		s.Require().Equal(b.Position.Height, h)
 	}
 	chk(1)
 	chk(2)
@@ -83,7 +78,7 @@ func (s *BlockRevealerTestSuite) TestCompactionChainBlockReveal() {
 	// Test 'startHeight' parameter.
 	iter, err = dbInst.GetAllBlocks()
 	s.Require().NoError(err)
-	r, err = NewCompactionChainBlockRevealer(iter, 2)
+	r, err = NewBlockRevealerByPosition(iter, 2)
 	s.Require().NotNil(r)
 	s.Require().NoError(err)
 	chk(2)

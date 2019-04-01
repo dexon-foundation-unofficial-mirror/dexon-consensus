@@ -39,6 +39,7 @@ func (r *agreementTestReceiver) VerifyPartialSignature(*types.Vote) bool {
 }
 
 func (r *agreementTestReceiver) ProposeVote(vote *types.Vote) {
+	vote.Position = r.s.agreementID
 	r.s.voteChan <- vote
 }
 
@@ -81,6 +82,7 @@ func (s *AgreementTestSuite) proposeBlock(
 	nID types.NodeID, crs common.Hash) *types.Block {
 	block := &types.Block{
 		ProposerID: nID,
+		Position:   types.Position{Height: types.GenesisHeight},
 		Hash:       common.NewRandomHash(),
 	}
 	s.block[block.Hash] = block
@@ -103,6 +105,7 @@ type AgreementTestSuite struct {
 	block         map[common.Hash]*types.Block
 	pulledBlocks  map[common.Hash]struct{}
 	agreement     []*agreement
+	agreementID   types.Position
 }
 
 func (s *AgreementTestSuite) SetupTest() {
@@ -119,6 +122,7 @@ func (s *AgreementTestSuite) SetupTest() {
 	s.forkBlockChan = make(chan common.Hash, 100)
 	s.block = make(map[common.Hash]*types.Block)
 	s.pulledBlocks = make(map[common.Hash]struct{})
+	s.agreementID = types.Position{Height: types.GenesisHeight}
 }
 
 func (s *AgreementTestSuite) newAgreement(
@@ -153,8 +157,8 @@ func (s *AgreementTestSuite) newAgreement(
 		s.signers[s.ID],
 		logger,
 	)
-	agreement.restart(notarySet, types.Position{},
-		leaderNode, common.NewRandomHash())
+	agreement.restart(notarySet, s.agreementID, leaderNode,
+		common.NewRandomHash())
 	s.agreement = append(s.agreement, agreement)
 	return agreement, leaderNode
 }
@@ -171,6 +175,7 @@ func (s *AgreementTestSuite) prepareVote(
 	period uint64) (
 	vote *types.Vote) {
 	vote = types.NewVote(voteType, blockHash, period)
+	vote.Position = types.Position{Height: types.GenesisHeight}
 	s.Require().NoError(s.signers[nID].SignVote(vote))
 	return
 }
@@ -576,11 +581,9 @@ func (s *AgreementTestSuite) TestConfirmWithBlock() {
 		return true, nil
 	})
 	block := &types.Block{
-		Hash:     common.NewRandomHash(),
-		Position: a.agreementID(),
-		Finalization: types.FinalizationResult{
-			Randomness: []byte{0x1, 0x2, 0x3, 0x4},
-		},
+		Hash:       common.NewRandomHash(),
+		Position:   a.agreementID(),
+		Randomness: []byte{0x1, 0x2, 0x3, 0x4},
 	}
 	a.processFinalizedBlock(block)
 	s.Require().Len(s.confirmChan, 1)

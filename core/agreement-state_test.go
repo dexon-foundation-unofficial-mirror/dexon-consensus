@@ -71,6 +71,7 @@ func (s *AgreementStateTestSuite) proposeBlock(
 	leader *leaderSelector) *types.Block {
 	block := &types.Block{
 		ProposerID: s.ID,
+		Position:   types.Position{Height: types.GenesisHeight},
 		Hash:       common.NewRandomHash(),
 	}
 	s.Require().NoError(s.signers[s.ID].SignCRS(block, leader.hashCRS))
@@ -124,7 +125,8 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 		s.signers[s.ID],
 		logger,
 	)
-	agreement.restart(notarySet, types.Position{}, types.NodeID{}, common.NewRandomHash())
+	agreement.restart(notarySet, types.Position{Height: types.GenesisHeight},
+		types.NodeID{}, common.NewRandomHash())
 	return agreement
 }
 

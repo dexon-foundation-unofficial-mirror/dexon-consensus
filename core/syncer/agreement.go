@@ -18,6 +18,7 @@
 package syncer
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -87,7 +88,7 @@ func (a *agreement) run() {
 			}
 			switch v := val.(type) {
 			case *types.Block:
-				if v.IsFinalized() {
+				if v.Position.Round >= core.DKGDelayRound && v.IsFinalized() {
 					a.processFinalizedBlock(v)
 				} else {
 					a.processBlock(v)
@@ -106,9 +107,8 @@ func (a *agreement) processBlock(b *types.Block) {
 		return
 	}
 	if rand, exist := a.agreementResults[b.Hash]; exist {
-		if b.Position.Round >= core.DKGDelayRound &&
-			len(b.Finalization.Randomness) == 0 {
-			b.Finalization.Randomness = rand
+		if len(b.Randomness) == 0 {
+			b.Randomness = rand
 		}
 		a.confirm(b)
 	} else {
@@ -120,9 +120,6 @@ func (a *agreement) processBlock(b *types.Block) {
 }
 
 func (a *agreement) processFinalizedBlock(block *types.Block) {
-	if block.Position.Round < core.DKGDelayRound {
-		return
-	}
 	// Cache those results that CRS is not ready yet.
 	if _, exists := a.confirmedBlocks[block.Hash]; exists {
 		a.logger.Trace("finalized block already confirmed", "block", block)
@@ -141,7 +138,8 @@ func (a *agreement) processFinalizedBlock(block *types.Block) {
 	if err := utils.VerifyBlockSignature(block); err != nil {
 		return
 	}
-	verifier, ok, err := a.tsigVerifierCache.UpdateAndGet(block.Position.Round)
+	verifier, ok, err := a.tsigVerifierCache.UpdateAndGet(
+		block.Position.Round)
 	if err != nil {
 		a.logger.Error("error verifying block randomness",
 			"block", block,
@@ -154,7 +152,7 @@ func (a *agreement) processFinalizedBlock(block *types.Block) {
 	}
 	if !verifier.VerifySignature(block.Hash, crypto.Signature{
 		Type:      "bls",
-		Signature: block.Finalization.Randomness,
+		Signature: block.Randomness,
 	}) {
 		a.logger.Error("incorrect block randomness", "block", block)
 		return
@@ -203,13 +201,17 @@ func (a *agreement) processAgreementResult(r *types.AgreementResult) {
 			a.logger.Error("incorrect agreement result randomness", "result", r)
 			return
 		}
+	} else {
+		// Special case for rounds before DKGDelayRound.
+		if bytes.Compare(r.Randomness, core.NoRand) != 0 {
+			a.logger.Error("incorrect agreement result randomness", "result", r)
+			return
+		}
 	}
 	if r.IsEmptyBlock {
 		b := &types.Block{
-			Position: r.Position,
-			Finalization: types.FinalizationResult{
-				Randomness: r.Randomness,
-			},
+			Position:   r.Position,
+			Randomness: r.Randomness,
 		}
 		// Empty blocks should be confirmed directly, they won't be sent over
 		// the wire.
@@ -218,7 +220,7 @@ func (a *agreement) processAgreementResult(r *types.AgreementResult) {
 	}
 	if bs, exist := a.blocks[r.Position]; exist {
 		if b, exist := bs[r.BlockHash]; exist {
-			b.Finalization.Randomness = r.Randomness
+			b.Randomness = r.Randomness
 			a.confirm(b)
 			return
 		}
@@ -271,11 +273,9 @@ func (a *agreement) processNewCRS(round uint64) {
 
 // confirm notifies consensus the confirmation of a block in BA.
 func (a *agreement) confirm(b *types.Block) {
-	if b.Position.Round >= core.DKGDelayRound &&
-		len(b.Finalization.Randomness) == 0 {
+	if !b.IsFinalized() {
 		panic(fmt.Errorf("confirm a block %s without randomness", b))
 	}
-	b.Finalization.Height = b.Position.Height + 1
 	if _, exist := a.confirmedBlocks[b.Hash]; !exist {
 		delete(a.blocks, b.Position)
 		delete(a.agreementResults, b.Hash)

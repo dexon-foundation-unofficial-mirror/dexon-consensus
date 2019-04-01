@@ -419,8 +419,8 @@ func (a *agreement) processVote(vote *types.Vote) error {
 	aID := a.agreementID()
 	// Agreement module has stopped.
 	if isStop(aID) {
-		// Hacky way to not drop first votes for height 0.
-		if vote.Position.Height == uint64(0) {
+		// Hacky way to not drop first votes for genesis height.
+		if vote.Position.Height == types.GenesisHeight {
 			a.pendingVote = append(a.pendingVote, pendingVote{
 				vote:         vote,
 				receivedTime: time.Now().UTC(),

@@ -357,8 +357,8 @@ func (s *ConsensusTestSuite) TestInitialHeightEventTriggered() {
 		pubKeys, time.Second, &common.NullLogger{}, true), ConfigRoundShift)
 	gov.State().RequestChange(test.StateChangeRoundLength, uint64(100))
 	s.Require().NoError(err)
-	gov.NotifyRound(2, 200)
-	gov.NotifyRound(3, 300)
+	gov.NotifyRound(2, 201)
+	gov.NotifyRound(3, 301)
 	hash := common.NewRandomHash()
 	gov.ProposeCRS(2, hash[:])
 	hash = common.NewRandomHash()
@@ -366,9 +366,8 @@ func (s *ConsensusTestSuite) TestInitialHeightEventTriggered() {
 	s.Require().Equal(gov.DKGResetCount(2), uint64(1))
 	prvKey := prvKeys[0]
 	initBlock := &types.Block{
-		Hash:         common.NewRandomHash(),
-		Position:     types.Position{Round: 1, Height: 199},
-		Finalization: types.FinalizationResult{Height: 200},
+		Hash:     common.NewRandomHash(),
+		Position: types.Position{Round: 1, Height: 200},
 	}
 	dbInst, err := db.NewMemBackedDB()
 	s.Require().NoError(err)
@@ -392,7 +391,7 @@ func (s *ConsensusTestSuite) TestInitialHeightEventTriggered() {
 	// Here is the tricky part, check if block chain module can handle the
 	// block with height == 200.
 	s.Require().Equal(con.bcModule.configs[0].RoundID(), uint64(1))
-	s.Require().Equal(con.bcModule.configs[0].RoundEndHeight(), uint64(300))
+	s.Require().Equal(con.bcModule.configs[0].RoundEndHeight(), uint64(301))
 }
 
 func TestConsensus(t *testing.T) {

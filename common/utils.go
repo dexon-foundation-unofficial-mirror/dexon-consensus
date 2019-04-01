@@ -29,3 +29,13 @@ func GenerateRandomBytes() []byte {
 	}
 	return randomness
 }
+
+// CopyBytes copies byte slice.
+func CopyBytes(src []byte) (dst []byte) {
+	if len(src) == 0 {
+		return
+	}
+	dst = make([]byte, len(src))
+	copy(dst, src)
+	return
+}

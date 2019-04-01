@@ -295,10 +295,7 @@ func (n *Network) BroadcastBlock(block *types.Block) {
 	}
 	n.addBlockToCache(block)
 	if block.IsFinalized() {
-		n.addBlockFinalizationToCache(
-			block.Hash,
-			block.Finalization.Height,
-			block.Finalization.Randomness)
+		n.addBlockRandomnessToCache(block.Hash, block.Randomness)
 	}
 }
 
@@ -308,11 +305,7 @@ func (n *Network) BroadcastAgreementResult(
 	if !n.markAgreementResultAsSent(result.BlockHash) {
 		return
 	}
-	n.addBlockFinalizationToCache(
-		result.BlockHash,
-		result.FinalizationHeight,
-		result.Randomness,
-	)
+	n.addBlockRandomnessToCache(result.BlockHash, result.Randomness)
 	notarySet := n.getNotarySet(result.Position.Round)
 	count := maxAgreementResultBroadcast
 	for nID := range notarySet {
@@ -626,16 +619,14 @@ func (n *Network) addBlockToCache(b *types.Block) {
 	n.blockCache[b.Hash] = b.Clone()
 }
 
-func (n *Network) addBlockFinalizationToCache(
-	hash common.Hash, height uint64, rand []byte) {
+func (n *Network) addBlockRandomnessToCache(hash common.Hash, rand []byte) {
 	n.blockCacheLock.Lock()
 	defer n.blockCacheLock.Unlock()
 	block, exist := n.blockCache[hash]
 	if !exist {
 		return
 	}
-	block.Finalization.Height = height
-	block.Finalization.Randomness = rand
+	block.Randomness = rand
 }
 
 func (n *Network) addVoteToCache(v *types.Vote) {

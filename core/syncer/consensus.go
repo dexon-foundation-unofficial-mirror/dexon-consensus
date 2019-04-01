@@ -42,13 +42,9 @@ var (
 	// ErrInvalidBlockOrder is reported when SyncBlocks receives unordered
 	// blocks.
 	ErrInvalidBlockOrder = fmt.Errorf("invalid block order")
-	// ErrMismatchBlockHashSequence means the delivering sequence is not
-	// correct, compared to finalized blocks.
-	ErrMismatchBlockHashSequence = fmt.Errorf("mismatch block hash sequence")
-	// ErrInvalidSyncingFinalizationHeight raised when the blocks to sync is
-	// not following the compaction chain tip in database.
-	ErrInvalidSyncingFinalizationHeight = fmt.Errorf(
-		"invalid syncing finalization height")
+	// ErrInvalidSyncingHeight raised when the blocks to sync is not following
+	// the compaction chain tip in database.
+	ErrInvalidSyncingHeight = fmt.Errorf("invalid syncing height")
 )
 
 // Consensus is for syncing consensus module.
@@ -150,13 +146,12 @@ func (con *Consensus) assureBuffering() {
 	)
 	if height == 0 {
 		con.roundEvt, err = utils.NewRoundEvent(con.ctx, con.gov, con.logger,
-			0, 0, core.ConfigRoundShift)
+			types.Position{}, core.ConfigRoundShift)
 	} else {
 		var b types.Block
 		if b, err = con.db.GetBlock(blockHash); err == nil {
 			con.roundEvt, err = utils.NewRoundEvent(con.ctx, con.gov,
-				con.logger, b.Position.Round, b.Finalization.Height,
-				core.ConfigRoundShift)
+				con.logger, b.Position, core.ConfigRoundShift)
 		}
 	}
 	if err != nil {
@@ -297,7 +292,7 @@ func (con *Consensus) SyncBlocks(
 	}
 	// Check if blocks are consecutive.
 	for i := 1; i < len(blocks); i++ {
-		if blocks[i].Finalization.Height != blocks[i-1].Finalization.Height+1 {
+		if blocks[i].Position.Height != blocks[i-1].Position.Height+1 {
 			err = ErrInvalidBlockOrder
 			return
 		}
@@ -305,17 +300,16 @@ func (con *Consensus) SyncBlocks(
 	// Make sure the first block is the next block of current compaction chain
 	// tip in DB.
 	_, tipHeight := con.db.GetCompactionChainTipInfo()
-	if blocks[0].Finalization.Height != tipHeight+1 {
-		con.logger.Error("Mismatched finalization height",
-			"now", blocks[0].Finalization.Height,
+	if blocks[0].Position.Height != tipHeight+1 {
+		con.logger.Error("Mismatched block height",
+			"now", blocks[0].Position.Height,
 			"expected", tipHeight+1,
 		)
-		err = ErrInvalidSyncingFinalizationHeight
+		err = ErrInvalidSyncingHeight
 		return
 	}
 	con.logger.Trace("SyncBlocks",
 		"position", &blocks[0].Position,
-		"final height", blocks[0].Finalization.Height,
 		"len", len(blocks),
 		"latest", latest,
 	)
@@ -331,10 +325,10 @@ func (con *Consensus) SyncBlocks(
 			}
 		}
 		if err = con.db.PutCompactionChainTipInfo(
-			b.Hash, b.Finalization.Height); err != nil {
+			b.Hash, b.Position.Height); err != nil {
 			return
 		}
-		con.heightEvt.NotifyHeight(b.Finalization.Height)
+		con.heightEvt.NotifyHeight(b.Position.Height)
 	}
 	if latest {
 		con.assureBuffering()

@@ -31,6 +31,9 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 )
 
+// GenesisHeight refers to the initial height the genesis block should be.
+const GenesisHeight uint64 = 1
+
 // BlockVerifyStatus is the return code for core.Application.VerifyBlock
 type BlockVerifyStatus int
 
@@ -64,58 +67,6 @@ func (t *rlpTimestamp) DecodeRLP(s *rlp.Stream) error {
 	return err
 }
 
-// FinalizationResult represents the result of DEXON consensus algorithm.
-type FinalizationResult struct {
-	ParentHash common.Hash `json:"parent_hash"`
-	Randomness []byte      `json:"randomness"`
-	Timestamp  time.Time   `json:"timestamp"`
-	Height     uint64      `json:"height"`
-}
-
-// Clone returns a deep copy of FinalizationResult
-func (f FinalizationResult) Clone() FinalizationResult {
-	frcopy := FinalizationResult{
-		ParentHash: f.ParentHash,
-		Timestamp:  f.Timestamp,
-		Height:     f.Height,
-	}
-	frcopy.Randomness = make([]byte, len(f.Randomness))
-	copy(frcopy.Randomness, f.Randomness)
-	return frcopy
-}
-
-type rlpFinalizationResult struct {
-	ParentHash common.Hash
-	Randomness []byte
-	Timestamp  *rlpTimestamp
-	Height     uint64
-}
-
-// EncodeRLP implements rlp.Encoder
-func (f *FinalizationResult) EncodeRLP(w io.Writer) error {
-	return rlp.Encode(w, &rlpFinalizationResult{
-		ParentHash: f.ParentHash,
-		Randomness: f.Randomness,
-		Timestamp:  &rlpTimestamp{f.Timestamp},
-		Height:     f.Height,
-	})
-}
-
-// DecodeRLP implements rlp.Decoder
-func (f *FinalizationResult) DecodeRLP(s *rlp.Stream) error {
-	var dec rlpFinalizationResult
-	err := s.Decode(&dec)
-	if err == nil {
-		*f = FinalizationResult{
-			ParentHash: dec.ParentHash,
-			Randomness: dec.Randomness,
-			Timestamp:  dec.Timestamp.Time,
-			Height:     dec.Height,
-		}
-	}
-	return err
-}
-
 // Witness represents the consensus information on the compaction chain.
 type Witness struct {
 	Height uint64 `json:"height"`
@@ -124,31 +75,31 @@ type Witness struct {
 
 // Block represents a single event broadcasted on the network.
 type Block struct {
-	ProposerID   NodeID             `json:"proposer_id"`
-	ParentHash   common.Hash        `json:"parent_hash"`
-	Hash         common.Hash        `json:"hash"`
-	Position     Position           `json:"position"`
-	Timestamp    time.Time          `json:"timestamp"`
-	Payload      []byte             `json:"payload"`
-	PayloadHash  common.Hash        `json:"payload_hash"`
-	Witness      Witness            `json:"witness"`
-	Finalization FinalizationResult `json:"finalization"`
-	Signature    crypto.Signature   `json:"signature"`
+	ProposerID  NodeID           `json:"proposer_id"`
+	ParentHash  common.Hash      `json:"parent_hash"`
+	Hash        common.Hash      `json:"hash"`
+	Position    Position         `json:"position"`
+	Timestamp   time.Time        `json:"timestamp"`
+	Payload     []byte           `json:"payload"`
+	PayloadHash common.Hash      `json:"payload_hash"`
+	Witness     Witness          `json:"witness"`
+	Randomness  []byte           `json:"finalization"`
+	Signature   crypto.Signature `json:"signature"`
 
 	CRSSignature crypto.Signature `json:"crs_signature"`
 }
 
 type rlpBlock struct {
-	ProposerID   NodeID
-	ParentHash   common.Hash
-	Hash         common.Hash
-	Position     Position
-	Timestamp    *rlpTimestamp
-	Payload      []byte
-	PayloadHash  common.Hash
-	Witness      *Witness
-	Finalization *FinalizationResult
-	Signature    crypto.Signature
+	ProposerID  NodeID
+	ParentHash  common.Hash
+	Hash        common.Hash
+	Position    Position
+	Timestamp   *rlpTimestamp
+	Payload     []byte
+	PayloadHash common.Hash
+	Witness     *Witness
+	Randomness  []byte
+	Signature   crypto.Signature
 
 	CRSSignature crypto.Signature
 }
@@ -164,7 +115,7 @@ func (b *Block) EncodeRLP(w io.Writer) error {
 		Payload:      b.Payload,
 		PayloadHash:  b.PayloadHash,
 		Witness:      &b.Witness,
-		Finalization: &b.Finalization,
+		Randomness:   b.Randomness,
 		Signature:    b.Signature,
 		CRSSignature: b.CRSSignature,
 	})
@@ -184,7 +135,7 @@ func (b *Block) DecodeRLP(s *rlp.Stream) error {
 			Payload:      dec.Payload,
 			PayloadHash:  dec.PayloadHash,
 			Witness:      *dec.Witness,
-			Finalization: *dec.Finalization,
+			Randomness:   dec.Randomness,
 			Signature:    dec.Signature,
 			CRSSignature: dec.CRSSignature,
 		}
@@ -206,25 +157,23 @@ func (b *Block) Clone() (bcopy *Block) {
 	bcopy.Position.Height = b.Position.Height
 	bcopy.Signature = b.Signature.Clone()
 	bcopy.CRSSignature = b.CRSSignature.Clone()
-	bcopy.Finalization = b.Finalization.Clone()
 	bcopy.Witness.Height = b.Witness.Height
-	bcopy.Witness.Data = make([]byte, len(b.Witness.Data))
-	copy(bcopy.Witness.Data, b.Witness.Data)
+	bcopy.Witness.Data = common.CopyBytes(b.Witness.Data)
 	bcopy.Timestamp = b.Timestamp
-	bcopy.Payload = make([]byte, len(b.Payload))
-	copy(bcopy.Payload, b.Payload)
+	bcopy.Payload = common.CopyBytes(b.Payload)
 	bcopy.PayloadHash = b.PayloadHash
+	bcopy.Randomness = common.CopyBytes(b.Randomness)
 	return
 }
 
 // IsGenesis checks if the block is a genesisBlock
 func (b *Block) IsGenesis() bool {
-	return b.Position.Height == 0 && b.ParentHash == common.Hash{}
+	return b.Position.Height == GenesisHeight && b.ParentHash == common.Hash{}
 }
 
-// IsFinalized checks if the finalization data is ready.
+// IsFinalized checks if the block is finalized.
 func (b *Block) IsFinalized() bool {
-	return b.Finalization.Height != 0
+	return len(b.Randomness) > 0
 }
 
 // IsEmpty checks if the block is an 'empty block'.
@@ -272,37 +221,6 @@ func (bs *BlocksByPosition) Push(x interface{}) {
 
 // Pop implements Pop method in heap interface.
 func (bs *BlocksByPosition) Pop() (ret interface{}) {
-	n := len(*bs)
-	*bs, ret = (*bs)[0:n-1], (*bs)[n-1]
-	return
-}
-
-// BlocksByFinalizationHeight is the helper type for sorting slice of blocks by
-// finalization height.
-type BlocksByFinalizationHeight []*Block
-
-// Len implements Len method in sort.Sort interface.
-func (bs BlocksByFinalizationHeight) Len() int {
-	return len(bs)
-}
-
-// Less implements Less method in sort.Sort interface.
-func (bs BlocksByFinalizationHeight) Less(i int, j int) bool {
-	return bs[i].Finalization.Height < bs[j].Finalization.Height
-}
-
-// Swap implements Swap method in sort.Sort interface.
-func (bs BlocksByFinalizationHeight) Swap(i int, j int) {
-	bs[i], bs[j] = bs[j], bs[i]
-}
-
-// Push implements Push method in heap interface.
-func (bs *BlocksByFinalizationHeight) Push(x interface{}) {
-	*bs = append(*bs, x.(*Block))
-}
-
-// Pop implements Pop method in heap interface.
-func (bs *BlocksByFinalizationHeight) Pop() (ret interface{}) {
 	n := len(*bs)
 	*bs, ret = (*bs)[0:n-1], (*bs)[n-1]
 	return

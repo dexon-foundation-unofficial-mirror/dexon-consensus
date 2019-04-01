@@ -50,53 +50,48 @@ func loadAllBlocks(iter db.BlockIterator) (
 	return
 }
 
-// CompactionChainBlockRevealer implements BlockRevealer interface, which would
+// BlockRevealerByPosition implements BlockRevealer interface, which would
 // load all blocks from db, reveal them in the order of compaction chain,
 // from the genesis block to the latest one.
-type CompactionChainBlockRevealer struct {
-	blocks          types.BlocksByFinalizationHeight
+type BlockRevealerByPosition struct {
+	blocks          types.BlocksByPosition
 	nextRevealIndex int
 }
 
-// NewCompactionChainBlockRevealer constructs a block revealer in the order of
+// NewBlockRevealerByPosition constructs a block revealer in the order of
 // compaction chain.
-func NewCompactionChainBlockRevealer(iter db.BlockIterator,
-	startHeight uint64) (r *CompactionChainBlockRevealer, err error) {
+func NewBlockRevealerByPosition(iter db.BlockIterator, startHeight uint64) (
+	r *BlockRevealerByPosition, err error) {
 	blocksByHash, err := loadAllBlocks(iter)
 	if err != nil {
 		return
 	}
-	if startHeight == 0 {
-		startHeight = 1
-	}
-	blocks := types.BlocksByFinalizationHeight{}
+	blocks := types.BlocksByPosition{}
 	for _, b := range blocksByHash {
-		if b.Finalization.Height < startHeight {
+		if b.Position.Height < startHeight {
 			continue
 		}
 		blocks = append(blocks, b)
 	}
-	sort.Sort(types.BlocksByFinalizationHeight(blocks))
-	// Make sure the finalization height of blocks are incremental with step 1.
+	sort.Sort(types.BlocksByPosition(blocks))
+	// Make sure the height of blocks are incremental with step 1.
 	for idx, b := range blocks {
 		if idx == 0 {
 			continue
 		}
-		if b.Finalization.Height != blocks[idx-1].Finalization.Height+1 {
+		if b.Position.Height != blocks[idx-1].Position.Height+1 {
 			err = ErrNotValidCompactionChain
 			return
 		}
 	}
-	r = &CompactionChainBlockRevealer{
-		blocks: blocks,
-	}
+	r = &BlockRevealerByPosition{blocks: blocks}
 	r.Reset()
 	return
 }
 
 // NextBlock implements Revealer.Next method, which would reveal blocks in the
 // order of compaction chain.
-func (r *CompactionChainBlockRevealer) NextBlock() (types.Block, error) {
+func (r *BlockRevealerByPosition) NextBlock() (types.Block, error) {
 	if r.nextRevealIndex == len(r.blocks) {
 		return types.Block{}, db.ErrIterationFinished
 	}
@@ -106,6 +101,6 @@ func (r *CompactionChainBlockRevealer) NextBlock() (types.Block, error) {
 }
 
 // Reset implement Revealer.Reset method, which would reset revealing.
-func (r *CompactionChainBlockRevealer) Reset() {
+func (r *BlockRevealerByPosition) Reset() {
 	r.nextRevealIndex = 0
 }

@@ -60,7 +60,6 @@ var (
 
 // consensusBAReceiver implements agreementReceiver.
 type consensusBAReceiver struct {
-	// TODO(mission): consensus would be replaced by blockChain and network.
 	consensus               *Consensus
 	agreementModule         *agreement
 	changeNotaryHeightValue *atomic.Value
@@ -262,10 +261,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 		}
 	}
 
-	// It's a workaround, the height for application is one-based.
-	block.Finalization.Height = block.Position.Height + 1
-
-	if len(votes) == 0 && len(block.Finalization.Randomness) == 0 {
+	if len(votes) == 0 && len(block.Randomness) == 0 {
 		recv.consensus.logger.Error("No votes to recover randomness",
 			"block", block)
 	} else if votes != nil {
@@ -293,18 +289,19 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 					"block", block,
 					"error", err)
 			} else {
-				block.Finalization.Randomness = rand.Signature[:]
+				block.Randomness = rand.Signature[:]
 			}
+		} else {
+			block.Randomness = NoRand
 		}
 
 		if recv.isNotary {
 			result := &types.AgreementResult{
-				BlockHash:          block.Hash,
-				Position:           block.Position,
-				Votes:              voteList,
-				FinalizationHeight: block.Finalization.Height,
-				IsEmptyBlock:       isEmptyBlockConfirmed,
-				Randomness:         block.Finalization.Randomness,
+				BlockHash:    block.Hash,
+				Position:     block.Position,
+				Votes:        voteList,
+				IsEmptyBlock: isEmptyBlockConfirmed,
+				Randomness:   block.Randomness,
 			}
 			recv.consensus.logger.Debug("Broadcast AgreementResult",
 				"result", result)
@@ -327,7 +324,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 		}
 	}
 
-	if block.Position.Height != 0 &&
+	if !block.IsGenesis() &&
 		!recv.consensus.bcModule.confirmed(block.Position.Height-1) {
 		go func(hash common.Hash) {
 			parentHash := hash
@@ -362,16 +359,15 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 				recv.consensus.logger.Info("Receive parent block",
 					"parent-hash", block.ParentHash.String()[:6],
 					"cur-position", block.Position)
-				if block.Finalization.Height == 0 {
+				if !block.IsFinalized() {
 					// TODO(jimmy): use a seperate message to pull finalized
 					// block. Here, we pull it again as workaround.
 					continue
 				}
 				recv.consensus.processBlockChan <- block
 				parentHash = block.ParentHash
-				if block.Position.Height == 0 ||
-					recv.consensus.bcModule.confirmed(
-						block.Position.Height-1) {
+				if block.IsGenesis() || recv.consensus.bcModule.confirmed(
+					block.Position.Height-1) {
 					return
 				}
 			}
@@ -646,9 +642,11 @@ func NewConsensusFromSyncer(
 		refBlock = b
 	}
 	if startWithEmpty {
-		pos := initBlock.Position
-		pos.Height++
-		_, err := con.bcModule.addEmptyBlock(pos)
+		emptyPos := types.Position{
+			Round:  con.bcModule.tipRound(),
+			Height: initBlock.Position.Height + 1,
+		}
+		_, err := con.bcModule.addEmptyBlock(emptyPos)
 		if err != nil {
 			panic(err)
 		}
@@ -657,7 +655,6 @@ func NewConsensusFromSyncer(
 }
 
 // newConsensusForRound creates a Consensus instance.
-// TODO(mission): remove dMoment, it's no longer one part of consensus.
 func newConsensusForRound(
 	initBlock *types.Block,
 	dMoment time.Time,
@@ -678,11 +675,12 @@ func newConsensusForRound(
 		debugApp = a
 	}
 	// Get configuration for bootstrap round.
-	initRound := uint64(0)
-	initBlockHeight := uint64(0)
+	initPos := types.Position{
+		Round:  0,
+		Height: types.GenesisHeight,
+	}
 	if initBlock != nil {
-		initRound = initBlock.Position.Round
-		initBlockHeight = initBlock.Position.Height
+		initPos = initBlock.Position
 	}
 	// Init configuration chain.
 	ID := types.NewNodeID(prv.PublicKey())
@@ -727,8 +725,8 @@ func newConsensusForRound(
 	}
 	con.ctx, con.ctxCancel = context.WithCancel(context.Background())
 	var err error
-	con.roundEvent, err = utils.NewRoundEvent(con.ctx, gov, logger, initRound,
-		initBlockHeight, ConfigRoundShift)
+	con.roundEvent, err = utils.NewRoundEvent(con.ctx, gov, logger, initPos,
+		ConfigRoundShift)
 	if err != nil {
 		panic(err)
 	}
@@ -983,7 +981,7 @@ func (con *Consensus) prepare(initBlock *types.Block) (err error) {
 	})
 	con.roundEvent.TriggerInitEvent()
 	if initBlock != nil {
-		con.event.NotifyHeight(initBlock.Finalization.Height)
+		con.event.NotifyHeight(initBlock.Position.Height)
 	}
 	con.baMgr.prepare()
 	return
@@ -1251,7 +1249,7 @@ MessageLoop:
 					}
 				} else {
 					ok, err := con.bcModule.verifyRandomness(
-						val.Hash, val.Position.Round, val.Finalization.Randomness)
+						val.Hash, val.Position.Round, val.Randomness)
 					if err != nil {
 						con.logger.Error("error verifying confirmed block randomness",
 							"block", val,
@@ -1381,7 +1379,7 @@ func (con *Consensus) processFinalizedBlock(b *types.Block) (err error) {
 	}
 	if !verifier.VerifySignature(b.Hash, crypto.Signature{
 		Type:      "bls",
-		Signature: b.Finalization.Randomness,
+		Signature: b.Randomness,
 	}) {
 		err = ErrIncorrectBlockRandomness
 		return
@@ -1427,16 +1425,15 @@ func (con *Consensus) deliverBlock(b *types.Block) {
 	case con.resetDeliveryGuardTicker <- struct{}{}:
 	default:
 	}
-	// TODO(mission): do we need to put block when confirmed now?
 	if err := con.db.PutBlock(*b); err != nil {
 		panic(err)
 	}
-	if err := con.db.PutCompactionChainTipInfo(
-		b.Hash, b.Finalization.Height); err != nil {
+	if err := con.db.PutCompactionChainTipInfo(b.Hash,
+		b.Position.Height); err != nil {
 		panic(err)
 	}
 	con.logger.Debug("Calling Application.BlockDelivered", "block", b)
-	con.app.BlockDelivered(b.Hash, b.Position, b.Finalization.Clone())
+	con.app.BlockDelivered(b.Hash, b.Position, common.CopyBytes(b.Randomness))
 	if con.debugApp != nil {
 		con.debugApp.BlockReady(b.Hash)
 	}
@@ -1457,7 +1454,7 @@ func (con *Consensus) deliverFinalizedBlocksWithoutLock() (err error) {
 		"pending", con.bcModule.lastPendingBlock())
 	for _, b := range deliveredBlocks {
 		con.deliverBlock(b)
-		con.event.NotifyHeight(b.Finalization.Height)
+		con.event.NotifyHeight(b.Position.Height)
 	}
 	return
 }

@@ -124,15 +124,15 @@ func (s *ConsensusTestSuite) setupNodes(
 		)
 		gov := seedGov.Clone()
 		gov.SwitchToRemoteMode(networkModule)
-		gov.NotifyRound(initRound, 0)
+		gov.NotifyRound(initRound, types.GenesisHeight)
 		networkModule.AttachNodeSetCache(utils.NewNodeSetCache(gov))
 		f, err := os.Create(fmt.Sprintf("log.%d.log", i))
 		if err != nil {
 			panic(err)
 		}
 		logger := common.NewCustomLogger(log.New(f, "", log.LstdFlags|log.Lmicroseconds))
-		rEvt, err := utils.NewRoundEvent(context.Background(), gov, logger, 0,
-			0, core.ConfigRoundShift)
+		rEvt, err := utils.NewRoundEvent(context.Background(), gov, logger,
+			types.Position{Height: types.GenesisHeight}, core.ConfigRoundShift)
 		s.Require().NoError(err)
 		nID := types.NewNodeID(k.PublicKey())
 		nodes[nID] = &node{
@@ -187,14 +187,13 @@ func (s *ConsensusTestSuite) syncBlocksWithSomeNode(
 	syncerObj *syncer.Consensus,
 	nextSyncHeight uint64) (
 	syncedCon *core.Consensus, syncerHeight uint64, err error) {
-
 	syncerHeight = nextSyncHeight
 	// Setup revealer.
 	DBAll, err := sourceNode.db.GetAllBlocks()
 	if err != nil {
 		return
 	}
-	r, err := test.NewCompactionChainBlockRevealer(DBAll, nextSyncHeight)
+	r, err := test.NewBlockRevealerByPosition(DBAll, nextSyncHeight)
 	if err != nil {
 		return
 	}
@@ -212,7 +211,7 @@ func (s *ConsensusTestSuite) syncBlocksWithSomeNode(
 			}
 			// Sync app.
 			syncNode.app.BlockConfirmed(*b)
-			syncNode.app.BlockDelivered(b.Hash, b.Position, b.Finalization)
+			syncNode.app.BlockDelivered(b.Hash, b.Position, b.Randomness)
 			// Sync gov.
 			syncNode.gov.CatchUpWithRound(
 				b.Position.Round + core.ConfigRoundShift)
@@ -241,7 +240,7 @@ func (s *ConsensusTestSuite) syncBlocksWithSomeNode(
 			}
 			break
 		}
-		syncerHeight = b.Finalization.Height + 1
+		syncerHeight = b.Position.Height + 1
 		compactionChainBlocks = append(compactionChainBlocks, &b)
 		if len(compactionChainBlocks) >= 20 {
 			if syncBlocks() {
@@ -482,7 +481,7 @@ ReachAlive:
 	// another go routine.
 	go func() {
 		var (
-			syncedHeight uint64
+			syncedHeight uint64 = 1
 			err          error
 			syncedCon    *core.Consensus
 		)
@@ -646,8 +645,10 @@ ReachStop:
 	}
 	targetNode := nodes[latestNodeID]
 	for nID, node := range nodes {
-		syncedHeight := node.app.GetLatestDeliveredPosition().Height + 1
-		// FinalizationHeight = Height + 1
+		if nID == latestNodeID {
+			continue
+		}
+		syncedHeight := node.app.GetLatestDeliveredPosition().Height
 		syncedHeight++
 		var err error
 		for {

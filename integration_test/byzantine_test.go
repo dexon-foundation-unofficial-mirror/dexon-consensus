@@ -81,7 +81,7 @@ func (s *ByzantineTestSuite) setupNodes(
 		)
 		gov := seedGov.Clone()
 		gov.SwitchToRemoteMode(networkModule)
-		gov.NotifyRound(0, 0)
+		gov.NotifyRound(0, types.GenesisHeight)
 		networkModule.AttachNodeSetCache(utils.NewNodeSetCache(gov))
 		f, err := os.Create(fmt.Sprintf("log.%d.log", i))
 		if err != nil {

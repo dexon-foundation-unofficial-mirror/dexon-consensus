@@ -60,7 +60,7 @@ func (app *slowApp) BlockConfirmed(block types.Block) {
 }
 
 func (app *slowApp) BlockDelivered(blockHash common.Hash,
-	blockPosition types.Position, _ types.FinalizationResult) {
+	blockPosition types.Position, _ []byte) {
 	time.Sleep(app.sleep)
 	app.blockDelivered[blockHash] = struct{}{}
 }
@@ -100,7 +100,7 @@ func (app *noDebugApp) BlockConfirmed(block types.Block) {
 }
 
 func (app *noDebugApp) BlockDelivered(blockHash common.Hash,
-	blockPosition types.Position, _ types.FinalizationResult) {
+	blockPosition types.Position, _ []byte) {
 	app.blockDelivered[blockHash] = struct{}{}
 }
 
@@ -125,8 +125,7 @@ func (s *NonBlockingTestSuite) TestNonBlocking() {
 			Hash:    hash,
 			Witness: types.Witness{},
 		})
-		nbModule.BlockDelivered(
-			hash, types.Position{}, types.FinalizationResult{})
+		nbModule.BlockDelivered(hash, types.Position{}, []byte(nil))
 	}
 
 	// nonBlocking should be non-blocking.
@@ -146,7 +145,7 @@ func (s *NonBlockingTestSuite) TestNoDebug() {
 	// Test BlockConfirmed.
 	nbModule.BlockConfirmed(types.Block{Hash: hash})
 	// Test BlockDelivered
-	nbModule.BlockDelivered(hash, types.Position{}, types.FinalizationResult{})
+	nbModule.BlockDelivered(hash, types.Position{}, []byte(nil))
 	nbModule.wait()
 	s.Contains(app.blockConfirmed, hash)
 	s.Contains(app.blockDelivered, hash)

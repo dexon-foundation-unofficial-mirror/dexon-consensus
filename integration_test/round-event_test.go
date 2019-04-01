@@ -114,8 +114,8 @@ func (s *RoundEventTestSuite) TestFromRound0() {
 		uint64(200)))
 	gov.CatchUpWithRound(1)
 	// Prepare utils.RoundEvent, starts from genesis.
-	rEvt, err := utils.NewRoundEvent(
-		context.Background(), gov, s.logger, 0, 0, core.ConfigRoundShift)
+	rEvt, err := utils.NewRoundEvent(context.Background(), gov, s.logger,
+		types.Position{Height: types.GenesisHeight}, core.ConfigRoundShift)
 	s.Require().NoError(err)
 	// Register a handler to collects triggered events.
 	var evts []evtParamToCheck
@@ -139,9 +139,9 @@ func (s *RoundEventTestSuite) TestFromRound0() {
 	s.Require().Equal(rEvt.ValidateNextRound(80), uint(3))
 	// Check collected events.
 	s.Require().Len(evts, 3)
-	s.Require().Equal(evts[0], evtParamToCheck{0, 1, 100, gov.CRS(0)})
-	s.Require().Equal(evts[1], evtParamToCheck{0, 2, 200, gov.CRS(0)})
-	s.Require().Equal(evts[2], evtParamToCheck{1, 0, 300, gov.CRS(1)})
+	s.Require().Equal(evts[0], evtParamToCheck{0, 1, 101, gov.CRS(0)})
+	s.Require().Equal(evts[1], evtParamToCheck{0, 2, 201, gov.CRS(0)})
+	s.Require().Equal(evts[2], evtParamToCheck{1, 0, 301, gov.CRS(1)})
 }
 
 func (s *RoundEventTestSuite) TestFromRoundN() {
@@ -155,10 +155,10 @@ func (s *RoundEventTestSuite) TestFromRoundN() {
 	for r := uint64(2); r <= uint64(20); r++ {
 		gov.ProposeCRS(r, getCRS(r, 0))
 	}
-	for r := uint64(0); r <= uint64(19); r++ {
-		gov.NotifyRound(r, r*roundLength)
+	for r := uint64(1); r <= uint64(19); r++ {
+		gov.NotifyRound(r, utils.GetRoundHeight(gov, r-1)+roundLength)
 	}
-	gov.NotifyRound(20, 2200)
+	gov.NotifyRound(20, 2201)
 	// Reset round#20 twice, then make it done DKG preparation.
 	gov.ResetDKG(getCRS(20, 1))
 	gov.ResetDKG(getCRS(20, 2))
@@ -174,8 +174,8 @@ func (s *RoundEventTestSuite) TestFromRoundN() {
 	s.proposeMPK(gov, 22, 0, 3)
 	s.proposeFinalize(gov, 22, 0, 3)
 	// Prepare utils.RoundEvent, starts from round#19, reset(for round#20)#1.
-	rEvt, err := utils.NewRoundEvent(context.Background(), gov, s.logger, 19,
-		2019, core.ConfigRoundShift)
+	rEvt, err := utils.NewRoundEvent(context.Background(), gov, s.logger,
+		types.Position{Round: 19, Height: 2019}, core.ConfigRoundShift)
 	s.Require().NoError(err)
 	// Register a handler to collects triggered events.
 	var evts []evtParamToCheck
@@ -193,14 +193,14 @@ func (s *RoundEventTestSuite) TestFromRoundN() {
 	s.Require().Equal(rEvt.ValidateNextRound(2080), uint(2))
 	// Check collected events.
 	s.Require().Len(evts, 2)
-	s.Require().Equal(evts[0], evtParamToCheck{19, 2, 2100, gov.CRS(19)})
-	s.Require().Equal(evts[1], evtParamToCheck{20, 0, 2200, gov.CRS(20)})
+	s.Require().Equal(evts[0], evtParamToCheck{19, 2, 2101, gov.CRS(19)})
+	s.Require().Equal(evts[1], evtParamToCheck{20, 0, 2201, gov.CRS(20)})
 	// Round might exceed round-shift limitation would not be triggered.
 	s.Require().Equal(rEvt.ValidateNextRound(2280), uint(1))
 	s.Require().Len(evts, 3)
-	s.Require().Equal(evts[2], evtParamToCheck{21, 0, 2300, gov.CRS(21)})
+	s.Require().Equal(evts[2], evtParamToCheck{21, 0, 2301, gov.CRS(21)})
 	s.Require().Equal(rEvt.ValidateNextRound(2380), uint(1))
-	s.Require().Equal(evts[3], evtParamToCheck{22, 0, 2400, gov.CRS(22)})
+	s.Require().Equal(evts[3], evtParamToCheck{22, 0, 2401, gov.CRS(22)})
 }
 
 func (s *RoundEventTestSuite) TestLastPeriod() {
@@ -212,24 +212,24 @@ func (s *RoundEventTestSuite) TestLastPeriod() {
 		uint64(200)))
 	gov.CatchUpWithRound(1)
 	// Prepare utils.RoundEvent, starts from genesis.
-	rEvt, err := utils.NewRoundEvent(
-		context.Background(), gov, s.logger, 0, 0, core.ConfigRoundShift)
+	rEvt, err := utils.NewRoundEvent(context.Background(), gov, s.logger,
+		types.Position{Height: types.GenesisHeight}, core.ConfigRoundShift)
 	s.Require().NoError(err)
 	begin, length := rEvt.LastPeriod()
-	s.Require().Equal(begin, uint64(0))
+	s.Require().Equal(begin, uint64(1))
 	s.Require().Equal(length, uint64(100))
 	// Reset round#1 twice, then make it ready.
 	gov.ResetDKG([]byte("DKG round 1 reset 1"))
 	gov.ResetDKG([]byte("DKG round 1 reset 2"))
 	rEvt.ValidateNextRound(80)
 	begin, length = rEvt.LastPeriod()
-	s.Require().Equal(begin, uint64(200))
+	s.Require().Equal(begin, uint64(201))
 	s.Require().Equal(length, uint64(100))
 	s.proposeMPK(gov, 1, 2, 3)
 	s.proposeFinalize(gov, 1, 2, 3)
 	rEvt.ValidateNextRound(80)
 	begin, length = rEvt.LastPeriod()
-	s.Require().Equal(begin, uint64(300))
+	s.Require().Equal(begin, uint64(301))
 	s.Require().Equal(length, uint64(200))
 }
 
@@ -242,8 +242,8 @@ func (s *RoundEventTestSuite) TestTriggerInitEvent() {
 		uint64(200)))
 	gov.CatchUpWithRound(1)
 	// Prepare utils.RoundEvent, starts from genesis.
-	rEvt, err := utils.NewRoundEvent(
-		context.Background(), gov, s.logger, 0, 0, core.ConfigRoundShift)
+	rEvt, err := utils.NewRoundEvent(context.Background(), gov, s.logger,
+		types.Position{Height: types.GenesisHeight}, core.ConfigRoundShift)
 	s.Require().NoError(err)
 	// Register a handler to collects triggered events.
 	var evts []evtParamToCheck
@@ -259,7 +259,7 @@ func (s *RoundEventTestSuite) TestTriggerInitEvent() {
 	})
 	rEvt.TriggerInitEvent()
 	s.Require().Len(evts, 1)
-	s.Require().Equal(evts[0], evtParamToCheck{0, 0, 0, gov.CRS(0)})
+	s.Require().Equal(evts[0], evtParamToCheck{0, 0, 1, gov.CRS(0)})
 }
 
 func TestRoundEvent(t *testing.T) {

@@ -35,11 +35,6 @@ type BlockTestSuite struct {
 	suite.Suite
 }
 
-func (s *BlockTestSuite) randomBytes() []byte {
-	h := common.NewRandomHash()
-	return h[:]
-}
-
 func (s *BlockTestSuite) noZeroInStruct(v reflect.Value) {
 	t := v.Type()
 	for i := 0; i < t.NumField(); i++ {
@@ -61,7 +56,7 @@ func (s *BlockTestSuite) noZeroInStruct(v reflect.Value) {
 }
 
 func (s *BlockTestSuite) createRandomBlock() *Block {
-	payload := s.randomBytes()
+	payload := common.GenerateRandomBytes()
 	b := &Block{
 		ProposerID: NodeID{common.NewRandomHash()},
 		ParentHash: common.NewRandomHash(),
@@ -73,23 +68,17 @@ func (s *BlockTestSuite) createRandomBlock() *Block {
 		Timestamp: time.Now().UTC(),
 		Witness: Witness{
 			Height: rand.Uint64(),
-			Data:   s.randomBytes(),
+			Data:   common.GenerateRandomBytes(),
 		},
-		Finalization: FinalizationResult{
-			ParentHash: common.NewRandomHash(),
-			Timestamp:  time.Now().UTC(),
-			Height:     rand.Uint64(),
-			Randomness: s.randomBytes(),
-		},
+		Randomness:  common.GenerateRandomBytes(),
 		Payload:     payload,
 		PayloadHash: crypto.Keccak256Hash(payload),
 		Signature: crypto.Signature{
 			Type:      "some type",
-			Signature: s.randomBytes()},
+			Signature: common.GenerateRandomBytes()},
 		CRSSignature: crypto.Signature{
 			Type:      "some type",
-			Signature: s.randomBytes(),
-		},
+			Signature: common.GenerateRandomBytes()},
 	}
 	// Check if all fields are initialized with non zero values.
 	s.noZeroInStruct(reflect.ValueOf(*b))
@@ -155,21 +144,21 @@ func (s *BlockTestSuite) TestSortBlocksByPosition() {
 func (s *BlockTestSuite) TestGenesisBlock() {
 	b0 := &Block{
 		Position: Position{
-			Height: 0,
+			Height: GenesisHeight,
 		},
 		ParentHash: common.Hash{},
 	}
 	s.True(b0.IsGenesis())
 	b1 := &Block{
 		Position: Position{
-			Height: 1,
+			Height: GenesisHeight + 1,
 		},
 		ParentHash: common.Hash{},
 	}
 	s.False(b1.IsGenesis())
 	b2 := &Block{
 		Position: Position{
-			Height: 0,
+			Height: GenesisHeight,
 		},
 		ParentHash: common.NewRandomHash(),
 	}

@@ -56,7 +56,7 @@ func NewGovernance(state *State, roundShift uint64) (g *Governance, err error) {
 		pendingConfigChanges: make(map[uint64]map[StateChangeType]interface{}),
 		stateModule:          state,
 		prohibitedTypes:      make(map[StateChangeType]struct{}),
-		roundBeginHeights:    []uint64{0},
+		roundBeginHeights:    []uint64{types.GenesisHeight},
 	}
 	return
 }
@@ -94,6 +94,8 @@ func (g *Governance) Configuration(round uint64) *types.Config {
 
 // GetRoundHeight returns the begin height of a round.
 func (g *Governance) GetRoundHeight(round uint64) uint64 {
+	// This is a workaround to fit fullnode's behavior, their 0 is reserved for
+	// a genesis block unseen to core.
 	if round == 0 {
 		return 0
 	}
@@ -103,8 +105,7 @@ func (g *Governance) GetRoundHeight(round uint64) uint64 {
 		panic(fmt.Errorf("round begin height is not ready: %d %d",
 			round, len(g.roundBeginHeights)))
 	}
-	// TODO(jimmy): remove this workaround.
-	return g.roundBeginHeights[round] + 1
+	return g.roundBeginHeights[round]
 }
 
 // CRS returns the CRS for a given round.
@@ -342,7 +343,7 @@ func (g *Governance) CatchUpWithRound(round uint64) {
 		// begin height of round 0 and round 1 should be ready, they won't be
 		// afected by DKG reset mechanism.
 		g.roundBeginHeights = append(g.roundBeginHeights,
-			g.configs[0].RoundLength)
+			g.configs[0].RoundLength+g.roundBeginHeights[0])
 	}
 }
 

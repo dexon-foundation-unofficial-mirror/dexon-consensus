@@ -149,3 +149,16 @@ func GetDKGValidThreshold(config *types.Config) int {
 func GetNextRoundValidationHeight(begin, length uint64) uint64 {
 	return begin + length*9/10
 }
+
+// GetRoundHeight wraps the workaround for the round height logic in fullnode.
+func GetRoundHeight(accessor interface{}, round uint64) uint64 {
+	type roundHeightAccessor interface {
+		GetRoundHeight(round uint64) uint64
+	}
+	accessorInst := accessor.(roundHeightAccessor)
+	height := accessorInst.GetRoundHeight(round)
+	if round == 0 && height < types.GenesisHeight {
+		return types.GenesisHeight
+	}
+	return height
+}

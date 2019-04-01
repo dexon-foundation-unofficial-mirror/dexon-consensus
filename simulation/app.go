@@ -151,10 +151,9 @@ func (a *simApp) PrepareWitness(height uint64) (types.Witness, error) {
 }
 
 // BlockDelivered is called when a block in compaction chain is delivered.
-func (a *simApp) BlockDelivered(
-	blockHash common.Hash, pos types.Position, result types.FinalizationResult) {
-
-	if len(result.Randomness) == 0 && pos.Round > 0 {
+func (a *simApp) BlockDelivered(blockHash common.Hash, pos types.Position,
+	rand []byte) {
+	if len(rand) == 0 && pos.Round > 0 {
 		panic(fmt.Errorf("Block %s randomness is empty", blockHash))
 	}
 	func() {
@@ -183,7 +182,7 @@ func (a *simApp) BlockDelivered(
 			panic(err)
 		}
 		a.latestWitness = types.Witness{
-			Height: result.Height,
+			Height: pos.Height,
 			Data:   data,
 		}
 		a.latestWitnessReady.Broadcast()

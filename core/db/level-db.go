@@ -362,7 +362,6 @@ func (lvl *LevelDBBackedDB) Close() error {
 func (lvl *LevelDBBackedDB) HasBlock(hash common.Hash) bool {
 	exists, err := lvl.internalHasBlock(lvl.getBlockKey(hash))
 	if err != nil {
-		// TODO(missionliao): Modify the interface to return error.
 		panic(err)
 	}
 	return exists
@@ -429,7 +428,6 @@ func (lvl *LevelDBBackedDB) PutBlock(block types.Block) (err error) {
 // GetAllBlocks implements Reader.GetAllBlocks method, which allows callers
 // to retrieve all blocks in DB.
 func (lvl *LevelDBBackedDB) GetAllBlocks() (BlockIterator, error) {
-	// TODO (mission): Implement this part via goleveldb's iterator.
 	return nil, ErrNotImplemented
 }
 

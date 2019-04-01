@@ -252,7 +252,8 @@ func (s *NetworkTestSuite) TestBroadcastToSet() {
 		1, pubKeys, time.Second, &common.NullLogger{}, true), 2)
 	req.NoError(err)
 	req.NoError(gov.State().RequestChange(StateChangeNotarySetSize, uint32(1)))
-	gov.NotifyRound(round, gov.Configuration(0).RoundLength)
+	gov.NotifyRound(round,
+		utils.GetRoundHeight(gov, 0)+gov.Configuration(0).RoundLength)
 	networks := s.setupNetworks(pubKeys)
 	cache := utils.NewNodeSetCache(gov)
 	// Cache required set of nodeIDs.
@@ -278,16 +279,16 @@ func (s *NetworkTestSuite) TestBroadcastToSet() {
 	req.NotNil(nerd)
 	req.NotNil(notaryNode)
 	nerd.AttachNodeSetCache(cache)
+	pos := types.Position{Round: round, Height: types.GenesisHeight}
 	// Try broadcasting with datum from round 0, and make sure only node belongs
 	// to that set receiving the message.
-	nerd.BroadcastVote(&types.Vote{VoteHeader: types.VoteHeader{
-		Position: types.Position{Round: round}}})
+	nerd.BroadcastVote(&types.Vote{VoteHeader: types.VoteHeader{Position: pos}})
 	req.IsType(&types.Vote{}, <-notaryNode.ReceiveChan())
-	nerd.BroadcastDKGPrivateShare(&typesDKG.PrivateShare{Round: round})
+	nerd.BroadcastDKGPrivateShare(&typesDKG.PrivateShare{Round: pos.Round})
 	req.IsType(&typesDKG.PrivateShare{}, <-notaryNode.ReceiveChan())
-	nerd.BroadcastDKGPartialSignature(&typesDKG.PartialSignature{Round: round})
+	nerd.BroadcastDKGPartialSignature(&typesDKG.PartialSignature{Round: pos.Round})
 	req.IsType(&typesDKG.PartialSignature{}, <-notaryNode.ReceiveChan())
-	nerd.BroadcastBlock(&types.Block{Position: types.Position{Round: round}})
+	nerd.BroadcastBlock(&types.Block{Position: pos})
 	req.IsType(&types.Block{}, <-notaryNode.ReceiveChan())
 }
 

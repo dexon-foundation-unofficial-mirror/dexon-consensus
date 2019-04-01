@@ -32,7 +32,7 @@ type blockConfirmedEvent struct {
 type blockDeliveredEvent struct {
 	blockHash     common.Hash
 	blockPosition types.Position
-	result        *types.FinalizationResult
+	rand          []byte
 }
 
 // nonBlocking implements these interfaces and is a decorator for
@@ -87,7 +87,7 @@ func (nb *nonBlocking) run() {
 		case blockConfirmedEvent:
 			nb.app.BlockConfirmed(*e.block)
 		case blockDeliveredEvent:
-			nb.app.BlockDelivered(e.blockHash, e.blockPosition, *e.result)
+			nb.app.BlockDelivered(e.blockHash, e.blockPosition, e.rand)
 		default:
 			fmt.Printf("Unknown event %v.", e)
 		}
@@ -128,10 +128,10 @@ func (nb *nonBlocking) BlockConfirmed(block types.Block) {
 
 // BlockDelivered is called when a block is add to the compaction chain.
 func (nb *nonBlocking) BlockDelivered(blockHash common.Hash,
-	blockPosition types.Position, result types.FinalizationResult) {
+	blockPosition types.Position, rand []byte) {
 	nb.addEvent(blockDeliveredEvent{
 		blockHash:     blockHash,
 		blockPosition: blockPosition,
-		result:        &result,
+		rand:          rand,
 	})
 }

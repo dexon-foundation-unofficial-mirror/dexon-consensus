@@ -32,6 +32,10 @@ const ConfigRoundShift uint64 = 2
 // have neither DKG nor CRS.
 const DKGDelayRound uint64 = 1
 
+// NoRand is the magic placeholder for randomness field in blocks for blocks
+// proposed before DKGDelayRound.
+var NoRand = []byte("norand")
+
 func init() {
 	utils.SetDKGDelayRound(DKGDelayRound)
 }

@@ -18,6 +18,7 @@
 package test
 
 import (
+	"bytes"
 	"fmt"
 	"sync"
 	"time"
@@ -34,20 +35,18 @@ var (
 	// ErrMismatchBlockHashSequence means the delivering sequence between two App
 	// instances are different.
 	ErrMismatchBlockHashSequence = fmt.Errorf("mismatch block hash sequence")
-	// ErrMismatchConsensusTime means the consensus timestamp between two blocks
-	// with the same hash from two App instances are different.
-	ErrMismatchConsensusTime = fmt.Errorf("mismatch consensus time")
+	// ErrMismatchRandomness means the randomness between two blocks with the
+	// same hash from two App instances are different.
+	ErrMismatchRandomness = fmt.Errorf("mismatch randomness")
 	// ErrApplicationIntegrityFailed means the internal datum in a App instance
 	// is not integrated.
 	ErrApplicationIntegrityFailed = fmt.Errorf("application integrity failed")
-	// ErrConsensusTimestampOutOfOrder means the later delivered block has
-	// consensus timestamp older than previous block.
-	ErrConsensusTimestampOutOfOrder = fmt.Errorf(
-		"consensus timestamp out of order")
-	// ErrConsensusHeightOutOfOrder means the later delivered block has
-	// consensus height not equal to height of previous block plus one.
-	ErrConsensusHeightOutOfOrder = fmt.Errorf(
-		"consensus height out of order")
+	// ErrTimestampOutOfOrder means the later delivered block has timestamp
+	// older than previous block.
+	ErrTimestampOutOfOrder = fmt.Errorf("timestamp out of order")
+	// ErrHeightOutOfOrder means the later delivered block has height not equal
+	// to height of previous block plus one.
+	ErrHeightOutOfOrder = fmt.Errorf("height out of order")
 	// ErrDeliveredBlockNotConfirmed means some block delivered (confirmed) but
 	// not confirmed.
 	ErrDeliveredBlockNotConfirmed = fmt.Errorf("delivered block not confirmed")
@@ -65,31 +64,36 @@ var (
 	// ErrParentBlockNotDelivered raised when the parent block is not seen by
 	// this app.
 	ErrParentBlockNotDelivered = fmt.Errorf("parent block not delivered")
+	// ErrMismatchDeliverPosition raised when the block hash and position are
+	// mismatched when calling BlockDelivered.
+	ErrMismatchDeliverPosition = fmt.Errorf("mismatch deliver position")
+	// ErrEmptyRandomness raised when the block contains empty randomness.
+	ErrEmptyRandomness = fmt.Errorf("empty randomness")
+	// ErrInvalidHeight refers to invalid value for block height.
+	ErrInvalidHeight = fmt.Errorf("invalid height")
 )
 
 // AppDeliveredRecord caches information when this application received
 // a block delivered notification.
 type AppDeliveredRecord struct {
-	Result types.FinalizationResult
-	When   time.Time
-	Pos    types.Position
+	Rand []byte
+	When time.Time
+	Pos  types.Position
 }
 
 // App implements Application interface for testing purpose.
 type App struct {
-	Confirmed             map[common.Hash]*types.Block
-	LastConfirmedHeight   uint64
-	confirmedLock         sync.RWMutex
-	Delivered             map[common.Hash]*AppDeliveredRecord
-	DeliverSequence       common.Hashes
-	deliveredLock         sync.RWMutex
-	state                 *State
-	gov                   *Governance
-	rEvt                  *utils.RoundEvent
-	hEvt                  *common.Event
-	lastPendingHeightLock sync.RWMutex
-	LastPendingHeight     uint64
-	roundToNotify         uint64
+	Confirmed           map[common.Hash]*types.Block
+	LastConfirmedHeight uint64
+	confirmedLock       sync.RWMutex
+	Delivered           map[common.Hash]*AppDeliveredRecord
+	DeliverSequence     common.Hashes
+	deliveredLock       sync.RWMutex
+	state               *State
+	gov                 *Governance
+	rEvt                *utils.RoundEvent
+	hEvt                *common.Event
+	roundToNotify       uint64
 }
 
 // NewApp constructs a TestApp instance.
@@ -129,30 +133,20 @@ func (app *App) PreparePayload(position types.Position) ([]byte, error) {
 
 // PrepareWitness implements Application interface.
 func (app *App) PrepareWitness(height uint64) (types.Witness, error) {
-	pendingHeight := app.getLastPendingWitnessHeight()
-	if pendingHeight < height {
-		return types.Witness{}, ErrLowerPendingHeight
-	}
-	if pendingHeight == 0 {
+	// Although we only perform reading operations here, to make sure what we
+	// prepared unique under concurrent access to this method, writer lock is
+	// used.
+	app.deliveredLock.Lock()
+	defer app.deliveredLock.Unlock()
+	hash, lastRec := app.LastDeliveredRecordNoLock()
+	if lastRec == nil {
 		return types.Witness{}, nil
 	}
-	hash := func() common.Hash {
-		app.deliveredLock.RLock()
-		defer app.deliveredLock.RUnlock()
-		// Our witness height starts from 1.
-		h := app.DeliverSequence[pendingHeight-1]
-		// Double confirm if the delivered record matches the pending height.
-		if app.Delivered[h].Result.Height != pendingHeight {
-			app.confirmedLock.RLock()
-			defer app.confirmedLock.RUnlock()
-			panic(fmt.Errorf("unmatched finalization record: %s, %v, %v",
-				app.Confirmed[h], pendingHeight,
-				app.Delivered[h].Result.Height))
-		}
-		return h
-	}()
+	if lastRec.Pos.Height < height {
+		return types.Witness{}, ErrLowerPendingHeight
+	}
 	return types.Witness{
-		Height: pendingHeight,
+		Height: lastRec.Pos.Height,
 		Data:   hash.Bytes(),
 	}, nil
 }
@@ -160,31 +154,30 @@ func (app *App) PrepareWitness(height uint64) (types.Witness, error) {
 // VerifyBlock implements Application interface.
 func (app *App) VerifyBlock(block *types.Block) types.BlockVerifyStatus {
 	// Make sure we can handle the witness carried by this block.
-	pendingHeight := app.getLastPendingWitnessHeight()
-	if pendingHeight < block.Witness.Height {
+	app.deliveredLock.RLock()
+	defer app.deliveredLock.RUnlock()
+	_, rec := app.LastDeliveredRecordNoLock()
+	if rec != nil && rec.Pos.Height < block.Witness.Height {
 		return types.VerifyRetryLater
 	}
 	// Confirm if the consensus height matches corresponding block hash.
 	var h common.Hash
 	copy(h[:], block.Witness.Data)
-	app.deliveredLock.RLock()
-	defer app.deliveredLock.RUnlock()
-	// This is the difference between test.App and fullnode, fullnode has the
-	// genesis block at height=0, we don't. Thus our reasonable witness starts
-	// from 1.
-	if block.Witness.Height > 0 {
-		if block.Witness.Height != app.Delivered[h].Result.Height {
+	app.confirmedLock.RLock()
+	defer app.confirmedLock.RUnlock()
+	if block.Witness.Height >= types.GenesisHeight {
+		// Make sure the hash and height are matched.
+		confirmed, exist := app.Confirmed[h]
+		if !exist || block.Witness.Height != confirmed.Position.Height {
 			return types.VerifyInvalidBlock
 		}
 	}
-	if block.Position.Height != 0 {
+	if block.Position.Height != types.GenesisHeight {
 		// This check is copied from fullnode, below is quoted from coresponding
 		// comment:
 		//
 		// Check if target block is the next height to be verified, we can only
 		// verify the next block in a given chain.
-		app.confirmedLock.RLock()
-		defer app.confirmedLock.RUnlock()
 		if app.LastConfirmedHeight+1 != block.Position.Height {
 			return types.VerifyRetryLater
 		}
@@ -197,10 +190,8 @@ func (app *App) BlockConfirmed(b types.Block) {
 	app.confirmedLock.Lock()
 	defer app.confirmedLock.Unlock()
 	app.Confirmed[b.Hash] = &b
-	if b.Position.Height != 0 {
-		if app.LastConfirmedHeight+1 != b.Position.Height {
-			panic(ErrConfirmedHeightNotIncreasing)
-		}
+	if app.LastConfirmedHeight+1 != b.Position.Height {
+		panic(ErrConfirmedHeightNotIncreasing)
 	}
 	app.LastConfirmedHeight = b.Position.Height
 }
@@ -211,34 +202,32 @@ func (app *App) ClearUndeliveredBlocks() {
 	defer app.deliveredLock.RUnlock()
 	app.confirmedLock.Lock()
 	defer app.confirmedLock.Unlock()
-	app.LastConfirmedHeight = uint64(len(app.DeliverSequence) - 1)
+	app.LastConfirmedHeight = uint64(len(app.DeliverSequence))
 }
 
 // BlockDelivered implements Application interface.
 func (app *App) BlockDelivered(blockHash common.Hash, pos types.Position,
-	result types.FinalizationResult) {
+	rand []byte) {
 	func() {
 		app.deliveredLock.Lock()
 		defer app.deliveredLock.Unlock()
 		app.Delivered[blockHash] = &AppDeliveredRecord{
-			Result: result,
-			When:   time.Now().UTC(),
-			Pos:    pos,
+			Rand: common.CopyBytes(rand),
+			When: time.Now().UTC(),
+			Pos:  pos,
 		}
-		app.DeliverSequence = append(app.DeliverSequence, blockHash)
-		// Make sure parent block also delivered.
-		if !result.ParentHash.Equal(common.Hash{}) {
-			d, exists := app.Delivered[result.ParentHash]
+		if len(app.DeliverSequence) > 0 {
+			// Make sure parent block also delivered.
+			lastHash := app.DeliverSequence[len(app.DeliverSequence)-1]
+			d, exists := app.Delivered[lastHash]
 			if !exists {
 				panic(ErrParentBlockNotDelivered)
 			}
-			if d.Result.Height+1 != result.Height {
-				panic(ErrConsensusHeightOutOfOrder)
+			if d.Pos.Height+1 != pos.Height {
+				panic(ErrHeightOutOfOrder)
 			}
 		}
-		app.lastPendingHeightLock.Lock()
-		defer app.lastPendingHeightLock.Unlock()
-		app.LastPendingHeight = result.Height
+		app.DeliverSequence = append(app.DeliverSequence, blockHash)
 	}()
 	// Apply packed state change requests in payload.
 	func() {
@@ -247,7 +236,13 @@ func (app *App) BlockDelivered(blockHash common.Hash, pos types.Position,
 		}
 		app.confirmedLock.RLock()
 		defer app.confirmedLock.RUnlock()
-		b := app.Confirmed[blockHash]
+		b, exists := app.Confirmed[blockHash]
+		if !exists {
+			panic(ErrDeliveredBlockNotConfirmed)
+		}
+		if !b.Position.Equal(pos) {
+			panic(ErrMismatchDeliverPosition)
+		}
 		if err := app.state.Apply(b.Payload); err != nil {
 			if err != ErrDuplicatedChange {
 				panic(err)
@@ -260,7 +255,7 @@ func (app *App) BlockDelivered(blockHash common.Hash, pos types.Position,
 			}
 		}
 	}()
-	app.hEvt.NotifyHeight(result.Height)
+	app.hEvt.NotifyHeight(pos.Height)
 }
 
 // GetLatestDeliveredPosition would return the latest position of delivered
@@ -298,9 +293,9 @@ func (app *App) Compare(other *App) (err error) {
 					err = ErrMismatchBlockHashSequence
 					return
 				}
-				if app.Delivered[h].Result.Timestamp !=
-					other.Delivered[h].Result.Timestamp {
-					err = ErrMismatchConsensusTime
+				if bytes.Compare(app.Delivered[h].Rand,
+					other.Delivered[h].Rand) != 0 {
+					err = ErrMismatchRandomness
 					return
 				}
 			}
@@ -311,7 +306,6 @@ func (app *App) Compare(other *App) (err error) {
 
 // Verify checks the integrity of date received by this App instance.
 func (app *App) Verify() error {
-	// TODO(mission): verify blocks' position when delivered.
 	app.confirmedLock.RLock()
 	defer app.confirmedLock.RUnlock()
 	app.deliveredLock.RLock()
@@ -326,24 +320,37 @@ func (app *App) Verify() error {
 	expectHeight := uint64(1)
 	prevTime := time.Time{}
 	for _, h := range app.DeliverSequence {
-		_, exists := app.Confirmed[h]
-		if !exists {
+		_, exist := app.Confirmed[h]
+		if !exist {
 			return ErrDeliveredBlockNotConfirmed
 		}
-		rec, exists := app.Delivered[h]
-		if !exists {
+		_, exist = app.Delivered[h]
+		if !exist {
+			return ErrApplicationIntegrityFailed
+		}
+		b, exist := app.Confirmed[h]
+		if !exist {
 			return ErrApplicationIntegrityFailed
 		}
 		// Make sure the consensus time is incremental.
-		ok := prevTime.Before(rec.Result.Timestamp) ||
-			prevTime.Equal(rec.Result.Timestamp)
-		if !ok {
-			return ErrConsensusTimestampOutOfOrder
+		if prevTime.After(b.Timestamp) {
+			return ErrTimestampOutOfOrder
 		}
-		prevTime = rec.Result.Timestamp
+		prevTime = b.Timestamp
 		// Make sure the consensus height is incremental.
-		if expectHeight != rec.Result.Height {
-			return ErrConsensusHeightOutOfOrder
+		rec, exist := app.Delivered[h]
+		if !exist {
+			return ErrApplicationIntegrityFailed
+		}
+		if len(rec.Rand) == 0 {
+			return ErrEmptyRandomness
+		}
+		// Make sure height is valid.
+		if b.Position.Height < types.GenesisHeight {
+			return ErrInvalidHeight
+		}
+		if expectHeight != rec.Pos.Height {
+			return ErrHeightOutOfOrder
 		}
 		expectHeight++
 	}
@@ -362,14 +369,16 @@ func (app *App) WithLock(function func(*App)) {
 	defer app.confirmedLock.RUnlock()
 	app.deliveredLock.RLock()
 	defer app.deliveredLock.RUnlock()
-	app.lastPendingHeightLock.RLock()
-	defer app.lastPendingHeightLock.RUnlock()
 
 	function(app)
 }
 
-func (app *App) getLastPendingWitnessHeight() uint64 {
-	app.lastPendingHeightLock.RLock()
-	defer app.lastPendingHeightLock.RUnlock()
-	return app.LastPendingHeight
+// LastDeliveredRecordNoLock returns the latest AppDeliveredRecord under lock.
+func (app *App) LastDeliveredRecordNoLock() (common.Hash, *AppDeliveredRecord) {
+	var hash common.Hash
+	if len(app.DeliverSequence) == 0 {
+		return hash, nil
+	}
+	hash = app.DeliverSequence[len(app.DeliverSequence)-1]
+	return hash, app.Delivered[hash]
 }

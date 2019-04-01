@@ -42,8 +42,7 @@ type Application interface {
 	BlockConfirmed(block types.Block)
 
 	// BlockDelivered is called when a block is added to the compaction chain.
-	BlockDelivered(blockHash common.Hash,
-		blockPosition types.Position, result types.FinalizationResult)
+	BlockDelivered(hash common.Hash, position types.Position, rand []byte)
 }
 
 // Debug describes the application interface that requires

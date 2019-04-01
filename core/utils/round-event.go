@@ -169,42 +169,39 @@ type RoundEvent struct {
 
 // NewRoundEvent creates an RoundEvent instance.
 func NewRoundEvent(parentCtx context.Context, gov governanceAccessor,
-	logger common.Logger, initRound uint64,
-	initBlockHeight uint64,
-	roundShift uint64) (*RoundEvent, error) {
+	logger common.Logger, initPos types.Position, roundShift uint64) (
+	*RoundEvent, error) {
 	// We need to generate valid ending block height of this round (taken
 	// DKG reset count into consideration).
-	initConfig := GetConfigWithPanic(gov, initRound, logger)
+	logger.Info("new RoundEvent", "position", initPos, "shift", roundShift)
+	initConfig := GetConfigWithPanic(gov, initPos.Round, logger)
 	e := &RoundEvent{
 		gov:                gov,
 		logger:             logger,
-		lastTriggeredRound: initRound,
+		lastTriggeredRound: initPos.Round,
 		roundShift:         roundShift,
 	}
 	e.ctx, e.ctxCancel = context.WithCancel(parentCtx)
 	e.config = RoundBasedConfig{}
-	e.config.SetupRoundBasedFields(initRound, initConfig)
-	// TODO(jimmy): remove -1 after we match the height with fullnode.
-	roundHeight := gov.GetRoundHeight(initRound)
-	if initRound != 0 {
-		roundHeight--
-	}
-	e.config.SetRoundBeginHeight(roundHeight)
+	e.config.SetupRoundBasedFields(initPos.Round, initConfig)
+	e.config.SetRoundBeginHeight(GetRoundHeight(gov, initPos.Round))
 	// Make sure the DKG reset count in current governance can cover the initial
 	// block height.
-	resetCount := gov.DKGResetCount(initRound + 1)
-	remains := resetCount
-	for ; remains > 0 && !e.config.Contains(initBlockHeight); remains-- {
-		e.config.ExtendLength()
-	}
-	if !e.config.Contains(initBlockHeight) {
-		return nil, ErrUnmatchedBlockHeightWithConfig{
-			round:       initRound,
-			reset:       resetCount,
-			blockHeight: initBlockHeight,
+	if initPos.Height >= types.GenesisHeight {
+		resetCount := gov.DKGResetCount(initPos.Round + 1)
+		remains := resetCount
+		for ; remains > 0 && !e.config.Contains(initPos.Height); remains-- {
+			e.config.ExtendLength()
 		}
+		if !e.config.Contains(initPos.Height) {
+			return nil, ErrUnmatchedBlockHeightWithConfig{
+				round:       initPos.Round,
+				reset:       resetCount,
+				blockHeight: initPos.Height,
+			}
+		}
+		e.lastTriggeredResetCount = resetCount - remains
 	}
-	e.lastTriggeredResetCount = resetCount - remains
 	return e, nil
 }
 
