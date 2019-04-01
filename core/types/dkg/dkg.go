@@ -320,7 +320,8 @@ func (gpk *GroupPublicKey) VerifySignature(
 	return gpk.GroupPublicKey.VerifySignature(hash, sig)
 }
 
-func calcQualifyNodes(
+// CalcQualifyNodes returns the qualified nodes.
+func CalcQualifyNodes(
 	mpks []*MasterPublicKey, complaints []*Complaint, threshold int) (
 	qualifyIDs cryptoDKG.IDs, qualifyNodeIDs map[types.NodeID]struct{}, err error) {
 	if len(mpks) < threshold {
@@ -371,7 +372,7 @@ func NewGroupPublicKey(
 	threshold int) (
 	*GroupPublicKey, error) {
 	qualifyIDs, qualifyNodeIDs, err :=
-		calcQualifyNodes(mpks, complaints, threshold)
+		CalcQualifyNodes(mpks, complaints, threshold)
 	if err != nil {
 		return nil, err
 	}
@@ -417,7 +418,7 @@ func NewNodePublicKeys(
 	threshold int) (
 	*NodePublicKeys, error) {
 	qualifyIDs, qualifyNodeIDs, err :=
-		calcQualifyNodes(mpks, complaints, threshold)
+		CalcQualifyNodes(mpks, complaints, threshold)
 	if err != nil {
 		return nil, err
 	}
