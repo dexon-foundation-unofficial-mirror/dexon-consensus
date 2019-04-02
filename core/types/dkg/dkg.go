@@ -345,7 +345,7 @@ func CalcQualifyNodes(
 		}
 	}
 	for nID, complaints := range complaintsByID {
-		if len(complaints) > threshold {
+		if len(complaints) >= threshold {
 			disqualifyIDs[nID] = struct{}{}
 		}
 	}

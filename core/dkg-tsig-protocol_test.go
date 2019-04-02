@@ -714,7 +714,7 @@ func (s *DKGTSIGProtocolTestSuite) TestQualifyIDs() {
 	}
 
 	gpk2, err := typesDKG.NewGroupPublicKey(round,
-		gov.DKGMasterPublicKeys(round), complaints[:k],
+		gov.DKGMasterPublicKeys(round), complaints[:k-1],
 		k,
 	)
 	s.Require().NoError(err)
