@@ -36,10 +36,9 @@ var (
 )
 
 type sets struct {
-	crs        common.Hash
-	nodeSet    *types.NodeSet
-	notarySet  map[types.NodeID]struct{}
-	leaderNode map[uint64]types.NodeID
+	crs       common.Hash
+	nodeSet   *types.NodeSet
+	notarySet map[types.NodeID]struct{}
 }
 
 // NodeSetCacheInterface interface specifies interface used by NodeSetCache.
@@ -133,30 +132,6 @@ func (cache *NodeSetCache) GetNotarySet(
 	return cache.cloneMap(IDs.notarySet), nil
 }
 
-// GetLeaderNode returns the BA leader of the position.
-func (cache *NodeSetCache) GetLeaderNode(pos types.Position) (
-	types.NodeID, error) {
-	IDs, err := cache.getOrUpdate(pos.Round)
-	if err != nil {
-		return types.NodeID{}, err
-	}
-	cache.lock.Lock()
-	defer cache.lock.Unlock()
-	if _, exist := IDs.leaderNode[pos.Height]; !exist {
-		notarySet := types.NewNodeSetFromMap(IDs.notarySet)
-		leader := notarySet.GetSubSet(1, types.NewNodeLeaderTarget(
-			IDs.crs, pos.Height))
-		if len(leader) != 1 {
-			panic(errors.New("length of leader is not one"))
-		}
-		for nID := range leader {
-			IDs.leaderNode[pos.Height] = nID
-			break
-		}
-	}
-	return IDs.leaderNode[pos.Height], nil
-}
-
 // Purge a specific round.
 func (cache *NodeSetCache) Purge(rID uint64) {
 	cache.lock.Lock()
@@ -238,10 +213,9 @@ func (cache *NodeSetCache) update(round uint64) (nIDs *sets, err error) {
 		return
 	}
 	nIDs = &sets{
-		crs:        crs,
-		nodeSet:    nodeSet,
-		notarySet:  make(map[types.NodeID]struct{}),
-		leaderNode: make(map[uint64]types.NodeID, cfg.RoundLength),
+		crs:       crs,
+		nodeSet:   nodeSet,
+		notarySet: make(map[types.NodeID]struct{}),
 	}
 	nIDs.notarySet = nodeSet.GetSubSet(
 		int(cfg.NotarySetSize), types.NewNotarySetTarget(crs))

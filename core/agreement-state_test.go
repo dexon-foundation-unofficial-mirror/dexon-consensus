@@ -125,7 +125,11 @@ func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 		s.signers[s.ID],
 		logger,
 	)
-	agreement.restart(notarySet, types.Position{Height: types.GenesisHeight},
+	agreement.restart(notarySet,
+		utils.GetBAThreshold(&types.Config{
+			NotarySetSize: uint32(len(notarySet)),
+		}),
+		types.Position{Height: types.GenesisHeight},
 		types.NodeID{}, common.NewRandomHash())
 	return agreement
 }

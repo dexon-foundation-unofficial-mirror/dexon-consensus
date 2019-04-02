@@ -90,14 +90,6 @@ func (s *NodeSetCacheTestSuite) TestBasicUsage() {
 	notarySet, err := cache.GetNotarySet(0)
 	req.NoError(err)
 	chk(cache, 0, notarySet)
-	leaderNode, err := cache.GetLeaderNode(types.Position{
-		Round:  uint64(0),
-		Height: uint64(10),
-	})
-	req.NoError(err)
-	chk(cache, 0, map[types.NodeID]struct{}{
-		leaderNode: struct{}{},
-	})
 	// Try to get round 1.
 	nodeSet1, err := cache.GetNodeSet(1)
 	req.NoError(err)

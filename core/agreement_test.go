@@ -157,7 +157,9 @@ func (s *AgreementTestSuite) newAgreement(
 		s.signers[s.ID],
 		logger,
 	)
-	agreement.restart(notarySet, s.agreementID, leaderNode,
+	agreement.restart(notarySet, utils.GetBAThreshold(&types.Config{
+		NotarySetSize: uint32(len(notarySet)),
+	}), s.agreementID, leaderNode,
 		common.NewRandomHash())
 	s.agreement = append(s.agreement, agreement)
 	return agreement, leaderNode
