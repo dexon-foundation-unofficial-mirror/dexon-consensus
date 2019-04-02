@@ -83,7 +83,7 @@ type Block struct {
 	Payload     []byte           `json:"payload"`
 	PayloadHash common.Hash      `json:"payload_hash"`
 	Witness     Witness          `json:"witness"`
-	Randomness  []byte           `json:"finalization"`
+	Randomness  []byte           `json:"randomness"`
 	Signature   crypto.Signature `json:"signature"`
 
 	CRSSignature crypto.Signature `json:"crs_signature"`
