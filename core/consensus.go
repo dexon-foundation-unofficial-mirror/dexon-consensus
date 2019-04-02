@@ -286,17 +286,13 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 				IsEmptyBlock: isEmptyBlockConfirmed,
 				Randomness:   block.Randomness,
 			}
+			recv.consensus.baMgr.touchAgreementResult(result)
 			recv.consensus.logger.Debug("Broadcast AgreementResult",
 				"result", result)
 			recv.consensus.network.BroadcastAgreementResult(result)
 			if block.IsEmpty() {
-				if err :=
-					recv.consensus.bcModule.processAgreementResult(
-						result); err != nil {
-					recv.consensus.logger.Warn(
-						"Failed to process agreement result",
-						"result", result)
-				}
+				recv.consensus.bcModule.addBlockRandomness(
+					block.Position, block.Randomness)
 			}
 			if block.Position.Round >= DKGDelayRound {
 				recv.consensus.logger.Debug(
@@ -729,12 +725,13 @@ func (con *Consensus) prepare(initBlock *types.Block) (err error) {
 	// modules see the up-to-date node set, we need to make sure this action
 	// should be taken as the first one.
 	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
-		defer elapse("purge-node-set", evts[len(evts)-1])()
+		defer elapse("purge-cache", evts[len(evts)-1])()
 		for _, e := range evts {
 			if e.Reset == 0 {
 				continue
 			}
 			con.nodeSetCache.Purge(e.Round + 1)
+			con.tsigVerifierCache.Purge(e.Round + 1)
 		}
 	})
 	// Register round event handler to abort previous running DKG if any.
@@ -850,12 +847,63 @@ func (con *Consensus) prepare(initBlock *types.Block) (err error) {
 		e := evts[len(evts)-1]
 		defer elapse("touch-NodeSetCache", e)()
 		con.event.RegisterHeight(e.NextTouchNodeSetCacheHeight(), func(uint64) {
-			if err := con.nodeSetCache.Touch(e.Round + 1); err != nil {
-				con.logger.Warn("Failed to update nodeSetCache",
-					"round", e.Round+1,
+			if e.Reset == 0 {
+				return
+			}
+			go func() {
+				nextRound := e.Round + 1
+				if err := con.nodeSetCache.Touch(nextRound); err != nil {
+					con.logger.Warn("Failed to update nodeSetCache",
+						"round", nextRound,
+						"error", err)
+				}
+			}()
+		})
+	})
+	con.roundEvent.Register(func(evts []utils.RoundEventParam) {
+		e := evts[len(evts)-1]
+		if e.Reset != 0 {
+			return
+		}
+		defer elapse("touch-DKGCache", e)()
+		go func() {
+			if _, err :=
+				con.tsigVerifierCache.Update(e.Round); err != nil {
+				con.logger.Warn("Failed to update tsig cache",
+					"round", e.Round,
 					"error", err)
 			}
-		})
+		}()
+		go func() {
+			threshold := utils.GetDKGThreshold(
+				utils.GetConfigWithPanic(con.gov, e.Round, con.logger))
+			// Restore group public key.
+			con.logger.Debug(
+				"Calling Governance.DKGMasterPublicKeys for recoverDKGInfo",
+				"round", e.Round)
+			con.logger.Debug(
+				"Calling Governance.DKGComplaints for recoverDKGInfo",
+				"round", e.Round)
+			_, qualifies, err := typesDKG.CalcQualifyNodes(
+				con.gov.DKGMasterPublicKeys(e.Round),
+				con.gov.DKGComplaints(e.Round),
+				threshold)
+			if err != nil {
+				con.logger.Warn("Failed to calculate dkg set",
+					"round", e.Round,
+					"error", err)
+				return
+			}
+			if _, exist := qualifies[con.ID]; !exist {
+				return
+			}
+			if _, _, err :=
+				con.cfgModule.getDKGInfo(e.Round, true); err != nil {
+				con.logger.Warn("Failed to recover DKG info",
+					"round", e.Round,
+					"error", err)
+			}
+		}()
 	})
 	// checkCRS is a generator of checker to check if CRS for that round is
 	// ready or not.
@@ -1045,12 +1093,7 @@ func (con *Consensus) generateBlockRandomness(blocks []*types.Block) {
 					Position:   block.Position,
 					Randomness: sig.Signature[:],
 				}
-				if err := con.bcModule.processAgreementResult(result); err != nil {
-					con.logger.Error("Failed to process BlockRandomness",
-						"result", result,
-						"error", err)
-					return
-				}
+				con.bcModule.addBlockRandomness(block.Position, sig.Signature[:])
 				con.logger.Debug("Broadcast BlockRandomness",
 					"block", block,
 					"result", result)
@@ -1275,8 +1318,7 @@ MessageLoop:
 
 // ProcessVote is the entry point to submit ont vote to a Consensus instance.
 func (con *Consensus) ProcessVote(vote *types.Vote) (err error) {
-	v := vote.Clone()
-	err = con.baMgr.processVote(v)
+	err = con.baMgr.processVote(vote)
 	return
 }
 
@@ -1293,6 +1335,9 @@ func (con *Consensus) ProcessAgreementResult(
 	}
 	if err := con.bcModule.processAgreementResult(rand); err != nil {
 		con.baMgr.untouchAgreementResult(rand)
+		if err == ErrSkipButNoError {
+			return nil
+		}
 		return err
 	}
 	// Syncing BA Module.

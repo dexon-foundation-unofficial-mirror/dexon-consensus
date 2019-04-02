@@ -19,6 +19,7 @@ package core
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -175,13 +176,16 @@ func (s *BlockChainTestSuite) newRoundOneInitBlock() *types.Block {
 }
 
 func (s *BlockChainTestSuite) baseConcurrentAceessTest(initBlock *types.Block,
-	blocks []*types.Block, rands []*types.AgreementResult) {
+	blocks []*types.Block, results []*types.AgreementResult) {
 	var (
 		bc        = s.newBlockChain(initBlock, uint64(len(blocks)+1))
 		start     = make(chan struct{})
 		newNotif  = make(chan struct{}, 1)
 		delivered []*types.Block
 	)
+	resultsCopy := make([]*types.AgreementResult, len(results))
+	copy(resultsCopy, results)
+	type randomnessResult types.AgreementResult
 	add := func(v interface{}) {
 		<-start
 		switch val := v.(type) {
@@ -192,9 +196,13 @@ func (s *BlockChainTestSuite) baseConcurrentAceessTest(initBlock *types.Block,
 			}
 		case *types.AgreementResult:
 			if err := bc.processAgreementResult(val); err != nil {
-				// Never assertion in sub routine when testing.
-				panic(err)
+				if err != ErrSkipButNoError {
+					// Never assertion in sub routine when testing.
+					panic(err)
+				}
 			}
+		case *randomnessResult:
+			bc.addBlockRandomness(val.Position, val.Randomness)
 		default:
 			panic(fmt.Errorf("unknown type: %v", v))
 		}
@@ -203,12 +211,26 @@ func (s *BlockChainTestSuite) baseConcurrentAceessTest(initBlock *types.Block,
 		default:
 		}
 	}
+	rand.Shuffle(len(resultsCopy), func(i, j int) {
+		resultsCopy[i], resultsCopy[j] = resultsCopy[j], resultsCopy[i]
+	})
 	for _, b := range blocks {
 		go add(b)
 	}
-	for _, r := range rands {
-		go add(r)
+	for i, r := range resultsCopy {
+		if i >= len(resultsCopy)/2 {
+			break
+		}
+		go add((*randomnessResult)(r))
 	}
+	go func() {
+		for i, a := range resultsCopy {
+			if i < len(resultsCopy)/2 {
+				continue
+			}
+			add(a)
+		}
+	}()
 	close(start)
 	for {
 		select {
@@ -257,10 +279,7 @@ func (s *BlockChainTestSuite) TestBasicUsage() {
 	s.Require().NoError(bc.addBlock(b0))
 	extracted := bc.extractBlocks()
 	s.Require().Len(extracted, 4)
-	bc.pendingRandomnesses[b4.Position] = &types.AgreementResult{
-		BlockHash:  b4.Hash,
-		Randomness: common.GenerateRandomBytes(),
-	}
+	bc.pendingRandomnesses[b4.Position] = common.GenerateRandomBytes()
 	extracted = bc.extractBlocks()
 	s.Require().Len(extracted, 2)
 	s.Require().Equal(extracted[0].Hash, b4.Hash)

@@ -137,11 +137,14 @@ type blockChain struct {
 	vGetter             tsigVerifierGetter
 	app                 Application
 	logger              common.Logger
-	pendingRandomnesses map[types.Position]*types.AgreementResult
+	pendingRandomnesses map[types.Position][]byte
 	configs             []blockChainConfig
 	pendingBlocks       pendingBlockRecords
 	confirmedBlocks     types.BlocksByPosition
 	dMoment             time.Time
+
+	// Do not access this variable besides processAgreementResult.
+	lastPosition types.Position
 }
 
 func newBlockChain(nID types.NodeID, dMoment time.Time, initBlock *types.Block,
@@ -157,7 +160,7 @@ func newBlockChain(nID types.NodeID, dMoment time.Time, initBlock *types.Block,
 		logger:        logger,
 		dMoment:       dMoment,
 		pendingRandomnesses: make(
-			map[types.Position]*types.AgreementResult),
+			map[types.Position][]byte),
 	}
 }
 
@@ -629,10 +632,7 @@ func (bc *blockChain) confirmBlock(b *types.Block) {
 
 func (bc *blockChain) setRandomnessFromPending(b *types.Block) bool {
 	if r, exist := bc.pendingRandomnesses[b.Position]; exist {
-		if !r.BlockHash.Equal(b.Hash) {
-			panic(fmt.Errorf("mismathed randomness: %s %s", b, r))
-		}
-		b.Randomness = r.Randomness
+		b.Randomness = r
 		delete(bc.pendingRandomnesses, b.Position)
 		return true
 	}
@@ -642,6 +642,9 @@ func (bc *blockChain) setRandomnessFromPending(b *types.Block) bool {
 func (bc *blockChain) processAgreementResult(result *types.AgreementResult) error {
 	if result.Position.Round < DKGDelayRound {
 		return nil
+	}
+	if !result.Position.Newer(bc.lastPosition) {
+		return ErrSkipButNoError
 	}
 	ok, err := bc.verifyRandomness(
 		result.BlockHash, result.Position.Round, result.Randomness)
@@ -656,6 +659,19 @@ func (bc *blockChain) processAgreementResult(result *types.AgreementResult) erro
 	if !result.Position.Newer(bc.lastDelivered.Position) {
 		return nil
 	}
-	bc.pendingRandomnesses[result.Position] = result
+	bc.pendingRandomnesses[result.Position] = result.Randomness
+	bc.lastPosition = bc.lastDelivered.Position
 	return nil
+}
+
+func (bc *blockChain) addBlockRandomness(pos types.Position, rand []byte) {
+	if pos.Round < DKGDelayRound {
+		return
+	}
+	bc.lock.Lock()
+	defer bc.lock.Unlock()
+	if !pos.Newer(bc.lastDelivered.Position) {
+		return
+	}
+	bc.pendingRandomnesses[pos] = rand
 }

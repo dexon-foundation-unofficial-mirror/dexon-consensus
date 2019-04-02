@@ -586,8 +586,19 @@ func (cc *configurationChain) recoverDKGInfo(
 		// Restore group public key.
 		cc.logger.Debug("Calling Governance.DKGMasterPublicKeys for recoverDKGInfo",
 			"round", round)
+		mpk := cc.gov.DKGMasterPublicKeys(round)
 		cc.logger.Debug("Calling Governance.DKGComplaints for recoverDKGInfo",
 			"round", round)
+		comps := cc.gov.DKGComplaints(round)
+		qualifies, _, err := typesDKG.CalcQualifyNodes(mpk, comps, threshold)
+		if err != nil {
+			return err
+		}
+		if len(qualifies) <
+			utils.GetDKGValidThreshold(utils.GetConfigWithPanic(
+				cc.gov, round, cc.logger)) {
+			return typesDKG.ErrNotReachThreshold
+		}
 		npks, err := typesDKG.NewNodePublicKeys(round,
 			cc.gov.DKGMasterPublicKeys(round),
 			cc.gov.DKGComplaints(round),

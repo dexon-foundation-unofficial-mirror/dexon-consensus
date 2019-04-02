@@ -79,7 +79,7 @@ func (e RoundEventParam) NextRoundHeight() uint64 {
 
 // NextTouchNodeSetCacheHeight returns the height to touch the node set cache.
 func (e RoundEventParam) NextTouchNodeSetCacheHeight() uint64 {
-	return e.BeginHeight + e.Config.RoundLength*9/10
+	return e.BeginHeight + e.Config.RoundLength/2
 }
 
 // NextDKGResetHeight returns the height to reset DKG for next period.
