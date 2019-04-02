@@ -399,6 +399,9 @@ func (a *agreement) prepareVote(vote *types.Vote) (err error) {
 }
 
 func (a *agreement) updateFilter(filter *utils.VoteFilter) {
+	if isStop(a.agreementID()) {
+		return
+	}
 	a.lock.RLock()
 	defer a.lock.RUnlock()
 	a.data.lock.RLock()
@@ -417,6 +420,7 @@ func (a *agreement) processVote(vote *types.Vote) error {
 		return err
 	}
 	aID := a.agreementID()
+
 	// Agreement module has stopped.
 	if isStop(aID) {
 		// Hacky way to not drop first votes for genesis height.

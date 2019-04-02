@@ -22,7 +22,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
@@ -60,23 +59,13 @@ var (
 
 // consensusBAReceiver implements agreementReceiver.
 type consensusBAReceiver struct {
-	consensus               *Consensus
-	agreementModule         *agreement
-	changeNotaryHeightValue *atomic.Value
-	roundValue              *atomic.Value
-	emptyBlockHashMap       *sync.Map
-	isNotary                bool
-	restartNotary           chan types.Position
-	npks                    *typesDKG.NodePublicKeys
-	psigSigner              *dkgShareSecret
-}
-
-func (recv *consensusBAReceiver) round() uint64 {
-	return recv.roundValue.Load().(uint64)
-}
-
-func (recv *consensusBAReceiver) changeNotaryHeight() uint64 {
-	return recv.changeNotaryHeightValue.Load().(uint64)
+	consensus         *Consensus
+	agreementModule   *agreement
+	emptyBlockHashMap *sync.Map
+	isNotary          bool
+	restartNotary     chan types.Position
+	npks              *typesDKG.NodePublicKeys
+	psigSigner        *dkgShareSecret
 }
 
 func (recv *consensusBAReceiver) emptyBlockHash(pos types.Position) (
@@ -99,17 +88,13 @@ func (recv *consensusBAReceiver) emptyBlockHash(pos types.Position) (
 }
 
 func (recv *consensusBAReceiver) VerifyPartialSignature(vote *types.Vote) bool {
-	if recv.round() >= DKGDelayRound && vote.BlockHash != types.SkipBlockHash {
+	if vote.Position.Round >= DKGDelayRound && vote.BlockHash != types.SkipBlockHash {
 		if vote.Type == types.VoteCom || vote.Type == types.VoteFastCom {
-			if recv.npks == nil || recv.npks.Round != vote.Position.Round {
-				var err error
-				recv.npks, _, err =
-					recv.consensus.cfgModule.getDKGInfo(vote.Position.Round, true)
-				if err != nil || recv.npks == nil {
-					recv.consensus.logger.Warn("cannot get npks",
-						"round", vote.Position.Round, "error", err)
-					return false
-				}
+			if recv.npks == nil {
+				return false
+			}
+			if vote.Position.Round != recv.npks.Round {
+				return false
 			}
 			pubKey, exist := recv.npks.PublicKeys[vote.ProposerID]
 			if !exist {
@@ -138,11 +123,9 @@ func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {
 	if !recv.isNotary {
 		return
 	}
-	if recv.round() >= DKGDelayRound && vote.BlockHash != types.SkipBlockHash {
+	if recv.psigSigner != nil &&
+		vote.BlockHash != types.SkipBlockHash {
 		if vote.Type == types.VoteCom || vote.Type == types.VoteFastCom {
-			if recv.psigSigner == nil {
-				return
-			}
 			if vote.BlockHash == types.NullBlockHash {
 				hash, err := recv.emptyBlockHash(vote.Position)
 				if err != nil {
@@ -272,7 +255,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 			if vote.BlockHash != hash {
 				continue
 			}
-			if recv.round() >= DKGDelayRound {
+			if block.Position.Round >= DKGDelayRound {
 				ID, exist := recv.npks.IDMap[vote.ProposerID]
 				if !exist {
 					continue
@@ -282,7 +265,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 			}
 			voteList = append(voteList, *vote)
 		}
-		if recv.round() >= DKGDelayRound {
+		if block.Position.Round >= DKGDelayRound {
 			rand, err := cryptoDKG.RecoverSignature(psigs, IDs)
 			if err != nil {
 				recv.consensus.logger.Warn("Unable to recover randomness",
@@ -385,23 +368,7 @@ CleanChannelLoop:
 			break CleanChannelLoop
 		}
 	}
-	newPos := block.Position
-	changeNotaryHeight := recv.changeNotaryHeight()
-	if block.Position.Height+1 >= changeNotaryHeight {
-		recv.consensus.logger.Info("Round will change",
-			"block", block,
-			"change-height", changeNotaryHeight)
-		newPos.Round++
-		recv.updateRound(newPos.Round)
-	}
-	currentRound := recv.round()
-	if block.Position.Height > changeNotaryHeight &&
-		block.Position.Round < currentRound {
-		panic(fmt.Errorf(
-			"round not switch when confirming: %s, %d, should switch at %d, %s",
-			block, currentRound, changeNotaryHeight, newPos))
-	}
-	recv.restartNotary <- newPos
+	recv.restartNotary <- block.Position
 }
 
 func (recv *consensusBAReceiver) PullBlocks(hashes common.Hashes) {
@@ -418,18 +385,6 @@ func (recv *consensusBAReceiver) ReportForkVote(v1, v2 *types.Vote) {
 
 func (recv *consensusBAReceiver) ReportForkBlock(b1, b2 *types.Block) {
 	recv.consensus.gov.ReportForkBlock(b1, b2)
-}
-
-func (recv *consensusBAReceiver) updateRound(round uint64) {
-	recv.roundValue.Store(round)
-	var err error
-	_, recv.psigSigner, err =
-		recv.consensus.cfgModule.getDKGInfo(round, false)
-	if err != nil {
-		recv.consensus.logger.Warn("cannot get dkg info",
-			"round", round, "error", err)
-		recv.psigSigner = nil
-	}
 }
 
 // consensusDKGReceiver implements dkgReceiver.

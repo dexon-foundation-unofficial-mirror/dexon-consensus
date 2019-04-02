@@ -22,7 +22,6 @@ import (
 	"errors"
 	"math"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
@@ -89,6 +88,7 @@ func newAgreementMgrConfig(prev agreementMgrConfig, config *types.Config,
 }
 
 type baRoundSetting struct {
+	round     uint64
 	notarySet map[types.NodeID]struct{}
 	ticker    Ticker
 	crs       common.Hash
@@ -132,13 +132,9 @@ func newAgreementMgr(con *Consensus) (mgr *agreementMgr, err error) {
 		voteFilter:        utils.NewVoteFilter(),
 	}
 	mgr.recv = &consensusBAReceiver{
-		consensus:               con,
-		restartNotary:           make(chan types.Position, 1),
-		roundValue:              &atomic.Value{},
-		changeNotaryHeightValue: &atomic.Value{},
+		consensus:     con,
+		restartNotary: make(chan types.Position, 1),
 	}
-	mgr.recv.updateRound(uint64(0))
-	mgr.recv.changeNotaryHeightValue.Store(uint64(0))
 	return mgr, nil
 }
 
@@ -201,13 +197,6 @@ func (mgr *agreementMgr) notifyRoundEvents(evts []utils.RoundEventParam) error {
 			}
 			if lastCfg.RoundID() == e.Round {
 				mgr.configs[len(mgr.configs)-1].ExtendLength()
-				// It's not an atomic operation to update an atomic value based
-				// on another. However, it's the best way so far to extend
-				// length of round without refactoring.
-				if mgr.recv.round() == e.Round {
-					mgr.recv.changeNotaryHeightValue.Store(
-						mgr.configs[len(mgr.configs)-1].RoundEndHeight())
-				}
 			} else if lastCfg.RoundID()+1 == e.Round {
 				mgr.configs = append(mgr.configs, newAgreementMgrConfig(
 					lastCfg, e.Config, e.CRS))
@@ -366,6 +355,7 @@ func (mgr *agreementMgr) runBA(initRound uint64) {
 		}
 		setting.crs = curConfig.crs
 		setting.notarySet = notarySet
+		setting.round = nextRound
 		_, isNotary = setting.notarySet[mgr.ID]
 		if isNotary {
 			mgr.logger.Info("Selected as notary set",
@@ -395,14 +385,24 @@ Loop:
 		}
 		mgr.recv.isNotary = checkRound()
 		// Run BA for this round.
-		mgr.recv.updateRound(currentRound)
-		mgr.recv.changeNotaryHeightValue.Store(curConfig.RoundEndHeight())
 		mgr.recv.restartNotary <- types.Position{
-			Round:  mgr.recv.round(),
+			Round:  currentRound,
 			Height: math.MaxUint64,
 		}
 		mgr.voteFilter = utils.NewVoteFilter()
 		mgr.recv.emptyBlockHashMap = &sync.Map{}
+		if currentRound >= DKGDelayRound && mgr.recv.isNotary {
+			var err error
+			mgr.recv.npks, mgr.recv.psigSigner, err =
+				mgr.con.cfgModule.getDKGInfo(currentRound, false)
+			if err != nil {
+				mgr.logger.Warn("cannot get dkg info",
+					"round", currentRound, "error", err)
+			}
+		} else {
+			mgr.recv.npks = nil
+			mgr.recv.psigSigner = nil
+		}
 		if err := mgr.baRoutineForOneRound(&setting); err != nil {
 			mgr.logger.Error("BA routine failed",
 				"error", err,
@@ -419,7 +419,7 @@ func (mgr *agreementMgr) baRoutineForOneRound(
 	oldPos := agr.agreementID()
 	restart := func(restartPos types.Position) (breakLoop bool, err error) {
 		if !isStop(restartPos) {
-			if restartPos.Round > oldPos.Round {
+			if restartPos.Height+1 >= mgr.config(setting.round).RoundEndHeight() {
 				for {
 					select {
 					case <-mgr.ctx.Done():
@@ -427,14 +427,12 @@ func (mgr *agreementMgr) baRoutineForOneRound(
 					default:
 					}
 					tipRound := mgr.bcModule.tipRound()
-					if tipRound > restartPos.Round {
-						// It's a vary rare that this go routine sleeps for entire round.
+					if tipRound > setting.round {
 						break
-					} else if tipRound != restartPos.Round {
-						mgr.logger.Debug("Waiting blockChain to change round...",
-							"pos", restartPos)
 					} else {
-						break
+						mgr.logger.Debug("Waiting blockChain to change round...",
+							"curRound", setting.round,
+							"tipRound", tipRound)
 					}
 					time.Sleep(100 * time.Millisecond)
 				}
@@ -459,9 +457,6 @@ func (mgr *agreementMgr) baRoutineForOneRound(
 			default:
 			}
 			nextHeight, nextTime = mgr.bcModule.nextBlock()
-			if isStop(oldPos) && nextHeight == 0 {
-				break
-			}
 			if isStop(restartPos) {
 				break
 			}
@@ -473,7 +468,7 @@ func (mgr *agreementMgr) baRoutineForOneRound(
 			time.Sleep(100 * time.Millisecond)
 		}
 		nextPos := types.Position{
-			Round:  recv.round(),
+			Round:  setting.round,
 			Height: nextHeight,
 		}
 		oldPos = nextPos
