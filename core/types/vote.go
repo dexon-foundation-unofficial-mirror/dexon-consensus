@@ -39,6 +39,23 @@ const (
 	MaxVoteType
 )
 
+func (t VoteType) String() string {
+	switch t {
+	case VoteInit:
+		return "Init"
+	case VotePreCom:
+		return "PreCom"
+	case VoteCom:
+		return "Com"
+	case VoteFast:
+		return "Fast"
+	case VoteFastCom:
+		return "FastCom"
+	default:
+		return fmt.Sprintf("Unknown-%d", t)
+	}
+}
+
 // NullBlockHash is the blockHash for ⊥ value.
 var NullBlockHash common.Hash
 
@@ -68,7 +85,7 @@ type Vote struct {
 }
 
 func (v *Vote) String() string {
-	return fmt.Sprintf("Vote{VP:%s %s Period:%d Type:%d Hash:%s}",
+	return fmt.Sprintf("Vote{VP:%s %s Period:%d Type:%s Hash:%s}",
 		v.ProposerID.String()[:6],
 		v.Position, v.Period, v.Type, v.BlockHash.String()[:6])
 }
