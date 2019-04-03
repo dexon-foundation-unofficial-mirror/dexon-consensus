@@ -159,6 +159,22 @@ func (mgr *agreementMgr) prepare() {
 	// Hacky way to make agreement module self contained.
 	mgr.recv.agreementModule = agr
 	mgr.baModule = agr
+	if round >= DKGDelayRound {
+		setting := mgr.generateSetting(round)
+		if setting == nil {
+			mgr.logger.Warn("Unable to prepare init setting", "round", round)
+		} else if _, exist := setting.dkgSet[mgr.ID]; exist {
+			mgr.logger.Debug("Preparing signer and npks.", "round", round)
+			npk, signer, err := mgr.con.cfgModule.getDKGInfo(round, false)
+			if err != nil {
+				mgr.logger.Error("Failed to prepare signer and npks.",
+					"round", round,
+					"error", err)
+			}
+			mgr.logger.Debug("Prepared signer and npks.",
+				"round", round, "signer", signer != nil, "npks", npk != nil)
+		}
+	}
 	return
 }
 
@@ -362,7 +378,7 @@ func (mgr *agreementMgr) generateSetting(round uint64) *baRoundSetting {
 		var err error
 		dkgSet, err = mgr.cache.GetNotarySet(round)
 		if err != nil {
-			mgr.logger.Error("Failed to get notarySet", "round", round)
+			mgr.logger.Error("Failed to get notarySet", "round", round, "error", err)
 			return nil
 		}
 	}
@@ -431,11 +447,6 @@ Loop:
 		default:
 		}
 		mgr.recv.isNotary = checkRound()
-		// Run BA for this round.
-		mgr.recv.restartNotary <- types.Position{
-			Round:  currentRound,
-			Height: math.MaxUint64,
-		}
 		mgr.voteFilter = utils.NewVoteFilter()
 		mgr.recv.emptyBlockHashMap = &sync.Map{}
 		if currentRound >= DKGDelayRound && mgr.recv.isNotary {
@@ -449,6 +460,11 @@ Loop:
 		} else {
 			mgr.recv.npks = nil
 			mgr.recv.psigSigner = nil
+		}
+		// Run BA for this round.
+		mgr.recv.restartNotary <- types.Position{
+			Round:  currentRound,
+			Height: math.MaxUint64,
 		}
 		if err := mgr.baRoutineForOneRound(setting); err != nil {
 			mgr.logger.Error("BA routine failed",
