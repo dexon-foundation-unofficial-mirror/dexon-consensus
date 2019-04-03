@@ -1035,13 +1035,12 @@ func benchmarkDKGGroupPubliKey(k, n int, b *testing.B) {
 		})
 	}
 
+	mpk := gov.DKGMasterPublicKeys(round)
+	comp := gov.DKGComplaints(round)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// DKG is fininished.
-		gpk, err := typesDKG.NewGroupPublicKey(round,
-			gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round),
-			k,
-		)
+		gpk, err := typesDKG.NewGroupPublicKey(round, mpk, comp, k)
 		if err != nil {
 			panic(err)
 		}
@@ -1080,17 +1079,60 @@ func benchmarkDKGNodePubliKeys(k, n int, b *testing.B) {
 		})
 	}
 
+	mpk := gov.DKGMasterPublicKeys(round)
+	comp := gov.DKGComplaints(round)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// DKG is fininished.
-		npks, err := typesDKG.NewNodePublicKeys(round,
-			gov.DKGMasterPublicKeys(round), gov.DKGComplaints(round),
-			k,
-		)
+		npks, err := typesDKG.NewNodePublicKeys(round, mpk, comp, k)
 		if err != nil {
 			panic(err)
 		}
 		if len(npks.QualifyIDs) != n {
+			panic("not enough of qualify id")
+		}
+	}
+}
+
+func BenchmarkCalcQ4_7(b *testing.B)    { benchmarkCalcQualified(4, 7, b) }
+func BenchmarkCalcQ9_13(b *testing.B)   { benchmarkCalcQualified(9, 13, b) }
+func BenchmarkCalcQ17_24(b *testing.B)  { benchmarkCalcQualified(17, 24, b) }
+func BenchmarkCalcQ81_121(b *testing.B) { benchmarkCalcQualified(81, 121, b) }
+
+func benchmarkCalcQualified(k, n int, b *testing.B) {
+	round := uint64(1)
+	reset := uint64(0)
+	_, pubKeys, err := test.NewKeys(n)
+	if err != nil {
+		panic(err)
+	}
+	gov, err := test.NewGovernance(test.NewState(DKGDelayRound,
+		pubKeys, 100, &common.NullLogger{}, true), ConfigRoundShift)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, pk := range pubKeys {
+		_, pubShare := dkg.NewPrivateKeyShares(k)
+		gov.AddDKGMasterPublicKey(&typesDKG.MasterPublicKey{
+			ProposerID:      types.NewNodeID(pk),
+			Round:           round,
+			Reset:           reset,
+			DKGID:           typesDKG.NewID(types.NewNodeID(pk)),
+			PublicKeyShares: *pubShare,
+		})
+	}
+
+	mpk := gov.DKGMasterPublicKeys(round)
+	comp := gov.DKGComplaints(round)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// DKG is fininished.
+		_, q, err := typesDKG.CalcQualifyNodes(mpk, comp, k)
+		if err != nil {
+			panic(err)
+		}
+		if len(q) != n {
 			panic("not enough of qualify id")
 		}
 	}
