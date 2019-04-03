@@ -86,6 +86,7 @@ type Consensus struct {
 
 // NewConsensus creates an instance for Consensus (syncer consensus).
 func NewConsensus(
+	initHeight uint64,
 	dMoment time.Time,
 	app core.Application,
 	gov core.Governance,
@@ -122,7 +123,37 @@ func NewConsensus(
 		defer con.agreementWaitGroup.Done()
 		con.agreementModule.run()
 	}()
+	if err := con.deliverPendingBlocks(initHeight); err != nil {
+		panic(err)
+	}
 	return con
+}
+
+func (con *Consensus) deliverPendingBlocks(height uint64) error {
+	if height >= con.initChainTipHeight {
+		return nil
+	}
+	blocks := make([]*types.Block, 0, con.initChainTipHeight-height)
+	hash, _ := con.db.GetCompactionChainTipInfo()
+	for {
+		block, err := con.db.GetBlock(hash)
+		if err != nil {
+			return err
+		}
+		if block.Position.Height == height {
+			break
+		}
+		blocks = append(blocks, &block)
+		hash = block.ParentHash
+	}
+	sort.Sort(types.BlocksByPosition(blocks))
+	for _, b := range blocks {
+		con.logger.Debug("Syncer BlockConfirmed", "block", b)
+		con.app.BlockConfirmed(*b)
+		con.logger.Debug("Syncer BlockDelivered", "block", b)
+		con.app.BlockDelivered(b.Hash, b.Position, b.Randomness)
+	}
+	return nil
 }
 
 func (con *Consensus) assureBuffering() {

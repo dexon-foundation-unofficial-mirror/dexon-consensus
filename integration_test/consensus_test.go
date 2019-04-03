@@ -469,6 +469,7 @@ ReachAlive:
 	}
 	logger := common.NewCustomLogger(log.New(f, "", log.LstdFlags|log.Lmicroseconds))
 	syncerObj := syncer.NewConsensus(
+		0,
 		dMoment,
 		syncNode.app,
 		syncNode.gov,
@@ -634,6 +635,7 @@ ReachStop:
 		nID := types.NewNodeID(prvKey.PublicKey())
 		node := nodes[nID]
 		syncerCon[nID] = syncer.NewConsensus(
+			latestHeight,
 			dMoment,
 			node.app,
 			node.gov,
