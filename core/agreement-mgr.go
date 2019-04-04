@@ -578,6 +578,14 @@ Loop:
 			}
 		default:
 		}
+		if !mgr.recv.isNotary {
+			select {
+			case <-setting.ticker.Tick():
+				continue Loop
+			case <-mgr.ctx.Done():
+				break Loop
+			}
+		}
 		if err = agr.nextState(); err != nil {
 			mgr.logger.Error("Failed to proceed to next state",
 				"nodeID", mgr.ID.String(),
