@@ -294,7 +294,7 @@ func (s *DKGTSIGProtocolTestSuite) TestErrMPKRegistered() {
 				Round:           round,
 				Reset:           reset,
 				DKGID:           typesDKG.NewID(ID),
-				PublicKeyShares: *mpk,
+				PublicKeyShares: *mpk.Move(),
 			})
 		}
 		gov.AddDKGMasterPublicKey(receiver.mpk)
@@ -995,7 +995,7 @@ func (s *DKGTSIGProtocolTestSuite) TestUnexpectedDKGResetCount() {
 		Round:           round,
 		Reset:           reset + 1,
 		DKGID:           typesDKG.NewID(sourceID),
-		PublicKeyShares: *mpk,
+		PublicKeyShares: *mpk.Move(),
 	})
 	err = protocols[sourceID].processMasterPublicKeys(
 		[]*typesDKG.MasterPublicKey{receivers[sourceID].mpk})
@@ -1031,7 +1031,7 @@ func benchmarkDKGGroupPubliKey(k, n int, b *testing.B) {
 			Round:           round,
 			Reset:           reset,
 			DKGID:           typesDKG.NewID(types.NewNodeID(pk)),
-			PublicKeyShares: *pubShare,
+			PublicKeyShares: *pubShare.Move(),
 		})
 	}
 
@@ -1075,7 +1075,7 @@ func benchmarkDKGNodePubliKeys(k, n int, b *testing.B) {
 			Round:           round,
 			Reset:           reset,
 			DKGID:           typesDKG.NewID(types.NewNodeID(pk)),
-			PublicKeyShares: *pubShare,
+			PublicKeyShares: *pubShare.Move(),
 		})
 	}
 
@@ -1119,7 +1119,7 @@ func benchmarkCalcQualified(k, n int, b *testing.B) {
 			Round:           round,
 			Reset:           reset,
 			DKGID:           typesDKG.NewID(types.NewNodeID(pk)),
-			PublicKeyShares: *pubShare,
+			PublicKeyShares: *pubShare.Move(),
 		})
 	}
 

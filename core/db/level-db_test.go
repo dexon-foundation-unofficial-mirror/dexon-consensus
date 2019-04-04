@@ -214,8 +214,8 @@ func (s *LevelDBTestSuite) TestDKGProtocolInfoRLPEncodeDecode() {
 			types.NodeID{Hash: common.Hash{0x02}}: dkg.ID{},
 		},
 		MpkMap: NodeIDToPubShares{
-			types.NodeID{Hash: common.Hash{0x01}}: &dkg.PublicKeyShares{},
-			types.NodeID{Hash: common.Hash{0x02}}: &dkg.PublicKeyShares{},
+			types.NodeID{Hash: common.Hash{0x01}}: dkg.NewEmptyPublicKeyShares(),
+			types.NodeID{Hash: common.Hash{0x02}}: dkg.NewEmptyPublicKeyShares(),
 		},
 		AntiComplaintReceived: NodeIDToNodeIDs{
 			types.NodeID{Hash: common.Hash{0x01}}: map[types.NodeID]struct{}{
@@ -278,8 +278,8 @@ func (s *LevelDBTestSuite) TestNodeIDRLPEncodeDecode() {
 
 func (s *LevelDBTestSuite) TestNodeIDToPubSharesRLPEncodeDecode() {
 	m := NodeIDToPubShares{
-		types.NodeID{Hash: common.Hash{0x01}}: &dkg.PublicKeyShares{},
-		types.NodeID{Hash: common.Hash{0x02}}: &dkg.PublicKeyShares{},
+		types.NodeID{Hash: common.Hash{0x01}}: dkg.NewEmptyPublicKeyShares(),
+		types.NodeID{Hash: common.Hash{0x02}}: dkg.NewEmptyPublicKeyShares(),
 	}
 
 	b, err := rlp.EncodeToBytes(&m)

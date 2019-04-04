@@ -130,7 +130,7 @@ func (d *MasterPublicKey) DecodeRLP(s *rlp.Stream) error {
 		Round:           dec.Round,
 		Reset:           dec.Reset,
 		DKGID:           id,
-		PublicKeyShares: *dec.PublicKeyShares,
+		PublicKeyShares: *dec.PublicKeyShares.Move(),
 		Signature:       dec.Signature,
 	}
 	return err

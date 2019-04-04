@@ -179,7 +179,7 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 		Round:           5,
 		Reset:           6,
 		DKGID:           id,
-		PublicKeyShares: *pkShare,
+		PublicKeyShares: *pkShare.Move(),
 	}
 	mpk.Signature, err = prv.Sign(hashDKGMasterPublicKey(mpk))
 	s.Require().NoError(err)

@@ -50,7 +50,7 @@ func (s *StateTestSuite) newDKGMasterPublicKey(
 		Round:           round,
 		Reset:           reset,
 		DKGID:           dID,
-		PublicKeyShares: *pubShare,
+		PublicKeyShares: *pubShare.Move(),
 	}
 }
 

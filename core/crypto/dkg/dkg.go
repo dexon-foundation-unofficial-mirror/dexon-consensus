@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sync"
+	"sync/atomic"
 
 	"github.com/dexon-foundation/bls/ffi/go/bls"
 	"github.com/dexon-foundation/dexon/rlp"
@@ -210,23 +212,30 @@ func (prvs *PrivateKeyShares) DecodeRLP(s *rlp.Stream) error {
 	return nil
 }
 
+type publicKeySharesCache struct {
+	share []PublicKey
+	index map[ID]int
+}
+
 // PublicKeyShares represents a public key shares for DKG protocol.
 type PublicKeyShares struct {
-	shareCaches     []PublicKey
-	shareCacheIndex map[ID]int
+	cache           atomic.Value
+	lock            sync.Mutex
 	masterPublicKey []bls.PublicKey
 }
 
 // Equal checks equality of two PublicKeyShares instance.
 func (pubs *PublicKeyShares) Equal(other *PublicKeyShares) bool {
+	cache := pubs.cache.Load().(*publicKeySharesCache)
+	cacheOther := other.cache.Load().(*publicKeySharesCache)
 	// Check shares.
-	for dID, idx := range pubs.shareCacheIndex {
-		otherIdx, exists := other.shareCacheIndex[dID]
+	for dID, idx := range cache.index {
+		otherIdx, exists := cacheOther.index[dID]
 		if !exists {
 			continue
 		}
-		if !pubs.shareCaches[idx].publicKey.IsEqual(
-			&other.shareCaches[otherIdx].publicKey) {
+		if !cache.share[idx].publicKey.IsEqual(
+			&cacheOther.share[otherIdx].publicKey) {
 			return false
 		}
 	}
@@ -267,7 +276,7 @@ func (pubs *PublicKeyShares) DecodeRLP(s *rlp.Stream) error {
 		ps.masterPublicKey = append(ps.masterPublicKey, key)
 	}
 
-	*pubs = *ps
+	*pubs = *ps.Move()
 	return nil
 }
 
@@ -349,13 +358,12 @@ func NewPrivateKeyShares(t int) (*PrivateKeyShares, *PublicKeyShares) {
 	prv.SetByCSPRNG()
 	msk := prv.GetMasterSecretKey(t)
 	mpk := bls.GetMasterPublicKey(msk)
+	pubShare := NewEmptyPublicKeyShares()
+	pubShare.masterPublicKey = mpk
 	return &PrivateKeyShares{
-			masterPrivateKey: msk,
-			shareIndex:       make(map[ID]int),
-		}, &PublicKeyShares{
-			shareCacheIndex: make(map[ID]int),
-			masterPublicKey: mpk,
-		}
+		masterPrivateKey: msk,
+		shareIndex:       make(map[ID]int),
+	}, pubShare
 }
 
 // NewEmptyPrivateKeyShares creates an empty private key shares.
@@ -442,16 +450,25 @@ func (prvs *PrivateKeyShares) Share(ID ID) (*PrivateKey, bool) {
 
 // NewEmptyPublicKeyShares creates an empty public key shares.
 func NewEmptyPublicKeyShares() *PublicKeyShares {
-	return &PublicKeyShares{
-		shareCacheIndex: make(map[ID]int),
+	cache := &publicKeySharesCache{
+		index: make(map[ID]int),
 	}
+	pubShares := &PublicKeyShares{}
+	pubShares.cache.Store(cache)
+	return pubShares
+}
+
+// Move will invalidate itself. Do not access to original reference.
+func (pubs *PublicKeyShares) Move() *PublicKeyShares {
+	return pubs
 }
 
 // Share returns the share for the ID.
 func (pubs *PublicKeyShares) Share(ID ID) (*PublicKey, error) {
-	idx, exist := pubs.shareCacheIndex[ID]
+	cache := pubs.cache.Load().(*publicKeySharesCache)
+	idx, exist := cache.index[ID]
 	if exist {
-		return &pubs.shareCaches[idx], nil
+		return &cache.share[idx], nil
 	}
 	var pk PublicKey
 	if err := pk.publicKey.Set(pubs.masterPublicKey, &ID); err != nil {
@@ -465,14 +482,19 @@ func (pubs *PublicKeyShares) Share(ID ID) (*PublicKey, error) {
 
 // AddShare adds a share.
 func (pubs *PublicKeyShares) AddShare(ID ID, share *PublicKey) error {
-	if idx, exist := pubs.shareCacheIndex[ID]; exist {
-		if !share.publicKey.IsEqual(&pubs.shareCaches[idx].publicKey) {
+	cache := pubs.cache.Load().(*publicKeySharesCache)
+	if idx, exist := cache.index[ID]; exist {
+		if !share.publicKey.IsEqual(&cache.share[idx].publicKey) {
 			return ErrDuplicatedShare
 		}
 		return nil
 	}
-	pubs.shareCacheIndex[ID] = len(pubs.shareCaches)
-	pubs.shareCaches = append(pubs.shareCaches, *share)
+	pubs.lock.Lock()
+	defer pubs.lock.Unlock()
+	cache = pubs.cache.Load().(*publicKeySharesCache)
+	cache.index[ID] = len(cache.share)
+	cache.share = append(cache.share, *share)
+	pubs.cache.Store(cache)
 	return nil
 }
 

@@ -52,7 +52,7 @@ func (s *PenaltyHelperTestSuite) TestDKGComplaint() {
 	mpk := &typesDKG.MasterPublicKey{
 		ProposerID:      nID1,
 		DKGID:           typesDKG.NewID(nID1),
-		PublicKeyShares: *pubShares,
+		PublicKeyShares: *pubShares.Move(),
 	}
 	mpk.Signature, err = prv1.Sign(hashDKGMasterPublicKey(mpk))
 	s.Require().NoError(err)

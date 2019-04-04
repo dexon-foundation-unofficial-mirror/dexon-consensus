@@ -230,7 +230,7 @@ func newDKGProtocol(
 		Round:           round,
 		Reset:           reset,
 		DKGID:           typesDKG.NewID(ID),
-		PublicKeyShares: *pubShare,
+		PublicKeyShares: *pubShare.Move(),
 	})
 
 	return &dkgProtocol{

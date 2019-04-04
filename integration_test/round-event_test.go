@@ -82,7 +82,7 @@ func (s *RoundEventTestSuite) proposeMPK(
 			Round:           round,
 			Reset:           reset,
 			DKGID:           typesDKG.NewID(types.NewNodeID(pubKey)),
-			PublicKeyShares: *pubShare,
+			PublicKeyShares: *pubShare.Move(),
 		}
 		s.Require().NoError(s.signers[idx].SignDKGMasterPublicKey(mpk))
 		gov.AddDKGMasterPublicKey(mpk)

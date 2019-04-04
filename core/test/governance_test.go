@@ -130,7 +130,7 @@ func (s *GovernanceTestSuite) TestProhibit() {
 		mpk := &typesDKG.MasterPublicKey{
 			Round:           round,
 			DKGID:           typesDKG.NewID(types.NewNodeID(k.PublicKey())),
-			PublicKeyShares: *pubShare,
+			PublicKeyShares: *pubShare.Move(),
 		}
 		s.Require().NoError(signer.SignDKGMasterPublicKey(mpk))
 		gov.AddDKGMasterPublicKey(mpk)

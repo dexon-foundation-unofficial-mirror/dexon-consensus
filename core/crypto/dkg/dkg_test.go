@@ -307,11 +307,10 @@ func (s *DKGTestSuite) TestPrivateKeyRLPEncodeDecode() {
 
 func (s *DKGTestSuite) TestPublicKeySharesRLPEncodeDecode() {
 	p := NewEmptyPublicKeyShares()
-	for i, id := range s.genID(1) {
+	for _, id := range s.genID(1) {
 		privkey := NewPrivateKey()
 		pubkey := privkey.PublicKey().(PublicKey)
-		p.shareCaches = append(p.shareCaches, pubkey)
-		p.shareCacheIndex[id] = i
+		p.AddShare(id, &pubkey)
 		p.masterPublicKey = append(p.masterPublicKey, pubkey.publicKey)
 	}
 
@@ -369,6 +368,30 @@ func (s *DKGTestSuite) TestPublicKeySharesEquality() {
 	// They should be equal now.
 	req.True(pubShares1.Equal(pubShares2))
 	req.True(pubShares2.Equal(pubShares1))
+}
+
+func (s *DKGTestSuite) TestPublicKeySharesMove() {
+	var req = s.Require()
+	IDs := s.genID(2)
+	_, pubShares1 := NewPrivateKeyShares(4)
+	// Make a copy from an empty share.
+	pubShares2 := pubShares1.Clone()
+	req.True(pubShares1.Equal(pubShares2))
+	// Move from pubShare1.
+	pubShares3 := pubShares1.Move()
+	// Add two shares.
+	prvKey1 := NewPrivateKey()
+	pubKey1 := prvKey1.PublicKey().(PublicKey)
+	req.NoError(pubShares3.AddShare(IDs[0], &pubKey1))
+	prvKey2 := NewPrivateKey()
+	pubKey2 := prvKey2.PublicKey().(PublicKey)
+	req.True(pubShares3.Equal(pubShares2))
+	// Clone the shares.
+	req.NoError(pubShares2.AddShare(IDs[0], &pubKey1))
+	req.NoError(pubShares2.AddShare(IDs[1], &pubKey2))
+	// They should be equal now.
+	req.True(pubShares3.Equal(pubShares2))
+	req.True(pubShares2.Equal(pubShares3))
 }
 
 func (s *DKGTestSuite) TestPrivateKeySharesEquality() {
@@ -577,4 +600,48 @@ func BenchmarkDKGProtocol(b *testing.B) {
 			RecoverGroupPublicKey(pubShares)
 		}
 	})
+}
+
+func BenchmarkGPKShare81_121(b *testing.B) { benchmarkGPKShare(b, 81, 121) }
+
+func benchmarkGPKShare(b *testing.B, t, n int) {
+	_, pubShare := NewPrivateKeyShares(t)
+	IDs := make(IDs, n)
+	for i := range IDs {
+		id := common.NewRandomHash()
+		IDs[i] = NewID(id[:])
+	}
+
+	for _, id := range IDs {
+		_, err := pubShare.Share(id)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, id := range IDs {
+			pubShare.Share(id)
+		}
+	}
+}
+
+func BenchmarkGPKAddShare81_121(b *testing.B) { benchmarkGPKAddShare(b, 81, 121) }
+
+func benchmarkGPKAddShare(b *testing.B, t, n int) {
+	IDs := make(IDs, n)
+	for i := range IDs {
+		id := common.NewRandomHash()
+		IDs[i] = NewID(id[:])
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		_, pubShare := NewPrivateKeyShares(t)
+		b.StartTimer()
+		for _, id := range IDs {
+			pubShare.Share(id)
+		}
+	}
 }

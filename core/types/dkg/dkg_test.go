@@ -63,7 +63,7 @@ func (s *DKGTestSuite) TestRLPEncodeDecode() {
 		Round:           10,
 		Reset:           11,
 		DKGID:           dID,
-		PublicKeyShares: *pubShare,
+		PublicKeyShares: *pubShare.Clone(),
 		Signature: crypto.Signature{
 			Type:      "123",
 			Signature: []byte{4, 5, 6},
@@ -189,7 +189,7 @@ func (s *DKGTestSuite) TestMasterPublicKeyEquality() {
 	pubKey := prvKey.PublicKey().(cryptoDKG.PublicKey)
 	_, pubShares := cryptoDKG.NewPrivateKeyShares(2)
 	req.NoError(pubShares.AddShare(s.genID(), &pubKey))
-	master1.PublicKeyShares = *pubShares
+	master1.PublicKeyShares = *pubShares.Move()
 	// Prepare another master public key by copying every field.
 	master2 := &MasterPublicKey{}
 	s.clone(master1, master2)
