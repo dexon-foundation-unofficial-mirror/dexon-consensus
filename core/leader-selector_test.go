@@ -123,6 +123,44 @@ func (s *LeaderSelectorTestSuite) TestLeaderBlockHash() {
 	}
 }
 
+func (s *LeaderSelectorTestSuite) TestTimeout() {
+	leader := s.newLeader()
+	blocks := make(map[common.Hash]*types.Block)
+	for i := 0; i < 10; i++ {
+		prv, err := ecdsa.NewPrivateKey()
+		s.Require().NoError(err)
+		block := &types.Block{
+			ProposerID: types.NewNodeID(prv.PublicKey()),
+			Hash:       common.NewRandomHash(),
+		}
+		s.Require().NoError(
+			utils.NewSigner(prv).SignCRS(block, leader.hashCRS))
+		s.Require().NoError(leader.processBlock(block))
+		blocks[block.Hash] = block
+	}
+	blockHash := leader.leaderBlockHash()
+	ch := make(chan struct{})
+	defer close(ch)
+
+	leader.validLeader = func(block *types.Block) (bool, error) {
+		return false, nil
+	}
+
+	leader.restart(leader.hashCRS)
+	for _, b := range blocks {
+		s.Require().NoError(leader.processBlock(b))
+	}
+
+	leader.validLeader = func(block *types.Block) (bool, error) {
+		if block.Hash == blockHash {
+			// Block forever
+			<-ch
+		}
+		return true, nil
+	}
+	s.NotEqual(blockHash, leader.leaderBlockHash())
+}
+
 func (s *LeaderSelectorTestSuite) TestValidLeaderFn() {
 	leader := s.newLeader()
 	blocks := make(map[common.Hash]*types.Block)
@@ -156,7 +194,9 @@ func (s *LeaderSelectorTestSuite) TestPotentialLeader() {
 	blocks := make(map[common.Hash]*types.Block)
 	for i := 0; i < 10; i++ {
 		if i > 0 {
+			leader.lock.Lock()
 			s.mockValidLeaderDefault = false
+			leader.lock.Unlock()
 		}
 		prv, err := ecdsa.NewPrivateKey()
 		s.Require().NoError(err)
@@ -168,6 +208,7 @@ func (s *LeaderSelectorTestSuite) TestPotentialLeader() {
 			utils.NewSigner(prv).SignCRS(block, leader.hashCRS))
 		ok, _ := leader.potentialLeader(block)
 		s.Require().NoError(leader.processBlock(block))
+		leader.lock.Lock()
 		if i > 0 {
 			if ok {
 				s.Contains(leader.pendingBlocks, block.Hash)
@@ -176,6 +217,7 @@ func (s *LeaderSelectorTestSuite) TestPotentialLeader() {
 			}
 			blocks[block.Hash] = block
 		}
+		leader.lock.Unlock()
 	}
 }
 

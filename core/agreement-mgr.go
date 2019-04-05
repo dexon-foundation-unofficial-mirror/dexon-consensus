@@ -466,6 +466,7 @@ Loop:
 			Round:  currentRound,
 			Height: math.MaxUint64,
 		}
+		mgr.baModule.data.leader.setTimeout(curConfig.lambdaBA / 2)
 		if err := mgr.baRoutineForOneRound(setting); err != nil {
 			mgr.logger.Error("BA routine failed",
 				"error", err,
