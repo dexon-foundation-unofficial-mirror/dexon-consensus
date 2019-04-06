@@ -394,6 +394,20 @@ func (s *DKGTestSuite) TestPublicKeySharesMove() {
 	req.True(pubShares2.Equal(pubShares3))
 }
 
+func (s *DKGTestSuite) TestPublicKeySharesConcurrent() {
+	t := 5
+	n := 10
+	IDs := make(IDs, n)
+	for i := range IDs {
+		id := common.NewRandomHash()
+		IDs[i] = NewID(id[:])
+	}
+	_, pubShare := NewPrivateKeyShares(t)
+	for _, id := range IDs {
+		go pubShare.Share(id)
+	}
+}
+
 func (s *DKGTestSuite) TestPrivateKeySharesEquality() {
 	var req = s.Require()
 	IDs := s.genID(2)

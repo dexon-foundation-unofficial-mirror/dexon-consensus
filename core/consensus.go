@@ -57,6 +57,8 @@ var (
 		"cannot verify block randomness")
 )
 
+type selfAgreementResult types.AgreementResult
+
 // consensusBAReceiver implements agreementReceiver.
 type consensusBAReceiver struct {
 	consensus         *Consensus
@@ -286,7 +288,8 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 				IsEmptyBlock: isEmptyBlockConfirmed,
 				Randomness:   block.Randomness,
 			}
-			recv.consensus.baMgr.touchAgreementResult(result)
+			// touchAgreementResult does not support concurrent access.
+			recv.consensus.msgChan <- (*selfAgreementResult)(result)
 			recv.consensus.logger.Debug("Broadcast AgreementResult",
 				"result", result)
 			recv.consensus.network.BroadcastAgreementResult(result)
@@ -1217,6 +1220,8 @@ MessageLoop:
 			return
 		}
 		switch val := msg.(type) {
+		case *selfAgreementResult:
+			con.baMgr.touchAgreementResult((*types.AgreementResult)(val))
 		case *types.Block:
 			if ch, exist := func() (chan<- *types.Block, bool) {
 				con.lock.RLock()

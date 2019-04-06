@@ -450,11 +450,10 @@ func (prvs *PrivateKeyShares) Share(ID ID) (*PrivateKey, bool) {
 
 // NewEmptyPublicKeyShares creates an empty public key shares.
 func NewEmptyPublicKeyShares() *PublicKeyShares {
-	cache := &publicKeySharesCache{
-		index: make(map[ID]int),
-	}
 	pubShares := &PublicKeyShares{}
-	pubShares.cache.Store(cache)
+	pubShares.cache.Store(&publicKeySharesCache{
+		index: make(map[ID]int),
+	})
 	return pubShares
 }
 
@@ -481,9 +480,9 @@ func (pubs *PublicKeyShares) Share(ID ID) (*PublicKey, error) {
 }
 
 // AddShare adds a share.
-func (pubs *PublicKeyShares) AddShare(ID ID, share *PublicKey) error {
+func (pubs *PublicKeyShares) AddShare(shareID ID, share *PublicKey) error {
 	cache := pubs.cache.Load().(*publicKeySharesCache)
-	if idx, exist := cache.index[ID]; exist {
+	if idx, exist := cache.index[shareID]; exist {
 		if !share.publicKey.IsEqual(&cache.share[idx].publicKey) {
 			return ErrDuplicatedShare
 		}
@@ -492,9 +491,17 @@ func (pubs *PublicKeyShares) AddShare(ID ID, share *PublicKey) error {
 	pubs.lock.Lock()
 	defer pubs.lock.Unlock()
 	cache = pubs.cache.Load().(*publicKeySharesCache)
-	cache.index[ID] = len(cache.share)
-	cache.share = append(cache.share, *share)
-	pubs.cache.Store(cache)
+	newCache := &publicKeySharesCache{
+		index: make(map[ID]int, len(cache.index)+1),
+		share: make([]PublicKey, len(cache.share), len(cache.share)+1),
+	}
+	for k, v := range cache.index {
+		newCache.index[k] = v
+	}
+	copy(newCache.share, cache.share)
+	newCache.index[shareID] = len(newCache.share)
+	newCache.share = append(newCache.share, *share)
+	pubs.cache.Store(newCache)
 	return nil
 }
 
