@@ -87,6 +87,14 @@ func (s *VoteFilterTestSuite) TestFilterLowerHeight() {
 	s.True(filter.Filter(vote))
 }
 
+func (s *VoteFilterTestSuite) TestFilterSameVote() {
+	filter := NewVoteFilter()
+	vote := types.NewVote(types.VoteCom, common.NewRandomHash(), uint64(5))
+	s.False(filter.Filter(vote))
+	filter.AddVote(vote)
+	s.True(filter.Filter(vote))
+}
+
 func TestVoteFilter(t *testing.T) {
 	suite.Run(t, new(VoteFilterTestSuite))
 }

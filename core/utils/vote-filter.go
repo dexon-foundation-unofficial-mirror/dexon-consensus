@@ -24,6 +24,7 @@ import (
 // VoteFilter filters votes that are useless for now.
 // To maximize performance, this structure is not thread-safe and will never be.
 type VoteFilter struct {
+	Voted    map[types.VoteHeader]struct{}
 	Height   uint64
 	LockIter uint64
 	Period   uint64
@@ -32,7 +33,9 @@ type VoteFilter struct {
 
 // NewVoteFilter creates a new vote filter instance.
 func NewVoteFilter() *VoteFilter {
-	return &VoteFilter{}
+	return &VoteFilter{
+		Voted: make(map[types.VoteHeader]struct{}),
+	}
 }
 
 // Filter checks if the vote should be filtered out.
@@ -57,5 +60,13 @@ func (vf *VoteFilter) Filter(vote *types.Vote) bool {
 		vote.BlockHash == types.SkipBlockHash {
 		return true
 	}
+	if _, exist := vf.Voted[vote.VoteHeader]; exist {
+		return true
+	}
 	return false
+}
+
+// AddVote to the filter so the same vote will be filtered.
+func (vf *VoteFilter) AddVote(vote *types.Vote) {
+	vf.Voted[vote.VoteHeader] = struct{}{}
 }

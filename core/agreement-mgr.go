@@ -257,6 +257,7 @@ func (mgr *agreementMgr) processVote(v *types.Vote) (err error) {
 	}
 	if err = mgr.baModule.processVote(v); err == nil {
 		mgr.baModule.updateFilter(mgr.voteFilter)
+		mgr.voteFilter.AddVote(v)
 	}
 	return
 }
