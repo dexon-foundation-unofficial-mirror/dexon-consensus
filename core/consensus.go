@@ -1338,7 +1338,11 @@ func (con *Consensus) ProcessAgreementResult(
 		return nil
 	}
 	// Sanity Check.
-	if err := VerifyAgreementResult(rand, con.nodeSetCache); err != nil {
+	notarySet, err := con.nodeSetCache.GetNotarySet(rand.Position.Round)
+	if err != nil {
+		return err
+	}
+	if err := VerifyAgreementResult(rand, notarySet); err != nil {
 		con.baMgr.untouchAgreementResult(rand)
 		return err
 	}

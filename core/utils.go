@@ -158,16 +158,12 @@ func HashConfigurationBlock(
 // VerifyAgreementResult perform sanity check against a types.AgreementResult
 // instance.
 func VerifyAgreementResult(
-	res *types.AgreementResult, cache *utils.NodeSetCache) error {
+	res *types.AgreementResult, notarySet map[types.NodeID]struct{}) error {
 	if res.Position.Round >= DKGDelayRound {
 		if len(res.Randomness) == 0 {
 			return ErrMissingRandomness
 		}
 		return nil
-	}
-	notarySet, err := cache.GetNotarySet(res.Position.Round)
-	if err != nil {
-		return err
 	}
 	if len(res.Votes) < len(notarySet)*2/3+1 {
 		return ErrNotEnoughVotes
