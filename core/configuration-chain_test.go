@@ -331,7 +331,7 @@ func (s *ConfigurationChainTestSuite) TestConfigurationChain() {
 			continue
 		}
 		go func(cc *configurationChain) {
-			tsig, err := cc.runTSig(round, hash)
+			tsig, err := cc.runTSig(round, hash, 5*time.Second)
 			// Prevent racing by collecting errors and check in main thread.
 			errs <- err
 			tsigChan <- tsig
@@ -547,13 +547,13 @@ func (s *ConfigurationChainTestSuite) TestMultipleTSig() {
 			continue
 		}
 		go func(cc *configurationChain) {
-			tsig1, err := cc.runTSig(round, hash1)
+			tsig1, err := cc.runTSig(round, hash1, 5*time.Second)
 			// Prevent racing by collecting errors and check in main thread.
 			errs <- err
 			tsigChan1 <- tsig1
 		}(cc)
 		go func(cc *configurationChain) {
-			tsig2, err := cc.runTSig(round, hash2)
+			tsig2, err := cc.runTSig(round, hash2, 5*time.Second)
 			// Prevent racing by collecting errors and check in main thread.
 			errs <- err
 			tsigChan2 <- tsig2
@@ -604,7 +604,7 @@ func (s *ConfigurationChainTestSuite) TestTSigTimeout() {
 		}
 		qualify++
 		go func(cc *configurationChain) {
-			_, err := cc.runTSig(round, hash)
+			_, err := cc.runTSig(round, hash, 5*time.Second)
 			// Prevent racing by collecting errors and check in main thread.
 			errs <- err
 		}(cc)

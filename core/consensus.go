@@ -1084,7 +1084,11 @@ func (con *Consensus) generateBlockRandomness(blocks []*types.Block) {
 					"proposer", psig.ProposerID,
 					"block", block)
 				con.network.BroadcastDKGPartialSignature(psig)
-				sig, err := con.cfgModule.runTSig(block.Position.Round, block.Hash)
+				sig, err := con.cfgModule.runTSig(
+					block.Position.Round,
+					block.Hash,
+					60*time.Minute,
+				)
 				if err != nil {
 					con.logger.Error("Failed to run Block Tsig",
 						"block", block,

@@ -662,7 +662,7 @@ func (cc *configurationChain) untouchTSigHash(hash common.Hash) {
 }
 
 func (cc *configurationChain) runTSig(
-	round uint64, hash common.Hash) (
+	round uint64, hash common.Hash, wait time.Duration) (
 	crypto.Signature, error) {
 	npks, _, _ := cc.getDKGInfo(round, false)
 	if npks == nil {
@@ -687,8 +687,7 @@ func (cc *configurationChain) runTSig(
 	}()
 	timeout := make(chan struct{}, 1)
 	go func() {
-		// TODO(jimmy-dexon): make timeout configurable.
-		time.Sleep(5 * time.Second)
+		time.Sleep(wait)
 		timeout <- struct{}{}
 		cc.tsigReady.Broadcast()
 	}()
@@ -714,7 +713,7 @@ func (cc *configurationChain) runTSig(
 
 func (cc *configurationChain) runCRSTSig(
 	round uint64, crs common.Hash) ([]byte, error) {
-	sig, err := cc.runTSig(round, crs)
+	sig, err := cc.runTSig(round, crs, cc.gov.Configuration(round).LambdaDKG*5)
 	cc.logger.Info("CRS",
 		"nodeID", cc.ID,
 		"round", round+1,
