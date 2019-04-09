@@ -383,7 +383,11 @@ func (recv *consensusBAReceiver) ReportForkVote(v1, v2 *types.Vote) {
 }
 
 func (recv *consensusBAReceiver) ReportForkBlock(b1, b2 *types.Block) {
-	recv.consensus.gov.ReportForkBlock(b1, b2)
+	b1Clone := b1.Clone()
+	b2Clone := b2.Clone()
+	b1Clone.Payload = []byte{}
+	b2Clone.Payload = []byte{}
+	recv.consensus.gov.ReportForkBlock(b1Clone, b2Clone)
 }
 
 // consensusDKGReceiver implements dkgReceiver.

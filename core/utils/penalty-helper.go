@@ -27,6 +27,8 @@ import (
 var (
 	// ErrInvalidDKGMasterPublicKey means the DKG MasterPublicKey is invalid.
 	ErrInvalidDKGMasterPublicKey = errors.New("invalid DKG master public key")
+	// ErrPayloadNotEmpty means the payload of block is not empty.
+	ErrPayloadNotEmpty = errors.New("payload not empty")
 )
 
 // NeedPenaltyDKGPrivateShare checks if the proposer of dkg private share
@@ -95,8 +97,11 @@ func NeedPenaltyForkBlock(block1, block2 *types.Block) (bool, error) {
 		block1.Hash == block2.Hash {
 		return false, nil
 	}
+	if len(block1.Payload) != 0 || len(block2.Payload) != 0 {
+		return false, ErrPayloadNotEmpty
+	}
 	verifyBlock := func(block *types.Block) (bool, error) {
-		err := VerifyBlockSignature(block)
+		err := VerifyBlockSignatureWithoutPayload(block)
 		switch err {
 		case nil:
 			return true, nil

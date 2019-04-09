@@ -63,6 +63,12 @@ func VerifyBlockSignature(b *types.Block) (err error) {
 		err = ErrIncorrectHash
 		return
 	}
+	return VerifyBlockSignatureWithoutPayload(b)
+}
+
+// VerifyBlockSignatureWithoutPayload verifies the signature of types.Block but
+// does not check if PayloadHash is correct.
+func VerifyBlockSignatureWithoutPayload(b *types.Block) (err error) {
 	hash, err := HashBlock(b)
 	if err != nil {
 		return
