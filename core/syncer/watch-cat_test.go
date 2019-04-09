@@ -116,6 +116,7 @@ func (s *WatchCatTestSuite) TestBasicUsage() {
 	default:
 		s.FailNow("expecting terminated")
 	}
+	s.Equal(pos, watchCat.LastPosition())
 }
 
 func TestWatchCat(t *testing.T) {

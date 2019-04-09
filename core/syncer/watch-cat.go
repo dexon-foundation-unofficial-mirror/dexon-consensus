@@ -37,6 +37,7 @@ type WatchCat struct {
 	timeout      time.Duration
 	configReader configReader
 	feed         chan types.Position
+	lastPosition types.Position
 	polling      time.Duration
 	ctx          context.Context
 	cancel       context.CancelFunc
@@ -69,6 +70,7 @@ func (wc *WatchCat) Feed(position types.Position) {
 // Start the WatchCat.
 func (wc *WatchCat) Start() {
 	wc.Stop()
+	wc.lastPosition = types.Position{}
 	wc.ctx, wc.cancel = context.WithCancel(context.Background())
 	go func() {
 		var lastPos types.Position
@@ -124,6 +126,7 @@ func (wc *WatchCat) Start() {
 				wc.logger.Error("Failed to get recovery votes", "height", lastPos.Height, "error", err)
 			} else if votes > threshold {
 				wc.logger.Info("Threshold for recovery reached!")
+				wc.lastPosition = lastPos
 				break ResetLoop
 			}
 			select {
@@ -145,4 +148,9 @@ func (wc *WatchCat) Stop() {
 // Meow return a closed channel if syncer should be terminated.
 func (wc *WatchCat) Meow() <-chan struct{} {
 	return wc.ctx.Done()
+}
+
+// LastPosition returns the last position for recovery.
+func (wc *WatchCat) LastPosition() types.Position {
+	return wc.lastPosition
 }

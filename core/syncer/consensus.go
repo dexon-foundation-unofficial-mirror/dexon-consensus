@@ -276,17 +276,21 @@ func (con *Consensus) buildAllEmptyBlocks() {
 }
 
 // ForceSync forces syncer to become synced.
-func (con *Consensus) ForceSync(skip bool) {
+func (con *Consensus) ForceSync(lastPos types.Position, skip bool) {
 	if con.syncedLastBlock != nil {
 		return
 	}
-	hash, _ := con.db.GetCompactionChainTipInfo()
-	var block types.Block
+	hash, height := con.db.GetCompactionChainTipInfo()
+	if height < lastPos.Height {
+		panic(fmt.Errorf("compaction chain not synced height %d, tip %d",
+			lastPos.Height, height))
+	} else if height > lastPos.Height {
+		skip = false
+	}
 	block, err := con.db.GetBlock(hash)
 	if err != nil {
 		panic(err)
 	}
-	con.logger.Info("Force Sync", "block", &block)
 	con.syncedLastBlock = &block
 	con.stopBuffering()
 	// We might call stopBuffering without calling assureBuffering.
@@ -298,6 +302,7 @@ func (con *Consensus) ForceSync(skip bool) {
 			})
 	}
 	con.syncedSkipNext = skip
+	con.logger.Info("Force Sync", "block", &block, "skip", skip)
 }
 
 // SyncBlocks syncs blocks from compaction chain, latest is true if the caller

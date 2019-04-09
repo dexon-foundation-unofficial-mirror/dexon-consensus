@@ -677,7 +677,7 @@ ReachStop:
 		s.Require().Equal(latestPos, pos)
 	}
 	for _, con := range syncerCon {
-		con.ForceSync(true)
+		con.ForceSync(latestPos, true)
 	}
 	for nID := range nodes {
 		con, err := syncerCon[nID].GetSyncedConsensus()
