@@ -115,3 +115,9 @@ func (v *Vote) Clone() *Vote {
 		Signature: v.Signature.Clone(),
 	}
 }
+
+// Newer return true when the (position, period) of other vote is older than us.
+func (v Vote) Newer(other Vote) bool {
+	return v.Position.Newer(other.Position) ||
+		(v.Position.Equal(other.Position) && v.Period > other.Period)
+}
