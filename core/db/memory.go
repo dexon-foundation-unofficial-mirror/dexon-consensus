@@ -49,7 +49,7 @@ type MemBackedDB struct {
 	compactionChainTipHash   common.Hash
 	compactionChainTipHeight uint64
 	dkgPrivateKeysLock       sync.RWMutex
-	dkgPrivateKeys           map[uint64]*dkg.PrivateKey
+	dkgPrivateKeys           map[uint64]*dkgPrivateKey
 	dkgProtocolLock          sync.RWMutex
 	dkgProtocolInfo          *DKGProtocolInfo
 	persistantFilePath       string
@@ -61,7 +61,7 @@ func NewMemBackedDB(persistantFilePath ...string) (
 	dbInst = &MemBackedDB{
 		blockHashSequence: common.Hashes{},
 		blocksByHash:      make(map[common.Hash]*types.Block),
-		dkgPrivateKeys:    make(map[uint64]*dkg.PrivateKey),
+		dkgPrivateKeys:    make(map[uint64]*dkgPrivateKey),
 	}
 	if len(persistantFilePath) == 0 || len(persistantFilePath[0]) == 0 {
 		return
@@ -168,34 +168,29 @@ func (m *MemBackedDB) GetCompactionChainTipInfo() (
 	return m.compactionChainTipHash, m.compactionChainTipHeight
 }
 
-// HasDKGPrivateKey check existence of DKG private key of one round.
-func (m *MemBackedDB) HasDKGPrivateKey(round uint64) (bool, error) {
-	m.dkgPrivateKeysLock.RLock()
-	defer m.dkgPrivateKeysLock.RUnlock()
-	_, exists := m.dkgPrivateKeys[round]
-	return exists, nil
-}
-
 // GetDKGPrivateKey get DKG private key of one round.
-func (m *MemBackedDB) GetDKGPrivateKey(round uint64) (
+func (m *MemBackedDB) GetDKGPrivateKey(round, reset uint64) (
 	dkg.PrivateKey, error) {
 	m.dkgPrivateKeysLock.RLock()
 	defer m.dkgPrivateKeysLock.RUnlock()
-	if prv, exists := m.dkgPrivateKeys[round]; exists {
-		return *prv, nil
+	if prv, exists := m.dkgPrivateKeys[round]; exists && prv.Reset == reset {
+		return prv.PK, nil
 	}
 	return dkg.PrivateKey{}, ErrDKGPrivateKeyDoesNotExist
 }
 
 // PutDKGPrivateKey save DKG private key of one round.
 func (m *MemBackedDB) PutDKGPrivateKey(
-	round uint64, prv dkg.PrivateKey) error {
+	round, reset uint64, prv dkg.PrivateKey) error {
 	m.dkgPrivateKeysLock.Lock()
 	defer m.dkgPrivateKeysLock.Unlock()
-	if _, exists := m.dkgPrivateKeys[round]; exists {
+	if prv, exists := m.dkgPrivateKeys[round]; exists && prv.Reset == reset {
 		return ErrDKGPrivateKeyExists
 	}
-	m.dkgPrivateKeys[round] = &prv
+	m.dkgPrivateKeys[round] = &dkgPrivateKey{
+		PK:    prv,
+		Reset: reset,
+	}
 	return nil
 }
 

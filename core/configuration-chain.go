@@ -396,7 +396,8 @@ func (cc *configurationChain) runDKGPhaseNine(round uint64, reset uint64) error 
 		return err
 	}
 	// Save private shares to DB.
-	if err = cc.db.PutDKGPrivateKey(round, *signer.privateKey); err != nil {
+	if err =
+		cc.db.PutDKGPrivateKey(round, reset, *signer.privateKey); err != nil {
 		return err
 	}
 	cc.dkgResult.Lock()
@@ -615,8 +616,9 @@ func (cc *configurationChain) recoverDKGInfo(
 		}()
 	}
 	if !signerExists && !ignoreSigner {
+		reset := cc.gov.DKGResetCount(round)
 		// Check if we have private shares in DB.
-		prvKey, err := cc.db.GetDKGPrivateKey(round)
+		prvKey, err := cc.db.GetDKGPrivateKey(round, reset)
 		if err != nil {
 			cc.logger.Warn("Failed to create DKGPrivateKey",
 				"round", round, "error", err)
@@ -638,7 +640,8 @@ func (cc *configurationChain) recoverDKGInfo(
 					"round", round, "error", err)
 				return err
 			}
-			if err = cc.db.PutDKGPrivateKey(round, *prvKeyRecover); err != nil {
+			if err = cc.db.PutDKGPrivateKey(
+				round, reset, *prvKeyRecover); err != nil {
 				cc.logger.Warn("Failed to save DKGPrivateKey",
 					"round", round, "error", err)
 			}

@@ -59,6 +59,11 @@ type DKGProtocolInfo struct {
 	Reset                     uint64
 }
 
+type dkgPrivateKey struct {
+	PK    dkg.PrivateKey
+	Reset uint64
+}
+
 // Equal compare with target DKGProtocolInfo.
 func (info *DKGProtocolInfo) Equal(target *DKGProtocolInfo) bool {
 	if !info.ID.Equal(target.ID) ||
@@ -478,13 +483,8 @@ func (lvl *LevelDBBackedDB) GetCompactionChainTipInfo() (
 	return
 }
 
-// HasDKGPrivateKey check existence of DKG private key of one round.
-func (lvl *LevelDBBackedDB) HasDKGPrivateKey(round uint64) (bool, error) {
-	return lvl.db.Has(lvl.getDKGPrivateKeyKey(round), nil)
-}
-
 // GetDKGPrivateKey get DKG private key of one round.
-func (lvl *LevelDBBackedDB) GetDKGPrivateKey(round uint64) (
+func (lvl *LevelDBBackedDB) GetDKGPrivateKey(round, reset uint64) (
 	prv dkg.PrivateKey, err error) {
 	queried, err := lvl.db.Get(lvl.getDKGPrivateKeyKey(round), nil)
 	if err != nil {
@@ -493,22 +493,32 @@ func (lvl *LevelDBBackedDB) GetDKGPrivateKey(round uint64) (
 		}
 		return
 	}
-	err = rlp.DecodeBytes(queried, &prv)
+	pk := dkgPrivateKey{}
+	err = rlp.DecodeBytes(queried, &pk)
+	if pk.Reset != reset {
+		err = ErrDKGPrivateKeyDoesNotExist
+		return
+	}
+	prv = pk.PK
 	return
 }
 
 // PutDKGPrivateKey save DKG private key of one round.
 func (lvl *LevelDBBackedDB) PutDKGPrivateKey(
-	round uint64, prv dkg.PrivateKey) error {
+	round, reset uint64, prv dkg.PrivateKey) error {
 	// Check existence.
-	exists, err := lvl.HasDKGPrivateKey(round)
-	if err != nil {
-		return err
-	}
-	if exists {
+	_, err := lvl.GetDKGPrivateKey(round, reset)
+	if err == nil {
 		return ErrDKGPrivateKeyExists
 	}
-	marshaled, err := rlp.EncodeToBytes(&prv)
+	if err != ErrDKGPrivateKeyDoesNotExist {
+		return err
+	}
+	pk := &dkgPrivateKey{
+		PK:    prv,
+		Reset: reset,
+	}
+	marshaled, err := rlp.EncodeToBytes(&pk)
 	if err != nil {
 		return err
 	}

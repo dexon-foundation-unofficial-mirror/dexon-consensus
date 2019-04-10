@@ -80,8 +80,7 @@ type Reader interface {
 	GetCompactionChainTipInfo() (common.Hash, uint64)
 
 	// DKG Private Key related methods.
-	HasDKGPrivateKey(round uint64) (bool, error)
-	GetDKGPrivateKey(round uint64) (dkg.PrivateKey, error)
+	GetDKGPrivateKey(round, reset uint64) (dkg.PrivateKey, error)
 	GetDKGProtocol() (dkgProtocol DKGProtocolInfo, err error)
 }
 
@@ -90,7 +89,7 @@ type Writer interface {
 	UpdateBlock(block types.Block) error
 	PutBlock(block types.Block) error
 	PutCompactionChainTipInfo(common.Hash, uint64) error
-	PutDKGPrivateKey(uint64, dkg.PrivateKey) error
+	PutDKGPrivateKey(round, reset uint64, pk dkg.PrivateKey) error
 	PutOrUpdateDKGProtocol(dkgProtocol DKGProtocolInfo) error
 }
 

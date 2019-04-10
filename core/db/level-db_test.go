@@ -169,22 +169,31 @@ func (s *LevelDBTestSuite) TestDKGPrivateKey() {
 		s.NoError(err)
 	}(dbName)
 	p := dkg.NewPrivateKey()
-	// Check existence.
-	exists, err := dbInst.HasDKGPrivateKey(1)
-	s.Require().NoError(err)
-	s.Require().False(exists)
-	// We should be unable to get it, too.
-	_, err = dbInst.GetDKGPrivateKey(1)
+	// We should be unable to get it.
+	_, err = dbInst.GetDKGPrivateKey(1, 0)
 	s.Require().Equal(err.Error(), ErrDKGPrivateKeyDoesNotExist.Error())
 	// Put it.
-	s.Require().NoError(dbInst.PutDKGPrivateKey(1, *p))
+	s.Require().NoError(dbInst.PutDKGPrivateKey(1, 0, *p))
+	// We should be unable to get it because reset is different.
+	_, err = dbInst.GetDKGPrivateKey(1, 1)
+	s.Require().Equal(err.Error(), ErrDKGPrivateKeyDoesNotExist.Error())
 	// Put it again, should not success.
-	err = dbInst.PutDKGPrivateKey(1, *p)
+	err = dbInst.PutDKGPrivateKey(1, 0, *p)
 	s.Require().Equal(err.Error(), ErrDKGPrivateKeyExists.Error())
 	// Get it back.
-	tmpPrv, err := dbInst.GetDKGPrivateKey(1)
+	tmpPrv, err := dbInst.GetDKGPrivateKey(1, 0)
 	s.Require().NoError(err)
 	s.Require().Equal(bytes.Compare(p.Bytes(), tmpPrv.Bytes()), 0)
+	// Put it at different reset.
+	p2 := dkg.NewPrivateKey()
+	s.Require().NoError(dbInst.PutDKGPrivateKey(1, 1, *p2))
+	// We should be unable to get it because reset is different.
+	_, err = dbInst.GetDKGPrivateKey(1, 0)
+	// Get it back.
+	tmpPrv, err = dbInst.GetDKGPrivateKey(1, 1)
+	s.Require().NoError(err)
+	s.Require().Equal(bytes.Compare(p2.Bytes(), tmpPrv.Bytes()), 0)
+	s.Require().NotEqual(bytes.Compare(p2.Bytes(), p.Bytes()), 0)
 }
 
 func (s *LevelDBTestSuite) TestDKGProtocol() {
