@@ -580,31 +580,31 @@ func (cc *configurationChain) recoverDKGInfo(
 		return ErrDKGNotReady
 	}
 
+	threshold := utils.GetDKGThreshold(
+		utils.GetConfigWithPanic(cc.gov, round, cc.logger))
+	cc.logger.Debug("Calling Governance.DKGMasterPublicKeys for recoverDKGInfo",
+		"round", round)
+	mpk := cc.gov.DKGMasterPublicKeys(round)
+	cc.logger.Debug("Calling Governance.DKGComplaints for recoverDKGInfo",
+		"round", round)
+	comps := cc.gov.DKGComplaints(round)
+	qualifies, _, err := typesDKG.CalcQualifyNodes(mpk, comps, threshold)
+	if err != nil {
+		return err
+	}
+	if len(qualifies) <
+		utils.GetDKGValidThreshold(utils.GetConfigWithPanic(
+			cc.gov, round, cc.logger)) {
+		return typesDKG.ErrNotReachThreshold
+	}
+
 	if !npksExists {
-		threshold := utils.GetDKGThreshold(
-			utils.GetConfigWithPanic(cc.gov, round, cc.logger))
-		// Restore group public key.
-		cc.logger.Debug("Calling Governance.DKGMasterPublicKeys for recoverDKGInfo",
-			"round", round)
-		mpk := cc.gov.DKGMasterPublicKeys(round)
-		cc.logger.Debug("Calling Governance.DKGComplaints for recoverDKGInfo",
-			"round", round)
-		comps := cc.gov.DKGComplaints(round)
-		qualifies, _, err := typesDKG.CalcQualifyNodes(mpk, comps, threshold)
-		if err != nil {
-			return err
-		}
-		if len(qualifies) <
-			utils.GetDKGValidThreshold(utils.GetConfigWithPanic(
-				cc.gov, round, cc.logger)) {
-			return typesDKG.ErrNotReachThreshold
-		}
 		npks, err := typesDKG.NewNodePublicKeys(round,
 			cc.gov.DKGMasterPublicKeys(round),
 			cc.gov.DKGComplaints(round),
 			threshold)
 		if err != nil {
-			cc.logger.Warn("Failed to create DKGGroupPublicKey",
+			cc.logger.Warn("Failed to create DKGNodePublicKeys",
 				"round", round, "error", err)
 			return err
 		}
@@ -620,7 +620,29 @@ func (cc *configurationChain) recoverDKGInfo(
 		if err != nil {
 			cc.logger.Warn("Failed to create DKGPrivateKey",
 				"round", round, "error", err)
-			return err
+			dkgProtocolInfo, err := cc.db.GetDKGProtocol()
+			if err != nil {
+				cc.logger.Warn("Unable to recover DKGProtocolInfo",
+					"round", round, "error", err)
+				return err
+			}
+			if dkgProtocolInfo.Round != round {
+				cc.logger.Warn("DKGProtocolInfo round mismatch",
+					"round", round, "infoRound", dkgProtocolInfo.Round)
+				return err
+			}
+			prvKeyRecover, err :=
+				dkgProtocolInfo.PrvShares.RecoverPrivateKey(qualifies)
+			if err != nil {
+				cc.logger.Warn("Failed to recover DKGPrivateKey",
+					"round", round, "error", err)
+				return err
+			}
+			if err = cc.db.PutDKGPrivateKey(round, *prvKeyRecover); err != nil {
+				cc.logger.Warn("Failed to save DKGPrivateKey",
+					"round", round, "error", err)
+			}
+			prvKey = *prvKeyRecover
 		}
 		func() {
 			cc.dkgResult.Lock()
