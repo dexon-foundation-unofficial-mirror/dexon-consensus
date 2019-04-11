@@ -361,15 +361,16 @@ func (a *agreement) sanityCheck(vote *types.Vote) error {
 	if vote.Type >= types.MaxVoteType {
 		return ErrInvalidVote
 	}
-	if _, exist := a.notarySet[vote.ProposerID]; !exist {
-		return ErrNotInNotarySet
-	}
 	ok, err := utils.VerifyVoteSignature(vote)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return ErrIncorrectVoteSignature
+	}
+	if vote.Position.Round != a.agreementID().Round {
+		// TODO(jimmy): maybe we can verify partial signature at agreement-mgr.
+		return nil
 	}
 	if !a.data.recv.VerifyPartialSignature(vote) {
 		return ErrIncorrectVotePartialSignature
@@ -412,7 +413,7 @@ func (a *agreement) updateFilter(filter *utils.VoteFilter) {
 	filter.Confirm = a.hasOutput
 	filter.LockIter = a.data.lockIter
 	filter.Period = a.data.period
-	filter.Height = a.agreementID().Height
+	filter.Position.Height = a.agreementID().Height
 }
 
 // processVote is the entry point for processing Vote.
@@ -426,8 +427,8 @@ func (a *agreement) processVote(vote *types.Vote) error {
 
 	// Agreement module has stopped.
 	if isStop(aID) {
-		// Hacky way to not drop first votes for genesis height.
-		if vote.Position.Height == types.GenesisHeight {
+		// Hacky way to not drop first votes when round just begins.
+		if vote.Position.Round == aID.Round {
 			a.pendingVote = append(a.pendingVote, pendingVote{
 				vote:         vote,
 				receivedTime: time.Now().UTC(),

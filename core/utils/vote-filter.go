@@ -25,7 +25,7 @@ import (
 // To maximize performance, this structure is not thread-safe and will never be.
 type VoteFilter struct {
 	Voted    map[types.VoteHeader]struct{}
-	Height   uint64
+	Position types.Position
 	LockIter uint64
 	Period   uint64
 	Confirm  bool
@@ -43,9 +43,9 @@ func (vf *VoteFilter) Filter(vote *types.Vote) bool {
 	if vote.Type == types.VoteInit {
 		return true
 	}
-	if vote.Position.Height < vf.Height {
+	if vote.Position.Older(vf.Position) {
 		return true
-	} else if vote.Position.Height > vf.Height {
+	} else if vote.Position.Newer(vf.Position) {
 		// It's impossible to check the vote of other height.
 		return false
 	}

@@ -3,11 +3,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:c0decf632843204d2b8781de7b26e7038584e2dcccc7e2f401e88ae85b1df2b7"
+  digest = "1:093bf93a65962e8191e3e8cd8fc6c363f83d43caca9739c906531ba7210a9904"
   name = "github.com/btcsuite/btcd"
   packages = ["btcec"]
   pruneopts = "UT"
-  revision = "2a560b2036bee5e3679ec2133eb6520b2f195213"
+  revision = "9bfb2ca0346b57e246cc96fa31074df521175240"
 
 [[projects]]
   digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
@@ -19,15 +19,15 @@
 
 [[projects]]
   branch = "dev"
-  digest = "1:c331891ab345659ad4e3e6af2c0b2ba262dd2c83867b2928f4c89455a429cb79"
+  digest = "1:989ca7617ed87c5fa460e9f63414d797fd0d2dd07cdda0b6d6d3e7450e002b1f"
   name = "github.com/dexon-foundation/bls"
   packages = ["ffi/go/bls"]
   pruneopts = "UT"
-  revision = "1208495d2fd3e5a69edaf7f429607e7ef431a5dd"
+  revision = "b0a83abe7389df7f4c45adc3b52d957f3996322d"
 
 [[projects]]
   branch = "dev"
-  digest = "1:de44df5d2d82983648c5f861dd7b7f54133e14b1c4dc412c58347e3872ab2181"
+  digest = "1:8fc72b5a0372267ae68d203aef3e1108eb7274050c7ded516ea1af71a8a09b77"
   name = "github.com/dexon-foundation/dexon"
   packages = [
     "common",
@@ -35,12 +35,11 @@
     "common/math",
     "crypto",
     "crypto/secp256k1",
-    "crypto/sha3",
     "log",
     "rlp",
   ]
   pruneopts = "UT"
-  revision = "abe4e80a8b6cf9dee93652ea36cdc56065a39a0f"
+  revision = "f1ed7d074fe1d574a84c308c6ad878dc2d153654"
 
 [[projects]]
   digest = "1:586ea76dbd0374d6fb649a91d70d652b7fe0ccffb8910a77468e7702e7901f3d"
@@ -51,12 +50,23 @@
   version = "v1.8.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:4a0c6bb4805508a6287675fac876be2ac1182539ca8a32468d8128882e9d5009"
+  digest = "1:e4f5819333ac698d294fe04dbf640f84719658d5c7ce195b10060cc37292ce79"
   name = "github.com/golang/snappy"
   packages = ["."]
   pruneopts = "UT"
-  revision = "2e65f85255dbc3072edf28d6b5b8efc472979f5a"
+  revision = "2a8bb927dd31d8daada140a5d09578521ce5c36a"
+  version = "v0.0.1"
+
+[[projects]]
+  digest = "1:d15ee511aa0f56baacc1eb4c6b922fa1c03b38413b6be18166b996d82a0156ea"
+  name = "github.com/hashicorp/golang-lru"
+  packages = [
+    ".",
+    "simplelru",
+  ]
+  pruneopts = "UT"
+  revision = "7087cb70de9f7a8bc0a10c375cb0d2280a8edf9c"
+  version = "v0.5.1"
 
 [[projects]]
   digest = "1:b56c589214f01a5601e0821387db484617392d0042f26234bf2da853a2f498a1"
@@ -86,7 +96,7 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:5110e3d4f130772fd39e6ce8208ad1955b242ccfcc8ad9d158857250579c82f4"
+  digest = "1:8ff03ccc603abb0d7cce94d34b613f5f6251a9e1931eba1a3f9888a9029b055c"
   name = "github.com/stretchr/testify"
   packages = [
     "assert",
@@ -94,12 +104,12 @@
     "suite",
   ]
   pruneopts = "UT"
-  revision = "f35b8ab0b5a2cef36673838d662e249dd9c94686"
-  version = "v1.2.2"
+  revision = "ffdc059bfe9ce6a4e144ba849dbedead332c6053"
+  version = "v1.3.0"
 
 [[projects]]
   branch = "master"
-  digest = "1:f2ffd421680b0a3f7887501b3c6974bcf19217ecd301d0e2c9b681940ec363d5"
+  digest = "1:3f0c28875fb78456bc1815a9c13cb5962a4f0c462b37ec72e90c2f2cc407b54f"
   name = "github.com/syndtr/goleveldb"
   packages = [
     "leveldb",
@@ -116,44 +126,39 @@
     "leveldb/util",
   ]
   pruneopts = "UT"
-  revision = "ae2bd5eed72d46b28834ec3f60db3a3ebedd8dbd"
+  revision = "c3a204f8e96543bb0cc090385c001078f184fc46"
+
+[[projects]]
+  branch = "master"
+  digest = "1:d193d0292355f8fada46cf77967d64df52ce6e0a757f81a3a1b2626ac77d649d"
+  name = "golang.org/x/crypto"
+  packages = ["sha3"]
+  pruneopts = "UT"
+  revision = "38d8ce5564a5b71b2e3a00553993f1b9a7ae852f"
+
+[[projects]]
+  branch = "master"
+  digest = "1:13917c3d8b9b6c14a941d66af59444b7ce53a859a8b86e24891a713186f42c65"
+  name = "golang.org/x/sys"
+  packages = [
+    "cpu",
+    "unix",
+  ]
+  pruneopts = "UT"
+  revision = "0ad05ae3009d6413d3363aa09b350b2ec37daf09"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/btcsuite/btcd/btcec",
-    "github.com/davecgh/go-spew/spew",
     "github.com/dexon-foundation/bls/ffi/go/bls",
-    "github.com/dexon-foundation/dexon/common",
-    "github.com/dexon-foundation/dexon/common/hexutil",
-    "github.com/dexon-foundation/dexon/common/math",
     "github.com/dexon-foundation/dexon/crypto",
-    "github.com/dexon-foundation/dexon/crypto/secp256k1",
-    "github.com/dexon-foundation/dexon/crypto/sha3",
     "github.com/dexon-foundation/dexon/log",
     "github.com/dexon-foundation/dexon/rlp",
-    "github.com/go-stack/stack",
-    "github.com/golang/snappy",
-    "github.com/naoina/go-stringutil",
+    "github.com/hashicorp/golang-lru",
     "github.com/naoina/toml",
-    "github.com/naoina/toml/ast",
-    "github.com/pmezard/go-difflib/difflib",
-    "github.com/stretchr/testify/assert",
-    "github.com/stretchr/testify/require",
     "github.com/stretchr/testify/suite",
     "github.com/syndtr/goleveldb/leveldb",
-    "github.com/syndtr/goleveldb/leveldb/cache",
-    "github.com/syndtr/goleveldb/leveldb/comparer",
-    "github.com/syndtr/goleveldb/leveldb/errors",
-    "github.com/syndtr/goleveldb/leveldb/filter",
-    "github.com/syndtr/goleveldb/leveldb/iterator",
-    "github.com/syndtr/goleveldb/leveldb/journal",
-    "github.com/syndtr/goleveldb/leveldb/memdb",
-    "github.com/syndtr/goleveldb/leveldb/opt",
-    "github.com/syndtr/goleveldb/leveldb/storage",
-    "github.com/syndtr/goleveldb/leveldb/table",
-    "github.com/syndtr/goleveldb/leveldb/util",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

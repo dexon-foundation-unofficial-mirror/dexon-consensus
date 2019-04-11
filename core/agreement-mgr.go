@@ -24,6 +24,8 @@ import (
 	"sync"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru"
+
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
 	typesDKG "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
@@ -39,6 +41,7 @@ var (
 )
 
 const maxResultCache = 100
+const settingLimit = 3
 
 // genValidLeader generate a validLeader function for agreement modules.
 func genValidLeader(
@@ -114,12 +117,15 @@ type agreementMgr struct {
 	recv              *consensusBAReceiver
 	processedBAResult map[types.Position]struct{}
 	voteFilter        *utils.VoteFilter
+	settingCache      *lru.Cache
+	curRoundSetting   *baRoundSetting
 	waitGroup         sync.WaitGroup
 	isRunning         bool
 	lock              sync.RWMutex
 }
 
 func newAgreementMgr(con *Consensus) (mgr *agreementMgr, err error) {
+	settingCache, _ := lru.New(settingLimit)
 	mgr = &agreementMgr{
 		con:               con,
 		ID:                con.ID,
@@ -133,6 +139,7 @@ func newAgreementMgr(con *Consensus) (mgr *agreementMgr, err error) {
 		ctx:               con.ctx,
 		processedBAResult: make(map[types.Position]struct{}, maxResultCache),
 		voteFilter:        utils.NewVoteFilter(),
+		settingCache:      settingCache,
 	}
 	mgr.recv = &consensusBAReceiver{
 		consensus:     con,
@@ -149,21 +156,18 @@ func (mgr *agreementMgr) prepare() {
 		newLeaderSelector(genValidLeader(mgr), mgr.logger),
 		mgr.signer,
 		mgr.logger)
-	nodes, err := mgr.cache.GetNodeSet(round)
-	if err != nil {
+	setting := mgr.generateSetting(round)
+	if setting == nil {
+		mgr.logger.Warn("Unable to prepare init setting", "round", round)
 		return
 	}
-	agr.notarySet = nodes.GetSubSet(
-		int(mgr.config(round).notarySetSize),
-		types.NewNotarySetTarget(mgr.config(round).crs))
+	mgr.curRoundSetting = setting
+	agr.notarySet = mgr.curRoundSetting.dkgSet
 	// Hacky way to make agreement module self contained.
 	mgr.recv.agreementModule = agr
 	mgr.baModule = agr
 	if round >= DKGDelayRound {
-		setting := mgr.generateSetting(round)
-		if setting == nil {
-			mgr.logger.Warn("Unable to prepare init setting", "round", round)
-		} else if _, exist := setting.dkgSet[mgr.ID]; exist {
+		if _, exist := setting.dkgSet[mgr.ID]; exist {
 			mgr.logger.Debug("Preparing signer and npks.", "round", round)
 			npk, signer, err := mgr.con.cfgModule.getDKGInfo(round, false)
 			if err != nil {
@@ -252,8 +256,24 @@ func (mgr *agreementMgr) notifyRoundEvents(evts []utils.RoundEventParam) error {
 }
 
 func (mgr *agreementMgr) processVote(v *types.Vote) (err error) {
+	if !mgr.recv.isNotary {
+		return nil
+	}
 	if mgr.voteFilter.Filter(v) {
 		return nil
+	}
+	if v.Position.Round == mgr.curRoundSetting.round {
+		if _, exist := mgr.curRoundSetting.dkgSet[v.ProposerID]; !exist {
+			return ErrNotInNotarySet
+		}
+	} else if v.Position.Round == mgr.curRoundSetting.round+1 {
+		setting := mgr.generateSetting(v.Position.Round)
+		if setting == nil {
+			return ErrConfigurationNotReady
+		}
+		if _, exist := setting.dkgSet[v.ProposerID]; !exist {
+			return ErrNotInNotarySet
+		}
 	}
 	if err = mgr.baModule.processVote(v); err == nil {
 		mgr.baModule.updateFilter(mgr.voteFilter)
@@ -323,6 +343,7 @@ func (mgr *agreementMgr) processAgreementResult(
 				result.Position.Round)
 			return ErrConfigurationNotReady
 		}
+		mgr.curRoundSetting = setting
 		leader, err := mgr.calcLeader(setting.dkgSet, setting.crs, result.Position)
 		if err != nil {
 			return err
@@ -358,6 +379,9 @@ func (mgr *agreementMgr) stop() {
 }
 
 func (mgr *agreementMgr) generateSetting(round uint64) *baRoundSetting {
+	if setting, exist := mgr.settingCache.Get(round); exist {
+		return setting.(*baRoundSetting)
+	}
 	curConfig := mgr.config(round)
 	if curConfig == nil {
 		return nil
@@ -383,13 +407,15 @@ func (mgr *agreementMgr) generateSetting(round uint64) *baRoundSetting {
 			return nil
 		}
 	}
-	return &baRoundSetting{
+	setting := &baRoundSetting{
 		crs:    curConfig.crs,
 		dkgSet: dkgSet,
 		round:  round,
 		threshold: utils.GetBAThreshold(&types.Config{
 			NotarySetSize: curConfig.notarySetSize}),
 	}
+	mgr.settingCache.Add(round, setting)
+	return setting
 }
 
 func (mgr *agreementMgr) runBA(initRound uint64) {
@@ -449,6 +475,7 @@ Loop:
 		}
 		mgr.recv.isNotary = checkRound()
 		mgr.voteFilter = utils.NewVoteFilter()
+		mgr.voteFilter.Position.Round = currentRound
 		mgr.recv.emptyBlockHashMap = &sync.Map{}
 		if currentRound >= DKGDelayRound && mgr.recv.isNotary {
 			var err error
