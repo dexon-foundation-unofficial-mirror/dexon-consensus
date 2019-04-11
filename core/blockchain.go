@@ -204,9 +204,6 @@ func (bc *blockChain) notifyRoundEvents(evts []utils.RoundEventParam) error {
 			}
 			bc.configs = append(bc.configs, c)
 		}
-		if e.Reset != 0 {
-			bc.vGetter.Purge(e.Round + 1)
-		}
 		return nil
 	}
 	for _, e := range evts {
