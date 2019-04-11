@@ -45,6 +45,10 @@
   branch = "master"
   name = "github.com/syndtr/goleveldb"
 
+[[constraint]]
+  name = "github.com/hashicorp/golang-lru"
+  version = "0.5.1"
+
 [prune]
   go-tests = true
   unused-packages = true

@@ -32,22 +32,22 @@ type VoteFilterTestSuite struct {
 
 func (s *VoteFilterTestSuite) TestFilterVotePass() {
 	filter := NewVoteFilter()
-	filter.Height = uint64(6)
+	filter.Position.Height = uint64(6)
 	filter.Period = uint64(3)
 	filter.LockIter = uint64(3)
 	// Pass with higher Height.
 	vote := types.NewVote(types.VotePreCom, common.NewRandomHash(), uint64(1))
-	vote.Position.Height = filter.Height + 1
+	vote.Position.Height = filter.Position.Height + 1
 	s.Require().False(filter.Filter(vote))
 	// Pass with VotePreCom.
 	vote = types.NewVote(types.VotePreCom, common.NewRandomHash(),
 		filter.LockIter)
-	vote.Position.Height = filter.Height
+	vote.Position.Height = filter.Position.Height
 	s.Require().False(filter.Filter(vote))
 	// Pass with VoteCom.
 	vote = types.NewVote(types.VoteCom, common.NewRandomHash(),
 		filter.Period)
-	vote.Position.Height = filter.Height
+	vote.Position.Height = filter.Position.Height
 	s.Require().False(filter.Filter(vote))
 	vote.Period--
 	s.Require().False(filter.Filter(vote))
@@ -81,9 +81,9 @@ func (s *VoteFilterTestSuite) TestFilterConfirm() {
 }
 func (s *VoteFilterTestSuite) TestFilterLowerHeight() {
 	filter := NewVoteFilter()
-	filter.Height = uint64(10)
+	filter.Position.Height = uint64(10)
 	vote := types.NewVote(types.VoteCom, common.NewRandomHash(), uint64(1))
-	vote.Position.Height = filter.Height - 1
+	vote.Position.Height = filter.Position.Height - 1
 	s.True(filter.Filter(vote))
 }
 

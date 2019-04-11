@@ -20,7 +20,7 @@ commands:
           command: |
             if [ "${CIRCLE_BRANCH}" == "master" ]; then
               make test
-            elif [ "${CIRCLE_BRANCH}" == "single-chain" ]; then
+            elif [ "${CIRCLE_BRANCH}" == "dexon-classic" ]; then
               make test
             else
               make test-short
@@ -98,6 +98,14 @@ jobs:
     steps:
       - init_workspace
       - run_test
+      - run: 
+          name: Saving Logs
+          when: on_fail
+          command: |
+            mkdir -p /tmp/logs
+            cd integration_test && tar -czf /tmp/logs/integration_test.tar.gz log.*
+      - store_artifacts:
+          path: /tmp/logs
 
   build:
     executor: go1_11
@@ -130,7 +138,7 @@ workflows:
             branches:
               only:
                 - master
-                - single-chain
+                - dexon-classic
 
   test_and_build:
     jobs:

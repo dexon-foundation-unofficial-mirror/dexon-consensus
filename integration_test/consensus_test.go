@@ -252,6 +252,11 @@ func (s *ConsensusTestSuite) syncBlocksWithSomeNode(
 }
 
 func (s *ConsensusTestSuite) TestSimple() {
+	if testing.Short() {
+		// All other tests will cover this basic case. To speed up CI process,
+		// ignore this test in short mode.
+		return
+	}
 	// The simplest test case:
 	//  - Node set is equals to DKG set and notary set for each chain in each
 	//    round.
