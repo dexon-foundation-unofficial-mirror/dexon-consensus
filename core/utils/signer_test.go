@@ -66,11 +66,12 @@ func (s *SignerTestSuite) TestVote() {
 }
 
 func (s *SignerTestSuite) TestCRS() {
+	dkgDelayRound = 1
 	k := s.setupSigner()
 	b := &types.Block{
 		ParentHash: common.NewRandomHash(),
 		Position: types.Position{
-			Round:  8,
+			Round:  0,
 			Height: 9,
 		},
 		Timestamp: time.Now().UTC(),
@@ -80,9 +81,8 @@ func (s *SignerTestSuite) TestCRS() {
 	// Hash block before hash CRS.
 	s.NoError(k.SignBlock(b))
 	s.NoError(k.SignCRS(b, crs))
-	ok, err := VerifyCRSSignature(b, crs)
+	ok := VerifyCRSSignature(b, crs, nil)
 	s.True(ok)
-	s.NoError(err)
 }
 
 func TestSigner(t *testing.T) {

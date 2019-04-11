@@ -690,7 +690,7 @@ func (a *agreement) processBlock(block *types.Block) error {
 				if !exist {
 					return true
 				}
-				ok, err := a.data.leader.validLeader(block)
+				ok, err := a.data.leader.validLeader(block, a.data.leader.hashCRS)
 				if err != nil {
 					fmt.Println("Error checking validLeader for Fast BA",
 						"error", err, "block", block)

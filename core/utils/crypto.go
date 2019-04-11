@@ -18,6 +18,7 @@
 package utils
 
 import (
+	"bytes"
 	"encoding/binary"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
@@ -122,21 +123,27 @@ func VerifyVoteSignature(vote *types.Vote) (bool, error) {
 
 func hashCRS(block *types.Block, crs common.Hash) common.Hash {
 	hashPos := HashPosition(block.Position)
+	if block.Position.Round < dkgDelayRound {
+		return crypto.Keccak256Hash(crs[:], hashPos[:], block.ProposerID.Hash[:])
+	}
 	return crypto.Keccak256Hash(crs[:], hashPos[:])
 }
 
 // VerifyCRSSignature verifies the CRS signature of types.Block.
-func VerifyCRSSignature(block *types.Block, crs common.Hash) (
-	bool, error) {
+func VerifyCRSSignature(
+	block *types.Block, crs common.Hash, npks *typesDKG.NodePublicKeys) bool {
 	hash := hashCRS(block, crs)
-	pubKey, err := crypto.SigToPub(hash, block.CRSSignature)
-	if err != nil {
-		return false, err
+	if block.Position.Round < dkgDelayRound {
+		return bytes.Compare(block.CRSSignature.Signature[:], hash[:]) == 0
 	}
-	if block.ProposerID != types.NewNodeID(pubKey) {
-		return false, nil
+	if npks == nil {
+		return false
 	}
-	return true, nil
+	pubKey, exist := npks.PublicKeys[block.ProposerID]
+	if !exist {
+		return false
+	}
+	return pubKey.VerifySignature(hash, block.CRSSignature)
 }
 
 // HashPosition generates hash of a types.Position.

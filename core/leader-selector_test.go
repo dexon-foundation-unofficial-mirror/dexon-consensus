@@ -38,7 +38,7 @@ type LeaderSelectorTestSuite struct {
 func (s *LeaderSelectorTestSuite) SetupTest() {
 	s.mockValidLeaderDefault = true
 	s.mockValidLeaderDB = make(map[common.Hash]bool)
-	s.mockValidLeader = func(b *types.Block) (bool, error) {
+	s.mockValidLeader = func(b *types.Block, _ common.Hash) (bool, error) {
 		if ret, exist := s.mockValidLeaderDB[b.Hash]; exist {
 			return ret, nil
 		}

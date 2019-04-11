@@ -103,7 +103,7 @@ func (s *AgreementStateTestSuite) SetupTest() {
 
 func (s *AgreementStateTestSuite) newAgreement(numNode int) *agreement {
 	logger := &common.NullLogger{}
-	leader := newLeaderSelector(func(*types.Block) (bool, error) {
+	leader := newLeaderSelector(func(*types.Block, common.Hash) (bool, error) {
 		return true, nil
 	}, logger)
 	notarySet := make(map[types.NodeID]struct{})

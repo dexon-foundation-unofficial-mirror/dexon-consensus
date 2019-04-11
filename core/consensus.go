@@ -656,6 +656,14 @@ func newConsensusForRound(
 	}
 	cfgModule := newConfigurationChain(ID, recv, gov, nodeSetCache, db, logger)
 	recv.cfgModule = cfgModule
+	signer.SetBLSSigner(
+		func(round uint64, hash common.Hash) (crypto.Signature, error) {
+			_, signer, err := cfgModule.getDKGInfo(round, false)
+			if err != nil {
+				return crypto.Signature{}, err
+			}
+			return crypto.Signature(signer.sign(hash)), nil
+		})
 	appModule := app
 	if usingNonBlocking {
 		appModule = newNonBlocking(app, debugApp)

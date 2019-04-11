@@ -18,22 +18,15 @@
 package core
 
 import (
-	"fmt"
 	"math/big"
 	"sync"
 
 	"github.com/dexon-foundation/dexon-consensus/common"
 	"github.com/dexon-foundation/dexon-consensus/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus/core/types"
-	"github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
-// Errors for leader module.
-var (
-	ErrIncorrectCRSSignature = fmt.Errorf("incorrect CRS signature")
-)
-
-type validLeaderFn func(*types.Block) (bool, error)
+type validLeaderFn func(block *types.Block, crs common.Hash) (bool, error)
 
 // Some constant value.
 var (
@@ -105,7 +98,7 @@ func (l *leaderSelector) leaderBlockHash() common.Hash {
 		if !ok {
 			continue
 		}
-		ok, err := l.validLeader(b)
+		ok, err := l.validLeader(b, l.hashCRS)
 		if err != nil {
 			l.logger.Error("Error checking validLeader", "error", err, "block", b)
 			delete(l.pendingBlocks, b.Hash)
@@ -120,20 +113,13 @@ func (l *leaderSelector) leaderBlockHash() common.Hash {
 }
 
 func (l *leaderSelector) processBlock(block *types.Block) error {
-	ok, err := utils.VerifyCRSSignature(block, l.hashCRS)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return ErrIncorrectCRSSignature
-	}
 	l.lock.Lock()
 	defer l.lock.Unlock()
 	ok, dist := l.potentialLeader(block)
 	if !ok {
 		return nil
 	}
-	ok, err = l.validLeader(block)
+	ok, err := l.validLeader(block, l.hashCRS)
 	if err != nil {
 		return err
 	}

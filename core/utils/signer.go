@@ -31,13 +31,17 @@ var (
 	ErrInvalidProposerID  = errors.New("invalid proposer id")
 	ErrIncorrectHash      = errors.New("hash of block is incorrect")
 	ErrIncorrectSignature = errors.New("signature of block is incorrect")
+	ErrNoBLSSigner        = errors.New("bls signer not set")
 )
+
+type blsSigner func(round uint64, hash common.Hash) (crypto.Signature, error)
 
 // Signer signs a segment of data.
 type Signer struct {
 	prvKey     crypto.PrivateKey
 	pubKey     crypto.PublicKey
 	proposerID types.NodeID
+	blsSign    blsSigner
 }
 
 // NewSigner constructs an Signer instance.
@@ -48,6 +52,11 @@ func NewSigner(prvKey crypto.PrivateKey) (s *Signer) {
 	}
 	s.proposerID = types.NewNodeID(s.pubKey)
 	return
+}
+
+// SetBLSSigner for signing CRSSignature
+func (s *Signer) SetBLSSigner(signer blsSigner) {
+	s.blsSign = signer
 }
 
 // SignBlock signs a types.Block.
@@ -76,7 +85,19 @@ func (s *Signer) SignCRS(b *types.Block, crs common.Hash) (err error) {
 		err = ErrInvalidProposerID
 		return
 	}
-	b.CRSSignature, err = s.prvKey.Sign(hashCRS(b, crs))
+	if b.Position.Round < dkgDelayRound {
+		hash := hashCRS(b, crs)
+		b.CRSSignature = crypto.Signature{
+			Type:      "bls",
+			Signature: hash[:],
+		}
+		return
+	}
+	if s.blsSign == nil {
+		err = ErrNoBLSSigner
+		return
+	}
+	b.CRSSignature, err = s.blsSign(b.Position.Round, hashCRS(b, crs))
 	return
 }
 

@@ -36,16 +36,32 @@ var (
 	ErrRoundOutOfRange            = errors.New("round out of range")
 	ErrInvalidBlock               = errors.New("invalid block")
 	ErrNoValidLeader              = errors.New("no valid leader")
+	ErrIncorrectCRSSignature      = errors.New("incorrect CRS signature")
+	ErrBlockTooOld                = errors.New("block too old")
 )
 
 const maxResultCache = 100
 
 // genValidLeader generate a validLeader function for agreement modules.
 func genValidLeader(
-	mgr *agreementMgr) func(*types.Block) (bool, error) {
-	return func(block *types.Block) (bool, error) {
+	mgr *agreementMgr) validLeaderFn {
+	return func(block *types.Block, crs common.Hash) (bool, error) {
 		if block.Timestamp.After(time.Now()) {
 			return false, nil
+		}
+		if block.Position.Round >= DKGDelayRound {
+			if mgr.recv.npks == nil {
+				return false, nil
+			}
+			if block.Position.Round > mgr.recv.npks.Round {
+				return false, nil
+			}
+			if block.Position.Round < mgr.recv.npks.Round {
+				return false, ErrBlockTooOld
+			}
+		}
+		if !utils.VerifyCRSSignature(block, crs, mgr.recv.npks) {
+			return false, ErrIncorrectCRSSignature
 		}
 		if err := mgr.bcModule.sanityCheck(block); err != nil {
 			if err == ErrRetrySanityCheckLater {

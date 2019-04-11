@@ -127,6 +127,7 @@ func (s *CryptoTestSuite) TestVoteSignature() {
 }
 
 func (s *CryptoTestSuite) TestCRSSignature() {
+	dkgDelayRound = 1
 	crs := common.NewRandomHash()
 	prv, err := ecdsa.NewPrivateKey()
 	s.Require().NoError(err)
@@ -135,14 +136,12 @@ func (s *CryptoTestSuite) TestCRSSignature() {
 	block := &types.Block{
 		ProposerID: nID,
 	}
-	block.CRSSignature, err = prv.Sign(hashCRS(block, crs))
-	s.Require().NoError(err)
-	ok, err := VerifyCRSSignature(block, crs)
-	s.Require().NoError(err)
+	hash := hashCRS(block, crs)
+	block.CRSSignature.Signature = hash[:]
+	ok := VerifyCRSSignature(block, crs, nil)
 	s.True(ok)
 	block.Position.Height++
-	ok, err = VerifyCRSSignature(block, crs)
-	s.Require().NoError(err)
+	ok = VerifyCRSSignature(block, crs, nil)
 	s.False(ok)
 }
 
