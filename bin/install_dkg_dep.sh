@@ -7,8 +7,8 @@ fi
 if [ ! -d .dep/dkg ]; then
   mkdir -p .dep/dkg
   cd .dep/dkg
-  git clone --depth 1 --single-branch -b dev git://github.com/dexon-foundation/bls.git &
-  git clone --depth 1 git://github.com/dexon-foundation/mcl.git &
+  git clone --depth 1 -b master git://github.com/dexon-foundation/bls.git &
+  git clone --depth 1 -b master git://github.com/dexon-foundation/mcl.git &
   wait
   cd bls
   make test_go -j

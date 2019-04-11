@@ -22,5 +22,5 @@ import (
 )
 
 const (
-	curve = bls.CurveFp382_2
+	curve = bls.BLS12_381
 )
