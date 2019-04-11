@@ -11,7 +11,7 @@ if [ ! -d .dep/dkg ]; then
   git clone --depth 1 -b master git://github.com/dexon-foundation/mcl.git &
   wait
   cd bls
-  make test_go -j
+  make test_go -j MCL_USE_OPENSSL=0
   cd ../../../
 fi
 cd vendor/github.com/dexon-foundation && rm -rf bls mcl
