@@ -1,11 +1,13 @@
 #!/bin/sh
 
-if ! which dep >/dev/null 2>&1; then
-  go get -u github.com/golang/dep/cmd/dep
+: "${GO:="go"}"
+
+if ! command -v dep >/dev/null 2>&1; then
+  eval "${GO} get -u ${GO_BUILD_FLAGS} github.com/golang/dep/cmd/dep"
 fi
-if ! which golint >/dev/null 2>&1; then
-  go get -u golang.org/x/lint/golint
+if ! command -v golint >/dev/null 2>&1; then
+  eval "${GO} get -u ${GO_BUILD_FLAGS} golang.org/x/lint/golint"
 fi
-if ! which gosec >/dev/null 2>&1; then
-  go get github.com/securego/gosec/cmd/gosec/...
+if ! command -v gosec >/dev/null 2>&1; then
+  eval "${GO} get -u ${GO_BUILD_FLAGS} github.com/securego/gosec/cmd/gosec/..."
 fi

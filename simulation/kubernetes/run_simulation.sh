@@ -4,13 +4,13 @@ IMAGE_TAG=asia.gcr.io/dexon-dev/dexcon-simulation:latest
 
 
 build_binary() {
-  make DOCKER=true -C ../..
+  make -C ../.. BUILD_IN_DOCKER=true
   cp -r ../../build .
 }
 
 build_docker_image() {
-  docker build -t ${IMAGE_TAG} .
-  docker push ${IMAGE_TAG}
+  docker build -t "${IMAGE_TAG}" .
+  docker push "${IMAGE_TAG}"
 }
 
 start_simulation() {
@@ -34,7 +34,7 @@ start_simulation() {
 main() {
   local num_nodes=$1
 
-  if [ "$num_nodes" == "" ]; then
+  if [ "$num_nodes" = "" ]; then
     num_nodes=7
   fi
 
@@ -47,4 +47,4 @@ main() {
   start_simulation
 }
 
-main $*
+main "$@"

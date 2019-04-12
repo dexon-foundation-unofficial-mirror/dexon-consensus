@@ -1,4 +1,5 @@
 # Environment variables for the project.
+# shellcheck shell=dash disable=SC2155
 
 export GITROOT=$(git rev-parse --show-toplevel)
 
