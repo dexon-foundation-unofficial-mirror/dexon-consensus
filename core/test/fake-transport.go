@@ -65,6 +65,11 @@ func NewFakeTransportClient(pubKey crypto.PublicKey) TransportClient {
 	}
 }
 
+// Disconnect implements Transport.Disconnect method.
+func (t *FakeTransport) Disconnect(endpoint types.NodeID) {
+	delete(t.peers, endpoint)
+}
+
 // Send implements Transport.Send method.
 func (t *FakeTransport) Send(
 	endpoint types.NodeID, msg interface{}) (err error) {

@@ -205,6 +205,11 @@ func (t *TCPTransport) clientHandshake(conn net.Conn) (
 	return
 }
 
+// Disconnect implements Transport.Disconnect method.
+func (t *TCPTransport) Disconnect(endpoint types.NodeID) {
+	delete(t.peers, endpoint)
+}
+
 func (t *TCPTransport) send(
 	endpoint types.NodeID, msg interface{}, payload []byte) {
 	t.peersLock.RLock()
@@ -216,6 +221,10 @@ func (t *TCPTransport) send(
 // Send implements Transport.Send method.
 func (t *TCPTransport) Send(
 	endpoint types.NodeID, msg interface{}) (err error) {
+
+	if _, exist := t.peers[endpoint]; !exist {
+		return fmt.Errorf("the endpoint does not exists: %v", endpoint)
+	}
 
 	payload, err := t.marshalMessage(msg)
 	if err != nil {

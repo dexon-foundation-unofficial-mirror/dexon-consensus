@@ -105,7 +105,7 @@ func VerifyDKGComplaint(
 // channel of a network module. An context is required to stop the go routine
 // automatically. An optinal message handler could be provided.
 func LaunchDummyReceiver(
-	ctx context.Context, recv <-chan interface{}, handler func(interface{})) (
+	ctx context.Context, recv <-chan types.Msg, handler func(types.Msg)) (
 	context.CancelFunc, <-chan struct{}) {
 	var (
 		dummyCtx, dummyCancel = context.WithCancel(ctx)

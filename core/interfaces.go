@@ -83,7 +83,10 @@ type Network interface {
 	BroadcastDKGPartialSignature(psig *typesDKG.PartialSignature)
 
 	// ReceiveChan returns a channel to receive messages from DEXON network.
-	ReceiveChan() <-chan interface{}
+	ReceiveChan() <-chan types.Msg
+
+	// ReportBadPeerChan returns a channel to report bad peer.
+	ReportBadPeerChan() chan<- interface{}
 }
 
 // Governance interface specifies interface to control the governance contract.

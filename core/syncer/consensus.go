@@ -80,7 +80,7 @@ type Consensus struct {
 	syncedSkipNext     bool
 	dummyCancel        context.CancelFunc
 	dummyFinished      <-chan struct{}
-	dummyMsgBuffer     []interface{}
+	dummyMsgBuffer     []types.Msg
 	initChainTipHeight uint64
 }
 
@@ -297,7 +297,7 @@ func (con *Consensus) ForceSync(lastPos types.Position, skip bool) {
 	if con.dummyCancel == nil {
 		con.dummyCancel, con.dummyFinished = utils.LaunchDummyReceiver(
 			context.Background(), con.network.ReceiveChan(),
-			func(msg interface{}) {
+			func(msg types.Msg) {
 				con.dummyMsgBuffer = append(con.dummyMsgBuffer, msg)
 			})
 	}
@@ -448,7 +448,7 @@ func (con *Consensus) stopBuffering() {
 	// need to launch a dummy receiver right away.
 	con.dummyCancel, con.dummyFinished = utils.LaunchDummyReceiver(
 		context.Background(), con.network.ReceiveChan(),
-		func(msg interface{}) {
+		func(msg types.Msg) {
 			con.dummyMsgBuffer = append(con.dummyMsgBuffer, msg)
 		})
 	// Stop agreements.
@@ -512,7 +512,7 @@ func (con *Consensus) startNetwork() {
 		for {
 			select {
 			case val := <-con.network.ReceiveChan():
-				switch v := val.(type) {
+				switch v := val.Payload.(type) {
 				case *types.Block:
 				case *types.AgreementResult:
 					// Avoid byzantine nodes attack by broadcasting older
@@ -524,7 +524,7 @@ func (con *Consensus) startNetwork() {
 				default:
 					continue loop
 				}
-				con.agreementModule.inputChan <- val
+				con.agreementModule.inputChan <- val.Payload
 			case <-con.ctx.Done():
 				break loop
 			}

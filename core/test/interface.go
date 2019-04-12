@@ -94,6 +94,8 @@ type Transport interface {
 	// This method should be accessed after ether 'Join' or 'WaitForPeers'
 	// returned.
 	Peers() []crypto.PublicKey
+
+	Disconnect(endpoint types.NodeID)
 }
 
 // Marshaller defines an interface to convert between interface{} and []byte.

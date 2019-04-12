@@ -18,6 +18,7 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -70,7 +71,7 @@ func (n *network) BroadcastAgreementResult(
 // SendDKGPrivateShare sends PrivateShare to a DKG participant.
 func (n *network) SendDKGPrivateShare(
 	recv crypto.PublicKey, prvShare *typesDKG.PrivateShare) {
-	n.conn.send(types.NewNodeID(recv), prvShare)
+	n.conn.send(n.nID, types.NewNodeID(recv), prvShare)
 }
 
 // BroadcastDKGPrivateShare broadcasts PrivateShare to all DKG participants.
@@ -87,8 +88,13 @@ func (n *network) BroadcastDKGPartialSignature(
 }
 
 // ReceiveChan returns a channel to receive messages from DEXON network.
-func (n *network) ReceiveChan() <-chan interface{} {
-	return make(chan interface{})
+func (n *network) ReceiveChan() <-chan types.Msg {
+	return make(chan types.Msg)
+}
+
+// ReportBadPeer reports that a peer is sending bad message.
+func (n *network) ReportBadPeerChan() chan<- interface{} {
+	return n.conn.s.sink
 }
 
 func (nc *networkConnection) broadcast(from types.NodeID, msg interface{}) {
@@ -96,11 +102,11 @@ func (nc *networkConnection) broadcast(from types.NodeID, msg interface{}) {
 		if nID == from {
 			continue
 		}
-		nc.send(nID, msg)
+		nc.send(from, nID, msg)
 	}
 }
 
-func (nc *networkConnection) send(to types.NodeID, msg interface{}) {
+func (nc *networkConnection) send(from, to types.NodeID, msg interface{}) {
 	ch, exist := nc.cons[to]
 	if !exist {
 		return
@@ -122,12 +128,15 @@ func (nc *networkConnection) send(to types.NodeID, msg interface{}) {
 		}
 		msgCopy = valCopy
 	}
-	ch <- msgCopy
+	ch <- types.Msg{
+		PeerID:  from,
+		Payload: msgCopy,
+	}
 }
 
 type networkConnection struct {
 	s    *ConsensusTestSuite
-	cons map[types.NodeID]chan interface{}
+	cons map[types.NodeID]chan types.Msg
 }
 
 func (nc *networkConnection) newNetwork(nID types.NodeID) *network {
@@ -138,14 +147,19 @@ func (nc *networkConnection) newNetwork(nID types.NodeID) *network {
 }
 
 func (nc *networkConnection) setCon(nID types.NodeID, con *Consensus) {
-	ch := make(chan interface{}, 1000)
+	ch := make(chan types.Msg, 1000)
 	go func() {
 		for {
-			msg := <-ch
+			var msg types.Msg
+			select {
+			case msg = <-ch:
+			case <-nc.s.ctx.Done():
+				return
+			}
 			var err error
 			// Testify package does not support concurrent call.
 			// Use panic() to detact error.
-			switch val := msg.(type) {
+			switch val := msg.Payload.(type) {
 			case *types.Block:
 				err = con.preProcessBlock(val)
 			case *types.Vote:
@@ -167,13 +181,31 @@ func (nc *networkConnection) setCon(nID types.NodeID, con *Consensus) {
 
 type ConsensusTestSuite struct {
 	suite.Suite
-	conn *networkConnection
+	ctx       context.Context
+	ctxCancel context.CancelFunc
+	conn      *networkConnection
+	sink      chan interface{}
+}
+
+func (s *ConsensusTestSuite) SetupTest() {
+	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
+	s.sink = make(chan interface{}, 1000)
+	go func() {
+		select {
+		case <-s.sink:
+		case <-s.ctx.Done():
+			return
+		}
+	}()
+}
+func (s *ConsensusTestSuite) TearDownTest() {
+	s.ctxCancel()
 }
 
 func (s *ConsensusTestSuite) newNetworkConnection() *networkConnection {
 	return &networkConnection{
 		s:    s,
-		cons: make(map[types.NodeID]chan interface{}),
+		cons: make(map[types.NodeID]chan types.Msg),
 	}
 }
 
@@ -384,7 +416,7 @@ func (s *ConsensusTestSuite) TestInitialHeightEventTriggered() {
 		network,
 		prvKey,
 		[]*types.Block(nil),
-		[]interface{}(nil),
+		[]types.Msg{},
 		&common.NullLogger{},
 	)
 	s.Require().NoError(err)

@@ -147,7 +147,7 @@ func (s *NetworkTestSuite) TestPullBlocks() {
 	for {
 		select {
 		case v := <-master.ReceiveChan():
-			b, ok := v.(*types.Block)
+			b, ok := v.Payload.(*types.Block)
 			if !ok {
 				break
 			}
@@ -223,7 +223,7 @@ func (s *NetworkTestSuite) TestPullVotes() {
 		defer cancelFunc()
 		select {
 		case v := <-master.ReceiveChan():
-			vv, ok := v.(*types.Vote)
+			vv, ok := v.Payload.(*types.Vote)
 			if !ok {
 				break
 			}
@@ -283,13 +283,17 @@ func (s *NetworkTestSuite) TestBroadcastToSet() {
 	// Try broadcasting with datum from round 0, and make sure only node belongs
 	// to that set receiving the message.
 	nerd.BroadcastVote(&types.Vote{VoteHeader: types.VoteHeader{Position: pos}})
-	req.IsType(&types.Vote{}, <-notaryNode.ReceiveChan())
+	msg := <-notaryNode.ReceiveChan()
+	req.IsType(&types.Vote{}, msg.Payload)
 	nerd.BroadcastDKGPrivateShare(&typesDKG.PrivateShare{Round: pos.Round})
-	req.IsType(&typesDKG.PrivateShare{}, <-notaryNode.ReceiveChan())
+	msg = <-notaryNode.ReceiveChan()
+	req.IsType(&typesDKG.PrivateShare{}, msg.Payload)
 	nerd.BroadcastDKGPartialSignature(&typesDKG.PartialSignature{Round: pos.Round})
-	req.IsType(&typesDKG.PartialSignature{}, <-notaryNode.ReceiveChan())
+	msg = <-notaryNode.ReceiveChan()
+	req.IsType(&typesDKG.PartialSignature{}, msg.Payload)
 	nerd.BroadcastBlock(&types.Block{Position: pos})
-	req.IsType(&types.Block{}, <-notaryNode.ReceiveChan())
+	msg = <-notaryNode.ReceiveChan()
+	req.IsType(&types.Block{}, msg.Payload)
 }
 
 type testVoteCensor struct{}
@@ -309,7 +313,7 @@ func (s *NetworkTestSuite) TestCensor() {
 	_, pubKeys, err := NewKeys(peerCount)
 	req.NoError(err)
 	networks := s.setupNetworks(pubKeys)
-	receiveChans := make(map[types.NodeID]<-chan interface{}, peerCount)
+	receiveChans := make(map[types.NodeID]<-chan types.Msg, peerCount)
 	for nID, node := range networks {
 		receiveChans[nID] = node.ReceiveChan()
 	}
@@ -330,7 +334,8 @@ func (s *NetworkTestSuite) TestCensor() {
 			req.Equal(0, len(receiveChan))
 		} else {
 			req.Equal(1, len(receiveChan))
-			req.IsType(&types.Vote{}, <-receiveChan)
+			msg := <-receiveChan
+			req.IsType(&types.Vote{}, msg.Payload)
 		}
 	}
 
@@ -351,7 +356,8 @@ func (s *NetworkTestSuite) TestCensor() {
 			req.Equal(0, len(receiveChan))
 		} else {
 			req.Equal(1, len(receiveChan))
-			req.IsType(&types.Vote{}, <-receiveChan)
+			msg := <-receiveChan
+			req.IsType(&types.Vote{}, msg.Payload)
 		}
 	}
 	censorNode.BroadcastVote(vote)
@@ -361,7 +367,8 @@ func (s *NetworkTestSuite) TestCensor() {
 			req.Equal(0, len(receiveChan))
 		} else {
 			req.Equal(1, len(receiveChan))
-			req.IsType(&types.Vote{}, <-receiveChan)
+			msg := <-receiveChan
+			req.IsType(&types.Vote{}, msg.Payload)
 		}
 	}
 

@@ -121,14 +121,16 @@ func (s *UtilsTestSuite) TestDummyReceiver() {
 	for i := 0; i < msgCount; i++ {
 		fakeMsgs = append(fakeMsgs, i)
 	}
-	launchDummySender := func(msgs []int, inputChan chan<- interface{}) {
+	launchDummySender := func(msgs []int, inputChan chan<- types.Msg) {
 		finished := make(chan struct{}, 1)
 		go func() {
 			defer func() {
 				finished <- struct{}{}
 			}()
 			for _, v := range msgs {
-				inputChan <- v
+				inputChan <- types.Msg{
+					Payload: v,
+				}
 			}
 		}()
 		select {
@@ -137,17 +139,17 @@ func (s *UtilsTestSuite) TestDummyReceiver() {
 			s.Require().FailNow("unable to deliver all messages in time")
 		}
 	}
-	checkBuffer := func(sent []int, buff []interface{}) {
+	checkBuffer := func(sent []int, buff []types.Msg) {
 		s.Require().Len(buff, len(sent))
 		for i := range sent {
-			s.Require().Equal(sent[i], buff[i].(int))
+			s.Require().Equal(sent[i], buff[i].Payload.(int))
 		}
 	}
 	// Basic scenario: a dummy receiver with caching enabled.
-	recv := make(chan interface{})
-	buff := []interface{}{}
+	recv := make(chan types.Msg)
+	buff := []types.Msg{}
 	cancel, finished := LaunchDummyReceiver(
-		context.Background(), recv, func(msg interface{}) {
+		context.Background(), recv, func(msg types.Msg) {
 			buff = append(buff, msg)
 		})
 	launchDummySender(fakeMsgs, recv)

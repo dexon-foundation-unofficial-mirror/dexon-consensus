@@ -520,7 +520,7 @@ type Consensus struct {
 	roundEvent               *utils.RoundEvent
 	logger                   common.Logger
 	resetDeliveryGuardTicker chan struct{}
-	msgChan                  chan interface{}
+	msgChan                  chan types.Msg
 	priorityMsgChan          chan interface{}
 	waitGroup                sync.WaitGroup
 	processBlockChan         chan *types.Block
@@ -528,7 +528,7 @@ type Consensus struct {
 	// Context of Dummy receiver during switching from syncer.
 	dummyCancel    context.CancelFunc
 	dummyFinished  <-chan struct{}
-	dummyMsgBuffer []interface{}
+	dummyMsgBuffer []types.Msg
 }
 
 // NewConsensus construct an Consensus instance.
@@ -577,7 +577,7 @@ func NewConsensusFromSyncer(
 	networkModule Network,
 	prv crypto.PrivateKey,
 	confirmedBlocks []*types.Block,
-	cachedMessages []interface{},
+	cachedMessages []types.Msg,
 	logger common.Logger) (*Consensus, error) {
 	// Setup Consensus instance.
 	con := newConsensusForRound(initBlock, dMoment, app, gov, db,
@@ -585,7 +585,7 @@ func NewConsensusFromSyncer(
 	// Launch a dummy receiver before we start receiving from network module.
 	con.dummyMsgBuffer = cachedMessages
 	con.dummyCancel, con.dummyFinished = utils.LaunchDummyReceiver(
-		con.ctx, networkModule.ReceiveChan(), func(msg interface{}) {
+		con.ctx, networkModule.ReceiveChan(), func(msg types.Msg) {
 			con.dummyMsgBuffer = append(con.dummyMsgBuffer, msg)
 		})
 	// Dump all BA-confirmed blocks to the consensus instance, make sure these
@@ -690,7 +690,7 @@ func newConsensusForRound(
 		event:                    common.NewEvent(),
 		logger:                   logger,
 		resetDeliveryGuardTicker: make(chan struct{}),
-		msgChan:                  make(chan interface{}, 1024),
+		msgChan:                  make(chan types.Msg, 1024),
 		priorityMsgChan:          make(chan interface{}, 1024),
 		processBlockChan:         make(chan *types.Block, 1024),
 	}
@@ -1234,14 +1234,15 @@ MessageLoop:
 			return
 		default:
 		}
-		var msg interface{}
+		var msg, peer interface{}
 		select {
 		case msg = <-con.priorityMsgChan:
 		default:
 		}
 		if msg == nil {
 			select {
-			case msg = <-con.msgChan:
+			case message := <-con.msgChan:
+				msg, peer = message.Payload, message.PeerID
 			case msg = <-con.priorityMsgChan:
 			case <-con.ctx.Done():
 				return
@@ -1260,42 +1261,53 @@ MessageLoop:
 				if val.IsEmpty() {
 					hash, err := utils.HashBlock(val)
 					if err != nil {
-						con.logger.Error("error verifying empty block hash",
+						con.logger.Error("Error verifying empty block hash",
 							"block", val,
 							"error, err")
+						con.network.ReportBadPeerChan() <- peer
 						continue MessageLoop
 					}
 					if hash != val.Hash {
-						con.logger.Error("incorrect confirmed empty block hash",
+						con.logger.Error("Incorrect confirmed empty block hash",
 							"block", val,
 							"hash", hash)
+						con.network.ReportBadPeerChan() <- peer
 						continue MessageLoop
 					}
 					if _, err := con.bcModule.proposeBlock(
 						val.Position, time.Time{}, true); err != nil {
-						con.logger.Error("error adding empty block",
+						con.logger.Error("Error adding empty block",
 							"block", val,
 							"error", err)
+						con.network.ReportBadPeerChan() <- peer
 						continue MessageLoop
 					}
 				} else {
+					if !val.IsFinalized() {
+						con.logger.Warn("Ignore not finalized block",
+							"block", val)
+						continue MessageLoop
+					}
 					ok, err := con.bcModule.verifyRandomness(
 						val.Hash, val.Position.Round, val.Randomness)
 					if err != nil {
-						con.logger.Error("error verifying confirmed block randomness",
+						con.logger.Error("Error verifying confirmed block randomness",
 							"block", val,
 							"error", err)
+						con.network.ReportBadPeerChan() <- peer
 						continue MessageLoop
 					}
 					if !ok {
-						con.logger.Error("incorrect confirmed block randomness",
+						con.logger.Error("Incorrect confirmed block randomness",
 							"block", val)
+						con.network.ReportBadPeerChan() <- peer
 						continue MessageLoop
 					}
 					if err := utils.VerifyBlockSignature(val); err != nil {
 						con.logger.Error("VerifyBlockSignature failed",
 							"block", val,
 							"error", err)
+						con.network.ReportBadPeerChan() <- peer
 						continue MessageLoop
 					}
 				}
@@ -1314,12 +1326,14 @@ MessageLoop:
 					con.logger.Error("Failed to process finalized block",
 						"block", val,
 						"error", err)
+					con.network.ReportBadPeerChan() <- peer
 				}
 			} else {
 				if err := con.preProcessBlock(val); err != nil {
 					con.logger.Error("Failed to pre process block",
 						"block", val,
 						"error", err)
+					con.network.ReportBadPeerChan() <- peer
 				}
 			}
 		case *types.Vote:
@@ -1327,23 +1341,27 @@ MessageLoop:
 				con.logger.Error("Failed to process vote",
 					"vote", val,
 					"error", err)
+				con.network.ReportBadPeerChan() <- peer
 			}
 		case *types.AgreementResult:
 			if err := con.ProcessAgreementResult(val); err != nil {
 				con.logger.Error("Failed to process agreement result",
 					"result", val,
 					"error", err)
+				con.network.ReportBadPeerChan() <- peer
 			}
 		case *typesDKG.PrivateShare:
 			if err := con.cfgModule.processPrivateShare(val); err != nil {
 				con.logger.Error("Failed to process private share",
 					"error", err)
+				con.network.ReportBadPeerChan() <- peer
 			}
 
 		case *typesDKG.PartialSignature:
 			if err := con.cfgModule.processPartialSignature(val); err != nil {
 				con.logger.Error("Failed to process partial signature",
 					"error", err)
+				con.network.ReportBadPeerChan() <- peer
 			}
 		}
 	}
