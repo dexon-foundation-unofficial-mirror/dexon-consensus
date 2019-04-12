@@ -19,6 +19,7 @@ package core
 
 import (
 	"bytes"
+	"fmt"
 	"math/rand"
 	"sort"
 	"testing"
@@ -80,20 +81,31 @@ type AgreementCacheTestSuite struct {
 	requiredVotes int
 	f             int
 	roundLength   uint64
+	lambdaBA      time.Duration
 	signers       []*utils.Signer
 	cache         *agreementCache
 	recv          *testAgreementCacheReceiver
 }
 
 func (s *AgreementCacheTestSuite) SetupSuite() {
+	s.setupNodes(7)
+}
+
+func (s *AgreementCacheTestSuite) SetupTest() {
+	s.recv.isTsigValid = true
+	s.newCache(s.newRoundEvents(1))
+}
+
+func (s *AgreementCacheTestSuite) setupNodes(count int) {
 	var (
 		prvKeys []crypto.PrivateKey
 		pubKeys []crypto.PublicKey
-		count   = 7
 	)
 	for i := 0; i < count; i++ {
 		prvKey, err := ecdsa.NewPrivateKey()
-		s.Require().NoError(err)
+		if err != nil {
+			panic(err)
+		}
 		prvKeys = append(prvKeys, prvKey)
 		pubKeys = append(pubKeys, prvKey.PublicKey())
 	}
@@ -103,23 +115,22 @@ func (s *AgreementCacheTestSuite) SetupSuite() {
 	s.f = count / 3
 	s.requiredVotes = 2*s.f + 1
 	s.roundLength = 100
+	s.lambdaBA = 100 * time.Millisecond
 	s.notarySet = make(map[types.NodeID]struct{})
 	for _, k := range pubKeys {
 		s.notarySet[types.NewNodeID(k)] = struct{}{}
 	}
 	s.recv = &testAgreementCacheReceiver{s: s}
-}
 
-func (s *AgreementCacheTestSuite) SetupTest() {
-	s.recv.isTsigValid = true
-	s.newCache(s.newRoundEvents(1))
 }
 
 func (s *AgreementCacheTestSuite) newVote(t types.VoteType, h common.Hash,
 	p types.Position, period uint64, signer *utils.Signer) *types.Vote {
 	v := types.NewVote(t, h, period)
 	v.Position = p
-	s.Require().NoError(signer.SignVote(v))
+	if err := signer.SignVote(v); err != nil {
+		panic(err)
+	}
 	return v
 }
 
@@ -181,7 +192,7 @@ func (s *AgreementCacheTestSuite) newRoundEvents(
 			Round:       r,
 			BeginHeight: h,
 			Config: &types.Config{
-				LambdaBA:    100 * time.Millisecond,
+				LambdaBA:    s.lambdaBA,
 				RoundLength: s.roundLength,
 			},
 		})
@@ -192,25 +203,26 @@ func (s *AgreementCacheTestSuite) newRoundEvents(
 
 func (s *AgreementCacheTestSuite) newCache(rEvts []utils.RoundEventParam) {
 	s.cache = newAgreementCache(s.recv)
-	s.Require().NotNil(s.cache)
-	s.Require().NoError(s.cache.notifyRoundEvents(rEvts))
+	if err := s.cache.notifyRoundEvents(rEvts); err != nil {
+		panic(err)
+	}
 }
 
 func (s *AgreementCacheTestSuite) generateTestData(
-	positionCount, periodCount uint64) (
+	positionCount, periodCount uint64,
+	voteTypes []types.VoteType, voteCount int) (
 	lastPosition types.Position,
 	votes []types.Vote, bs []*types.Block, rs []*types.AgreementResult) {
 	gen := func(p types.Position, period uint64) (
 		vs []types.Vote, b *types.Block, r *types.AgreementResult) {
 		h := common.NewRandomHash()
-		v := s.newVotes(types.VotePreCom, h, p, period)
-		vs = append(vs, v...)
-		vCom := s.newVotes(types.VoteCom, h, p, period)
-		vs = append(vs, vCom...)
-		if period == 0 {
-			v = s.newVotes(types.VoteFast, h, p, period)
-			vs = append(vs, v...)
-			v = s.newVotes(types.VoteFastCom, h, p, period)
+		var vCom []types.Vote
+		for _, t := range voteTypes {
+			v := s.newVotes(t, h, p, period)
+			if t == types.VoteFastCom || t == types.VoteCom {
+				vCom = v
+			}
+			v = v[:voteCount]
 			vs = append(vs, v...)
 		}
 		r = &types.AgreementResult{BlockHash: h, Position: p}
@@ -840,7 +852,10 @@ func (s *AgreementCacheTestSuite) TestRandomly() {
 		periodCount   uint64 = 5
 		iteration            = 3
 	)
-	lastPosition, vs, bs, rs := s.generateTestData(positionCount, periodCount)
+	lastPosition, vs, bs, rs := s.generateTestData(positionCount, periodCount,
+		[]types.VoteType{
+			types.VoteFast, types.VotePreCom, types.VoteCom, types.VoteFastCom,
+		}, 3*s.f+1)
 	s.Require().NotEmpty(vs)
 	s.Require().NotEmpty(bs)
 	s.Require().NotEmpty(rs)
@@ -904,4 +919,149 @@ func (s *AgreementCacheTestSuite) TestRandomly() {
 
 func TestAgreementCache(t *testing.T) {
 	suite.Run(t, new(AgreementCacheTestSuite))
+}
+
+type generated struct {
+	nodeCount                  int
+	positionCount, periodCount uint64
+	benchType                  string
+	votes                      []types.Vote
+	s                          *AgreementCacheTestSuite
+}
+
+func (g *generated) refresh(
+	nodeCount int, positionCount, periodCount uint64, benchType string) {
+	if g.nodeCount != nodeCount ||
+		g.positionCount != positionCount ||
+		g.periodCount != periodCount ||
+		g.benchType != benchType {
+		fmt.Printf(
+			"generate votes, node:%d, pos:%d, period:%d, type:%s\n",
+			nodeCount, positionCount, periodCount, benchType)
+		s := new(AgreementCacheTestSuite)
+		s.setupNodes(nodeCount)
+		var (
+			voteCountPerSet int
+			voteTypes       []types.VoteType
+		)
+		switch benchType {
+		case "vote-process":
+			voteCountPerSet = s.requiredVotes
+			voteTypes = []types.VoteType{types.VotePreCom, types.VoteCom}
+		case "vote-process-no-trigger":
+			voteCountPerSet = s.requiredVotes - 1
+			voteTypes = []types.VoteType{types.VotePreCom, types.VoteCom}
+		case "snapshot":
+			// No event trigger expected, no votes is purged, that the worst
+			// case when taking snapshot.
+			voteCountPerSet = s.requiredVotes - 1
+			voteTypes = []types.VoteType{
+				types.VoteFast,
+				types.VotePreCom,
+				types.VoteCom,
+				types.VoteFastCom}
+		default:
+			panic(fmt.Errorf("unknown bench-type: %s", benchType))
+		}
+		_, vs, _, _ := s.generateTestData(positionCount, periodCount,
+			voteTypes, voteCountPerSet)
+		fmt.Printf(
+			"generate votes, node:%d, pos:%d, period:%d, type:%s, done with %d votes\n",
+			nodeCount, positionCount, periodCount, benchType, len(vs))
+		generatedCache = generated{
+			nodeCount:     nodeCount,
+			positionCount: positionCount,
+			periodCount:   periodCount,
+			benchType:     benchType,
+			votes:         vs,
+			s:             s}
+	}
+}
+
+var generatedCache generated
+
+func benchmarkAgreementCacheVoteProcess(
+	b *testing.B, nodeCount int, positionCount uint64, benchType string) {
+	generatedCache.refresh(nodeCount, positionCount, 1, benchType)
+	s := generatedCache.s
+	s.newCache(s.newRoundEvents(positionCount / s.roundLength))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if i >= len(generatedCache.votes) {
+			break
+		}
+		if _, err := s.cache.processVote(generatedCache.votes[i]); err != nil {
+			panic(err)
+		}
+	}
+}
+
+func BenchmarkAgreementCacheVoteProcess_49_200(b *testing.B) {
+	benchmarkAgreementCacheVoteProcess(b, 49, 200, "vote-process")
+}
+
+func BenchmarkAgreementCacheVoteProcess_199_200(b *testing.B) {
+	benchmarkAgreementCacheVoteProcess(b, 199, 200, "vote-process")
+}
+
+func BenchmarkAgreementCacheVoteProcess_301_300(b *testing.B) {
+	benchmarkAgreementCacheVoteProcess(b, 301, 300, "vote-process")
+}
+
+func BenchmarkAgreementCacheVoteProcess_400_300(b *testing.B) {
+	benchmarkAgreementCacheVoteProcess(b, 401, 300, "vote-process")
+}
+
+func BenchmarkAgreementCacheVoteProcess_49_200_NoTrigger(b *testing.B) {
+	benchmarkAgreementCacheVoteProcess(b, 49, 200, "vote-process-no-trigger")
+}
+
+func BenchmarkAgreementCacheVoteProcess_199_200_NoTrigger(b *testing.B) {
+	benchmarkAgreementCacheVoteProcess(b, 199, 200, "vote-process-no-trigger")
+}
+
+func BenchmarkAgreementCacheVoteProcess_301_300_NoTrigger(b *testing.B) {
+	benchmarkAgreementCacheVoteProcess(b, 301, 300, "vote-process-no-trigger")
+}
+
+func BenchmarkAgreementCacheVoteProcess_400_300_NoTrigger(b *testing.B) {
+	benchmarkAgreementCacheVoteProcess(b, 401, 300, "vote-process-no-trigger")
+}
+
+func benchmarkAgreementCacheSnapshot(
+	b *testing.B, nodeCount int, positionCount, periodCount uint64) {
+	generatedCache.refresh(nodeCount, positionCount, periodCount, "snapshot")
+	s := generatedCache.s
+	s.newCache(s.newRoundEvents(positionCount / s.roundLength))
+	for _, v := range generatedCache.votes {
+		evts, err := s.cache.processVote(v)
+		if len(evts) > 0 {
+			panic(fmt.Errorf("trigger event: %s %s", evts[0], &v))
+		}
+		if err != nil {
+			panic(err)
+		}
+	}
+	b.ResetTimer()
+	t := time.Now()
+	for i := 0; i < b.N; i++ {
+		s.cache.snapshot(t)
+		t = t.Add(s.lambdaBA + time.Second)
+	}
+}
+
+func BenchmarkAgreementCacheSnapshot_49_30_2(b *testing.B) {
+	benchmarkAgreementCacheSnapshot(b, 49, 30, 2)
+}
+
+func BenchmarkAgreementCacheSnapshot_199_30_3(b *testing.B) {
+	benchmarkAgreementCacheSnapshot(b, 199, 30, 2)
+}
+
+func BenchmarkAgreementCacheSnapshot_301_30_3(b *testing.B) {
+	benchmarkAgreementCacheSnapshot(b, 301, 30, 3)
+}
+
+func BenchmarkAgreementCacheSnapshot_400_40_4(b *testing.B) {
+	benchmarkAgreementCacheSnapshot(b, 401, 40, 4)
 }
