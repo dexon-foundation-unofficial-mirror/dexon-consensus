@@ -72,3 +72,13 @@ make
 ```
 dexcon-simulation-with-scheduler -config test.toml
 ```
+
+## License
+
+DEXON Consensus is licensed under the
+[GNU LGPL v3](https://www.gnu.org/licenses/lgpl-3.0.en.html),
+or any later version at your option. The license text is included as `LICENSE`
+in the repository. Since the GNU LGPL v3 itself is not a complete license but
+a set of terms applied on top of the GNU GPL v3, the text of the
+[GNU GPL v3](https://www.gnu.org/licenses/gpl-3.0.en.html)
+is also included in the repository as `LICENSE.GPL`.
