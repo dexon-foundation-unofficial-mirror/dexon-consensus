@@ -93,13 +93,23 @@ func (recv *consensusBAReceiver) VerifyPartialSignature(vote *types.Vote) bool {
 	if vote.Position.Round >= DKGDelayRound && vote.BlockHash != types.SkipBlockHash {
 		if vote.Type == types.VoteCom || vote.Type == types.VoteFastCom {
 			if recv.npks == nil {
+				recv.consensus.logger.Debug(
+					"Unable to verify psig, npks is nil",
+					"vote", vote)
 				return false
 			}
 			if vote.Position.Round != recv.npks.Round {
+				recv.consensus.logger.Debug(
+					"Unable to verify psig, round of npks mismatch",
+					"vote", vote,
+					"npksRound", recv.npks.Round)
 				return false
 			}
 			pubKey, exist := recv.npks.PublicKeys[vote.ProposerID]
 			if !exist {
+				recv.consensus.logger.Debug(
+					"Unable to verify psig, proposer is not qualified",
+					"vote", vote)
 				return false
 			}
 			blockHash := vote.BlockHash
