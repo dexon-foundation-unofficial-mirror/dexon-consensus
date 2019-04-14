@@ -18,7 +18,9 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
@@ -139,9 +141,16 @@ func (nc *networkConnection) newNetwork(nID types.NodeID) *network {
 
 func (nc *networkConnection) setCon(nID types.NodeID, con *Consensus) {
 	ch := make(chan interface{}, 1000)
+	nc.s.wg.Add(1)
 	go func() {
+		defer nc.s.wg.Done()
 		for {
-			msg := <-ch
+			var msg interface{}
+			select {
+			case msg = <-ch:
+			case <-nc.s.ctx.Done():
+				return
+			}
 			var err error
 			// Testify package does not support concurrent call.
 			// Use panic() to detact error.
@@ -167,7 +176,19 @@ func (nc *networkConnection) setCon(nID types.NodeID, con *Consensus) {
 
 type ConsensusTestSuite struct {
 	suite.Suite
-	conn *networkConnection
+	ctx       context.Context
+	ctxCancel context.CancelFunc
+	conn      *networkConnection
+	wg        sync.WaitGroup
+}
+
+func (s *ConsensusTestSuite) SetupTest() {
+	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
+}
+
+func (s *ConsensusTestSuite) TearDownTest() {
+	s.ctxCancel()
+	s.wg.Wait()
 }
 
 func (s *ConsensusTestSuite) newNetworkConnection() *networkConnection {
