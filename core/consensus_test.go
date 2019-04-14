@@ -20,6 +20,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
@@ -148,7 +149,9 @@ func (nc *networkConnection) newNetwork(nID types.NodeID) *network {
 
 func (nc *networkConnection) setCon(nID types.NodeID, con *Consensus) {
 	ch := make(chan types.Msg, 1000)
+	nc.s.wg.Add(1)
 	go func() {
+		defer nc.s.wg.Done()
 		for {
 			var msg types.Msg
 			select {
@@ -185,12 +188,15 @@ type ConsensusTestSuite struct {
 	ctxCancel context.CancelFunc
 	conn      *networkConnection
 	sink      chan interface{}
+	wg        sync.WaitGroup
 }
 
 func (s *ConsensusTestSuite) SetupTest() {
 	s.ctx, s.ctxCancel = context.WithCancel(context.Background())
 	s.sink = make(chan interface{}, 1000)
+	s.wg.Add(1)
 	go func() {
+		defer s.wg.Done()
 		select {
 		case <-s.sink:
 		case <-s.ctx.Done():
@@ -200,6 +206,7 @@ func (s *ConsensusTestSuite) SetupTest() {
 }
 func (s *ConsensusTestSuite) TearDownTest() {
 	s.ctxCancel()
+	s.wg.Wait()
 }
 
 func (s *ConsensusTestSuite) newNetworkConnection() *networkConnection {
