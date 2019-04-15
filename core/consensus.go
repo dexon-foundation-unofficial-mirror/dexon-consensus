@@ -89,28 +89,29 @@ func (recv *consensusBAReceiver) emptyBlockHash(pos types.Position) (
 	return hash, nil
 }
 
-func (recv *consensusBAReceiver) VerifyPartialSignature(vote *types.Vote) bool {
+func (recv *consensusBAReceiver) VerifyPartialSignature(vote *types.Vote) (
+	bool, bool) {
 	if vote.Position.Round >= DKGDelayRound && vote.BlockHash != types.SkipBlockHash {
 		if vote.Type == types.VoteCom || vote.Type == types.VoteFastCom {
 			if recv.npks == nil {
 				recv.consensus.logger.Debug(
 					"Unable to verify psig, npks is nil",
 					"vote", vote)
-				return false
+				return false, false
 			}
 			if vote.Position.Round != recv.npks.Round {
 				recv.consensus.logger.Debug(
 					"Unable to verify psig, round of npks mismatch",
 					"vote", vote,
 					"npksRound", recv.npks.Round)
-				return false
+				return false, false
 			}
 			pubKey, exist := recv.npks.PublicKeys[vote.ProposerID]
 			if !exist {
 				recv.consensus.logger.Debug(
 					"Unable to verify psig, proposer is not qualified",
 					"vote", vote)
-				return false
+				return false, true
 			}
 			blockHash := vote.BlockHash
 			if blockHash == types.NullBlockHash {
@@ -121,14 +122,14 @@ func (recv *consensusBAReceiver) VerifyPartialSignature(vote *types.Vote) bool {
 						"Failed to verify vote for empty block",
 						"position", vote.Position,
 						"error", err)
-					return false
+					return false, true
 				}
 			}
 			return pubKey.VerifySignature(
-				vote.BlockHash, crypto.Signature(vote.PartialSignature))
+				blockHash, crypto.Signature(vote.PartialSignature)), true
 		}
 	}
-	return len(vote.PartialSignature.Signature) == 0
+	return len(vote.PartialSignature.Signature) == 0, true
 }
 
 func (recv *consensusBAReceiver) ProposeVote(vote *types.Vote) {

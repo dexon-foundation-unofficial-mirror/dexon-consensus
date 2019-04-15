@@ -43,8 +43,8 @@ type agreementStateTestReceiver struct {
 	leader *leaderSelector
 }
 
-func (r *agreementStateTestReceiver) VerifyPartialSignature(*types.Vote) bool {
-	return true
+func (r *agreementStateTestReceiver) VerifyPartialSignature(*types.Vote) (bool, bool) {
+	return true, false
 }
 
 func (r *agreementStateTestReceiver) ProposeVote(vote *types.Vote) {

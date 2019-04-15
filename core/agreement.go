@@ -85,7 +85,7 @@ type agreementReceiver interface {
 	PullBlocks(common.Hashes)
 	ReportForkVote(v1, v2 *types.Vote)
 	ReportForkBlock(b1, b2 *types.Block)
-	VerifyPartialSignature(vote *types.Vote) bool
+	VerifyPartialSignature(vote *types.Vote) (bool, bool)
 }
 
 type pendingBlock struct {
@@ -372,8 +372,11 @@ func (a *agreement) sanityCheck(vote *types.Vote) error {
 		// TODO(jimmy): maybe we can verify partial signature at agreement-mgr.
 		return nil
 	}
-	if !a.data.recv.VerifyPartialSignature(vote) {
-		return ErrIncorrectVotePartialSignature
+	if ok, report := a.data.recv.VerifyPartialSignature(vote); !ok {
+		if report {
+			return ErrIncorrectVotePartialSignature
+		}
+		return ErrSkipButNoError
 	}
 	return nil
 }

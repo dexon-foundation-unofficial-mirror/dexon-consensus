@@ -34,8 +34,8 @@ type agreementTestReceiver struct {
 	agreementIndex int
 }
 
-func (r *agreementTestReceiver) VerifyPartialSignature(*types.Vote) bool {
-	return true
+func (r *agreementTestReceiver) VerifyPartialSignature(*types.Vote) (bool, bool) {
+	return true, false
 }
 
 func (r *agreementTestReceiver) ProposeVote(vote *types.Vote) {

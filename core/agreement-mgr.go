@@ -295,6 +295,9 @@ func (mgr *agreementMgr) processVote(v *types.Vote) (err error) {
 		mgr.baModule.updateFilter(mgr.voteFilter)
 		mgr.voteFilter.AddVote(v)
 	}
+	if err == ErrSkipButNoError {
+		err = nil
+	}
 	return
 }
 
