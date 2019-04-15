@@ -46,7 +46,8 @@ func (r *agreementTestReceiver) ProposeVote(vote *types.Vote) {
 func (r *agreementTestReceiver) ProposeBlock() common.Hash {
 	block := r.s.proposeBlock(
 		r.s.agreement[r.agreementIndex].data.ID,
-		r.s.agreement[r.agreementIndex].data.leader.hashCRS)
+		r.s.agreement[r.agreementIndex].data.leader.hashCRS,
+		[]byte{})
 	r.s.blockChan <- block.Hash
 	return block.Hash
 }
@@ -79,17 +80,18 @@ func (r *agreementTestReceiver) ReportForkBlock(b1, b2 *types.Block) {
 }
 
 func (s *AgreementTestSuite) proposeBlock(
-	nID types.NodeID, crs common.Hash) *types.Block {
+	nID types.NodeID, crs common.Hash, payload []byte) *types.Block {
 	block := &types.Block{
 		ProposerID: nID,
 		Position:   types.Position{Height: types.GenesisHeight},
-		Hash:       common.NewRandomHash(),
+		Payload:    payload,
 	}
-	s.block[block.Hash] = block
 	signer, exist := s.signers[block.ProposerID]
 	s.Require().True(exist)
-	s.Require().NoError(signer.SignCRS(
-		block, crs))
+	s.Require().NoError(signer.SignCRS(block, crs))
+	s.Require().NoError(signer.SignBlock(block))
+	s.block[block.Hash] = block
+
 	return block
 }
 
@@ -331,7 +333,7 @@ func (s *AgreementTestSuite) TestFastConfirmNonLeader() {
 	a.nextState()
 	// FastVoteState
 	s.Require().Len(s.blockChan, 0)
-	block := s.proposeBlock(leaderNode, a.data.leader.hashCRS)
+	block := s.proposeBlock(leaderNode, a.data.leader.hashCRS, []byte{})
 	s.Require().Equal(leaderNode, block.ProposerID)
 	s.Require().NoError(a.processBlock(block))
 	// Wait some time for go routine in processBlock to finish.
@@ -537,8 +539,8 @@ func (s *AgreementTestSuite) TestForkVote() {
 func (s *AgreementTestSuite) TestForkBlock() {
 	a, _ := s.newAgreement(4, -1, s.defaultValidLeader)
 	for nID := range a.notarySet {
-		b01 := s.proposeBlock(nID, a.data.leader.hashCRS)
-		b02 := s.proposeBlock(nID, a.data.leader.hashCRS)
+		b01 := s.proposeBlock(nID, a.data.leader.hashCRS, []byte{1})
+		b02 := s.proposeBlock(nID, a.data.leader.hashCRS, []byte{2})
 		s.Require().NoError(a.processBlock(b01))
 		s.Require().IsType(&ErrFork{}, a.processBlock(b02))
 		s.Require().Equal(b01.Hash, <-s.forkBlockChan)
@@ -550,7 +552,7 @@ func (s *AgreementTestSuite) TestFindBlockInPendingSet() {
 	a, leaderNode := s.newAgreement(4, 0, func(*types.Block, common.Hash) (bool, error) {
 		return false, nil
 	})
-	block := s.proposeBlock(leaderNode, a.data.leader.hashCRS)
+	block := s.proposeBlock(leaderNode, a.data.leader.hashCRS, []byte{})
 	s.Require().NoError(a.processBlock(block))
 	// Make sure the block goes to pending pool in leader selector.
 	block, exist := a.data.leader.findPendingBlock(block.Hash)

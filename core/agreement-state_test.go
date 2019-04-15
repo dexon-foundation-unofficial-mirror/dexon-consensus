@@ -75,6 +75,7 @@ func (s *AgreementStateTestSuite) proposeBlock(
 		Hash:       common.NewRandomHash(),
 	}
 	s.Require().NoError(s.signers[s.ID].SignCRS(block, leader.hashCRS))
+	s.Require().NoError(s.signers[s.ID].SignBlock(block))
 	s.block[block.Hash] = block
 	return block
 }
@@ -213,9 +214,11 @@ func (s *AgreementStateTestSuite) TestPreCommitState() {
 		blocks[i] = s.proposeBlock(a.data.leader)
 		prv, err := ecdsa.NewPrivateKey()
 		s.Require().NoError(err)
+		signer := utils.NewSigner(prv)
 		blocks[i].ProposerID = types.NewNodeID(prv.PublicKey())
-		s.Require().NoError(utils.NewSigner(prv).SignCRS(
+		s.Require().NoError(signer.SignCRS(
 			blocks[i], a.data.leader.hashCRS))
+		s.Require().NoError(signer.SignBlock(blocks[i]))
 		s.Require().NoError(a.processBlock(blocks[i]))
 	}
 
