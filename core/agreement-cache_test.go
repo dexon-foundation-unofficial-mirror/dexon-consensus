@@ -782,7 +782,7 @@ func (s *AgreementCacheTestSuite) TestRandomly() {
 	randObj := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < iteration; i++ {
 		// Shuffle those slices.
-		randObj.Shuffle(len(vs), func(i, j int) { vs[i], vs[i] = vs[j], vs[i] })
+		randObj.Shuffle(len(vs), func(i, j int) { vs[i], vs[j] = vs[j], vs[i] })
 		randObj.Shuffle(len(bs), func(i, j int) { bs[i], bs[j] = bs[j], bs[i] })
 		randObj.Shuffle(len(rs), func(i, j int) { rs[i], rs[j] = rs[j], rs[i] })
 		for i := range lastEvts {
