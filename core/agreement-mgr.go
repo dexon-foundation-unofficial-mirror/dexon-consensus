@@ -564,11 +564,13 @@ func (mgr *agreementMgr) baRoutineForOneRound(
 			default:
 			}
 			nextHeight, nextTime = mgr.bcModule.nextBlock()
-			if isStop(restartPos) {
-				break
-			}
-			if nextHeight > restartPos.Height {
-				break
+			if nextHeight != notReadyHeight {
+				if isStop(restartPos) {
+					break
+				}
+				if nextHeight > restartPos.Height {
+					break
+				}
 			}
 			mgr.logger.Debug("BlockChain not ready!!!",
 				"old", oldPos, "restart", restartPos, "next", nextHeight)

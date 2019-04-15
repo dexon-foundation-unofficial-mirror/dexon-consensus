@@ -415,6 +415,7 @@ func (s *BlockChainTestSuite) TestNextBlockAndTipRound() {
 	s.Require().Equal(nextT, s.dMoment)
 	// Add one block.
 	s.Require().NoError(bc.addBlock(blocks[0]))
+	s.Require().Len(bc.extractBlocks(), 1)
 	nextH, nextT = bc.nextBlock()
 	s.Require().Equal(nextH, uint64(2))
 	s.Require().Equal(

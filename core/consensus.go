@@ -1148,6 +1148,10 @@ func (con *Consensus) generateBlockRandomness(blocks []*types.Block) {
 					"block", block,
 					"result", result)
 				con.network.BroadcastAgreementResult(result)
+				if err := con.deliverFinalizedBlocks(); err != nil {
+					con.logger.Error("Failed to deliver finalized block",
+						"error", err)
+				}
 			}
 		}(block)
 	}
