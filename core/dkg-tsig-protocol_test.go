@@ -50,6 +50,7 @@ type testDKGReceiver struct {
 	antiComplaints map[types.NodeID]*typesDKG.PrivateShare
 	ready          []*typesDKG.MPKReady
 	final          []*typesDKG.Finalize
+	success        []*typesDKG.Success
 }
 
 func newTestDKGReceiver(s *DKGTSIGProtocolTestSuite,
@@ -100,6 +101,10 @@ func (r *testDKGReceiver) ProposeDKGMPKReady(ready *typesDKG.MPKReady) {
 
 func (r *testDKGReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
 	r.final = append(r.final, final)
+}
+
+func (r *testDKGReceiver) ProposeDKGSuccess(success *typesDKG.Success) {
+	r.success = append(r.success, success)
 }
 
 func (s *DKGTSIGProtocolTestSuite) setupDKGParticipants(n int) {
@@ -876,6 +881,22 @@ func (s *DKGTSIGProtocolTestSuite) TestProposeFinalize() {
 		Round:      1,
 		Reset:      3,
 	}, final)
+}
+
+func (s *DKGTSIGProtocolTestSuite) TestProposeSuccess() {
+	prvKey, err := ecdsa.NewPrivateKey()
+	s.Require().NoError(err)
+	recv := newTestDKGReceiver(s, utils.NewSigner(prvKey))
+	nID := types.NewNodeID(prvKey.PublicKey())
+	protocol := newDKGProtocol(nID, recv, 1, 3, 2)
+	protocol.proposeSuccess()
+	s.Require().Len(recv.success, 1)
+	success := recv.success[0]
+	s.Equal(&typesDKG.Success{
+		ProposerID: nID,
+		Round:      1,
+		Reset:      3,
+	}, success)
 }
 
 func (s *DKGTSIGProtocolTestSuite) TestTSigVerifierCache() {

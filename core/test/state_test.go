@@ -282,9 +282,9 @@ func (s *StateTestSuite) TestLocalMode() {
 	// Test adding node set, DKG complaints, final, master public key.
 	// Make sure everything is empty before changed.
 	req.Empty(st.DKGMasterPublicKeys(2))
-	req.False(st.IsDKGMPKReady(2, 0))
+	req.False(st.IsDKGMPKReady(2, 1))
 	req.Empty(st.DKGComplaints(2))
-	req.False(st.IsDKGFinal(2, 0))
+	req.False(st.IsDKGFinal(2, 1))
 	// Add DKG stuffs.
 	masterPubKey := s.newDKGMasterPublicKey(2, 0)
 	ready := s.newDKGMPKReady(2, 0)
@@ -296,22 +296,22 @@ func (s *StateTestSuite) TestLocalMode() {
 	req.Len(masterKeyForRound, 1)
 	req.True(masterKeyForRound[0].Equal(masterPubKey))
 	// Check IsDKGMPKReady.
-	req.True(st.IsDKGMPKReady(2, 0))
+	req.True(st.IsDKGMPKReady(2, 1))
 	// Check DKGComplaints.
 	compForRound := st.DKGComplaints(2)
 	req.Len(compForRound, 1)
 	req.True(compForRound[0].Equal(comp))
 	// Check IsDKGFinal.
-	req.True(st.IsDKGFinal(2, 0))
+	req.True(st.IsDKGFinal(2, 1))
 	// Test ResetDKG.
 	crs = common.NewRandomHash()
 	req.NoError(st.RequestChange(StateResetDKG, crs))
 	req.Equal(st.CRS(2), crs)
 	// Make sure all DKG fields are cleared.
 	req.Empty(st.DKGMasterPublicKeys(2))
-	req.False(st.IsDKGMPKReady(2, 0))
+	req.False(st.IsDKGMPKReady(2, 1))
 	req.Empty(st.DKGComplaints(2))
-	req.False(st.IsDKGFinal(2, 0))
+	req.False(st.IsDKGFinal(2, 1))
 }
 
 func (s *StateTestSuite) TestPacking() {
@@ -353,9 +353,9 @@ func (s *StateTestSuite) TestPacking() {
 	s.makeDKGChanges(st, masterPubKey, ready, comp, final)
 	// Make sure everything is empty before changed.
 	req.Empty(st.DKGMasterPublicKeys(2))
-	req.False(st.IsDKGMPKReady(2, 0))
+	req.False(st.IsDKGMPKReady(2, 1))
 	req.Empty(st.DKGComplaints(2))
-	req.False(st.IsDKGFinal(2, 0))
+	req.False(st.IsDKGFinal(2, 1))
 	packAndApply(st)
 	// Check if configs are changed.
 	config, nodes := st.Snapshot()
@@ -373,9 +373,9 @@ func (s *StateTestSuite) TestPacking() {
 	req.Len(compForRound, 1)
 	req.True(compForRound[0].Equal(comp))
 	// Check IsDKGMPKReady.
-	req.True(st.IsDKGMPKReady(2, 0))
+	req.True(st.IsDKGMPKReady(2, 1))
 	// Check IsDKGFinal.
-	req.True(st.IsDKGFinal(2, 0))
+	req.True(st.IsDKGFinal(2, 1))
 
 	// Test ResetDKG.
 	crs = common.NewRandomHash()
@@ -384,9 +384,9 @@ func (s *StateTestSuite) TestPacking() {
 	req.Equal(st.CRS(2), crs)
 	// Make sure all DKG fields are cleared.
 	req.Empty(st.DKGMasterPublicKeys(2))
-	req.False(st.IsDKGMPKReady(2, 0))
+	req.False(st.IsDKGMPKReady(2, 1))
 	req.Empty(st.DKGComplaints(2))
-	req.False(st.IsDKGFinal(2, 0))
+	req.False(st.IsDKGFinal(2, 1))
 }
 
 func (s *StateTestSuite) TestRequestBroadcastAndPack() {

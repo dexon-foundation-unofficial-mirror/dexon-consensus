@@ -242,6 +242,11 @@ func (c *Complaint) DecodeRLP(s *rlp.Stream) error {
 	return nil
 }
 
+// IsNack returns true if it's a nack complaint in DKG protocol.
+func (c *Complaint) IsNack() bool {
+	return len(c.PrivateShare.Signature.Signature) == 0
+}
+
 // PartialSignature describe a partial signature in DKG protocol.
 type PartialSignature struct {
 	ProposerID       types.NodeID               `json:"proposer_id"`
@@ -251,7 +256,7 @@ type PartialSignature struct {
 	Signature        crypto.Signature           `json:"signature"`
 }
 
-// MPKReady describe a dig ready message in DKG protocol.
+// MPKReady describe a dkg ready message in DKG protocol.
 type MPKReady struct {
 	ProposerID types.NodeID     `json:"proposer_id"`
 	Round      uint64           `json:"round"`
@@ -275,7 +280,7 @@ func (ready *MPKReady) Equal(other *MPKReady) bool {
 		bytes.Compare(ready.Signature.Signature, other.Signature.Signature) == 0
 }
 
-// Finalize describe a dig finalize message in DKG protocol.
+// Finalize describe a dkg finalize message in DKG protocol.
 type Finalize struct {
 	ProposerID types.NodeID     `json:"proposer_id"`
 	Round      uint64           `json:"round"`
@@ -299,9 +304,28 @@ func (final *Finalize) Equal(other *Finalize) bool {
 		bytes.Compare(final.Signature.Signature, other.Signature.Signature) == 0
 }
 
-// IsNack returns true if it's a nack complaint in DKG protocol.
-func (c *Complaint) IsNack() bool {
-	return len(c.PrivateShare.Signature.Signature) == 0
+// Success describe a dkg success message in DKG protocol.
+type Success struct {
+	ProposerID types.NodeID     `json:"proposer_id"`
+	Round      uint64           `json:"round"`
+	Reset      uint64           `json:"reset"`
+	Signature  crypto.Signature `json:"signature"`
+}
+
+func (s *Success) String() string {
+	return fmt.Sprintf("DKGSuccess{SP:%s Round:%d Reset:%d}",
+		s.ProposerID.String()[:6],
+		s.Round,
+		s.Reset)
+}
+
+// Equal check equality of two Success instances.
+func (s *Success) Equal(other *Success) bool {
+	return s.ProposerID.Equal(other.ProposerID) &&
+		s.Round == other.Round &&
+		s.Reset == other.Reset &&
+		s.Signature.Type == other.Signature.Type &&
+		bytes.Compare(s.Signature.Signature, other.Signature.Signature) == 0
 }
 
 // GroupPublicKey is the result of DKG protocol.

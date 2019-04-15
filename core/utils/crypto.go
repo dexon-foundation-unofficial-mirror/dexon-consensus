@@ -325,6 +325,19 @@ func hashDKGFinalize(final *typesDKG.Finalize) common.Hash {
 	)
 }
 
+func hashDKGSuccess(success *typesDKG.Success) common.Hash {
+	binaryRound := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryRound, success.Round)
+	binaryReset := make([]byte, 8)
+	binary.LittleEndian.PutUint64(binaryReset, success.Reset)
+
+	return crypto.Keccak256Hash(
+		success.ProposerID.Hash[:],
+		binaryRound,
+		binaryReset,
+	)
+}
+
 // VerifyDKGFinalizeSignature verifies DKGFinalize signature.
 func VerifyDKGFinalizeSignature(
 	final *typesDKG.Finalize) (bool, error) {
@@ -334,6 +347,20 @@ func VerifyDKGFinalizeSignature(
 		return false, err
 	}
 	if final.ProposerID != types.NewNodeID(pubKey) {
+		return false, nil
+	}
+	return true, nil
+}
+
+// VerifyDKGSuccessSignature verifies DKGSuccess signature.
+func VerifyDKGSuccessSignature(
+	success *typesDKG.Success) (bool, error) {
+	hash := hashDKGSuccess(success)
+	pubKey, err := crypto.SigToPub(hash, success.Signature)
+	if err != nil {
+		return false, err
+	}
+	if success.ProposerID != types.NewNodeID(pubKey) {
 		return false, nil
 	}
 	return true, nil

@@ -302,6 +302,29 @@ func (s *CryptoTestSuite) TestDKGSignature() {
 	s.Require().NoError(err)
 	s.False(ok)
 	final.Reset--
+
+	success := &typesDKG.Success{
+		ProposerID: nID,
+		Round:      5,
+		Reset:      6,
+	}
+	success.Signature, err = prv.Sign(hashDKGSuccess(success))
+	s.Require().NoError(err)
+	ok, err = VerifyDKGSuccessSignature(success)
+	s.Require().NoError(err)
+	s.True(ok)
+	// Test incorrect round.
+	success.Round++
+	ok, err = VerifyDKGSuccessSignature(success)
+	s.Require().NoError(err)
+	s.False(ok)
+	success.Round--
+	// Test incorrect reset.
+	success.Reset++
+	ok, err = VerifyDKGSuccessSignature(success)
+	s.Require().NoError(err)
+	s.False(ok)
+	success.Reset--
 }
 
 func TestCrypto(t *testing.T) {

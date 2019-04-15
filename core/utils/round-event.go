@@ -84,7 +84,7 @@ func (e RoundEventParam) NextTouchNodeSetCacheHeight() uint64 {
 
 // NextDKGResetHeight returns the height to reset DKG for next period.
 func (e RoundEventParam) NextDKGResetHeight() uint64 {
-	return e.BeginHeight + e.Config.RoundLength*8/10
+	return e.BeginHeight + e.Config.RoundLength*85/100
 }
 
 // NextDKGRegisterHeight returns the height to register DKG.

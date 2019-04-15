@@ -170,6 +170,20 @@ func CloneDKGFinalize(final *typesDKG.Finalize) (
 	return
 }
 
+// CloneDKGSuccess clones a typesDKG.Success instance.
+func CloneDKGSuccess(success *typesDKG.Success) (
+	copied *typesDKG.Success) {
+	b, err := rlp.EncodeToBytes(success)
+	if err != nil {
+		panic(err)
+	}
+	copied = &typesDKG.Success{}
+	if err = rlp.DecodeBytes(b, copied); err != nil {
+		panic(err)
+	}
+	return
+}
+
 // CloneDKGPrivateShare clones a typesDKG.PrivateShare instance.
 func CloneDKGPrivateShare(prvShare *typesDKG.PrivateShare) (
 	copied *typesDKG.PrivateShare) {

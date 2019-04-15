@@ -114,6 +114,12 @@ func (r *testCCGlobalReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
 	}
 }
 
+func (r *testCCGlobalReceiver) ProposeDKGSuccess(success *typesDKG.Success) {
+	for _, gov := range r.govs {
+		gov.AddDKGSuccess(test.CloneDKGSuccess(success))
+	}
+}
+
 type testCCReceiver struct {
 	signer *utils.Signer
 	recv   *testCCGlobalReceiver
@@ -174,6 +180,13 @@ func (r *testCCReceiver) ProposeDKGFinalize(final *typesDKG.Finalize) {
 		panic(err)
 	}
 	r.recv.ProposeDKGFinalize(final)
+}
+
+func (r *testCCReceiver) ProposeDKGSuccess(success *typesDKG.Success) {
+	if err := r.signer.SignDKGSuccess(success); err != nil {
+		panic(err)
+	}
+	r.recv.ProposeDKGSuccess(success)
 }
 
 func (s *ConfigurationChainTestSuite) setupNodes(n int) {

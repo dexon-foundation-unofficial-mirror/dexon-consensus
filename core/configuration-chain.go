@@ -400,6 +400,7 @@ func (cc *configurationChain) runDKGPhaseNine(round uint64, reset uint64) error 
 		cc.db.PutDKGPrivateKey(round, reset, *signer.privateKey); err != nil {
 		return err
 	}
+	cc.dkg.proposeSuccess()
 	cc.dkgResult.Lock()
 	defer cc.dkgResult.Unlock()
 	cc.dkgSigner[round] = signer

@@ -394,6 +394,42 @@ func (s *DKGTestSuite) TestFinalizeEquality() {
 	req.True(final1.Equal(final2))
 }
 
+func (s *DKGTestSuite) TestSuccessEquality() {
+	var req = s.Require()
+	success1 := &Success{
+		ProposerID: types.NodeID{Hash: common.NewRandomHash()},
+		Round:      1,
+		Reset:      2,
+		Signature: crypto.Signature{
+			Signature: s.genRandomBytes(),
+		},
+	}
+	// Make a copy
+	success2 := &Success{}
+	s.clone(success1, success2)
+	req.True(success1.Equal(success2))
+	// Change proposer ID.
+	success2.ProposerID = types.NodeID{Hash: common.NewRandomHash()}
+	req.False(success1.Equal(success2))
+	success2.ProposerID = success1.ProposerID
+	// Change round.
+	success2.Round = success1.Round + 1
+	req.False(success1.Equal(success2))
+	success2.Round = success1.Round
+	// Change reset.
+	success2.Reset = success1.Reset + 1
+	req.False(success1.Equal(success2))
+	success2.Reset = success1.Reset
+	// Change signature.
+	success2.Signature = crypto.Signature{
+		Signature: s.genRandomBytes(),
+	}
+	req.False(success1.Equal(success2))
+	success2.Signature = success1.Signature
+	// After changing every field back, they should be equal.
+	req.True(success1.Equal(success2))
+}
+
 func TestDKG(t *testing.T) {
 	suite.Run(t, new(DKGTestSuite))
 }

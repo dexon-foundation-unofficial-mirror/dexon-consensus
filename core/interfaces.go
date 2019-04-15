@@ -141,6 +141,12 @@ type Governance interface {
 	// IsDKGFinal checks if DKG is final.
 	IsDKGFinal(round uint64) bool
 
+	// AddDKGSuccess adds a DKG success message.
+	AddDKGSuccess(success *typesDKG.Success)
+
+	// IsDKGSuccess checks if DKG is success.
+	IsDKGSuccess(round uint64) bool
+
 	// ReportForkVote reports a node for forking votes.
 	ReportForkVote(vote1, vote2 *types.Vote)
 

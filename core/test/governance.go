@@ -236,7 +236,7 @@ func (g *Governance) IsDKGMPKReady(round uint64) bool {
 	if round >= uint64(len(g.configs)) {
 		return false
 	}
-	return g.stateModule.IsDKGMPKReady(round, int(g.configs[round].NotarySetSize)/3*2)
+	return g.stateModule.IsDKGMPKReady(round, int(g.configs[round].NotarySetSize)*2/3+1)
 }
 
 // AddDKGFinalize adds a DKG finalize message.
@@ -264,7 +264,35 @@ func (g *Governance) IsDKGFinal(round uint64) bool {
 	if round >= uint64(len(g.configs)) {
 		return false
 	}
-	return g.stateModule.IsDKGFinal(round, int(g.configs[round].NotarySetSize)/3*2)
+	return g.stateModule.IsDKGFinal(round, int(g.configs[round].NotarySetSize)*2/3+1)
+}
+
+// AddDKGSuccess adds a DKG success message.
+func (g *Governance) AddDKGSuccess(success *typesDKG.Success) {
+	if g.isProhibited(StateAddDKGSuccess) {
+		return
+	}
+	if err := g.stateModule.RequestChange(StateAddDKGSuccess, success); err != nil {
+		if err != ErrChangeWontApply {
+			panic(err)
+		}
+	}
+	g.broadcastPendingStateChanges()
+}
+
+// IsDKGSuccess checks if DKG is success.
+func (g *Governance) IsDKGSuccess(round uint64) bool {
+	if round == 0 || round == 1 {
+		// Round 0, 1 are genesis round, their configs should be created
+		// by default.
+		g.CatchUpWithRound(round)
+	}
+	g.lock.RLock()
+	defer g.lock.RUnlock()
+	if round >= uint64(len(g.configs)) {
+		return false
+	}
+	return g.stateModule.IsDKGFinal(round, int(g.configs[round].NotarySetSize)*5/6)
 }
 
 // ReportForkVote reports a node for forking votes.

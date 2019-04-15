@@ -66,6 +66,9 @@ var (
 	// ErrStateDKGFinalsNotEqual means DKG finalizations of two states are not
 	// equal.
 	ErrStateDKGFinalsNotEqual = errors.New("dkg finalizations not equal")
+	// ErrStateDKGSuccessesNotEqual means DKG successes of two states are not
+	// equal.
+	ErrStateDKGSuccessesNotEqual = errors.New("dkg successes not equal")
 	// ErrStateCRSsNotEqual means CRSs of two states are not equal.
 	ErrStateCRSsNotEqual = errors.New("crs not equal")
 	// ErrStateDKGResetCountNotEqual means dkgResetCount of two states are not
@@ -103,6 +106,7 @@ type State struct {
 	dkgMasterPublicKeys map[uint64]map[types.NodeID]*typesDKG.MasterPublicKey
 	dkgReadys           map[uint64]map[types.NodeID]*typesDKG.MPKReady
 	dkgFinals           map[uint64]map[types.NodeID]*typesDKG.Finalize
+	dkgSuccesses        map[uint64]map[types.NodeID]*typesDKG.Success
 	crs                 []common.Hash
 	dkgResetCount       map[uint64]uint64
 	// Other stuffs
@@ -150,6 +154,8 @@ func NewState(
 			map[uint64]map[types.NodeID]*typesDKG.MPKReady),
 		dkgFinals: make(
 			map[uint64]map[types.NodeID]*typesDKG.Finalize),
+		dkgSuccesses: make(
+			map[uint64]map[types.NodeID]*typesDKG.Success),
 		dkgComplaints: make(
 			map[uint64]map[types.NodeID][]*typesDKG.Complaint),
 		dkgMasterPublicKeys: make(
@@ -210,6 +216,9 @@ func (s *State) unpackPayload(
 		err = rlp.DecodeBytes(raw.Payload, v)
 	case StateAddDKGFinal:
 		v = &typesDKG.Finalize{}
+		err = rlp.DecodeBytes(raw.Payload, v)
+	case StateAddDKGSuccess:
+		v = &typesDKG.Success{}
 		err = rlp.DecodeBytes(raw.Payload, v)
 	case StateResetDKG:
 		var tmp common.Hash
@@ -393,6 +402,28 @@ func (s *State) Equal(other *State) error {
 			}
 		}
 	}
+	// Check DKG successes.
+	if len(s.dkgSuccesses) != len(other.dkgSuccesses) {
+		return ErrStateDKGSuccessesNotEqual
+	}
+	for round, successesForRound := range s.dkgSuccesses {
+		otherSuccessesForRound, exists := other.dkgSuccesses[round]
+		if !exists {
+			return ErrStateDKGSuccessesNotEqual
+		}
+		if len(successesForRound) != len(otherSuccessesForRound) {
+			return ErrStateDKGSuccessesNotEqual
+		}
+		for nID, success := range successesForRound {
+			otherSuccesse, exists := otherSuccessesForRound[nID]
+			if !exists {
+				return ErrStateDKGSuccessesNotEqual
+			}
+			if !success.Equal(otherSuccesse) {
+				return ErrStateDKGSuccessesNotEqual
+			}
+		}
+	}
 	// Check CRS part.
 	if len(s.crs) != len(other.crs) {
 		return ErrStateCRSsNotEqual
@@ -455,6 +486,7 @@ func (s *State) Clone() (copied *State) {
 			map[uint64]map[types.NodeID]*typesDKG.MasterPublicKey),
 		dkgReadys:       make(map[uint64]map[types.NodeID]*typesDKG.MPKReady),
 		dkgFinals:       make(map[uint64]map[types.NodeID]*typesDKG.Finalize),
+		dkgSuccesses:    make(map[uint64]map[types.NodeID]*typesDKG.Success),
 		appliedRequests: make(map[common.Hash]struct{}),
 	}
 	// Nodes
@@ -491,6 +523,12 @@ func (s *State) Clone() (copied *State) {
 		copied.dkgFinals[round] = make(map[types.NodeID]*typesDKG.Finalize)
 		for nID, final := range finalsForRound {
 			copied.dkgFinals[round][nID] = CloneDKGFinalize(final)
+		}
+	}
+	for round, successesForRound := range s.dkgSuccesses {
+		copied.dkgSuccesses[round] = make(map[types.NodeID]*typesDKG.Success)
+		for nID, success := range successesForRound {
+			copied.dkgSuccesses[round][nID] = CloneDKGSuccess(success)
 		}
 	}
 	for _, crs := range s.crs {
@@ -636,6 +674,11 @@ func (s *State) isValidRequest(req *StateChangeRequest) error {
 		if final.Reset != s.dkgResetCount[final.Round] {
 			return ErrChangeWontApply
 		}
+	case StateAddDKGSuccess:
+		success := req.Payload.(*typesDKG.Success)
+		if success.Reset != s.dkgResetCount[success.Round] {
+			return ErrChangeWontApply
+		}
 	case StateAddDKGMasterPublicKey:
 		mpk := req.Payload.(*typesDKG.MasterPublicKey)
 		if mpk.Reset != s.dkgResetCount[mpk.Round] {
@@ -747,6 +790,13 @@ func (s *State) applyRequest(req *StateChangeRequest) error {
 			s.dkgFinals[final.Round] = make(map[types.NodeID]*typesDKG.Finalize)
 		}
 		s.dkgFinals[final.Round][final.ProposerID] = final
+	case StateAddDKGSuccess:
+		success := req.Payload.(*typesDKG.Success)
+		if _, exists := s.dkgSuccesses[success.Round]; !exists {
+			s.dkgSuccesses[success.Round] =
+				make(map[types.NodeID]*typesDKG.Success)
+		}
+		s.dkgSuccesses[success.Round][success.ProposerID] = success
 	case StateResetDKG:
 		round := uint64(len(s.crs) - 1)
 		s.crs[round] = req.Payload.(common.Hash)
@@ -755,6 +805,7 @@ func (s *State) applyRequest(req *StateChangeRequest) error {
 		delete(s.dkgReadys, round)
 		delete(s.dkgComplaints, round)
 		delete(s.dkgFinals, round)
+		delete(s.dkgSuccesses, round)
 	case StateChangeLambdaBA:
 		s.lambdaBA = time.Duration(req.Payload.(uint64))
 	case StateChangeLambdaDKG:
@@ -799,6 +850,8 @@ func (s *State) RequestChange(
 		payload = payload.(*typesDKG.MPKReady)
 	case StateAddDKGFinal:
 		payload = payload.(*typesDKG.Finalize)
+	case StateAddDKGSuccess:
+		payload = payload.(*typesDKG.Success)
 	case StateAddDKGMasterPublicKey:
 		payload = payload.(*typesDKG.MasterPublicKey)
 	case StateAddDKGComplaint:
@@ -873,7 +926,7 @@ func (s *State) DKGMasterPublicKeys(round uint64) []*typesDKG.MasterPublicKey {
 func (s *State) IsDKGMPKReady(round uint64, threshold int) bool {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	return len(s.dkgReadys[round]) > threshold
+	return len(s.dkgReadys[round]) >= threshold
 }
 
 // IsDKGFinal checks if current received dkg finals exceeds threshold.
@@ -881,7 +934,15 @@ func (s *State) IsDKGMPKReady(round uint64, threshold int) bool {
 func (s *State) IsDKGFinal(round uint64, threshold int) bool {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	return len(s.dkgFinals[round]) > threshold
+	return len(s.dkgFinals[round]) >= threshold
+}
+
+// IsDKGSuccess checks if current received dkg successes exceeds threshold.
+// This information won't be snapshot, thus can't be cached in test.Governance.
+func (s *State) IsDKGSuccess(round uint64, threshold int) bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	return len(s.dkgSuccesses[round]) >= threshold
 }
 
 // DKGResetCount returns the reset count for DKG of given round.

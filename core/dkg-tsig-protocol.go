@@ -102,6 +102,9 @@ type dkgReceiver interface {
 
 	// ProposeDKGFinalize propose a DKGFinalize message.
 	ProposeDKGFinalize(final *typesDKG.Finalize)
+
+	// ProposeDKGSuccess propose a DKGSuccess message.
+	ProposeDKGSuccess(final *typesDKG.Success)
 }
 
 type dkgProtocol struct {
@@ -508,6 +511,14 @@ func (d *dkgProtocol) proposeMPKReady() {
 
 func (d *dkgProtocol) proposeFinalize() {
 	d.recv.ProposeDKGFinalize(&typesDKG.Finalize{
+		ProposerID: d.ID,
+		Round:      d.round,
+		Reset:      d.reset,
+	})
+}
+
+func (d *dkgProtocol) proposeSuccess() {
+	d.recv.ProposeDKGSuccess(&typesDKG.Success{
 		ProposerID: d.ID,
 		Round:      d.round,
 		Reset:      d.reset,

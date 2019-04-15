@@ -145,3 +145,10 @@ func (s *Signer) SignDKGFinalize(final *typesDKG.Finalize) (err error) {
 	final.Signature, err = s.prvKey.Sign(hashDKGFinalize(final))
 	return
 }
+
+// SignDKGSuccess signs a DKG success message.
+func (s *Signer) SignDKGSuccess(success *typesDKG.Success) (err error) {
+	success.ProposerID = s.proposerID
+	success.Signature, err = s.prvKey.Sign(hashDKGSuccess(success))
+	return
+}
