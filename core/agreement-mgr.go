@@ -255,6 +255,24 @@ func (mgr *agreementMgr) notifyRoundEvents(evts []utils.RoundEventParam) error {
 	return nil
 }
 
+func (mgr *agreementMgr) checkProposer(
+	round uint64, proposerID types.NodeID) error {
+	if round == mgr.curRoundSetting.round {
+		if _, exist := mgr.curRoundSetting.dkgSet[proposerID]; !exist {
+			return ErrNotInNotarySet
+		}
+	} else if round == mgr.curRoundSetting.round+1 {
+		setting := mgr.generateSetting(round)
+		if setting == nil {
+			return ErrConfigurationNotReady
+		}
+		if _, exist := setting.dkgSet[proposerID]; !exist {
+			return ErrNotInNotarySet
+		}
+	}
+	return nil
+}
+
 func (mgr *agreementMgr) processVote(v *types.Vote) (err error) {
 	if !mgr.recv.isNotary {
 		return nil
@@ -262,18 +280,8 @@ func (mgr *agreementMgr) processVote(v *types.Vote) (err error) {
 	if mgr.voteFilter.Filter(v) {
 		return nil
 	}
-	if v.Position.Round == mgr.curRoundSetting.round {
-		if _, exist := mgr.curRoundSetting.dkgSet[v.ProposerID]; !exist {
-			return ErrNotInNotarySet
-		}
-	} else if v.Position.Round == mgr.curRoundSetting.round+1 {
-		setting := mgr.generateSetting(v.Position.Round)
-		if setting == nil {
-			return ErrConfigurationNotReady
-		}
-		if _, exist := setting.dkgSet[v.ProposerID]; !exist {
-			return ErrNotInNotarySet
-		}
+	if err := mgr.checkProposer(v.Position.Round, v.ProposerID); err != nil {
+		return err
 	}
 	if err = mgr.baModule.processVote(v); err == nil {
 		mgr.baModule.updateFilter(mgr.voteFilter)
@@ -283,6 +291,9 @@ func (mgr *agreementMgr) processVote(v *types.Vote) (err error) {
 }
 
 func (mgr *agreementMgr) processBlock(b *types.Block) error {
+	if err := mgr.checkProposer(b.Position.Round, b.ProposerID); err != nil {
+		return err
+	}
 	return mgr.baModule.processBlock(b)
 }
 
