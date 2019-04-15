@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -48,6 +49,8 @@ var (
 		"incorrect block randomness result")
 	ErrMissingRandomness = errors.New("missing block randomness")
 )
+
+const notReadyHeight uint64 = math.MaxUint64
 
 type pendingBlockRecord struct {
 	position types.Position
@@ -386,6 +389,10 @@ func (bc *blockChain) nextBlock() (uint64, time.Time) {
 	tip, config := bc.lastConfirmed, bc.configs[0]
 	if tip == nil {
 		return types.GenesisHeight, bc.dMoment
+	}
+	if tip != bc.lastDelivered {
+		// If tip is not delivered, we should not proceed to next block.
+		return notReadyHeight, time.Time{}
 	}
 	return tip.Position.Height + 1, tip.Timestamp.Add(config.minBlockInterval)
 }
