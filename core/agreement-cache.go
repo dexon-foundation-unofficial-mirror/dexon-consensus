@@ -117,6 +117,78 @@ func (s *voteSet) isPurged() bool {
 	return s.purged
 }
 
+// voteSets caches votes in one position.
+type voteSets map[uint64][]*voteSet
+
+func (vs voteSets) votes(v types.Vote, config agreementCacheConfig,
+	createIfNotExist bool) (vSet *voteSet) {
+	vForPeriod, exist := vs[v.Period]
+	if !exist {
+		if !createIfNotExist {
+			return nil
+		}
+		reserved := len(config.notarySet)
+		vForPeriod = make([]*voteSet, types.MaxVoteType)
+		for idx := range vForPeriod {
+			if types.VoteType(idx) == types.VoteInit {
+				continue
+			}
+			vForPeriod[idx] = &voteSet{
+				votes:       make(map[types.NodeID]types.Vote, reserved),
+				votesAsList: make([]types.Vote, 0, reserved),
+				counts:      make(map[common.Hash]int),
+			}
+		}
+		vs[v.Period] = vForPeriod
+	}
+	return vForPeriod[v.Type]
+}
+
+// When a vote-pulling request (P, r) is made, we need to return these votes
+// at the same position:
+//  - commit/fast-commit votes from (P, 0) -> (P, r') where r' is the newest
+//    period.
+//  - pre-commit/fast votes from (P, r+1) -> (P, r')
+//
+// The snapshoted votes slice is arranged in this way to make re-appending
+// votes when pulling is not necessary.
+//
+// |<- pre-commit/fast votes ->|<- commit/fast-commit votes->|
+// |P,0|P,3|...|P,r|......|P,r'|P,0|P,2|.....................|
+//
+func (vs voteSets) snapshot() (s agreementSnapshotVotes) {
+	var periods []uint64
+	for period := range vs {
+		periods = append(periods, period)
+	}
+	sort.Slice(periods, func(i, j int) bool {
+		return periods[i] < periods[j]
+	})
+	// Append votes in pre-commit family.
+	for _, period := range periods {
+		s.idxes = append(s.idxes, agreementSnapshotVotesIndex{
+			period: period,
+			idx:    len(s.votes),
+		})
+		for t, vSet := range vs[period] {
+			if t == int(types.VotePreCom) || t == int(types.VoteFast) {
+				s.votes = vSet.appendTo(s.votes)
+			}
+		}
+	}
+	s.boundary = len(s.votes)
+	// Append votes in commit family.
+	for _, period := range periods {
+		vForPeriod := vs[period]
+		for t, vSet := range vForPeriod {
+			if t == int(types.VoteCom) || t == int(types.VoteFastCom) {
+				s.votes = vSet.appendTo(s.votes)
+			}
+		}
+	}
+	return
+}
+
 type agreementCacheConfig struct {
 	utils.RoundBasedConfig
 
@@ -144,29 +216,16 @@ func newAgreementCacheConfig(
 }
 
 type agreementSnapshotVotesIndex struct {
-	position types.Position
-	period   uint64
-	idx      int
-}
-
-func (x agreementSnapshotVotesIndex) Older(o agreementSnapshotVotesIndex) bool {
-	return x.position.Older(o.position) ||
-		(x.position.Equal(o.position) && x.period < o.period)
-}
-
-func (x agreementSnapshotVotesIndex) Newer(o agreementSnapshotVotesIndex) bool {
-	return x.position.Newer(o.position) ||
-		(x.position.Equal(o.position) && x.period > o.period)
+	period uint64
+	idx    int
 }
 
 type agreementSnapshotVotesIndexes []agreementSnapshotVotesIndex
 
 func (x agreementSnapshotVotesIndexes) nearestNewerIdx(
-	position types.Position,
 	period uint64) (agreementSnapshotVotesIndex, bool) {
-	fakeIdx := agreementSnapshotVotesIndex{position: position, period: period}
 	i := sort.Search(len(x), func(i int) bool {
-		return x[i].Newer(fakeIdx)
+		return x[i].period > period
 	})
 	if i < len(x) {
 		return x[i], true
@@ -174,114 +233,38 @@ func (x agreementSnapshotVotesIndexes) nearestNewerIdx(
 	return agreementSnapshotVotesIndex{}, false
 }
 
-func (x agreementSnapshotVotesIndexes) nearestNewerOrEqualIdx(
-	position types.Position,
-	period uint64) (agreementSnapshotVotesIndex, bool) {
-	fakeIdx := agreementSnapshotVotesIndex{position: position, period: period}
-	i := sort.Search(len(x), func(i int) bool {
-		return !x[i].Older(fakeIdx)
-	})
-	if i < len(x) {
-		return x[i], true
+type agreementSnapshotVotes struct {
+	votes    []types.Vote
+	idxes    agreementSnapshotVotesIndexes
+	boundary int
+}
+
+func (v agreementSnapshotVotes) subset(lockPeriod uint64) []types.Vote {
+	begin := v.boundary
+	if i, found := v.idxes.nearestNewerIdx(lockPeriod); found {
+		begin = i.idx
 	}
-	return agreementSnapshotVotesIndex{}, false
+	return v.votes[begin:]
 }
 
 // agreementSnapshot represents a group of ongoing votes that could be pulled
-// to help others nodes to reach consensus. It supports to take a subset of
-// snapshoted votes by providing the latest locked position P and period r.
-// (NOTE: assume P-1 is already decided).
-//
-// When a subset request (P, r) is made, all pre-commit/fast votes later than
-// that position would be returned. And all fast-commit/commit votes later than
-// (P, 0) would be returned, too. To support this kind of access, the "votes"
-// slice in snapshot is splited into two parts and can be viewed as this:
-//
-// |<-      pre-commit/fast    ->|<-      commit/fast-commit ->|
-// |P0,r0|P1,r1|P1,r2|P2,r1|P3,r1|P2,r2|P2,r1|P1,r2|P1,r0|P0,r0|
-//
-// When a pull request (P1,r2) is made, the slots between (P2,r1)->(P3,r1) in
-// pre-commit/fast part and slots between (P1,r0)->(P2,r2) in
-// commit/fast-commit part would be taken, and they are continuous in the slice,
-// thus we don't need to recreate a new slice for pulling.
+// to help others nodes to reach consensus.
 type agreementSnapshot struct {
-	expired     time.Time
-	votes       []types.Vote
-	evtDecide   *agreementEvent
-	preComIdxes agreementSnapshotVotesIndexes // pre-commit/fast parts.
-	comIdxes    agreementSnapshotVotesIndexes // commit/fast-commit parts.
-	boundary    int                           // middle line between parts.
+	expired   time.Time
+	evtDecide *agreementEvent
+	votes     map[types.Position]agreementSnapshotVotes
 }
 
 func (s agreementSnapshot) get(position types.Position, lockPeriod uint64) (
 	r *types.AgreementResult, votes []types.Vote) {
-	if s.evtDecide != nil && s.evtDecide.Position.Newer(position) {
+	if vs, exist := s.votes[position]; exist {
+		votes = vs.subset(lockPeriod)
+	}
+	if s.evtDecide != nil && !s.evtDecide.Position.Older(position) {
 		result := s.evtDecide.toAgreementResult()
 		r = &result
 	}
-	begin, end := s.boundary, s.boundary
-	if i, found := s.preComIdxes.nearestNewerIdx(position, lockPeriod); found {
-		begin = i.idx
-	}
-	if i, found := s.comIdxes.nearestNewerOrEqualIdx(position, 0); found {
-		end = i.idx
-	}
-	votes = s.votes[begin:end]
 	return
-}
-
-func (s *agreementSnapshot) addPreCommitVotes(
-	position types.Position, period uint64, votes []types.Vote) {
-	if len(votes) == 0 {
-		return
-	}
-	i := agreementSnapshotVotesIndex{
-		position: position,
-		period:   period,
-	}
-	if len(s.preComIdxes) > 0 && !s.preComIdxes[len(s.preComIdxes)-1].Older(i) {
-		panic(fmt.Errorf(
-			"invalid snapshot index additional in pre-commit case: %+v,%+v",
-			i, s.preComIdxes[len(s.preComIdxes)-1]))
-	}
-	// In pre-commit case, we would record the index of the first vote.
-	i.idx = len(s.votes)
-	s.votes = append(s.votes, votes...)
-	if len(s.votes) == i.idx {
-		return
-	}
-	s.preComIdxes = append(s.preComIdxes, i)
-}
-
-func (s *agreementSnapshot) addCommitVotes(
-	position types.Position, period uint64, votes []types.Vote) {
-	if len(votes) == 0 {
-		return
-	}
-	i := agreementSnapshotVotesIndex{
-		position: position,
-		period:   period,
-	}
-	if len(s.comIdxes) > 0 && !s.comIdxes[len(s.comIdxes)-1].Newer(i) {
-		panic(fmt.Errorf(
-			"invalid snapshot index additional in commit case: %+v,%+v",
-			i, s.comIdxes[len(s.comIdxes)-1]))
-	}
-	// In commit case, we would record the index of the last vote.
-	beforeAppend := len(s.votes)
-	s.votes = append(s.votes, votes...)
-	if len(s.votes) == beforeAppend {
-		return
-	}
-	i.idx = len(s.votes)
-	s.comIdxes = append(agreementSnapshotVotesIndexes{i}, s.comIdxes...)
-}
-
-func (s *agreementSnapshot) markBoundary() {
-	if len(s.comIdxes) > 0 {
-		panic(fmt.Errorf("attempt to mark boundary after commit votes added"))
-	}
-	s.boundary = len(s.votes)
 }
 
 type agreementCacheReceiver interface {
@@ -295,7 +278,7 @@ type agreementCache struct {
 	configs        []agreementCacheConfig
 	configsLock    sync.RWMutex
 	lock           sync.RWMutex
-	vSets          map[types.Position]map[uint64][]*voteSet // Position > Period > Type
+	vSets          map[types.Position]voteSets // Position > Period > Type
 	refEvts        []*agreementEvent
 	refPosition    atomic.Value
 	lastSnapshot   atomic.Value
@@ -309,29 +292,10 @@ func (c *agreementCache) votes(v types.Vote, config agreementCacheConfig,
 		if !createIfNotExist {
 			return nil
 		}
-		vForPosition = make(map[uint64][]*voteSet)
+		vForPosition = make(voteSets)
 		c.vSets[v.Position] = vForPosition
 	}
-	vForPeriod, exist := vForPosition[v.Period]
-	if !exist {
-		if !createIfNotExist {
-			return nil
-		}
-		reserved := len(config.notarySet)
-		vForPeriod = make([]*voteSet, types.MaxVoteType)
-		for idx := range vForPeriod {
-			if types.VoteType(idx) == types.VoteInit {
-				continue
-			}
-			vForPeriod[idx] = &voteSet{
-				votes:       make(map[types.NodeID]types.Vote, reserved),
-				votesAsList: make([]types.Vote, 0, reserved),
-				counts:      make(map[common.Hash]int),
-			}
-		}
-		vForPosition[v.Period] = vForPeriod
-	}
-	return vForPeriod[v.Type]
+	return vForPosition.votes(v, config, createIfNotExist)
 }
 
 func (c *agreementCache) config(
@@ -665,7 +629,7 @@ func (c *agreementCache) purgeBy(e *agreementEvent) {
 
 func newAgreementCache(recv agreementCacheReceiver) (c *agreementCache) {
 	c = &agreementCache{
-		vSets:          make(map[types.Position]map[uint64][]*voteSet),
+		vSets:          make(map[types.Position]voteSets),
 		refEvts:        make([]*agreementEvent, maxAgreementEventType),
 		lastSnapshotCh: make(chan time.Time, 1),
 		recv:           recv,
@@ -870,59 +834,10 @@ func (c *agreementCache) snapshot(expect time.Time) *agreementSnapshot {
 	defer c.lock.RUnlock()
 	ss := &agreementSnapshot{
 		evtDecide: c.refEvts[agreementEventDecide],
+		votes:     make(map[types.Position]agreementSnapshotVotes),
 	}
-	var positions []types.Position
-	for position := range c.vSets {
-		positions = append(positions, position)
-	}
-	sort.Slice(positions, func(i, j int) bool {
-		return positions[i].Older(positions[j])
-	})
-	// All votes in cache are useful votes, so just keep them all in snapshot.
-	// They would be orgainzed in acending order of (position, period) of votes.
-	for _, position := range positions {
-		vForPosition := c.vSets[position]
-		var periods []uint64
-		for period := range vForPosition {
-			periods = append(periods, period)
-		}
-		sort.Slice(periods, func(i, j int) bool {
-			return periods[i] < periods[j]
-		})
-		for _, period := range periods {
-			vForPeriod := vForPosition[period]
-			votes := []types.Vote{}
-			for t, vSet := range vForPeriod {
-				if t == int(types.VotePreCom) || t == int(types.VoteFast) {
-					votes = vSet.appendTo(votes)
-				}
-			}
-			ss.addPreCommitVotes(position, period, votes)
-		}
-	}
-	ss.markBoundary()
-	// It's the part for commit/fast-commit votes, they should be appended in
-	// reversed order.
-	for i := range positions {
-		position := positions[len(positions)-i-1]
-		vForPosition := c.vSets[position]
-		var periods []uint64
-		for period := range vForPosition {
-			periods = append(periods, period)
-		}
-		sort.Slice(periods, func(i, j int) bool {
-			return periods[i] > periods[j]
-		})
-		for _, period := range periods {
-			vForPeriod := vForPosition[period]
-			votes := []types.Vote{}
-			for t, vSet := range vForPeriod {
-				if t == int(types.VoteFastCom) || t == int(types.VoteCom) {
-					votes = vSet.appendTo(votes)
-				}
-			}
-			ss.addCommitVotes(position, period, votes)
-		}
+	for p, vs := range c.vSets {
+		ss.votes[p] = vs.snapshot()
 	}
 	ss.expired = time.Now().Add(refreshInterval)
 	c.lastSnapshot.Store(ss)

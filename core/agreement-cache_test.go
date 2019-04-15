@@ -175,15 +175,6 @@ func (s *AgreementCacheTestSuite) testVotes(
 	return
 }
 
-func (s *AgreementCacheTestSuite) takeSubset(ss *agreementSnapshot,
-	p types.Position, period uint64, length int) (
-	*types.AgreementResult, []types.Vote) {
-	s.Require().NotNil(ss)
-	r, votes := ss.get(p, period)
-	s.Require().Len(votes, length)
-	return r, votes
-}
-
 func (s *AgreementCacheTestSuite) newRoundEvents(
 	round uint64) (rEvts []utils.RoundEventParam) {
 	h := types.GenesisHeight
@@ -449,6 +440,7 @@ func (s *AgreementCacheTestSuite) TestDecideAfterForward() {
 }
 
 func (s *AgreementCacheTestSuite) TestDecideByFinalizedBlock() {
+	// TODO(mission):
 	// A finalized block from round before DKGDelayRound won't trigger a decide
 	// event.
 
@@ -491,8 +483,8 @@ func (s *AgreementCacheTestSuite) TestSnapshot() {
 		hash  = common.NewRandomHash()
 		count = s.requiredVotes - 1
 	)
-	process := func(vs []types.Vote, until int) []types.Vote {
-		for i := range vs[:until] {
+	process := func(vs []types.Vote) []types.Vote {
+		for i := range vs[:count] {
 			evts, err := s.cache.processVote(vs[i])
 			s.Require().NoError(err)
 			s.Require().Empty(evts)
@@ -500,79 +492,61 @@ func (s *AgreementCacheTestSuite) TestSnapshot() {
 		return vs
 	}
 	// Process some votes without triggering any event.
-	//
-	// Below is the expected slice of votes when taking snapshot.
-	// |<-      pre-commit/fast    ->|<-commit/fast-commit ->|
-	// |P0,r1|P1,r0|P1,r1|P1,r2|P2,r1|P2,r1|P1,r2|P1,r0|P0,r1|
-	p0 := types.Position{Round: 1, Height: types.GenesisHeight + s.roundLength}
-	process(s.newVotes(types.VoteFast, hash, p0, 1), count)
-	process(s.newVotes(types.VotePreCom, hash, p0, 1), count)
-	process(s.newVotes(types.VoteCom, hash, p0, 1), count)
-	process(s.newVotes(types.VoteFastCom, hash, p0, 1), count)
-	p1 := p0
-	p1.Height++
-	process(s.newVotes(types.VoteCom, hash, p1, 0), count)
-	process(s.newVotes(types.VoteFastCom, hash, p1, 0), count)
-	process(s.newVotes(types.VotePreCom, hash, p1, 0), count)
-	process(s.newVotes(types.VoteFast, hash, p1, 0), count)
-	process(s.newVotes(types.VoteFast, hash, p1, 1), count)
-	process(s.newVotes(types.VotePreCom, hash, p1, 1), count)
-	process(s.newVotes(types.VoteFast, hash, p1, 2), count)
-	process(s.newVotes(types.VotePreCom, hash, p1, 2), count)
-	process(s.newVotes(types.VoteCom, hash, p1, 2), count)
-	process(s.newVotes(types.VoteFastCom, hash, p1, 2), count)
-	p2 := p1
-	p2.Height++
-	process(s.newVotes(types.VoteFast, hash, p2, 1), count)
-	process(s.newVotes(types.VotePreCom, hash, p2, 1), count)
-	process(s.newVotes(types.VoteCom, hash, p2, 1), count)
-	process(s.newVotes(types.VoteFastCom, hash, p2, 1), count)
-	// The snapshot should contains all processed votes.
+	p0 := types.Position{Round: 0, Height: types.GenesisHeight}
+	p1 := types.Position{Round: 0, Height: types.GenesisHeight + 1}
+	p2 := types.Position{Round: 0, Height: types.GenesisHeight + 2}
+	p3 := types.Position{Round: 0, Height: types.GenesisHeight + 3}
+	// p0.
+	process(s.newVotes(types.VoteFast, hash, p0, 0))
+	process(s.newVotes(types.VoteCom, hash, p0, 1))
+	process(s.newVotes(types.VotePreCom, hash, p0, 2))
+	process(s.newVotes(types.VoteFastCom, hash, p0, 3))
+	process(s.newVotes(types.VoteFast, hash, p0, 4))
+	process(s.newVotes(types.VoteCom, hash, p0, 5))
+	// p1, only pre-commit family votes.
+	process(s.newVotes(types.VotePreCom, hash, p1, 3))
+	process(s.newVotes(types.VoteFast, hash, p1, 5))
+	// p2, only commit family votes.
+	votesCom := s.newVotes(types.VoteCom, hash, p2, 6)
+	process(votesCom)
+	process(s.newVotes(types.VoteFastCom, hash, p2, 8))
 	ss := s.cache.snapshot(time.Now())
-	s.takeSubset(ss, types.Position{}, 0, 18*count)
-	// all votes in older position would be igonred.
-	_, vs := s.takeSubset(ss, p1, 1, 10*count)
-	s.Require().Equal(0, countVotes(vs, p0, 1, types.VotePreCom))
-	s.Require().Equal(0, countVotes(vs, p0, 1, types.VoteFast))
-	s.Require().Equal(0, countVotes(vs, p0, 1, types.VoteCom))
-	s.Require().Equal(0, countVotes(vs, p0, 1, types.VoteFastCom))
-	// pre-commit/fast votes in older or equal period of the same position would
-	// be ignored.
-	s.Require().Equal(0, countVotes(vs, p1, 0, types.VotePreCom))
-	s.Require().Equal(0, countVotes(vs, p1, 0, types.VoteFast))
-	s.Require().Equal(0, countVotes(vs, p1, 1, types.VoteCom))
-	s.Require().Equal(0, countVotes(vs, p1, 1, types.VoteFastCom))
-	// pre-commit/fast votes in newer period of the same position would not be
-	// ignored.
-	s.Require().Equal(count, countVotes(vs, p1, 2, types.VotePreCom))
-	s.Require().Equal(count, countVotes(vs, p1, 2, types.VoteFast))
-	// commit/fast-commit votes in the same position can't be ignored.
-	s.Require().Equal(count, countVotes(vs, p1, 0, types.VoteCom))
-	s.Require().Equal(count, countVotes(vs, p1, 0, types.VoteFastCom))
-	s.Require().Equal(count, countVotes(vs, p1, 2, types.VoteCom))
-	s.Require().Equal(count, countVotes(vs, p1, 2, types.VoteFastCom))
-	// all votes in newer position would be kept.
-	s.Require().Equal(count, countVotes(vs, p2, 1, types.VotePreCom))
-	s.Require().Equal(count, countVotes(vs, p2, 1, types.VoteFast))
-	s.Require().Equal(count, countVotes(vs, p2, 1, types.VoteCom))
-	s.Require().Equal(count, countVotes(vs, p2, 1, types.VoteFastCom))
-	// Take an empty subset.
-	s.takeSubset(ss, types.Position{Round: 1, Height: 1000}, 0, 0)
-	// Take a subset contains only commit/fast-commit votes.
-	_, vs = s.takeSubset(ss, p2, 1, 2*count)
-	s.Require().Equal(0, countVotes(vs, p2, 1, types.VotePreCom))
-	s.Require().Equal(0, countVotes(vs, p2, 1, types.VoteFast))
-	s.Require().Equal(count, countVotes(vs, p2, 1, types.VoteCom))
-	s.Require().Equal(count, countVotes(vs, p2, 1, types.VoteFastCom))
-	// Taks a subset contains only pre-commit/fast votes.
-	p3 := p2
-	p3.Height++
-	process(s.newVotes(types.VotePreCom, hash, p3, 1), count)
-	process(s.newVotes(types.VoteFast, hash, p3, 1), count)
+	// Both pre-commit, commit family votes.
+	r, votes := ss.get(p0, 1)
+	s.Require().Nil(r)
+	s.Require().Equal(count, countVotes(votes, p0, 1, types.VoteCom))
+	s.Require().Equal(count, countVotes(votes, p0, 2, types.VotePreCom))
+	s.Require().Equal(count, countVotes(votes, p0, 3, types.VoteFastCom))
+	s.Require().Equal(count, countVotes(votes, p0, 4, types.VoteFast))
+	s.Require().Equal(count, countVotes(votes, p0, 5, types.VoteCom))
+	// Only pre-commit family votes.
+	r, votes = ss.get(p1, 3)
+	s.Require().Nil(r)
+	s.Require().Equal(0, countVotes(votes, p1, 3, types.VotePreCom))
+	s.Require().Equal(count, countVotes(votes, p1, 5, types.VoteFast))
+	// Only commit family votes.
+	r, votes = ss.get(p2, 10000)
+	s.Require().Nil(r)
+	s.Require().Equal(count, countVotes(votes, p2, 6, types.VoteCom))
+	s.Require().Equal(count, countVotes(votes, p2, 8, types.VoteFastCom))
+	// Trigger a decide event.
+	evts, err := s.cache.processVote(votesCom[count])
+	s.Require().NoError(err)
+	s.Require().Len(evts, 1)
+	s.Require().Equal(evts[0].Position, p2)
 	ss = s.cache.snapshot(time.Now().Add(time.Second))
-	_, vs = s.takeSubset(ss, p3, 0, 2*count)
-	s.Require().Equal(count, countVotes(vs, p3, 1, types.VotePreCom))
-	s.Require().Equal(count, countVotes(vs, p3, 1, types.VoteFast))
+	r, votes = ss.get(p0, 1)
+	s.Require().NotNil(r)
+	s.Require().Empty(votes)
+	r, votes = ss.get(p1, 3)
+	s.Require().NotNil(r)
+	s.Require().Empty(votes)
+	r, votes = ss.get(p2, 10000)
+	s.Require().NotNil(r)
+	s.Require().Empty(votes)
+	r, votes = ss.get(p3, 0)
+	s.Require().Nil(r)
+	s.Require().Empty(votes)
 }
 
 func (s *AgreementCacheTestSuite) TestPurgeByDecideEvent() {
@@ -588,55 +562,56 @@ func (s *AgreementCacheTestSuite) TestPurgeByDecideEvent() {
 		}
 		return vs
 	}
-	// There are some pre-commit/fast votes unable to trigger any signal.
-	p00 := types.Position{Round: 1, Height: types.GenesisHeight + s.roundLength}
-	process(s.newVotes(types.VotePreCom, hash, p00, 1), count)
-	process(s.newVotes(types.VoteFast, hash, p00, 1), count)
-	// There are some commit/fast-commit votes unable to trigger any signal.
-	process(s.newVotes(types.VoteCom, hash, p00, 1), count)
-	process(s.newVotes(types.VoteFastCom, hash, p00, 1), count)
-	// There are some pre-commit/fast votes at later position unable to trigger
-	// any signal.
-	p01 := p00
-	p01.Height++
-	s.Require().True(p01.Round >= DKGDelayRound)
-	process(s.newVotes(types.VotePreCom, hash, p01, 3), count)
-	process(s.newVotes(types.VoteFast, hash, p01, 3), count)
-	// There are some commit/fast-commit votes at later position unable to
-	// trigger any signal.
-	process(s.newVotes(types.VoteCom, hash, p01, 1), count)
-	votesFC := process(s.newVotes(types.VoteFastCom, hash, p01, 1), count)
-	// There are some pre-commit/fast votes at the newest position unable to
-	// trigger any signal.
-	p02 := p01
-	p02.Height++
-	process(s.newVotes(types.VotePreCom, hash, p02, 1), count)
-	process(s.newVotes(types.VoteFast, hash, p02, 1), count)
-	// There are some commit/fast-commit votes at the newest position unable to
-	// trigger any signal.
-	process(s.newVotes(types.VoteCom, hash, p02, 1), count)
-	process(s.newVotes(types.VoteFastCom, hash, p02, 1), count)
+	p0 := types.Position{Round: 1, Height: types.GenesisHeight + s.roundLength}
+	p1 := p0
+	p1.Height++
+	s.Require().True(p1.Round >= DKGDelayRound)
+	p2 := p1
+	p2.Height++
+	// p0.
+	process(s.newVotes(types.VotePreCom, hash, p0, 1), count)
+	process(s.newVotes(types.VoteCom, hash, p0, 1), count)
+	// p1.
+	process(s.newVotes(types.VoteFast, hash, p1, 3), count)
+	votesFC := process(s.newVotes(types.VoteFastCom, hash, p1, 1), count)
+	// p2.
+	process(s.newVotes(types.VotePreCom, hash, p2, 1), count)
+	process(s.newVotes(types.VoteCom, hash, p2, 1), count)
 	// Check current snapshot: all votes are exists, no decide event triggered.
 	ss := s.cache.snapshot(time.Now())
-	r, _ := s.takeSubset(ss, types.Position{}, 0, 12*count)
+	r, votes := ss.get(p0, 0)
 	s.Require().Nil(r)
-	// We receive some commit votes position that can trigger some decide event,
-	// then those votes should be purged.
+	s.Require().Len(votes, 2*count)
+	s.Require().Equal(count, countVotes(votes, p0, 1, types.VotePreCom))
+	s.Require().Equal(count, countVotes(votes, p0, 1, types.VoteCom))
+	r, votes = ss.get(p1, 0)
+	s.Require().Nil(r)
+	s.Require().Len(votes, 2*count)
+	s.Require().Equal(count, countVotes(votes, p1, 3, types.VoteFast))
+	s.Require().Equal(count, countVotes(votes, p1, 1, types.VoteFastCom))
+	r, votes = ss.get(p2, 0)
+	s.Require().Nil(r)
+	s.Require().Len(votes, 2*count)
+	s.Require().Equal(count, countVotes(votes, p2, 1, types.VotePreCom))
+	s.Require().Equal(count, countVotes(votes, p2, 1, types.VoteCom))
+	// trigger a decide event.
 	evts, err := s.cache.processVote(votesFC[count])
 	s.Require().NoError(err)
 	s.Require().Len(evts, 1)
 	s.Require().Equal(evts[0].evtType, agreementEventDecide)
 	// All votes in older/equal position should be purged.
 	ss = s.cache.snapshot(time.Now().Add(time.Second))
-	r, votes := s.takeSubset(ss, types.Position{}, 0, 4*count)
+	r, votes = ss.get(p0, 0)
 	s.Require().NotNil(r)
-	s.Require().Equal(r.Position, p01)
-	s.Require().NotEmpty(r.Randomness)
+	s.Require().Empty(votes)
+	r, votes = ss.get(p1, 2)
+	s.Require().NotNil(r)
+	s.Require().Empty(votes)
 	// All votes in later position should be kept.
-	s.Require().Equal(count, countVotes(votes, p02, 1, types.VotePreCom))
-	s.Require().Equal(count, countVotes(votes, p02, 1, types.VoteFast))
-	s.Require().Equal(count, countVotes(votes, p02, 1, types.VoteCom))
-	s.Require().Equal(count, countVotes(votes, p02, 1, types.VoteFastCom))
+	r, votes = ss.get(p2, 0)
+	s.Require().Nil(r)
+	s.Require().Equal(count, countVotes(votes, p2, 1, types.VotePreCom))
+	s.Require().Equal(count, countVotes(votes, p2, 1, types.VoteCom))
 }
 
 func (s *AgreementCacheTestSuite) TestPrugeByLockEvent() {
@@ -652,43 +627,47 @@ func (s *AgreementCacheTestSuite) TestPrugeByLockEvent() {
 		}
 		return vs
 	}
+	p0 := types.Position{Round: 1, Height: types.GenesisHeight + s.roundLength}
+	p1 := p0
+	p1.Height++
 	// There are some votes unable to trigger any signal.
-	p00 := types.Position{Round: 1, Height: types.GenesisHeight + s.roundLength}
-	process(s.newVotes(types.VoteFast, hash, p00, 1), count)
-	process(s.newVotes(types.VotePreCom, hash, p00, 1), count)
-	process(s.newVotes(types.VoteFastCom, hash, p00, 1), count)
-	process(s.newVotes(types.VoteCom, hash, p00, 1), count)
-	p01 := p00
-	p01.Height++
-	process(s.newVotes(types.VoteFast, hash, p01, 0), count)
-	votes := process(s.newVotes(types.VotePreCom, hash, p01, 1), count)
-	process(s.newVotes(types.VoteCom, hash, p01, 1), count)
-	process(s.newVotes(types.VotePreCom, hash, p01, 2), count)
+	process(s.newVotes(types.VotePreCom, hash, p0, 1), count)
+	process(s.newVotes(types.VoteCom, hash, p0, 1), count)
+	process(s.newVotes(types.VotePreCom, hash, p1, 1), count)
+	votesPreCom := process(s.newVotes(types.VotePreCom, hash, p1, 2), count)
+	process(s.newVotes(types.VoteCom, hash, p1, 2), count)
+	process(s.newVotes(types.VoteFast, hash, p1, 3), count)
 	ss := s.cache.snapshot(time.Now())
-	s.takeSubset(ss, types.Position{}, 0, 8*count)
+	_, votes := ss.get(p0, 0)
+	s.Require().Equal(count, countVotes(votes, p0, 1, types.VotePreCom))
+	s.Require().Equal(count, countVotes(votes, p0, 1, types.VoteCom))
+	_, votes = ss.get(p1, 0)
+	s.Require().Len(votes, 4*count)
 	// Receive some pre-commit votes position that can trigger locked event.
-	evts, err := s.cache.processVote(votes[count])
+	evts, err := s.cache.processVote(votesPreCom[count])
 	s.Require().NoError(err)
 	s.Require().Len(evts, 1)
 	s.Require().Equal(evts[0].evtType, agreementEventLock)
-	s.Require().Equal(evts[0].Position, votes[count].Position)
-	s.Require().Equal(evts[0].period, votes[count].Period)
+	s.Require().Equal(evts[0].Position, votesPreCom[count].Position)
+	s.Require().Equal(evts[0].period, votesPreCom[count].Period)
 	ss = s.cache.snapshot(time.Now().Add(time.Second))
-	r, votes := s.takeSubset(ss, types.Position{}, 0, 5*count+1)
+	r, votes := ss.get(p0, 0)
 	s.Require().Nil(r)
+	// We shouldn't purge commit votes in older position by locked event.
+	s.Require().Equal(count, countVotes(votes, p0, 1, types.VoteCom))
+	r, votes = ss.get(p1, 0)
+	s.Require().Nil(r)
+	s.Require().Len(votes, 3*count+1)
 	// Those pre-commit/fast votes in older position should be purged.
-	s.Require().Equal(0, countVotes(votes, p00, 1, types.VoteFast))
-	s.Require().Equal(0, countVotes(votes, p00, 1, types.VotePreCom))
+	s.Require().Equal(0, countVotes(votes, p0, 1, types.VotePreCom))
 	// Those pre-commit/fast votes in older period should be purged.
-	s.Require().Equal(0, countVotes(votes, p01, 0, types.VoteFast))
-	// Those pre-commit/fast votes in newer period should be included.
-	s.Require().Equal(count, countVotes(votes, p01, 2, types.VotePreCom))
+	s.Require().Equal(0, countVotes(votes, p1, 1, types.VotePreCom))
 	// Those votes triggering events should be included.
-	s.Require().Equal(count+1, countVotes(votes, p01, 1, types.VotePreCom))
+	s.Require().Equal(count+1, countVotes(votes, p1, 2, types.VotePreCom))
+	// Those pre-commit/fast votes in newer period should be included.
+	s.Require().Equal(count, countVotes(votes, p1, 3, types.VoteFast))
 	// We shouldn't purge commit votes by locked event.
-	s.Require().Equal(count, countVotes(votes, p00, 1, types.VoteCom))
-	s.Require().Equal(count, countVotes(votes, p00, 1, types.VoteFastCom))
-	s.Require().Equal(count, countVotes(votes, p01, 1, types.VoteCom))
+	s.Require().Equal(count, countVotes(votes, p1, 2, types.VoteCom))
 }
 
 func (s *AgreementCacheTestSuite) TestPurgeByImpossibleToAgreeOnOneHash() {
@@ -705,15 +684,18 @@ func (s *AgreementCacheTestSuite) TestPurgeByImpossibleToAgreeOnOneHash() {
 		return vs
 	}
 	// 2f votes for one hash.
-	p00 := types.Position{Round: 1, Height: types.GenesisHeight + s.roundLength}
-	process(s.newVotes(types.VotePreCom, hash, p00, 1), count)
-	s.takeSubset(s.cache.snapshot(time.Now()), types.Position{}, 0, count)
+	p0 := types.Position{Round: 1, Height: types.GenesisHeight + s.roundLength}
+	process(s.newVotes(types.VotePreCom, hash, p0, 1), count)
+	ss := s.cache.snapshot(time.Now())
+	_, votes := ss.get(p0, 0)
+	s.Require().Len(votes, count)
 	// f+1 votes for another hash.
 	hash = common.NewRandomHash()
-	otherVotes := s.newVotes(types.VotePreCom, hash, p00, 1)
+	otherVotes := s.newVotes(types.VotePreCom, hash, p0, 1)
 	process(otherVotes[count:], s.f+1)
-	s.takeSubset(
-		s.cache.snapshot(time.Now().Add(time.Second)), types.Position{}, 0, 0)
+	ss = s.cache.snapshot(time.Now().Add(time.Second))
+	_, votes = ss.get(p0, 0)
+	s.Require().Empty(votes)
 }
 
 func (s *AgreementCacheTestSuite) TestIgnoredVotes() {
@@ -751,99 +733,22 @@ func (s *AgreementCacheTestSuite) TestIgnoredVotes() {
 }
 
 func (s *AgreementCacheTestSuite) TestAgreementSnapshotVotesIndex() {
-	i0 := agreementSnapshotVotesIndex{
-		position: types.Position{Round: 0, Height: types.GenesisHeight},
-		period:   0}
-	i1 := agreementSnapshotVotesIndex{
-		position: types.Position{Round: 0, Height: types.GenesisHeight},
-		period:   1}
-	i2 := agreementSnapshotVotesIndex{
-		position: types.Position{Round: 0, Height: types.GenesisHeight + 1},
-		period:   0}
-	i3 := agreementSnapshotVotesIndex{
-		position: types.Position{Round: 1, Height: types.GenesisHeight},
-		period:   0}
-	i4 := agreementSnapshotVotesIndex{
-		position: types.Position{Round: 1, Height: types.GenesisHeight},
-		period:   2}
+	i0 := agreementSnapshotVotesIndex{period: 0}
+	i1 := agreementSnapshotVotesIndex{period: 1}
+	i2 := agreementSnapshotVotesIndex{period: 2}
+	i3 := agreementSnapshotVotesIndex{period: 3}
+	i4 := agreementSnapshotVotesIndex{period: 4}
 	is := agreementSnapshotVotesIndexes{i0, i1, i2, i3, i4}
 	s.Require().True(sort.SliceIsSorted(is, func(i, j int) bool {
-		return !is[i].Newer(is[j])
+		return is[i].period < is[j].period
 	}))
 	for i := range is[:len(is)-1] {
-		s.Require().True(is[i].Older(is[i+1]))
-	}
-	for i := range is[:len(is)-1] {
-		s.Require().True(is[i+1].Newer(is[i]))
-	}
-	for _, i := range is {
-		s.Require().False(i.Older(i))
-		s.Require().False(i.Newer(i))
-	}
-	for i := range is[:len(is)-1] {
-		iFound, found := is.nearestNewerIdx(is[i].position, is[i].period)
+		iFound, found := is.nearestNewerIdx(is[i].period)
 		s.Require().True(found)
 		s.Require().Equal(iFound, is[i+1])
 	}
-	_, found := is.nearestNewerIdx(i4.position, i4.period)
+	_, found := is.nearestNewerIdx(i4.period)
 	s.Require().False(found)
-	_, found = is.nearestNewerOrEqualIdx(i4.position, i4.period)
-	s.Require().True(found)
-}
-
-func (s *AgreementCacheTestSuite) TestAgreementSnapshot() {
-	var (
-		h     = common.NewRandomHash()
-		count = s.requiredVotes - 1
-	)
-	newVotes := func(t types.VoteType, h common.Hash, p types.Position,
-		period uint64) []types.Vote {
-		votes := s.newVotes(t, h, p, period)
-		return votes[:count]
-	}
-	ss := agreementSnapshot{}
-	// |<-pre-commit      ->|<- commit         ->|
-	// | P0,1 | P2,2 | P3,1 | P2,2 | P2,1 | P1,0 |
-	p0 := types.Position{Round: 0, Height: types.GenesisHeight}
-	p1 := types.Position{Round: 0, Height: types.GenesisHeight + 1}
-	p2 := types.Position{Round: 0, Height: types.GenesisHeight + 2}
-	p3 := types.Position{Round: 0, Height: types.GenesisHeight + 3}
-	p4 := types.Position{Round: 0, Height: types.GenesisHeight + 4}
-	ss.addPreCommitVotes(p0, 1, newVotes(types.VotePreCom, h, p0, 1))
-	ss.addPreCommitVotes(p2, 2, newVotes(types.VoteFast, h, p1, 2))
-	ss.addPreCommitVotes(p3, 1, newVotes(types.VoteFast, h, p3, 1))
-	// Add commit/fast-common votes in reversed order.
-	ss.markBoundary()
-	ss.addCommitVotes(p2, 2, newVotes(types.VoteCom, h, p2, 2))
-	ss.addCommitVotes(p2, 1, newVotes(types.VoteFastCom, h, p2, 1))
-	ss.addCommitVotes(p1, 0, newVotes(types.VoteCom, h, p1, 0))
-	// Get with a very new position, should return empty votes.
-	r, votes := ss.get(types.Position{Round: 0, Height: 10}, 0)
-	s.Require().Nil(r)
-	s.Require().Empty(votes)
-	// Get with a very old position, should return all votes.
-	_, votes = ss.get(types.Position{}, 0)
-	s.Require().Nil(r)
-	s.Require().Len(votes, 6*count)
-	// Only the newest pre-commit votes returns.
-	_, votes = ss.get(p3, 0)
-	s.Require().Len(votes, count)
-	s.Require().Equal(count, countVotes(votes, p3, 1, types.VoteFast))
-	// pre-commit votes in the same position and period is ignored, commit votes
-	// in the same position and period is included.
-	_, votes = ss.get(p2, 2)
-	s.Require().Len(votes, 3*count)
-	s.Require().Equal(count, countVotes(votes, p3, 1, types.VoteFast))
-	s.Require().Equal(count, countVotes(votes, p2, 1, types.VoteFastCom))
-	s.Require().Equal(count, countVotes(votes, p2, 2, types.VoteCom))
-	// Only the newest commit votes is included.
-	ss = agreementSnapshot{}
-	ss.addPreCommitVotes(p0, 1, newVotes(types.VotePreCom, h, p0, 1))
-	ss.markBoundary()
-	ss.addCommitVotes(p4, 1, newVotes(types.VoteFastCom, h, p4, 1))
-	_, votes = ss.get(p4, 10)
-	s.Require().Len(votes, count)
-	s.Require().Equal(count, countVotes(votes, p4, 1, types.VoteFastCom))
 }
 
 func (s *AgreementCacheTestSuite) TestRandomly() {
