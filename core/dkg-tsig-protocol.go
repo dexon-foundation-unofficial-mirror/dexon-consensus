@@ -487,10 +487,13 @@ func (d *dkgProtocol) processPrivateShare(
 		if _, exist := d.antiComplaintReceived[prvShare.ReceiverID]; !exist {
 			d.antiComplaintReceived[prvShare.ReceiverID] =
 				make(map[types.NodeID]struct{})
-			d.recv.ProposeDKGAntiNackComplaint(prvShare)
 		}
-		d.antiComplaintReceived[prvShare.ReceiverID][prvShare.ProposerID] =
-			struct{}{}
+		if _, exist :=
+			d.antiComplaintReceived[prvShare.ReceiverID][prvShare.ProposerID]; !exist {
+			d.recv.ProposeDKGAntiNackComplaint(prvShare)
+			d.antiComplaintReceived[prvShare.ReceiverID][prvShare.ProposerID] =
+				struct{}{}
+		}
 	}
 	return nil
 }
