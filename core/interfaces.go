@@ -36,7 +36,7 @@ type Application interface {
 	PrepareWitness(consensusHeight uint64) (types.Witness, error)
 
 	// VerifyBlock verifies if the block is valid.
-	VerifyBlock(block *types.Block) types.BlockVerifyStatus
+	VerifyBlock(block *types.Block) (<-chan types.BlockVerifyStatus, chan<- struct{})
 
 	// BlockConfirmed is called when a block is confirmed and added to lattice.
 	BlockConfirmed(block types.Block)
