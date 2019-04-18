@@ -30,7 +30,7 @@
   name = "github.com/dexon-foundation/bls"
 
 [[constraint]]
-  branch = "dev"
+  branch = "master"
   name = "github.com/dexon-foundation/dexon"
 
 [[constraint]]
