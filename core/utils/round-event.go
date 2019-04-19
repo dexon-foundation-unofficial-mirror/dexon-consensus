@@ -127,6 +127,9 @@ type governanceAccessor interface {
 	// IsDKGFinal checks if DKG is final.
 	IsDKGFinal(round uint64) bool
 
+	// IsDKGSuccess checks if DKG is success.
+	IsDKGSuccess(round uint64) bool
+
 	// DKGResetCount returns the reset count for DKG of given round.
 	DKGResetCount(round uint64) uint64
 
@@ -162,7 +165,7 @@ type RoundEvent struct {
 	lastTriggeredRound      uint64
 	lastTriggeredResetCount uint64
 	roundShift              uint64
-	dkgFailed               bool
+	gpkInvalid              bool
 	ctx                     context.Context
 	ctxCancel               context.CancelFunc
 }
@@ -309,40 +312,28 @@ func (e *RoundEvent) check(blockHeight, startRound uint64) (
 	if resetCount > e.lastTriggeredResetCount {
 		e.lastTriggeredResetCount++
 		e.config.ExtendLength()
-		e.dkgFailed = false
+		e.gpkInvalid = false
 		triggered = true
 		return
 	}
-	if e.dkgFailed {
+	if e.gpkInvalid {
 		// We know that DKG already failed, now wait for the DKG set from
 		// previous round to reset DKG and don't have to reconstruct the
 		// group public key again.
 		return
 	}
 	if nextRound >= dkgDelayRound {
-		if !e.gov.IsDKGFinal(nextRound) {
-			e.logger.Debug("DKG is not final, waiting for DKG reset",
-				"round", nextRound,
-				"reset", e.lastTriggeredResetCount)
-			return
-		}
-		if _, err := typesDKG.NewGroupPublicKey(
-			nextRound,
-			e.gov.DKGMasterPublicKeys(nextRound),
-			e.gov.DKGComplaints(nextRound),
-			GetDKGThreshold(nextCfg)); err != nil {
-			e.logger.Debug(
-				"Group public key setup failed, waiting for DKG reset",
-				"round", nextRound,
-				"reset", e.lastTriggeredResetCount)
-			e.dkgFailed = true
+		var ok bool
+		ok, e.gpkInvalid = IsDKGValid(
+			e.gov, e.logger, nextRound, e.lastTriggeredResetCount)
+		if !ok {
 			return
 		}
 	}
 	// The DKG set for next round is well prepared.
 	e.lastTriggeredRound = nextRound
 	e.lastTriggeredResetCount = 0
-	e.dkgFailed = false
+	e.gpkInvalid = false
 	rCfg := RoundBasedConfig{}
 	rCfg.SetupRoundBasedFields(nextRound, nextCfg)
 	rCfg.AppendTo(e.config)

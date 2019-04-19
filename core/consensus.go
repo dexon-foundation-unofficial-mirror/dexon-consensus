@@ -820,40 +820,9 @@ func (con *Consensus) prepare(initBlock *types.Block) (err error) {
 		if _, exist := curNotarySet[con.ID]; !exist {
 			return
 		}
-		isDKGValid := func() bool {
-			nextConfig := utils.GetConfigWithPanic(con.gov, nextRound,
-				con.logger)
-			if !con.gov.IsDKGFinal(nextRound) {
-				con.logger.Error("Next DKG is not final, reset it",
-					"round", e.Round,
-					"reset", e.Reset)
-				return false
-			}
-			if !con.gov.IsDKGSuccess(nextRound) {
-				con.logger.Error("Next DKG is not success, reset it",
-					"round", e.Round,
-					"reset", e.Reset)
-				return false
-			}
-			gpk, err := typesDKG.NewGroupPublicKey(
-				nextRound,
-				con.gov.DKGMasterPublicKeys(nextRound),
-				con.gov.DKGComplaints(nextRound),
-				utils.GetDKGThreshold(nextConfig))
-			if err != nil {
-				con.logger.Error("Next DKG failed to prepare, reset it",
-					"round", e.Round,
-					"reset", e.Reset,
-					"error", err)
-				return false
-			}
-			if len(gpk.QualifyNodeIDs) < utils.GetDKGValidThreshold(nextConfig) {
-				return false
-			}
-			return true
-		}
 		con.event.RegisterHeight(e.NextDKGResetHeight(), func(uint64) {
-			if isDKGValid() {
+			if ok, _ := utils.IsDKGValid(
+				con.gov, con.logger, nextRound, e.Reset); ok {
 				return
 			}
 			// Aborting all previous running DKG protocol instance if any.

@@ -167,3 +167,41 @@ func GetRoundHeight(accessor interface{}, round uint64) uint64 {
 	}
 	return height
 }
+
+// IsDKGValid check if DKG is correctly prepared.
+func IsDKGValid(
+	gov governanceAccessor, logger common.Logger, round, reset uint64) (
+	valid bool, gpkInvalid bool) {
+	if !gov.IsDKGFinal(round) {
+		logger.Debug("DKG is not final", "round", round, "reset", reset)
+		return
+	}
+	if !gov.IsDKGSuccess(round) {
+		logger.Debug("DKG is not successful", "round", round, "reset", reset)
+		return
+	}
+	cfg := GetConfigWithPanic(gov, round, logger)
+	gpk, err := typesDKG.NewGroupPublicKey(
+		round,
+		gov.DKGMasterPublicKeys(round),
+		gov.DKGComplaints(round),
+		GetDKGThreshold(cfg))
+	if err != nil {
+		logger.Debug("Group public key setup failed",
+			"round", round,
+			"reset", reset,
+			"error", err)
+		gpkInvalid = true
+		return
+	}
+	if len(gpk.QualifyNodeIDs) < GetDKGValidThreshold(cfg) {
+		logger.Debug("Group public key threshold not reach",
+			"round", round,
+			"reset", reset,
+			"qualified", len(gpk.QualifyNodeIDs))
+		gpkInvalid = true
+		return
+	}
+	valid = true
+	return
+}
