@@ -436,8 +436,9 @@ func (a *agreement) processVote(vote *types.Vote) error {
 				vote:         vote,
 				receivedTime: time.Now().UTC(),
 			})
+			return nil
 		}
-		return nil
+		return ErrSkipButNoError
 	}
 	if vote.Position != aID {
 		if aID.Newer(vote.Position) {
