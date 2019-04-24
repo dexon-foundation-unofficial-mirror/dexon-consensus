@@ -224,7 +224,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 		var exist bool
 		block, exist = recv.agreementModule.findBlockNoLock(hash)
 		if !exist {
-			recv.consensus.logger.Error("Unknown block confirmed",
+			recv.consensus.logger.Debug("Unknown block confirmed",
 				"hash", hash.String()[:6])
 			ch := make(chan *types.Block)
 			func() {
@@ -245,7 +245,7 @@ func (recv *consensusBAReceiver) ConfirmBlock(
 					case <-time.After(1 * time.Second):
 					}
 				}
-				recv.consensus.logger.Info("Receive unknown block",
+				recv.consensus.logger.Debug("Receive unknown block",
 					"hash", hash.String()[:6],
 					"position", block.Position)
 				recv.agreementModule.addCandidateBlock(block)
