@@ -497,7 +497,7 @@ func (s *ConfigurationChainTestSuite) TestDKGComplaintDelayAdd() {
 	go func() {
 		// Node 0 proposes NackComplaint to all others at 3λ but they should
 		// be ignored because NackComplaint should be proposed before 2λ.
-		time.Sleep(lambdaDKG * 3)
+		time.Sleep(lambdaDKG * 4)
 		for _, gov := range recv.govs {
 			if complaints == -1 {
 				complaints = len(gov.DKGComplaints(round))
