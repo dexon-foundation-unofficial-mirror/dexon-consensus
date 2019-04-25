@@ -392,6 +392,9 @@ func (d *dkgProtocol) processNackComplaints(complaints []*typesDKG.Complaint) (
 
 func (d *dkgProtocol) enforceNackComplaints(complaints []*typesDKG.Complaint) {
 	for _, complaint := range complaints {
+		if d.round != complaint.Round || d.reset != complaint.Reset {
+			continue
+		}
 		if !complaint.IsNack() {
 			continue
 		}

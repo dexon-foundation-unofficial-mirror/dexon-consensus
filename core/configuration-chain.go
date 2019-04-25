@@ -70,6 +70,7 @@ type configurationChain struct {
 	dkgLock         sync.RWMutex
 	dkgSigner       map[uint64]*dkgShareSecret
 	npks            map[uint64]*typesDKG.NodePublicKeys
+	complaints      []*typesDKG.Complaint
 	dkgResult       sync.RWMutex
 	tsig            map[common.Hash]*tsigProtocol
 	tsigTouched     map[common.Hash]struct{}
@@ -321,8 +322,8 @@ func (cc *configurationChain) runDKGPhaseFour() {
 func (cc *configurationChain) runDKGPhaseFiveAndSix(round uint64, reset uint64) {
 	// Phase 5(T = 2λ): Propose Anti nack complaint.
 	cc.logger.Debug("Calling Governance.DKGComplaints", "round", round)
-	complaints := cc.gov.DKGComplaints(round)
-	if err := cc.dkg.processNackComplaints(complaints); err != nil {
+	cc.complaints = cc.gov.DKGComplaints(round)
+	if err := cc.dkg.processNackComplaints(cc.complaints); err != nil {
 		cc.logger.Error("Failed to process NackComplaint",
 			"round", round,
 			"reset", reset,
@@ -333,9 +334,9 @@ func (cc *configurationChain) runDKGPhaseFiveAndSix(round uint64, reset uint64) 
 	// Rebroadcast is done in `processPrivateShare`.
 }
 
-func (cc *configurationChain) runDKGPhaseSeven(complaints []*typesDKG.Complaint) {
+func (cc *configurationChain) runDKGPhaseSeven() {
 	// Phase 7(T = 4λ): Enforce complaints and nack complaints.
-	cc.dkg.enforceNackComplaints(complaints)
+	cc.dkg.enforceNackComplaints(cc.complaints)
 	// Enforce complaint is done in `processPrivateShare`.
 }
 
@@ -425,8 +426,7 @@ func (cc *configurationChain) initDKGPhasesFunc() {
 			return nil
 		},
 		func(round uint64, reset uint64) error {
-			complaints := cc.gov.DKGComplaints(round)
-			cc.runDKGPhaseSeven(complaints)
+			cc.runDKGPhaseSeven()
 			return nil
 		},
 		func(round uint64, reset uint64) error {
