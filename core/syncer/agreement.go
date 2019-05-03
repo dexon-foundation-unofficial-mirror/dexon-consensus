@@ -176,12 +176,7 @@ func (a *agreement) processAgreementResult(r *types.AgreementResult) {
 		a.logger.Trace("Agreement result cached", "result", r)
 		return
 	}
-	notarySet, err := a.cache.GetNotarySet(r.Position.Round)
-	if err != nil {
-		a.logger.Error("unable to get notary set", "result", r, "error", err)
-		return
-	}
-	if err := core.VerifyAgreementResult(r, notarySet); err != nil {
+	if err := core.VerifyAgreementResult(r, a.cache); err != nil {
 		a.logger.Error("Agreement result verification failed",
 			"result", r,
 			"error", err)
@@ -257,18 +252,13 @@ func (a *agreement) processNewCRS(round uint64) {
 	a.latestCRSRound = round
 	// Verify all pending results.
 	for r := prevRound; r <= a.latestCRSRound; r++ {
-		notarySet, err := a.cache.GetNotarySet(r)
-		if err != nil {
-			a.logger.Error("Unable to get notary set", "round", r, "error", err)
-			continue
-		}
 		pendingsForRound := a.pendingAgrs[r]
 		if pendingsForRound == nil {
 			continue
 		}
 		delete(a.pendingAgrs, r)
 		for _, res := range pendingsForRound {
-			if err := core.VerifyAgreementResult(res, notarySet); err != nil {
+			if err := core.VerifyAgreementResult(res, a.cache); err != nil {
 				a.logger.Error("Invalid agreement result",
 					"result", res,
 					"error", err)

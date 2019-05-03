@@ -71,55 +71,52 @@ func (s *UtilsTestSuite) TestVerifyAgreementResult() {
 		s.Require().NoError(signer.SignVote(vote))
 		baResult.Votes = append(baResult.Votes, *vote)
 	}
-	nSet, err := cache.GetNotarySet(pos.Round)
-	s.Require().NoError(err)
-	s.Require().NotEmpty(nSet)
-	s.Require().NoError(VerifyAgreementResult(baResult, nSet))
+	s.Require().NoError(VerifyAgreementResult(baResult, cache))
 
 	// Test negative case.
 	// All period should be the same.
 	baResult.Votes[1].Period++
-	s.Equal(ErrIncorrectVotePeriod, VerifyAgreementResult(baResult, nSet))
+	s.Equal(ErrIncorrectVotePeriod, VerifyAgreementResult(baResult, cache))
 	baResult.Votes[1].Period--
 
 	// Blockhash should match the one in votes.
 	baResult.BlockHash = common.NewRandomHash()
-	s.Equal(ErrIncorrectVoteBlockHash, VerifyAgreementResult(baResult, nSet))
+	s.Equal(ErrIncorrectVoteBlockHash, VerifyAgreementResult(baResult, cache))
 	baResult.BlockHash = hash
 
 	// Position should match.
 	baResult.Position.Height++
-	s.Equal(ErrIncorrectVotePosition, VerifyAgreementResult(baResult, nSet))
+	s.Equal(ErrIncorrectVotePosition, VerifyAgreementResult(baResult, cache))
 	baResult.Position = pos
 
 	// types.VotePreCom is not accepted in agreement result.
 	baResult.Votes[0].Type = types.VotePreCom
-	s.Equal(ErrIncorrectVoteType, VerifyAgreementResult(baResult, nSet))
+	s.Equal(ErrIncorrectVoteType, VerifyAgreementResult(baResult, cache))
 	baResult.Votes[0].Type = types.VoteCom
 
 	// Vote type should be the same.
 	baResult.Votes[1].Type = types.VoteFastCom
-	s.Equal(ErrIncorrectVoteType, VerifyAgreementResult(baResult, nSet))
+	s.Equal(ErrIncorrectVoteType, VerifyAgreementResult(baResult, cache))
 	baResult.Votes[1].Type = types.VoteCom
 
 	// Only vote proposed by notarySet is valid.
 	baResult.Votes[0].ProposerID = types.NodeID{Hash: common.NewRandomHash()}
-	s.Equal(ErrIncorrectVoteProposer, VerifyAgreementResult(baResult, nSet))
+	s.Equal(ErrIncorrectVoteProposer, VerifyAgreementResult(baResult, cache))
 	baResult.Votes[0].ProposerID = types.NewNodeID(pubKeys[0])
 
 	// Vote shuold have valid signature.
 	baResult.Votes[0].Signature, err = prvKeys[0].Sign(common.NewRandomHash())
 	s.Require().NoError(err)
-	s.Equal(ErrIncorrectVoteSignature, VerifyAgreementResult(baResult, nSet))
+	s.Equal(ErrIncorrectVoteSignature, VerifyAgreementResult(baResult, cache))
 	s.Require().NoError(signers[0].SignVote(&baResult.Votes[0]))
 
 	// Unique votes shuold be more than threshold.
 	baResult.Votes = baResult.Votes[:1]
-	s.Equal(ErrNotEnoughVotes, VerifyAgreementResult(baResult, nSet))
+	s.Equal(ErrNotEnoughVotes, VerifyAgreementResult(baResult, cache))
 	for range signers {
 		baResult.Votes = append(baResult.Votes, baResult.Votes[0])
 	}
-	s.Equal(ErrNotEnoughVotes, VerifyAgreementResult(baResult, nSet))
+	s.Equal(ErrNotEnoughVotes, VerifyAgreementResult(baResult, cache))
 }
 
 func TestUtils(t *testing.T) {
