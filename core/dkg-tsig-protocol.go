@@ -391,6 +391,9 @@ func (d *dkgProtocol) processNackComplaints(complaints []*typesDKG.Complaint) (
 }
 
 func (d *dkgProtocol) enforceNackComplaints(complaints []*typesDKG.Complaint) {
+	complained := make(map[types.NodeID]struct{})
+	// Do not propose nack complaint to itself.
+	complained[d.ID] = struct{}{}
 	for _, complaint := range complaints {
 		if d.round != complaint.Round || d.reset != complaint.Reset {
 			continue
@@ -402,8 +405,7 @@ func (d *dkgProtocol) enforceNackComplaints(complaints []*typesDKG.Complaint) {
 			continue
 		}
 		to := complaint.PrivateShare.ProposerID
-		// Do not propose nack complaint to itself.
-		if to == d.ID {
+		if _, exist := complained[to]; exist {
 			continue
 		}
 		from := complaint.ProposerID
@@ -413,6 +415,7 @@ func (d *dkgProtocol) enforceNackComplaints(complaints []*typesDKG.Complaint) {
 		}
 		if _, exist :=
 			d.antiComplaintReceived[from][to]; !exist {
+			complained[to] = struct{}{}
 			d.recv.ProposeDKGComplaint(&typesDKG.Complaint{
 				Round: d.round,
 				Reset: d.reset,
@@ -460,6 +463,18 @@ func (d *dkgProtocol) processPrivateShare(
 	// This node is not a DKG participant, ignore the private share.
 	if !exist {
 		return nil
+	}
+	if prvShare.ReceiverID == d.ID {
+		if _, exist := d.prvSharesReceived[prvShare.ProposerID]; exist {
+			return nil
+		}
+	} else {
+		if _, exist := d.antiComplaintReceived[prvShare.ReceiverID]; exist {
+			if _, exist :=
+				d.antiComplaintReceived[prvShare.ReceiverID][prvShare.ProposerID]; exist {
+				return nil
+			}
+		}
 	}
 	if err := d.sanityCheck(prvShare); err != nil {
 		return err
